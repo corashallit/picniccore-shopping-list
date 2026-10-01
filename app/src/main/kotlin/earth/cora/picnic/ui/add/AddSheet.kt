@@ -57,7 +57,8 @@ import earth.cora.picnic.ui.common.HintText
 import earth.cora.picnic.ui.common.PicnicSheet
 import earth.cora.picnic.ui.common.SheetTitle
 import earth.cora.picnic.ui.common.storeAisleNumber
-import earth.cora.picnic.ui.theme.AisleMedallion
+import earth.cora.picnic.ui.theme.AisleSectionRow
+import earth.cora.picnic.ui.theme.AisleSectionTitle
 import earth.cora.picnic.ui.theme.CheckMark
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.ItemIcon
@@ -70,7 +71,6 @@ import earth.cora.picnic.ui.theme.PicnicIconButton
 import earth.cora.picnic.ui.theme.PicnicSurface
 import earth.cora.picnic.ui.theme.PicnicTextField
 import earth.cora.picnic.ui.theme.PicnicTheme
-import earth.cora.picnic.ui.theme.SectionDivider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -460,28 +460,18 @@ private fun ColumnScope.PreviewContent(state: AddUiState, actions: AddActions) {
         if (acc.lastOrNull()?.first()?.aisleIndex == item.aisleIndex) acc.last() += item else acc += mutableListOf(item)
         acc
     }
+    // Each aisle group is one section container, like the list: title band, rows inside its tray.
     groups.forEach { group ->
         val first = group.first()
-        Column(verticalArrangement = Arrangement.spacedBy(d.xs)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(d.s)) {
-                AisleMedallion(
-                    number = if (first.aisleIndex >= 0) storeAisleNumber(first.aisleTitle) else null,
-                    aisleIndex = first.aisleIndex,
-                    size = 28.dp,
-                )
-                Text(
-                    if (first.aisleIndex < 0) stringResource(R.string.list_section_unsorted) else first.aisleTitle,
-                    style = PicnicTheme.type.label,
-                    color = c.ink,
-                    modifier = Modifier.semantics { heading() },
-                )
-            }
-            PicnicSurface(Modifier.fillMaxWidth().padding(bottom = d.hardShadow.y), shape = PicnicTheme.shapes.row) {
-                Column(Modifier.padding(horizontal = d.s, vertical = d.xxs)) {
-                    group.forEachIndexed { i, row ->
-                        if (i > 0) SectionDivider(Modifier.padding(horizontal = d.xs))
-                        PreviewRow(row, onToggle = { actions.onToggleKeep(row.key) })
-                    }
+        Column(Modifier.fillMaxWidth().padding(bottom = d.hardShadow.y)) {
+            AisleSectionTitle(
+                title = if (first.aisleIndex < 0) stringResource(R.string.list_section_unsorted) else first.aisleTitle,
+                number = if (first.aisleIndex >= 0) storeAisleNumber(first.aisleTitle) else null,
+                aisleIndex = first.aisleIndex,
+            )
+            group.forEachIndexed { i, row ->
+                AisleSectionRow(first.aisleIndex, first = i == 0, last = i == group.lastIndex) {
+                    PreviewRow(row, onToggle = { actions.onToggleKeep(row.key) })
                 }
             }
         }
@@ -538,7 +528,7 @@ private fun PreviewRow(row: PreviewItemUi, onToggle: () -> Unit) {
                 onValueChange = { onToggle() },
             )
             .semantics { stateDescription = stateText }
-            .padding(vertical = d.xxs),
+            .padding(start = d.s, end = d.xs, top = d.xxs, bottom = d.xxs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(d.s),
     ) {

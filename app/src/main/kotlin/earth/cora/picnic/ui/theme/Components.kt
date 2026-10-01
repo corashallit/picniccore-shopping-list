@@ -37,7 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
@@ -48,8 +48,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -102,7 +104,8 @@ fun PicnicSurface(
 enum class PicnicButtonStyle { Primary, Secondary, Text }
 
 /**
- * A stamped toy button, >= 48 dp tall. Primary: strawberry pill on a darker base with a white glint;
+ * A stamped toy button, >= 48 dp tall. Primary: strawberry pill on a darker base, with a cel rim light
+ * hugging the top of its face (clipped to the shape, clear of the label: never a loose glint stroke);
  * Secondary: surface pill on the shadow base; Text: ink label on a highlighter bar. Pressing pushes
  * the face down onto its base (the press feedback; no ripple).
  */
@@ -153,23 +156,8 @@ fun PicnicButton(
                 .then(if (focused) Modifier.focusRing(shape, c.highlight) else Modifier)
                 .clip(shape)
                 .background(fill)
+                .then(if (style == PicnicButtonStyle.Primary && enabled) Modifier.celRimLight(shape, d.outline) else Modifier)
                 .then(if (style != PicnicButtonStyle.Text) Modifier.border(d.outline, if (enabled) c.outline else c.inkFaint, shape) else Modifier)
-                .then(
-                    if (style == PicnicButtonStyle.Primary && enabled) {
-                        Modifier.drawWithContent {
-                            drawContent()
-                            // Cel glint: a small white chunk at the top-left, clear of the label.
-                            drawRoundRect(
-                                Color.White.copy(alpha = 0.75f),
-                                topLeft = Offset(18.dp.toPx(), 7.dp.toPx()),
-                                size = Size(14.dp.toPx(), 3.dp.toPx()),
-                                cornerRadius = CornerRadius(2.dp.toPx()),
-                            )
-                        }
-                    } else {
-                        Modifier
-                    },
-                )
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -528,6 +516,32 @@ private object SpeechBubbleShape : Shape {
         return Outline.Generic(Path.combine(PathOperation.Union, body, tip))
     }
 }
+
+/**
+ * Cel rim light on a button face: the face minus itself nudged down by [RIM], i.e. a crescent that
+ * follows the top contour inside the [inset] ink line and fades out down the rounded ends. Drawn
+ * under the label and the outline, clipped to the face's top half so it never reaches the text.
+ */
+private fun Modifier.celRimLight(shape: Shape, inset: Dp): Modifier = drawWithCache {
+    val i = inset.toPx()
+    val faceSize = Size((size.width - i * 2).coerceAtLeast(0f), (size.height - i * 2).coerceAtLeast(0f))
+    val face = Path().apply {
+        addOutline(shape.createOutline(faceSize, layoutDirection, this@drawWithCache))
+        translate(Offset(i, i))
+    }
+    val lower = Path().apply { addPath(face, Offset(0f, RIM.toPx())) }
+    val crescent = Path.combine(PathOperation.Difference, face, lower)
+    onDrawWithContent {
+        clipRect(bottom = size.height / 2f) { drawPath(crescent, RimLight) }
+        drawContent()
+    }
+}
+
+/** Thickness of the button rim light at the top of the face. */
+private val RIM: Dp = 4.dp
+
+/** Rim light colour: white, translucent, so it takes the face's hue (strawberry at noon, pink at dusk). */
+private val RimLight = Color.White.copy(alpha = 0.32f)
 
 /** A 3 dp ring outside the shape (keyboard focus): flat, never a glow. */
 private fun Modifier.focusRing(shape: Shape, color: Color): Modifier = drawBehind {

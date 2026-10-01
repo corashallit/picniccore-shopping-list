@@ -8,6 +8,39 @@ plugins {
 
 val jvmTargetVersion = libs.versions.jvmTarget.get()
 
+// Play upload key (docs/RELEASING.md). Each value comes from an environment variable (CI) or the
+// Gradle property next to it (for example in ~/.gradle/gradle.properties; never in this repository).
+// None set: no release signing at all, so debug and sideload builds are unchanged and
+// bundleRelease/assembleRelease produce unsigned artifacts as before. The key password may be
+// omitted: a PKCS12 keystore (keytool's default) uses the store password for its key.
+fun uploadSetting(env: String, property: String): String? =
+    providers.environmentVariable(env).orElse(providers.gradleProperty(property)).orNull?.takeIf { it.isNotBlank() }
+
+val uploadStoreFile = uploadSetting("PICNIC_UPLOAD_STORE_FILE", "picnic.upload.storeFile")
+val uploadStorePassword = uploadSetting("PICNIC_UPLOAD_STORE_PASSWORD", "picnic.upload.storePassword")
+val uploadKeyAlias = uploadSetting("PICNIC_UPLOAD_KEY_ALIAS", "picnic.upload.keyAlias")
+val uploadKeyPassword = uploadSetting("PICNIC_UPLOAD_KEY_PASSWORD", "picnic.upload.keyPassword") ?: uploadStorePassword
+val uploadKeystore: File? = run {
+    val required = mapOf(
+        "PICNIC_UPLOAD_STORE_FILE" to uploadStoreFile,
+        "PICNIC_UPLOAD_STORE_PASSWORD" to uploadStorePassword,
+        "PICNIC_UPLOAD_KEY_ALIAS" to uploadKeyAlias,
+    )
+    val missing = required.filterValues { it == null }.keys
+    when {
+        missing.size == required.size -> null
+        // Half a configuration would silently produce an unsigned bundle: fail loudly instead.
+        missing.isNotEmpty() -> throw GradleException(
+            "Release signing is only partly configured; also set ${missing.joinToString()} " +
+                "(or the matching picnic.upload.* Gradle properties). See docs/RELEASING.md.",
+        )
+        // Relative paths resolve against the repository root.
+        else -> rootProject.file(uploadStoreFile!!).also {
+            if (!it.isFile) throw GradleException("PICNIC_UPLOAD_STORE_FILE: no keystore file at $it")
+        }
+    }
+}
+
 // APK file names: picnic-list-debug.apk / picnic-list-sideload.apk instead of app-*.apk.
 base {
     archivesName.set("picnic-list")
@@ -28,7 +61,11 @@ android {
             version = release(libs.versions.targetSdk.get().toInt())
         }
         // CI passes -Ppicnic.versionCode=<run number> so each CI APK installs over the last one.
-        versionCode = providers.gradleProperty("picnic.versionCode").map(String::toInt).getOrElse(1)
+        // Play builds pass minutes since 2026-01-01 UTC instead (docs/RELEASING.md, "Version codes").
+        // 2100000000 is the largest version code Play accepts.
+        versionCode = providers.gradleProperty("picnic.versionCode").map(String::toInt).getOrElse(1).also {
+            if (it !in 1..2_100_000_000) throw GradleException("picnic.versionCode must be 1..2100000000, got $it")
+        }
         versionName = providers.gradleProperty("picnic.versionName").getOrElse("0.1.0-dev")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -41,16 +78,29 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // Play upload key: only when configured (see the top of this file). Play re-signs what it
+        // delivers with its own app signing key, so Play installs never match the debug key.
+        if (uploadKeystore != null) {
+            create("upload") {
+                storeFile = uploadKeystore
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
+        }
     }
 
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("debug")
         }
+        // What goes to Google Play: `bundleRelease` (R8 on). Signed with the upload key when it is
+        // configured, unsigned otherwise. Not debuggable (Play rejects debuggable builds).
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("upload")
         }
         // What friends install (CI's APK): the debug build's code and committed signing key, so it
         // installs over earlier debug APKs, but NOT debuggable. A debuggable app lets anyone with

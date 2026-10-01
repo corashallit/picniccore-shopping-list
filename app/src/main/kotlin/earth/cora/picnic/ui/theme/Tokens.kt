@@ -1,6 +1,7 @@
 package earth.cora.picnic.ui.theme
 
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
@@ -106,6 +107,13 @@ data class PicnicShapes(
     val sheet: Shape,
     val badge: Shape,
     val medallion: Shape,
+    /**
+     * Aisle section container (header band + its rows, see AisleSectionRow). A CornerBasedShape so each
+     * lazy-list slice can square off the edges it shares with its neighbours.
+     */
+    val section: CornerBasedShape,
+    /** The lighter inner surface the rows sit on, inside the section's tinted tray. */
+    val sectionInner: CornerBasedShape,
 )
 
 @Immutable
@@ -119,8 +127,14 @@ data class PicnicDimens(
     val l: Dp = 16.dp,
     val xl: Dp = 24.dp,
     val xxl: Dp = 32.dp,
+    /** Gap between free-standing cards (list switcher rows...). Rows inside an aisle section have none. */
     val rowGap: Dp = 8.dp,
+    /** Gap between aisle sections. */
     val sectionGap: Dp = 14.dp,
+    /** Aisle section tray wall: from the container's outer edge to its inner row surface. */
+    val sectionInset: Dp = 8.dp,
+    /** Thin rules: between rows of a section and round its inner surface. */
+    val rule: Dp = 1.5.dp,
     val rowMinHeight: Dp = 64.dp,
     /** Minimum touch target. */
     val touchTarget: Dp = 48.dp,
@@ -241,4 +255,6 @@ val PlaceholderShapes = PicnicShapes(
     sheet = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
     badge = CircleShape,
     medallion = CircleShape,
+    section = RoundedCornerShape(18.dp),
+    sectionInner = RoundedCornerShape(12.dp),
 )

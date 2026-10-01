@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +43,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -65,6 +66,7 @@ import earth.cora.picnic.ui.common.HintText
 import earth.cora.picnic.ui.common.ScreenScaffold
 import earth.cora.picnic.ui.edit.EditItemSheet
 import earth.cora.picnic.ui.theme.AisleHeader
+import earth.cora.picnic.ui.theme.AisleSectionRow
 import earth.cora.picnic.ui.theme.EmptyState
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.ItemRowCard
@@ -234,7 +236,8 @@ fun ListRoute(
 }
 
 /**
- * Stateless List screen: aisles in walking order with collapsible basket headers, check-off rows
+ * Stateless List screen: aisles in walking order, each one container (collapsible basket header band
+ * owning its rows), check-off rows
  * (tap), edit (long-press or the accessibility action), swipe to delete, "Clear checked", and the
  * Edit / list-switcher sheets when [ListUiState.editing] / [showLists] say so.
  */
@@ -338,9 +341,12 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
             top = padding.calculateTopPadding() + d.xs,
             bottom = padding.calculateBottomPadding() + FAB_CLEARANCE,
         ),
-        verticalArrangement = Arrangement.spacedBy(d.rowGap),
     ) {
+        // Each section is ONE container drawn slice by slice (theme ListPieces.kt): the header is its
+        // top band, every row its own keyed item inside, the last row the cap. Slices must touch, so
+        // there is no list-wide spacing: the gap goes above each header instead.
         state.sections.forEachIndexed { index, section ->
+            val open = !section.collapsed && section.items.isNotEmpty()
             item(key = "header:${section.id}", contentType = "header") {
                 AisleHeader(
                     title = sectionTitle(section),
@@ -352,19 +358,33 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                     collapsed = section.collapsed,
                     cleared = section.cleared,
                     onToggle = { actions.onToggleSection(section.id) },
+                    rowsBelow = open,
                     modifier = Modifier
                         .itemMotion(this)
-                        .padding(top = if (index > 0) d.sectionGap - d.rowGap else 0.dp),
+                        .padding(top = if (index > 0) d.sectionGap else 0.dp),
                 )
             }
-            if (!section.collapsed) {
-                items(section.items, key = { it.id }, contentType = { "row" }) { row ->
-                    ItemRow(row, actions, Modifier.itemMotion(this))
+            if (open) {
+                itemsIndexed(section.items, key = { _, row -> row.id }, contentType = { _, _ -> "row" }) { i, row ->
+                    AisleSectionRow(
+                        aisleIndex = section.aisleIndex,
+                        first = i == 0,
+                        last = i == section.items.lastIndex,
+                        modifier = Modifier.itemMotion(this),
+                    ) {
+                        ItemRow(row, actions)
+                    }
                 }
             }
             if (section.kind == SectionKind.CHECKED && section.count > 0) {
                 item(key = "clear-checked", contentType = "button") {
-                    Box(Modifier.itemMotion(this).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .itemMotion(this)
+                            .fillMaxWidth()
+                            .padding(top = d.m),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         PicnicButton(
                             pluralStringResource(R.plurals.list_clear_checked, section.count, section.count),
                             onClick = actions.onClearChecked,
@@ -381,7 +401,7 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                 Modifier
                     .itemMotion(this)
                     .fillMaxWidth()
-                    .padding(top = d.s),
+                    .padding(top = d.l),
             )
         }
     }
@@ -480,14 +500,17 @@ private fun ItemRow(row: ItemRowUi, actions: ListActions, modifier: Modifier = M
     }
 }
 
-/** Revealed under a swiped row: a "Remove" strip on the side the swipe started from. */
+/**
+ * Revealed under a swiped row: a "Remove" strip on the side the swipe started from. It fills the
+ * row's slot inside the section (AisleSectionRow clips it to the inner surface).
+ */
 @Composable
 private fun RowScope.SwipeBackground(state: SwipeToDismissBoxState) {
     val direction = state.dismissDirection
     if (direction == SwipeToDismissBoxValue.Settled) return
     val c = PicnicTheme.colors
     val d = PicnicTheme.dimens
-    PicnicSurface(Modifier.fillMaxSize(), shape = PicnicTheme.shapes.row, color = c.error, shadow = false) {
+    PicnicSurface(Modifier.fillMaxSize(), shape = RectangleShape, color = c.error, outlined = false, shadow = false) {
         Row(
             Modifier
                 .fillMaxSize()

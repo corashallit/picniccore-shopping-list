@@ -1,0 +1,6 @@
+# Build context is proxy/. Allow-list: only what the image needs, so .dev.vars, env files, node_modules,
+# .wrangler and the tests can never end up in an image layer.
+*
+!package.json
+!src/
+!scripts/

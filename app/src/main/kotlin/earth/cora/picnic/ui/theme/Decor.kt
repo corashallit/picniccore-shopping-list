@@ -2,9 +2,13 @@ package earth.cora.picnic.ui.theme
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +40,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -59,7 +64,7 @@ import kotlin.math.sin
 
 /*
  * DECORATIVE SLOTS: CONTRACT (signatures) between app-shell and app-screens (docs/ARCHITECTURE.md §11.3).
- * Placeholder picnic art: gingham ground, bunting, patterned medallions, a star check, a ribbon
+ * Placeholder picnic art: gingham ground, bunting, patterned medallions, a stamped check box, a ribbon
  * progress bar, a sleepy-bee empty state, sparkle loaders. All decoration is semantics-free unless a
  * parameter says otherwise. Decorative loops respect PicnicTheme.motion.reduced (static frames).
  */
@@ -223,35 +228,61 @@ private fun polar(c: Offset, r: Float, deg: Float): Offset {
 }
 
 /**
- * The check control's visual (the row provides the touch target): an empty outlined circle with a
- * cel crescent, or a lemon star with a tick. Fixed 40 dp footprint so rows don't jump.
+ * The check control's visual (the row provides the touch target): a rounded box with a bold ink
+ * outline and no shadow; checked = filled with the highlight, a heavy tick and a little sparkle
+ * flourish, stamped in with a short springy pop (instant with reduced motion). Fixed 48 dp
+ * (touch-target) footprint so rows don't jump.
  */
 @Composable
 fun CheckMark(checked: Boolean, modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
-    val lemon = c.aisle(2)
-    Canvas(modifier.size(40.dp)) {
-        val ink = c.outline
-        val line = 2.dp.toPx()
-        if (!checked) {
-            val r = 14.dp.toPx()
-            drawCircle(c.surface, r)
-            clipPath(path { addOval(androidx.compose.ui.geometry.Rect(center, r)) }) {
-                drawCircle(c.hardShadow, r, center + Offset(r * 0.4f, r * 0.4f), style = Stroke(r * 0.3f))
+    val motion = PicnicTheme.motion
+    val stamp by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = if (motion.reduced) snap() else spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow),
+        label = "checkStamp",
+    )
+    Canvas(modifier.size(PicnicTheme.dimens.touchTarget)) {
+        val side = CHECK_BOX.toPx()
+        val line = 2.5.dp.toPx()
+        val topLeft = center - Offset(side / 2, side / 2)
+        val corner = CornerRadius(side * 0.3f)
+        drawRoundRect(c.surface, topLeft, Size(side, side), corner)
+        if (stamp > 0f) {
+            // The fill grows from the centre, clipped to the box; the tick overshoots (the "stamp").
+            val fill = stamp.coerceAtMost(1f)
+            clipRect(topLeft.x, topLeft.y, topLeft.x + side, topLeft.y + side) {
+                scale(fill, pivot = center) { drawRoundRect(c.highlight, topLeft, Size(side, side), corner) }
             }
-            drawCircle(ink, r, style = Stroke(line))
-        } else {
-            val star = starPath(center + Offset(0f, 1.dp.toPx()), 19.dp.toPx(), 9.5.dp.toPx())
-            drawPath(star, lemon.base)
-            clipPath(star) {
-                // Right half in the shade colour: the cel look.
-                drawRect(lemon.shadow, Offset(center.x, 0f), Size(size.width / 2, size.height))
+        }
+        drawRoundRect(
+            c.outline,
+            topLeft + Offset(line / 2, line / 2),
+            Size(side - line, side - line),
+            CornerRadius(corner.x - line / 2),
+            style = Stroke(line),
+        )
+        if (stamp > 0f) {
+            scale(stamp, pivot = center) {
+                inkLine(
+                    c.onHighlight,
+                    3.2.dp.toPx(),
+                    center + Offset(-6.dp.toPx(), 0.5.dp.toPx()),
+                    center + Offset(-1.5.dp.toPx(), 5.dp.toPx()),
+                    center + Offset(6.5.dp.toPx(), -4.5.dp.toPx()),
+                )
             }
-            drawPath(star, ink, style = Stroke(line, join = androidx.compose.ui.graphics.StrokeJoin.Round))
-            inkLine(ink, 2.6.dp.toPx(), center + Offset(-5.dp.toPx(), 1.dp.toPx()), center + Offset(-1.dp.toPx(), 5.dp.toPx()), center + Offset(6.dp.toPx(), -3.dp.toPx()))
+            // Flourish: a twinkle popping off the box's top-right corner.
+            drawPath(
+                sparklePath(Offset(topLeft.x + side - 1.dp.toPx(), topLeft.y + 1.dp.toPx()), 6.dp.toPx() * stamp.coerceAtMost(1f)),
+                c.primary,
+            )
         }
     }
 }
+
+/** Side of the CheckMark box (inside its 48 dp footprint). */
+private val CHECK_BOX: Dp = 26.dp
 
 /** Trip progress metaphor (a satin ribbon with a heart charm at its leading end). Announces "done of total". */
 @Composable
