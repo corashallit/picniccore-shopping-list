@@ -25,13 +25,21 @@ internal fun ThemeSampler() {
                 miniIcons = listOf(IconRef("lemon"), IconRef("apple"), IconRef("carrot")), count = 3,
                 collapsed = true, cleared = false, onToggle = {},
             )
-            AisleHeader(
-                title = "Bakery", number = 2, aisleIndex = 1, basket = BasketKind.BREAD_BASKET,
-                miniIcons = emptyList(), count = 1, collapsed = false, cleared = false, onToggle = {},
-            )
-            ItemRowCard(name = "Baguette", detail = "1 · crusty", icon = IconRef("baguette"), checked = false)
-            ItemRowCard(name = "Gochujang", detail = "500 g tub", icon = IconRef("condiments_generic"), checked = false, drawing = true)
-            ItemRowCard(name = "Milk", detail = "4 L bag", icon = IconRef("milk_bag"), checked = true)
+            Column {
+                AisleHeader(
+                    title = "Bakery", number = 2, aisleIndex = 1, basket = BasketKind.BREAD_BASKET,
+                    miniIcons = emptyList(), count = 3, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
+                )
+                AisleSectionRow(aisleIndex = 1, first = true, last = false) {
+                    ItemRowCard(name = "Baguette", detail = "1 · crusty", icon = IconRef("baguette"), checked = false)
+                }
+                AisleSectionRow(aisleIndex = 1, first = false, last = false) {
+                    ItemRowCard(name = "Gochujang", detail = "500 g tub", icon = IconRef("condiments_generic"), checked = false, drawing = true)
+                }
+                AisleSectionRow(aisleIndex = 1, first = false, last = true) {
+                    ItemRowCard(name = "Milk", detail = "4 L bag", icon = IconRef("milk_bag"), checked = true)
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PicnicButton("Add all", onClick = {})
                 PicnicButton("Cancel", onClick = {}, style = PicnicButtonStyle.Secondary)

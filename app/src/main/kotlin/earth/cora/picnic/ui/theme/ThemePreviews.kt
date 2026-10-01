@@ -119,7 +119,7 @@ private fun DecorSample() {
     Caption("SectionDivider (major · minor)")
     SectionDivider(major = true)
     SectionDivider()
-    Caption("CheckMark · DrawingSparkle · LoadingSparkle")
+    Caption("CheckMark (unchecked · checked) · DrawingSparkle · LoadingSparkle")
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         CheckMark(checked = false)
         CheckMark(checked = true)
@@ -204,23 +204,37 @@ private fun BasketsDuskPreview() = PreviewFrame(dark = true) { BasketsSample() }
 
 @Composable
 private fun ListPiecesSample() {
-    AisleHeader(
-        title = "Unsorted", number = null, aisleIndex = -1, basket = BasketKind.DEFAULT,
-        miniIcons = emptyList(), count = 1, collapsed = false, cleared = false, onToggle = {},
-    )
-    ItemRowCard(name = "Dish rack", detail = null, icon = IconRef(IconCatalog.DEFAULT_ICON), checked = false, drawing = true)
+    // Sections as the list draws them: header band + AisleSectionRows touching (no spacing), one
+    // container per aisle; collapsed and cleared aisles are just the band.
+    Column {
+        AisleHeader(
+            title = "Unsorted", number = null, aisleIndex = -1, basket = BasketKind.DEFAULT,
+            miniIcons = emptyList(), count = 1, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
+        )
+        AisleSectionRow(aisleIndex = -1, first = true, last = true) {
+            ItemRowCard(name = "Dish rack", detail = null, icon = IconRef(IconCatalog.DEFAULT_ICON), checked = false, drawing = true)
+        }
+    }
     AisleHeader(
         title = "Produce", number = 1, aisleIndex = 0, basket = BasketKind.FRUIT_CRATE,
         miniIcons = listOf("lemon", "apple", "carrot", "spinach").map(::IconRef), count = 4,
         collapsed = true, cleared = false, onToggle = {},
     )
-    AisleHeader(
-        title = "Aisle 2 - Baking & spices", number = 3, aisleIndex = 2, basket = BasketKind.JAR_SHELF,
-        miniIcons = emptyList(), count = 2, collapsed = false, cleared = false, onToggle = {},
-    )
-    ItemRowCard(name = "All-purpose flour", detail = "2 kg", icon = IconRef("flour"), checked = false)
-    ItemRowCard(name = "Gochujang", detail = "500 g tub · for the bibimbap", icon = IconRef("condiments_generic"), checked = false, drawing = true)
-    ItemRowCard(name = "Milk", detail = "4 L bag", icon = IconRef("milk_bag"), checked = true)
+    Column {
+        AisleHeader(
+            title = "Aisle 2 - Baking & spices", number = 3, aisleIndex = 2, basket = BasketKind.JAR_SHELF,
+            miniIcons = emptyList(), count = 2, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
+        )
+        AisleSectionRow(aisleIndex = 2, first = true, last = false) {
+            ItemRowCard(name = "All-purpose flour", detail = "2 kg", icon = IconRef("flour"), checked = false)
+        }
+        AisleSectionRow(aisleIndex = 2, first = false, last = false) {
+            ItemRowCard(name = "Gochujang", detail = "500 g tub · for the bibimbap", icon = IconRef("condiments_generic"), checked = false, drawing = true)
+        }
+        AisleSectionRow(aisleIndex = 2, first = false, last = true) {
+            ItemRowCard(name = "Milk", detail = "4 L bag", icon = IconRef("milk_bag"), checked = true)
+        }
+    }
     AisleHeader(
         title = "Bakery", number = 2, aisleIndex = 1, basket = BasketKind.BREAD_BASKET,
         miniIcons = emptyList(), count = 0, collapsed = true, cleared = true, onToggle = {},
