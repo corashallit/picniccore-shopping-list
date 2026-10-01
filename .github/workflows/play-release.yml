@@ -1,11 +1,18 @@
 name: Play release
 
-# Builds the Google Play App Bundle (release build type: R8 on, signed with the upload key from
-# secrets), runs the core and app unit tests, and uploads it to a Play track.
+# Runs the core and app unit tests, builds the Google Play App Bundle (release build type: R8 on,
+# signed with the upload key from secrets), and uploads it to a Play track.
 # Setup, secrets and the first (manual) upload: docs/RELEASING.md.
 #
-# Two jobs on purpose: `build` holds the upload key and never sees the Play credential; `upload`
-# holds the Play credential and never sees the upload key.
+# Three jobs, each on its own fresh runner:
+#  - `test` runs the repository's test code and holds no secret;
+#  - `build` holds the upload key and never sees the Play credential;
+#  - `upload` holds the Play credential and never sees the upload key.
+# `build` and `upload` use the `play` environment. With the secrets stored there (GitHub Pro, or a public
+# repository), only the default branch and play-v* tags can read them (docs/RELEASING.md §4).
+#
+# Every action is pinned to a full commit SHA (the comment names its release); Dependabot keeps them
+# current (.github/dependabot.yml).
 
 on:
   workflow_dispatch:
@@ -24,6 +31,10 @@ on:
         description: 'Upload to Google Play. Untick to only build the signed bundle (the very first upload must be done by hand in Play Console)'
         type: boolean
         default: true
+      changes-not-sent-for-review:
+        description: 'Tick if Play refuses with "Changes cannot be sent for review automatically": the release is then saved, and you send it for review from Publishing overview'
+        type: boolean
+        default: false
   # A play-v1.2.3 tag releases 1.2.3 to internal testing. Set the repository variable
   # PLAY_TAG_STATUS to "draft" while the app is still a draft app.
   push:
@@ -48,37 +59,100 @@ defaults:
     shell: bash # -eo pipefail
 
 jobs:
-  build:
-    name: Tests and signed bundle
+  test:
+    name: Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      # The `play` environment enforces this on GitHub's side once its secrets live there; this check
+      # also covers repository secrets, and fails before anything is built.
+      - name: Check branch or tag
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" && "$GITHUB_REF" != refs/tags/play-v* ]]; then
+            echo "::error::Play releases run only from $DEFAULT_BRANCH or a play-v* tag, not $GITHUB_REF (see docs/RELEASING.md §7)."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+
+      # Read-only: a release run may use the caches other builds wrote, but never writes them.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: basic
+          cache-read-only: true
+
+      - name: Core tests
+        run: ./gradlew -p core test
+
+      - name: App unit tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: play-release-reports-${{ github.run_number }}
+          path: |
+            core/build/reports/
+            app/build/reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  build:
+    name: Signed bundle
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: play
     permissions:
       contents: read
     outputs:
       version-code: ${{ steps.ver.outputs.code }}
       version-name: ${{ steps.ver.outputs.name }}
       artifact: ${{ steps.ver.outputs.artifact }}
+    env:
+      # Not a secret (a secret's value is masked everywhere in the log, and a job output that contains
+      # it is dropped). Set the variable only if the key was made with a different -alias.
+      PICNIC_UPLOAD_KEY_ALIAS: ${{ vars.PICNIC_UPLOAD_KEY_ALIAS || 'upload' }}
     steps:
       # Only "is it set" reaches the shell, never a value.
       - name: Check release secrets
         env:
           HAS_KEYSTORE: ${{ secrets.PICNIC_UPLOAD_KEYSTORE_BASE64 != '' }}
           HAS_STORE_PASSWORD: ${{ secrets.PICNIC_UPLOAD_STORE_PASSWORD != '' }}
-          HAS_KEY_ALIAS: ${{ secrets.PICNIC_UPLOAD_KEY_ALIAS != '' }}
           HAS_SERVICE_ACCOUNT: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
         run: |
           missing=()
           [[ "$HAS_KEYSTORE" == true ]] || missing+=(PICNIC_UPLOAD_KEYSTORE_BASE64)
           [[ "$HAS_STORE_PASSWORD" == true ]] || missing+=(PICNIC_UPLOAD_STORE_PASSWORD)
-          [[ "$HAS_KEY_ALIAS" == true ]] || missing+=(PICNIC_UPLOAD_KEY_ALIAS)
           if [[ "$UPLOAD" == true && "$HAS_SERVICE_ACCOUNT" != true ]]; then
             missing+=(PLAY_SERVICE_ACCOUNT_JSON)
           fi
           if (( ${#missing[@]} > 0 )); then
-            echo "::error title=Play release is not set up::Missing repository secrets: ${missing[*]}. Add them under Settings > Secrets and variables > Actions; see docs/RELEASING.md."
+            echo "::error title=Play release is not set up::Missing secrets: ${missing[*]}. Add them to the play environment (or as repository secrets); see docs/RELEASING.md §4."
             exit 1
           fi
-          echo "All needed release secrets are set (PICNIC_UPLOAD_KEY_PASSWORD is optional)."
+          echo "All needed release secrets are set (PICNIC_UPLOAD_KEY_PASSWORD is optional). Key alias: $PICNIC_UPLOAD_KEY_ALIAS."
           if [[ "$UPLOAD" == true ]]; then
             echo "Will upload to track $TRACK with status $STATUS."
           else
@@ -113,42 +187,33 @@ jobs:
           echo "versionName $name, versionCode $code"
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
           log-accepted-android-sdk-licenses: false
 
-      # Read-only: a release build may use the caches other builds wrote, but never writes them.
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           cache-provider: basic
           cache-read-only: true
-
-      # The tests run before the key exists on the runner, so test code never sees it.
-      - name: Core tests
-        run: ./gradlew -p core test
-
-      - name: App unit tests
-        run: ./gradlew :app:testDebugUnitTest
 
       - name: Decode upload keystore
         id: key
         env:
           KEYSTORE_BASE64: ${{ secrets.PICNIC_UPLOAD_KEYSTORE_BASE64 }}
           PICNIC_UPLOAD_STORE_PASSWORD: ${{ secrets.PICNIC_UPLOAD_STORE_PASSWORD }}
-          PICNIC_UPLOAD_KEY_ALIAS: ${{ secrets.PICNIC_UPLOAD_KEY_ALIAS }}
         run: |
           umask 077
           keystore="$RUNNER_TEMP/picnic-upload.jks"
@@ -159,7 +224,7 @@ jobs:
           # A wrong password or alias fails here, with keytool's own message (it never echoes the password).
           if ! listing=$(keytool -list -v -keystore "$keystore" -storepass:env PICNIC_UPLOAD_STORE_PASSWORD \
               -alias "$PICNIC_UPLOAD_KEY_ALIAS" 2>&1); then
-            echo "::error::Couldn't open the upload key ($(grep -m1 'keytool error' <<< "$listing")). Check PICNIC_UPLOAD_KEYSTORE_BASE64, PICNIC_UPLOAD_STORE_PASSWORD and PICNIC_UPLOAD_KEY_ALIAS."
+            echo "::error::Couldn't open the upload key ($(grep -m1 'keytool error' <<< "$listing")). Check PICNIC_UPLOAD_KEYSTORE_BASE64, PICNIC_UPLOAD_STORE_PASSWORD and the key alias (variable PICNIC_UPLOAD_KEY_ALIAS, default upload)."
             exit 1
           fi
           fingerprint=$(awk '/SHA256:/ { print $2; exit }' <<< "$listing")
@@ -171,24 +236,28 @@ jobs:
           echo "sha256=$fingerprint" >> "$GITHUB_OUTPUT"
           echo "Upload certificate SHA-256: $fingerprint"
 
-      # --no-configuration-cache: the signing passwords are configuration inputs, and no cache entry
-      # should hold them, even encrypted.
+      # No process outlives this step with the passwords in its environment: --no-daemon makes Gradle's
+      # daemon single-use, and the Kotlin compiler runs inside it instead of in its own daemon.
+      # --no-configuration-cache: the passwords are configuration inputs, and no cache entry should hold
+      # them, even encrypted.
       - name: Signed release bundle
         env:
           PICNIC_UPLOAD_STORE_PASSWORD: ${{ secrets.PICNIC_UPLOAD_STORE_PASSWORD }}
-          PICNIC_UPLOAD_KEY_ALIAS: ${{ secrets.PICNIC_UPLOAD_KEY_ALIAS }}
           PICNIC_UPLOAD_KEY_PASSWORD: ${{ secrets.PICNIC_UPLOAD_KEY_PASSWORD }}
           VERSION_CODE: ${{ steps.ver.outputs.code }}
           VERSION_NAME: ${{ steps.ver.outputs.name }}
         run: >
-          ./gradlew --no-configuration-cache
+          ./gradlew --no-daemon --no-configuration-cache
+          -Pkotlin.compiler.execution.strategy=in-process
           :app:bundleRelease
           -Ppicnic.versionCode="$VERSION_CODE"
           -Ppicnic.versionName="$VERSION_NAME"
 
-      - name: Remove upload keystore
+      - name: Remove upload keystore, stop Gradle
         if: always()
-        run: rm -f "$RUNNER_TEMP/picnic-upload.jks"
+        run: |
+          rm -f "$RUNNER_TEMP/picnic-upload.jks"
+          if [[ -x ./gradlew ]]; then ./gradlew --stop || true; fi
 
       # The bundle must carry exactly the upload certificate (never unsigned, never the debug key).
       - name: Verify bundle signature
@@ -223,22 +292,11 @@ jobs:
 
       # The AAB for a manual upload in Play Console, and the R8 mapping for readable stack traces.
       - name: Upload bundle and mapping
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.ver.outputs.artifact }}
           path: dist/${{ steps.ver.outputs.artifact }}/
           if-no-files-found: error
-
-      - name: Upload test reports
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: play-release-reports-${{ github.run_number }}
-          path: |
-            core/build/reports/
-            app/build/reports/
-          if-no-files-found: ignore
-          retention-days: 14
 
   upload:
     name: Upload to Google Play
@@ -246,16 +304,28 @@ jobs:
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    environment: play
     # Nothing from the GitHub API is needed: artifacts of the same run download without a token.
     permissions: {}
     steps:
+      # An empty name would download every artifact of the run into subfolders, and the upload below
+      # would then fail with a confusing "file not found".
+      - name: Check artifact name
+        env:
+          ARTIFACT: ${{ needs.build.outputs.artifact }}
+        run: |
+          if [[ -z "$ARTIFACT" ]]; then
+            echo "::error::The build job passed no artifact name."
+            exit 1
+          fi
+
       - name: Download bundle
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.build.outputs.artifact }}
           path: bundle
 
-      # Third-party action that receives the Play credential: pinned to the commit of v1.1.5.
+      # Third-party action that receives the Play credential.
       - name: Upload to Play (${{ env.TRACK }}, ${{ env.STATUS }})
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
@@ -266,6 +336,7 @@ jobs:
           tracks: ${{ env.TRACK }}
           status: ${{ env.STATUS }}
           releaseName: ${{ needs.build.outputs.version-name }} (${{ needs.build.outputs.version-code }})
+          changesNotSentForReview: ${{ inputs.changes-not-sent-for-review == true }}
 
       - name: Summary
         env:

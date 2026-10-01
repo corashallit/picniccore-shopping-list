@@ -67,13 +67,16 @@ private fun o(x: Float, y: Float) = Offset(x, y)
 private const val STICKER_LINE = 1.1f
 
 /**
- * A placeholder item sticker in a 24 x 24 grid: lavender drop, white die-cut disc with a [rim] line,
- * then the category's object. [categoryKey] null or unknown and [isDefault] draw the paper bag.
+ * A placeholder item sticker in a 24 x 24 grid: white die-cut disc with a [rim] line, then the
+ * category's object. [categoryKey] null or unknown and [isDefault] draw the paper bag.
  * [disc] false draws just the object (tiny sizes, where the disc would hide it).
+ * [lifted] adds the lavender drop under the disc: only for a sticker floating on the ground (the edit
+ * sheet's hero icon). Inside a section row the sticker lies flat: an offset crescent beside the
+ * checkbox reads as a smudge, not depth.
  */
-internal fun DrawScope.drawItemSticker(categoryKey: String?, isDefault: Boolean, rim: Color, disc: Boolean = true) {
+internal fun DrawScope.drawItemSticker(categoryKey: String?, isDefault: Boolean, rim: Color, disc: Boolean = true, lifted: Boolean = false) {
     if (disc) {
-        drawCircle(Art.lavender, 10.9f, o(12.8f, 13f))
+        if (lifted) drawCircle(Art.lavender, 10.9f, o(12.8f, 13f))
         drawCircle(Art.white, 10.9f, o(12f, 12f))
         drawCircle(rim, 10.9f, o(12f, 12f), style = Stroke(0.9f))
     }

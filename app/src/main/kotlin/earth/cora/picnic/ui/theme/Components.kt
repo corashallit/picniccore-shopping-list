@@ -48,10 +48,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -104,10 +102,11 @@ fun PicnicSurface(
 enum class PicnicButtonStyle { Primary, Secondary, Text }
 
 /**
- * A stamped toy button, >= 48 dp tall. Primary: strawberry pill on a darker base, with a cel rim light
- * hugging the top of its face (clipped to the shape, clear of the label: never a loose glint stroke);
- * Secondary: surface pill on the shadow base; Text: ink label on a highlighter bar. Pressing pushes
- * the face down onto its base (the press feedback; no ripple).
+ * A stamped toy button, >= 48 dp tall. Primary: strawberry pill on a darker base, with the palette's
+ * cel highlight ([PicnicColors.buttonGloss]: a tapered lens centred under the top outline, clear of
+ * the outline and the label; none when null); at dusk a ground-coloured halo keeps its pale face
+ * off pastel bands. Secondary: surface pill on the shadow base; Text: ink label on a highlighter bar.
+ * Pressing pushes the face down onto its base (the press feedback; no ripple).
  */
 @Composable
 fun PicnicButton(
@@ -140,6 +139,8 @@ fun PicnicButton(
         else -> c.ink
     }
     val base = if (style == PicnicButtonStyle.Primary) c.primaryShadow else c.hardShadow
+    val gloss = c.buttonGloss.takeIf { style == PicnicButtonStyle.Primary && enabled }
+    val halo = raised && style == PicnicButtonStyle.Primary && c.isDark
 
     Box(
         modifier
@@ -152,11 +153,12 @@ fun PicnicButton(
         Row(
             Modifier
                 .offset(y = shift)
+                .then(if (halo) Modifier.halo(shape, c.background, HALO, below = depth - shift) else Modifier)
                 .then(if (raised) Modifier.hardShadow(shape, base, DpOffset(0.dp, depth - shift)) else Modifier)
                 .then(if (focused) Modifier.focusRing(shape, c.highlight) else Modifier)
                 .clip(shape)
                 .background(fill)
-                .then(if (style == PicnicButtonStyle.Primary && enabled) Modifier.celRimLight(shape, d.outline) else Modifier)
+                .then(if (gloss != null) Modifier.celGloss(gloss, d.outline) else Modifier)
                 .then(if (style != PicnicButtonStyle.Text) Modifier.border(d.outline, if (enabled) c.outline else c.inkFaint, shape) else Modifier)
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -518,30 +520,51 @@ private object SpeechBubbleShape : Shape {
 }
 
 /**
- * Cel rim light on a button face: the face minus itself nudged down by [RIM], i.e. a crescent that
- * follows the top contour inside the [inset] ink line and fades out down the rounded ends. Drawn
- * under the label and the outline, clipped to the face's top half so it never reaches the text.
+ * Cel highlight on a button face: one tapered lens under the top outline (thickest at the centre,
+ * running out to points), a clear [GLOSS_GAP] below the [outline] ink line and well above the label,
+ * about half the face wide (capped, so a long button gets a highlight, not a rule). A shape of its
+ * own on the face: it never touches the outline, so it can't read as a second edge or a stray stroke.
+ * Drawn under the label and the outline.
  */
-private fun Modifier.celRimLight(shape: Shape, inset: Dp): Modifier = drawWithCache {
-    val i = inset.toPx()
-    val faceSize = Size((size.width - i * 2).coerceAtLeast(0f), (size.height - i * 2).coerceAtLeast(0f))
-    val face = Path().apply {
-        addOutline(shape.createOutline(faceSize, layoutDirection, this@drawWithCache))
-        translate(Offset(i, i))
+private fun Modifier.celGloss(color: Color, outline: Dp): Modifier = drawWithCache {
+    val top = outline.toPx() + GLOSS_GAP.toPx()
+    val t = GLOSS_THICKNESS.toPx()
+    val w = (size.width * 0.5f).coerceIn(GLOSS_MIN.toPx(), GLOSS_MAX.toPx()).coerceAtMost(size.width - size.height)
+    val left = (size.width - w) / 2f
+    val right = left + w
+    val cx = size.width / 2f
+    // Ends dip slightly below the crown, like light lying along the curve of a tube.
+    val end = top + t * 0.35f
+    val lens = Path().apply {
+        moveTo(left, end)
+        quadraticTo(cx, top - t * 0.35f, right, end)
+        quadraticTo(cx, top + t * 1.65f, left, end)
+        close()
     }
-    val lower = Path().apply { addPath(face, Offset(0f, RIM.toPx())) }
-    val crescent = Path.combine(PathOperation.Difference, face, lower)
     onDrawWithContent {
-        clipRect(bottom = size.height / 2f) { drawPath(crescent, RimLight) }
+        if (w > t * 4) drawPath(lens, color)
         drawContent()
     }
 }
 
-/** Thickness of the button rim light at the top of the face. */
-private val RIM: Dp = 4.dp
+private val GLOSS_GAP: Dp = 2.dp
+/** Thickness of the lens at its centre. */
+private val GLOSS_THICKNESS: Dp = 4.5.dp
+private val GLOSS_MIN: Dp = 24.dp
+private val GLOSS_MAX: Dp = 96.dp
 
-/** Rim light colour: white, translucent, so it takes the face's hue (strawberry at noon, pink at dusk). */
-private val RimLight = Color.White.copy(alpha = 0.32f)
+/**
+ * A [width] ring of [color] round the face and its base ([below] = how far the base shows under the
+ * face): a die-cut edge that separates a pale face from whatever pastel it floats over.
+ */
+private fun Modifier.halo(shape: Shape, color: Color, width: Dp, below: Dp): Modifier = drawBehind {
+    val g = width.toPx()
+    val outline = shape.createOutline(Size(size.width + g * 2, size.height + below.toPx() + g * 2), layoutDirection, this)
+    translate(-g, -g) { drawOutline(outline, color) }
+}
+
+/** Width of the dusk halo round Primary buttons. */
+private val HALO: Dp = 2.5.dp
 
 /** A 3 dp ring outside the shape (keyboard focus): flat, never a glow. */
 private fun Modifier.focusRing(shape: Shape, color: Color): Modifier = drawBehind {

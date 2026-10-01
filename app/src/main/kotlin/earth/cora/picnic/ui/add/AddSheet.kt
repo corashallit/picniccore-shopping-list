@@ -2,10 +2,10 @@ package earth.cora.picnic.ui.add
 
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -44,7 +45,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -71,6 +71,7 @@ import earth.cora.picnic.ui.theme.PicnicIconButton
 import earth.cora.picnic.ui.theme.PicnicSurface
 import earth.cora.picnic.ui.theme.PicnicTextField
 import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.SectionDivider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -163,32 +164,42 @@ fun AddSheet(
     }
 }
 
-/** The sheet's content for every mode and phase (docs/ARCHITECTURE.md §10.4). */
+/**
+ * The sheet's content for every mode and phase (docs/ARCHITECTURE.md §10.4). In the preview the
+ * commit row is a footer pinned under the scrolling content, so "Add N items" never needs a scroll.
+ */
 @Composable
 fun AddSheetContent(state: AddUiState, actions: AddActions, modifier: Modifier = Modifier) {
     val d = PicnicTheme.dimens
     val phase = state.phase
-    Column(modifier.verticalScroll(rememberScrollState())) {
-        SheetTitle(stringResource(if (phase == AddPhase.Preview) R.string.add_title_preview else R.string.add_title)) {
-            PicnicIconButton(PicnicGlyph.Close, stringResource(R.string.screens_close), actions.onClose)
-        }
+    Column(modifier) {
         Column(
-            Modifier.padding(start = d.gutter, end = d.gutter, bottom = d.l),
-            verticalArrangement = Arrangement.spacedBy(d.m),
+            Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
         ) {
-            // Tabs only while the user can switch: hidden during a call, a recording and the preview.
-            if (phase != AddPhase.Preview && !phase.busy) ModeTabs(state.mode, enabled = !state.committing, onModeChange = actions.onModeChange)
-            when (phase) {
-                AddPhase.Preview -> PreviewContent(state, actions)
-                AddPhase.Transcribing, is AddPhase.Thinking -> BusyContent(state, actions)
-                is AddPhase.Recording -> RecordingContent(phase, actions)
-                AddPhase.Idle, is AddPhase.Failed -> when (state.mode) {
-                    AddMode.WRITE -> WriteContent(state, actions)
-                    AddMode.SNAP -> SnapContent(state, actions)
-                    AddMode.SPEAK -> SpeakContent(state, actions)
+            SheetTitle(stringResource(if (phase == AddPhase.Preview) R.string.add_title_preview else R.string.add_title)) {
+                PicnicIconButton(PicnicGlyph.Close, stringResource(R.string.screens_close), actions.onClose)
+            }
+            Column(
+                Modifier.padding(start = d.gutter, end = d.gutter, bottom = if (phase == AddPhase.Preview) d.s else d.l),
+                verticalArrangement = Arrangement.spacedBy(d.m),
+            ) {
+                // Tabs only while the user can switch: hidden during a call, a recording and the preview.
+                if (phase != AddPhase.Preview && !phase.busy) ModeTabs(state.mode, enabled = !state.committing, onModeChange = actions.onModeChange)
+                when (phase) {
+                    AddPhase.Preview -> PreviewContent(state, actions)
+                    AddPhase.Transcribing, is AddPhase.Thinking -> BusyContent(state, actions)
+                    is AddPhase.Recording -> RecordingContent(phase, actions)
+                    AddPhase.Idle, is AddPhase.Failed -> when (state.mode) {
+                        AddMode.WRITE -> WriteContent(state, actions)
+                        AddMode.SNAP -> SnapContent(state, actions)
+                        AddMode.SPEAK -> SpeakContent(state, actions)
+                    }
                 }
             }
         }
+        if (phase == AddPhase.Preview) PreviewFooter(state, actions)
     }
 }
 
@@ -438,7 +449,7 @@ private fun FailureCard(failed: AddPhase.Failed, actions: AddActions) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ColumnScope.PreviewContent(state: AddUiState, actions: AddActions) {
+private fun PreviewContent(state: AddUiState, actions: AddActions) {
     val c = PicnicTheme.colors
     val d = PicnicTheme.dimens
     val uriHandler = LocalUriHandler.current
@@ -468,6 +479,7 @@ private fun ColumnScope.PreviewContent(state: AddUiState, actions: AddActions) {
                 title = if (first.aisleIndex < 0) stringResource(R.string.list_section_unsorted) else first.aisleTitle,
                 number = if (first.aisleIndex >= 0) storeAisleNumber(first.aisleTitle) else null,
                 aisleIndex = first.aisleIndex,
+                rowIcon = PREVIEW_ICON,
             )
             group.forEachIndexed { i, row ->
                 AisleSectionRow(first.aisleIndex, first = i == 0, last = i == group.lastIndex) {
@@ -498,19 +510,40 @@ private fun ColumnScope.PreviewContent(state: AddUiState, actions: AddActions) {
             }
         }
     }
+}
 
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(d.s)) {
-        PicnicButton(
-            pluralStringResource(R.plurals.add_commit, state.keptCount, state.keptCount),
-            onClick = actions.onCommit,
-            enabled = state.keptCount > 0 && !state.committing,
-            glyph = PicnicGlyph.Add,
-            modifier = Modifier.weight(1f),
-        )
-        PicnicButton(stringResource(R.string.add_start_over), onClick = actions.onStartOver, style = PicnicButtonStyle.Text)
+/** The preview's commit row, pinned under the scrolling preview (a dashed edge marks the fold). */
+@Composable
+private fun PreviewFooter(state: AddUiState, actions: AddActions) {
+    val d = PicnicTheme.dimens
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(PicnicTheme.colors.surfaceRaised)
+            .padding(start = d.gutter, end = d.gutter, bottom = d.s),
+    ) {
+        SectionDivider()
+        Row(
+            Modifier.padding(top = d.xs),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(d.s),
+        ) {
+            PicnicButton(
+                pluralStringResource(R.plurals.add_commit, state.keptCount, state.keptCount),
+                onClick = actions.onCommit,
+                enabled = state.keptCount > 0 && !state.committing,
+                glyph = PicnicGlyph.Add,
+                modifier = Modifier.weight(1f),
+            )
+            PicnicButton(stringResource(R.string.add_start_over), onClick = actions.onStartOver, style = PicnicButtonStyle.Text)
+        }
     }
 }
 
+/**
+ * One proposed item: ticked = it goes on the list. A skipped row fades (no strike-through: on the
+ * list a struck name means "done", so it must not mean "skip" here).
+ */
 @Composable
 private fun PreviewRow(row: PreviewItemUi, onToggle: () -> Unit) {
     val c = PicnicTheme.colors
@@ -530,16 +563,13 @@ private fun PreviewRow(row: PreviewItemUi, onToggle: () -> Unit) {
             .semantics { stateDescription = stateText }
             .padding(start = d.s, end = d.xs, top = d.xxs, bottom = d.xxs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(d.s),
+        // Same columns as ItemRowCard (and AisleSectionTitle(rowIcon = PREVIEW_ICON) above it).
+        horizontalArrangement = Arrangement.spacedBy(d.m),
     ) {
-        ItemIcon(row.icon, contentDescription = null, size = 36.dp)
+        ItemIcon(row.icon, contentDescription = null, size = PREVIEW_ICON, modifier = Modifier.alpha(if (row.keep) 1f else SKIPPED_ALPHA))
         Column(Modifier.weight(1f)) {
-            Text(
-                row.item.name,
-                style = PicnicTheme.type.itemName.copy(textDecoration = if (row.keep) null else TextDecoration.LineThrough),
-                color = if (row.keep) c.ink else c.inkFaint,
-            )
-            if (detail != null) Text(detail, style = PicnicTheme.type.detail, color = c.inkSoft)
+            Text(row.item.name, style = PicnicTheme.type.itemName, color = if (row.keep) c.ink else c.inkFaint)
+            if (detail != null) Text(detail, style = PicnicTheme.type.detail, color = if (row.keep) c.inkSoft else c.inkFaint)
         }
         CheckMark(checked = row.keep)
     }
@@ -572,6 +602,12 @@ internal fun formatElapsed(ms: Long): String {
 /** "allrecipes.com" for a source chip. */
 internal fun hostOf(url: String): String =
     runCatching { url.toUri().host }.getOrNull()?.removePrefix("www.")?.takeIf { it.isNotBlank() } ?: url
+
+/** Item icon size in the preview rows (more compact than the list's). */
+private val PREVIEW_ICON = 36.dp
+
+/** A skipped preview row's icon fades with its text. */
+private const val SKIPPED_ALPHA = 0.45f
 
 private const val METER_BARS = 28
 private const val SLOW_AFTER_MS = 15_000L

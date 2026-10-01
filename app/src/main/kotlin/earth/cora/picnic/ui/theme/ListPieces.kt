@@ -1,5 +1,8 @@
 package earth.cora.picnic.ui.theme
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,13 +13,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.CacheDrawScope
@@ -29,6 +35,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
@@ -45,6 +52,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.R
 import earth.cora.picnic.core.model.BasketKind
@@ -69,10 +77,12 @@ import earth.cora.picnic.core.model.IconRef
 
 /**
  * Aisle section header (one toggle target). Expanded: patterned medallion + title. Collapsed: the
- * AisleBasket with [miniIcons] peeking out and its count badge. Cleared: a "CLEAR!" star stamp.
+ * AisleBasket with [miniIcons] peeking out and its count badge. Cleared: a "CLEAR!" star stamp in the
+ * trailing slot, in place of the count and chevron (nothing is left to show or hide).
  * Exposes "<title>, <count> items" with state "collapsed"/"expanded" to accessibility.
  * [rowsBelow] = this section's AisleSectionRows follow (expanded, not empty): the header is drawn as
  * the open top band of the section container; otherwise it is a closed card on its own.
+ * The medallion is centred on the rows' icon column and the title starts on their name column.
  */
 @Composable
 fun AisleHeader(
@@ -98,60 +108,76 @@ fun AisleHeader(
     val description = pluralStringResource(R.plurals.theme_aisle_header, count, title, count)
     val state = stringResource(if (collapsed) R.string.theme_state_collapsed else R.string.theme_state_expanded)
     val clearedText = stringResource(R.string.theme_aisle_cleared)
-    Box(modifier.fillMaxWidth()) {
-        SectionBand(aisleIndex, open = rowsBelow, halftone = true) { bandShape ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .defaultMinSize(minHeight = d.touchTarget + d.s)
-                    .clip(bandShape)
-                    .clickable(onClick = onToggle)
-                    .clearAndSetSemantics {
-                        contentDescription = if (cleared) "$description, $clearedText" else description
-                        stateDescription = state
-                        role = Role.Button
-                        onClick { onToggle(); true }
-                    }
-                    .padding(horizontal = d.m, vertical = d.s),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(d.m),
-            ) {
-                if (collapsed) {
-                    AisleBasket(basket, miniIcons, count)
-                } else {
-                    AisleMedallion(number, aisleIndex)
+    // Line the medallion up with the item icons below and the title with the item names (the rows'
+    // content starts d.s inside the inner surface: icon, then d.m to the name).
+    val lead = (d.itemIcon - d.medallion) / 2
+    val start = (d.sectionInset + d.rule + d.s + lead).coerceAtLeast(d.s)
+    val gap = (d.m + lead).coerceAtLeast(d.s)
+    SectionBand(aisleIndex, open = rowsBelow, halftone = true, modifier = modifier) { bandShape ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = d.touchTarget + d.s)
+                .clip(bandShape)
+                .clickable(onClick = onToggle)
+                .clearAndSetSemantics {
+                    contentDescription = if (cleared) "$description, $clearedText" else description
+                    stateDescription = state
+                    role = Role.Button
+                    onClick { onToggle(); true }
                 }
-                // Text and chevron sit on the pastel fill, which stays light at dusk too: always the
-                // family's deep ink (TokensContrastTest checks deep/pastel for every family).
-                Column(Modifier.weight(1f)) {
-                    Text(title, style = PicnicTheme.type.aisleTitle, color = family.deep)
-                    if (cleared) Text(clearedText, style = PicnicTheme.type.caption, color = family.deep)
-                }
+                .padding(start = start, end = d.m, top = d.s, bottom = d.s),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(gap),
+        ) {
+            if (collapsed) {
+                AisleBasket(basket, miniIcons, count)
+            } else {
+                AisleMedallion(number, aisleIndex)
+            }
+            // Text and chevron sit on the pastel fill, which stays light at dusk too: always the
+            // family's deep ink (TokensContrastTest checks deep/pastel for every family).
+            Column(Modifier.weight(1f)) {
+                Text(title, style = PicnicTheme.type.aisleTitle, color = family.deep)
+                if (cleared) Text(clearedText, style = PicnicTheme.type.caption, color = family.deep)
+            }
+            if (cleared) {
+                ClearedStamp()
+            } else {
                 if (!collapsed && count > 0) CountPill(count)
                 Glyph(if (collapsed) PicnicGlyph.Expand else PicnicGlyph.Collapse, contentDescription = null, tint = family.deep)
             }
         }
-        if (cleared) ClearedStamp(Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-10).dp))
     }
 }
 
 /**
  * A plain (non-interactive) section top band: small medallion + title, announced as a heading.
  * For read-only groupings such as the Add sheet's preview; follow it with AisleSectionRows.
+ * [rowIcon] = the icon size of the rows below (laid out like ItemRowCard: d.s, icon, d.m, name): the
+ * medallion sits centred in that column and the title starts where the item names do.
  */
 @Composable
-fun AisleSectionTitle(title: String, number: Int?, aisleIndex: Int, modifier: Modifier = Modifier) {
+fun AisleSectionTitle(
+    title: String,
+    number: Int?,
+    aisleIndex: Int,
+    modifier: Modifier = Modifier,
+    rowIcon: Dp = PicnicTheme.dimens.itemIcon,
+) {
     val d = PicnicTheme.dimens
     val family = PicnicTheme.colors.aisle(aisleIndex)
     SectionBand(aisleIndex, open = true, halftone = false, modifier = modifier) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = d.m, vertical = d.s),
+                .padding(start = d.sectionInset + d.rule + d.s, end = d.m, top = d.s, bottom = d.s),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(d.s),
+            horizontalArrangement = Arrangement.spacedBy(d.m),
         ) {
-            AisleMedallion(number = number, aisleIndex = aisleIndex, size = 28.dp)
+            Box(Modifier.width(rowIcon), contentAlignment = Alignment.Center) {
+                AisleMedallion(number = number, aisleIndex = aisleIndex, size = 28.dp)
+            }
             Text(
                 title,
                 style = PicnicTheme.type.label,
@@ -206,7 +232,7 @@ fun AisleSectionRow(
                     }
                     drawContent()
                     // Rules stay put over the rows (a swiped row slides under them).
-                    if (!first) drawRect(line.copy(alpha = RULE_ALPHA), Offset(inset + indent, 0f), Size(size.width - 2 * (inset + indent), rule))
+                    if (!first) drawRect(line, Offset(inset + indent, 0f), Size(size.width - 2 * (inset + indent), rule))
                 }
             }
             .padding(
@@ -217,7 +243,7 @@ fun AisleSectionRow(
             )
             .clip(inner.slice(top = first, bottom = last)),
     ) {
-        content()
+        CompositionLocalProvider(LocalSectionAisle provides aisleIndex) { content() }
     }
 }
 
@@ -225,7 +251,8 @@ fun AisleSectionRow(
  * Visual content of one item row, laid on its section's inner surface (wrap it in AisleSectionRow;
  * no gestures: the screen adds click/swipe/long-press around it). Opaque, so a swipe background
  * stays hidden until the row moves. Checked state = filled CheckMark + strike-through + softer ink
- * (never colour alone).
+ * (never colour alone). [pressed] (from the screen's interaction source) tints the row with its
+ * section's pastel: the press feedback, since the row has no card edge of its own to move.
  */
 @Composable
 fun ItemRowCard(
@@ -236,14 +263,16 @@ fun ItemRowCard(
     checked: Boolean,
     modifier: Modifier = Modifier,
     drawing: Boolean = false,
+    pressed: Boolean = false,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val d = PicnicTheme.dimens
+    val aisleIndex = LocalSectionAisle.current
     Row(
         modifier
             .fillMaxWidth()
-            .background(c.surface)
+            .background(if (pressed) c.rowPressed(aisleIndex) else c.surface)
             .defaultMinSize(minHeight = d.rowMinHeight)
             .padding(start = d.s, end = d.xs, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -266,8 +295,10 @@ fun ItemRowCard(
 
 /**
  * The section's top band: pastel fill (+ halftone accent), ink outline; [open] = rows follow, so the
- * bottom edge is left open for the tray; closed = a whole card with its hard shadow. [content] gets
- * the band's shape (for clipping a ripple).
+ * bottom edge is left open for the tray; closed = a whole card with its hard shadow. Switching
+ * between the two cross-fades the bottom closure (edge, corners, shadow) over the rows' fade
+ * (instant with reduced motion), so the band never sits open over nothing. [content] gets the band's
+ * shape (for clipping a ripple).
  */
 @Composable
 private fun SectionBand(
@@ -279,21 +310,40 @@ private fun SectionBand(
 ) {
     val c = PicnicTheme.colors
     val d = PicnicTheme.dimens
+    val motion = PicnicTheme.motion
     val family = c.aisle(aisleIndex)
     val shape = PicnicTheme.shapes.section
+    val closure by animateFloatAsState(
+        targetValue = if (open) 0f else 1f,
+        animationSpec = if (motion.reduced) snap() else tween(motion.shortMillis),
+        label = "bandClosure",
+    )
     Box(
         modifier
             .fillMaxWidth()
             .drawWithCache {
                 val stroke = d.outline.toPx()
                 val shadowDy = d.hardShadow.y.toPx()
-                val path = slicePath(shape, top = true, bottom = !open, Rect(Offset.Zero, size))
+                val bounds = Rect(Offset.Zero, size)
+                val openPath = slicePath(shape, top = true, bottom = false, bounds)
+                val closedPath = slicePath(shape, top = true, bottom = true, bounds)
+                val corner = maxOf(shape.bottomStart.toPx(size, this), shape.bottomEnd.toPx(size, this))
+                val dotMargin = d.s.toPx() + d.rule.toPx()
                 onDrawBehind {
-                    if (!open) drawHardShadow(path, c.hardShadow, shadowDy)
+                    val k = closure
+                    if (k > 0f) drawHardShadow(closedPath, c.hardShadow.copy(alpha = c.hardShadow.alpha * k), shadowDy)
                     clipRect(0f, 0f, size.width, size.height) {
-                        drawPath(path, family.pastel)
-                        if (halftone) clipPath(path) { drawHalftone(family.base.copy(alpha = 0.22f)) }
-                        inkInside(path, c.outline, stroke)
+                        if (k < 1f) drawPath(openPath, family.pastel, alpha = 1f - k)
+                        drawPath(closedPath, family.pastel)
+                        // Open band: the dots fade out before its bottom edge (the inner surface's top
+                        // line) instead of crowding it.
+                        if (halftone) clipPath(closedPath) { drawHalftone(family.base.copy(alpha = 0.22f), margin = dotMargin, fade = 1f - k) }
+                        // The outline is the same above the bottom corners; below them the closure fades.
+                        clipRect(bottom = size.height - corner) { inkInside(closedPath, c.outline, stroke) }
+                        clipRect(top = size.height - corner) {
+                            if (k < 1f) inkInside(openPath, c.outline, stroke, alpha = 1f - k)
+                            if (k > 0f) inkInside(closedPath, c.outline, stroke, alpha = k)
+                        }
                     }
                 }
             },
@@ -303,15 +353,27 @@ private fun SectionBand(
 }
 
 /**
- * Thin-line colour of a section's inner surface (its edge and the rules between rows): the aisle's
- * cel shade at noon (the pale bases, lemon above all, vanish on white), its brighter base at dusk
- * (the shades sink into the dark surface). Neutral sections use their soft ink: a second full ink
- * line inside the outline would read as a double border.
+ * Thin-line colour of a section's inner surface (its edge and the rules between rows), alpha
+ * included: exactly what is drawn. Noon: the aisle's deep ink, half strength (the pale bases, lemon
+ * above all, vanish on white). Dusk: its brighter base (the deep and shade colours sink into the dark
+ * surface). Neutral sections: a soft outline, so it never reads as a second ink border inside the
+ * container's own. TokensContrastTest keeps it >= 2:1 on the row surface (<= 3:1 for neutral).
  */
-internal fun PicnicColors.sectionLine(aisleIndex: Int): Color {
-    val family = aisle(aisleIndex)
-    return if (isDark || aisleIndex < 0) family.base else family.shadow
+internal fun PicnicColors.sectionLine(aisleIndex: Int): Color = when {
+    aisleIndex < 0 -> outline.copy(alpha = NEUTRAL_LINE_ALPHA)
+    isDark -> aisle(aisleIndex).base.copy(alpha = DUSK_LINE_ALPHA)
+    else -> aisle(aisleIndex).deep.copy(alpha = NOON_LINE_ALPHA)
 }
+
+/**
+ * A pressed row's fill (opaque): the section's pastel washed over the row surface. Light at noon; a
+ * faint wash at dusk so light text keeps AA (TokensContrastTest checks ink and inkSoft on it).
+ */
+internal fun PicnicColors.rowPressed(aisleIndex: Int): Color =
+    aisle(aisleIndex).pastel.copy(alpha = if (isDark) 0.14f else 0.7f).compositeOver(surface)
+
+/** The aisle index of the AisleSectionRow a row is drawn in (-1 outside any: neutral). */
+internal val LocalSectionAisle = staticCompositionLocalOf { -1 }
 
 /** [this] shape with the corners on its open (shared) edges squared off. */
 internal fun CornerBasedShape.slice(top: Boolean, bottom: Boolean): CornerBasedShape = copy(
@@ -337,8 +399,8 @@ private fun CacheDrawScope.slicePath(shape: CornerBasedShape, top: Boolean, bott
 }
 
 /** Ink line of [width] just inside [path] (border-style: never spills outside the fill). */
-private fun DrawScope.inkInside(path: Path, color: Color, width: Float) {
-    clipPath(path) { drawPath(path, color, style = Stroke(width * 2)) }
+private fun DrawScope.inkInside(path: Path, color: Color, width: Float, alpha: Float = 1f) {
+    clipPath(path) { drawPath(path, color, alpha = alpha, style = Stroke(width * 2)) }
 }
 
 /** Hard offset shadow under a closing slice, never above its own top (that belongs to the slice before). */
@@ -348,17 +410,25 @@ private fun DrawScope.drawHardShadow(path: Path, color: Color, dy: Float) {
     }
 }
 
-/** Halftone accent on the right of a band: decoration only. */
-private fun DrawScope.drawHalftone(color: Color) {
+/**
+ * Halftone accent on the right of a band: decoration only. [fade] (0..1) shrinks the dots towards
+ * nothing over the last 12 dp above a [margin] at the bottom (an open band's inner-surface line).
+ */
+private fun DrawScope.drawHalftone(color: Color, margin: Float = 0f, fade: Float = 0f) {
     val step = 9.dp.toPx()
+    val fadeLength = 12.dp.toPx()
+    val floor = size.height - margin
     var y = step / 2
     var row = 0
     while (y < size.height) {
-        var x = size.width * 0.55f + if (row % 2 == 0) 0f else step / 2
-        while (x < size.width) {
-            val t = (x - size.width * 0.55f) / (size.width * 0.45f)
-            drawCircle(color, 1.dp.toPx() + 1.6.dp.toPx() * t, Offset(x, y))
-            x += step
+        val shrink = 1f - fade * (1f - ((floor - y) / fadeLength).coerceIn(0f, 1f))
+        if (shrink > 0f) {
+            var x = size.width * 0.55f + if (row % 2 == 0) 0f else step / 2
+            while (x < size.width) {
+                val t = (x - size.width * 0.55f) / (size.width * 0.45f)
+                drawCircle(color, (1.dp.toPx() + 1.6.dp.toPx() * t) * shrink, Offset(x, y))
+                x += step
+            }
         }
         y += step
         row++
@@ -367,14 +437,16 @@ private fun DrawScope.drawHalftone(color: Color) {
 
 private const val OVERHANG_DP = 8
 
-/** Rules between rows: the section line, softened so item names stay the strongest marks. */
-private const val RULE_ALPHA = 0.55f
+/** Section line strengths (see sectionLine): weaker than item text, still a visible separator. */
+internal const val NOON_LINE_ALPHA = 0.5f
+internal const val DUSK_LINE_ALPHA = 0.7f
+internal const val NEUTRAL_LINE_ALPHA = 0.35f
 
 /* ---------------- small pieces ---------------- */
 
-/** "CLEAR!" lemon star stamp, rotated: decorative (the header's description says it). */
+/** "CLEAR!" lemon star stamp, rotated, in the header's trailing slot: decorative (the header's description says it). */
 @Composable
-private fun ClearedStamp(modifier: Modifier) {
+private fun ClearedStamp(modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
     val lemon = c.aisle(2)
     Box(modifier.size(48.dp).rotate(-10f).clearAndSetSemantics { }, contentAlignment = Alignment.Center) {

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { createServer } from 'node:http';
+import { Agent, createServer, request as httpRequest } from 'node:http';
 import { connect } from 'node:net';
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -68,6 +68,48 @@ function rawRequest(url, text) {
     socket.on('end', () => resolve(out));
     socket.on('error', reject);
   });
+}
+
+/**
+ * One request through a keep-alive agent, so a second call can reuse the socket. `body` may be a Buffer
+ * (sent with Content-Length) or an array of Buffers (sent chunked, no Content-Length). Fails after `ms`
+ * instead of hanging: a socket the server stopped reading never answers.
+ */
+function send(agent, url, { method = 'GET', headers = {}, body, ms = 3000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(url, { agent, method, headers }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        clearTimeout(timer);
+        resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks).toString(), reused: req.reusedSocket });
+      });
+    });
+    const timer = setTimeout(() => { req.destroy(); reject(new Error(`no answer to ${method} ${url} within ${ms} ms`)); }, ms);
+    req.on('error', (err) => { clearTimeout(timer); reject(err); });
+    if (Array.isArray(body)) {
+      for (const chunk of body) req.write(chunk);
+      req.end();
+    } else req.end(body);
+  });
+}
+
+/**
+ * A raw client connection that sends a request's headers and only part of its body, then keeps the socket
+ * open. Resolves once a complete (chunked) answer has arrived, with the text so far and the socket.
+ */
+async function partialUpload(url, head, firstBytes) {
+  const { hostname, port } = new URL(url);
+  const socket = connect(Number(port), hostname);
+  socket.on('error', () => {});
+  const state = { text: '', closed: false };
+  socket.on('data', (d) => { state.text += d; });
+  socket.on('close', () => { state.closed = true; });
+  await new Promise((r) => socket.once('connect', r));
+  socket.write(head);
+  socket.write(Buffer.alloc(firstBytes, 0x61));
+  await until(() => state.text.includes('\r\n0\r\n\r\n') || state.closed);
+  return { socket, state };
 }
 
 const until = async (predicate, ms = 2000) => {
@@ -239,6 +281,97 @@ test('a device that disconnects cancels the upstream call', async (t) => {
   abort.abort();
   assert.equal((await pending).name, 'AbortError');
   await until(() => upstream.received[0].closed);
+});
+
+test('a rejected upload (body never read) leaves its connection usable, and shutdown stays prompt', async (t) => {
+  const upstream = await fakeUpstream(t);
+  const { url, shutdown, logs } = await start(t, proxyEnv(upstream.base, { SHUTDOWN_GRACE_SECONDS: '5' }));
+  const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+  t.after(() => agent.destroy());
+  const photo = Buffer.alloc(4 * 1024 * 1024, 0x61);
+
+  for (const [headers, status] of [
+    [{ authorization: 'Bearer pk_revoked', 'content-type': 'application/json' }, 401],
+    [{ ...auth, 'content-type': 'text/plain' }, 415],
+  ]) {
+    const rejected = await send(agent, `${url}/v1/responses`, { method: 'POST', headers, body: photo });
+    assert.equal(rejected.status, status);
+    assert.notEqual(rejected.headers.connection, 'close');
+  }
+  const next = await send(agent, `${url}/healthz`);
+  assert.equal(next.status, 200);
+  assert.equal(next.reused, true); // the same socket answered its next request
+  assert.equal(upstream.received.length, 0);
+
+  const started = Date.now();
+  await shutdown('SIGTERM');
+  assert.ok(Date.now() - started < 1000, `shutdown took ${Date.now() - started} ms`);
+  assert.ok(!logs.some((l) => l.event === 'shutdown_timeout'));
+});
+
+test('an upload over the limit without Content-Length gets its 413, and the server keeps serving', async (t) => {
+  const upstream = await fakeUpstream(t);
+  const { url } = await start(t, proxyEnv(upstream.base, { MAX_JSON_MB: '0.01' }));
+  const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+  t.after(() => agent.destroy());
+  // Chunked: the Worker reads part of it, stops at the limit and cancels the rest.
+  const chunks = Array.from({ length: 64 }, () => Buffer.alloc(4096, 0x61));
+
+  const tooBig = await send(agent, `${url}/v1/responses`, { method: 'POST', headers: json, body: chunks });
+  assert.equal(tooBig.status, 413);
+  assert.equal(JSON.parse(tooBig.body).error.code, 'request_too_large');
+  const next = await send(agent, `${url}/healthz`);
+  assert.equal(next.status, 200);
+  assert.equal(next.reused, true);
+
+  // fetch streams the same way; this used to crash the process (Readable.toWeb after a cancel).
+  const body = new ReadableStream({
+    start(c) {
+      for (const chunk of chunks) c.enqueue(new Uint8Array(chunk));
+      c.close();
+    },
+  });
+  const res = await fetch(`${url}/v1/responses`, { method: 'POST', headers: json, body, duplex: 'half' });
+  assert.equal(res.status, 413);
+  await res.body.cancel();
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal((await fetch(`${url}/healthz`)).status, 200);
+  assert.equal(upstream.received.length, 0);
+});
+
+test('a body declared too big to read through is answered with Connection: close, and the socket closes', async (t) => {
+  const upstream = await fakeUpstream(t);
+  const { url } = await start(t, proxyEnv(upstream.base));
+  const { socket, state } = await partialUpload(
+    url,
+    `POST /v1/audio/transcriptions HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer ${TOKEN}\r\n`
+      + `Content-Type: multipart/form-data; boundary=b\r\nContent-Length: ${200 * 1024 * 1024}\r\n\r\n`,
+    64 * 1024,
+  );
+  t.after(() => socket.destroy());
+  assert.match(state.text, /^HTTP\/1\.1 413 /);
+  assert.match(state.text, /\r\nconnection: close\r\n/i);
+  await until(() => state.closed);
+});
+
+test('shutdown does not wait for the rest of a rejected upload that is still arriving', async (t) => {
+  const upstream = await fakeUpstream(t);
+  const { url, shutdown, logs } = await start(t, proxyEnv(upstream.base, { SHUTDOWN_GRACE_SECONDS: '5' }));
+  // The device declares 1 MiB, sends 64 KiB, and is still sending when the 401 arrives.
+  const { socket, state } = await partialUpload(
+    url,
+    'POST /v1/responses HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer pk_revoked\r\n'
+      + `Content-Type: application/json\r\nContent-Length: ${1024 * 1024}\r\n\r\n`,
+    64 * 1024,
+  );
+  t.after(() => socket.destroy());
+  assert.match(state.text, /^HTTP\/1\.1 401 /);
+  assert.doesNotMatch(state.text, /connection: close/i);
+  const started = Date.now();
+  await shutdown('SIGTERM');
+  assert.ok(Date.now() - started < 1000, `shutdown took ${Date.now() - started} ms`);
+  assert.ok(!logs.some((l) => l.event === 'shutdown_timeout'));
+  await until(() => state.closed);
 });
 
 test('shutdown drains: refuses new connections, finishes in-flight requests, then stops', async (t) => {

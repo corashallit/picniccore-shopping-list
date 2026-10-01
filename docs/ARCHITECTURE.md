@@ -774,6 +774,8 @@ The ingest context is taken when the request is sent (`state.ingestContext(listI
 | **Snap** (camera / picker) | `TakePicture` into a FileProvider Uri (`Captures.newCaptureUri`, pending Uri kept in `rememberSaveable`) or `PickVisualMedia(ImageOnly)` → `onPhoto(uri)` → `photos.jpegBytes(uri)` (IO) → `Thinking` → `ingest(Image(bytes), ctx)` → Preview → commit. Delete the capture file afterwards. | PHOTO | `Failed(retryable)`; no plain-lines option (nothing to parse) |
 | **Speak** | Request `RECORD_AUDIO` at runtime → `AudioRecorder.start()` (`VoiceRecorder`: m4a, mono 16 kHz 32 kbps, max 5 min). Poll `level()` about 10×/s for the waveform. `stop()` (also on `ON_STOP`) → bytes → `Transcribing` → `assistant.transcribe(AudioClip(bytes), keywords)` → show the transcript (editable) → `Thinking` → `ingest(Transcript(text), ctx)` → Preview → commit | VOICE | Empty transcript → "Didn't catch that". Transcribe failure → retry with the bytes kept in memory. Ingest failure → plain lines from the transcript. |
 
+**Preview layout.** Proposed items are grouped by aisle in section containers (`AisleSectionTitle` + `AisleSectionRow`s). The commit row (**Add N items**, **Start over**) is a footer pinned under the scrolling preview, behind a dashed edge, so the main action never needs a scroll. A skipped row fades and leaves its box empty; it is never struck through (§11.4).
+
 **Commit** (shared by every path), in `appScope`:
 
 1. `items = proposed.filter { keep }.map { it.toGroceryItem(newId(), clock(), source) }`.
@@ -809,7 +811,9 @@ The art pass then mostly edits `ui/theme/**` and assets, not screens.
 object PicnicTheme { colors: PicnicColors; type: PicnicTypography; shapes: PicnicShapes; dimens: PicnicDimens; motion: PicnicMotion }
 data class PicnicColors(isDark, background, backgroundPattern, surface, surfaceRaised, surfaceSunken, hardShadow,
     outline, ink, inkSoft, inkFaint, primary, primaryShadow, onPrimary, secondary, onSecondary, highlight, onHighlight,
-    link, error, onError, strike, scrim, aisles: List<AisleColors>) { fun aisle(index: Int): AisleColors }  // index<0 = neutral
+    link, error, onError, strike, scrim, aisles: List<AisleColors>,
+    neutral: AisleColors /*Unsorted, In the basket*/, buttonGloss: Color? /*null = no gloss*/) {
+    fun aisle(index: Int): AisleColors }  // index<0 = neutral
 data class AisleColors(base, shadow, pastel, deep)        // cel base, hard shade, pale fill, deep text
 data class PicnicTypography(wordmark, screenTitle, aisleTitle, aisleNumber, itemName /*>=16sp*/, body,
     detail /*>=13sp*/, label, caption, script /*decorative*/, handwriting, counter)
@@ -824,6 +828,7 @@ val LocalIconCatalog: ProvidableCompositionLocal<IconCatalog> // default IconCat
 
 - **Palettes.** Two placeholder palettes: light "picnic at noon" and dark "picnic at dusk", chosen by the system dark mode. Both share an 8-colour aisle rotation (strawberry, sky, lemon, leaf, grape, tangerine, bubblegum, cocoa). An aisle's colour is `aisles[(position-1) % 8]`.
 - **Aisle identity.** An aisle is identified by colour, pattern, number and name, never by colour alone.
+- **Neutral sections.** Unsorted and In the basket use `colors.neutral` (what `aisle(-1)` returns): a low-chroma paper tone, never one of the rotation pastels or `surfaceSunken`, so they can't pass for an aisle. Its pastel stays light in both palettes, like the rotation's, so its tray reads the same way (light tray, row panel inside). `TokensContrastTest` checks it is low-chroma and at least ΔE 8 from every rotation pastel.
 - **Fonts.** These must be **bundled** TTF/OTF files in `res/font`, subsetted, with their OFL licences shown in-app. Robolectric can't render downloadable fonts. The skeleton uses system families as placeholders.
 
 ### 11.2 Components (`ui/theme/Components.kt`)
@@ -831,7 +836,7 @@ val LocalIconCatalog: ProvidableCompositionLocal<IconCatalog> // default IconCat
 | Composable | Purpose |
 |---|---|
 | `PicnicSurface(modifier, shape, color, outlined, shadow, content: BoxScope.()->Unit)` | Every card or row container: fill, ink outline and a **hard offset shadow** (no blur elevation) |
-| `PicnicButton(text, onClick, modifier, style: Primary/Secondary/Text, enabled, glyph?)` | Buttons, at least 48 dp tall. Any gloss must read as intentional cel shading clipped to the face and clear of the label (the placeholder Primary has a rim light along the top contour), never a loose highlight stroke. |
+| `PicnicButton(text, onClick, modifier, style: Primary/Secondary/Text, enabled, glyph?)` | Buttons, at least 48 dp tall. Gloss is a palette setting, `colors.buttonGloss` (null = none). Any gloss must read as an intentional cel highlight: a shape of its own on the face, clear of the outline and the label, never a loose stroke or a second top edge. The placeholder Primary draws a tapered lens centred under the top outline at noon (about half the face wide, capped at 96 dp) and none at dusk, where the pale face gives a highlight nothing to contrast with. At dusk Primary buttons also wear a 2.5 dp halo in the ground colour, so the pale face never melts into a pastel band behind it. |
 | `PicnicIconButton(glyph, contentDescription, onClick, modifier, enabled, emphasized)` | 48 dp round glyph button |
 | `PicnicChip(text, selected, onClick, modifier, leading?)` | Aisle chips, Sources chips and filter chips |
 | `PicnicTextField(value, onValueChange, modifier, placeholder, label, singleLine, minLines, maxLines, isError, supportingText, enabled, keyboardOptions, keyboardActions, visualTransformation, trailing?)` | All text input. For the token field, pass `PasswordVisualTransformation`. The visible `label` is the editable node's content description (TalkBack: "Amount, 2, edit box") and is cleared from the label `Text`; tests find fields by `hasContentDescription(label)`. |
@@ -860,17 +865,18 @@ These have no semantics unless a parameter says otherwise. Each direction's meta
 
 ```kotlin
 @Composable fun ItemIcon(icon: IconRef, contentDescription: String?, modifier = Modifier,
-                         size: Dp = PicnicTheme.dimens.itemIcon, drawing: Boolean = false)
+                         size: Dp = PicnicTheme.dimens.itemIcon, drawing: Boolean = false, lifted: Boolean = false)
 @Composable fun AisleBasket(kind: BasketKind, miniIcons: List<IconRef>, count: Int, modifier = Modifier,
                             size: Dp = PicnicTheme.dimens.basket)
 @Composable fun AisleHeader(title: String, number: Int?, aisleIndex: Int, basket: BasketKind, miniIcons: List<IconRef>,
                             count: Int, collapsed: Boolean, cleared: Boolean, onToggle: () -> Unit, modifier = Modifier,
                             rowsBelow: Boolean = false)
-@Composable fun AisleSectionTitle(title: String, number: Int?, aisleIndex: Int, modifier = Modifier)
+@Composable fun AisleSectionTitle(title: String, number: Int?, aisleIndex: Int, modifier = Modifier,
+                                  rowIcon: Dp = PicnicTheme.dimens.itemIcon)
 @Composable fun AisleSectionRow(aisleIndex: Int, first: Boolean, last: Boolean, modifier = Modifier,
                                 content: @Composable () -> Unit)
 @Composable fun ItemRowCard(name: String, detail: String?, icon: IconRef, checked: Boolean,
-                            modifier = Modifier, drawing: Boolean = false)
+                            modifier = Modifier, drawing: Boolean = false, pressed: Boolean = false)
 ```
 
 **Aisle sections: an aisle owns its rows.** An aisle and its items read as **one container**, never as a stack of equal floating cards. The header is the container's top band, tinted with the aisle's `pastel`. The rows sit on a lighter inner surface (`colors.surface`, shape `shapes.sectionInner`) inside a tray of that same tint (`dimens.sectionInset` wall), divided by thin rules (`dimens.rule`). The last row closes the container with a rounded cap, the tray margin and the hard shadow. Collapsed or emptied sections are just the band with its basket.
@@ -886,15 +892,20 @@ itemsIndexed(items, key = { _, r -> r.id }) { i, r ->
 }
 ```
 
-- Slices must touch: no `verticalArrangement` spacing in the list. Put `dimens.sectionGap` above each header (except the first) instead. Each slice draws its outline past its open edges and clips it to its own bounds, so adjacent slices join without a visible seam.
+- Slices must touch: no `verticalArrangement` spacing in the list. Put `dimens.sectionGap` between sections (the List screen uses a spacer item) instead. Each slice draws its outline past its open edges and clips it to its own bounds, so adjacent slices join without a visible seam.
 - **AisleSectionRow** draws the tray walls, the inner surface, a rule above every row but the `first`, and on the `last` row the cap. It clips `content` to the inner surface, so a swiped row slides out under the walls and the swipe background fills exactly that row's slot. Gestures, semantics and keys stay with the screen.
-- **AisleSectionTitle** is a non-interactive band (small medallion and title, announced as a heading) for read-only groupings such as the Add sheet's preview. Follow it with `AisleSectionRow`s, in a plain `Column` if the group is short.
-- If a later screen adds sticky headers, pin the header band only; rows keep drawing their own slice.
+- **Section lines** (the inner surface's edge and the rules between rows) are measured as drawn, alpha included: at least 2:1 on the row surface in both palettes. Placeholder: the aisle's `deep` at 50 % at noon, its `base` at 70 % at dusk, a 35 % outline on neutral sections (at most 3:1 there, so it never reads as a second border inside the container's ink outline). `TokensContrastTest` checks all three.
+- **AisleSectionTitle** is a non-interactive band (small medallion and title, announced as a heading) for read-only groupings such as the Add sheet's preview. Follow it with `AisleSectionRow`s, in a plain `Column` if the group is short. Pass the rows' icon size as `rowIcon` (rows laid out like `ItemRowCard`: `d.s`, icon, `d.m`, name) so the medallion sits on the icon column and the title starts where the names do. `AisleHeader` lines up the same way with `ItemRowCard`.
+- **Band motion.** When a header's `rowsBelow` changes, its bottom closure (edge, corners, shadow) cross-fades over `motion.shortMillis`, alongside the rows' fade, so a band never sits open over nothing (instant with reduced motion). Keep the header the same lazy item while it expands and collapses, or the animation restarts at its target.
+- **Pinned bands.** On the List screen every section header is a `stickyHeader`. Once an open section's rows scroll under the top, its band stays pinned, drawn closed (`rowsBelow = false`) as a card over its own rows, so a long aisle is never a run of rows without a name. A one-pixel sticky marker after each section pushes the band off as the section ends (the list ignores zero-size items when choosing which header to pin). The list's viewport starts under the top bar (top inset as padding, not content padding), so the pinned band sits just below the bar.
+- **Ticking off.** A just-ticked row stays in its aisle, ticked, for 600 ms so the check stamp plays in place, then fades out of the aisle and into the basket. Basket rows are keyed `basket:<id>`, so a row never slides its slice across the sections in between. This is presentation only: the state and its counts are unchanged.
+- **No offset shadows inside a section.** Circles and boxes in a row (item stickers, the checkbox) lie flat. An offset drop reads as a smudge or crescent next to the checkbox, not as depth. Lift (hard offset shadow) is only for free-floating cards, buttons and stickers on the ground: `ItemIcon(lifted = true)` for the edit sheet's hero icon.
 
-- **ItemIcon** uses `LocalIconImages.cached(ref)` first; if that's null, it calls `load(ref)` in `produceState`; if the result is still null, it draws placeholder art keyed by the icon's category. `drawing` overlays `DrawingSparkle`. Rows pass `contentDescription = null`, because the row text already names the item. Callers pass `IconCatalog.displayRef(item, busy)`.
+- **ItemIcon** uses `LocalIconImages.cached(ref)` first; if that's null, it calls `load(ref)` in `produceState`; if the result is still null, it draws placeholder art keyed by the icon's category. `drawing` overlays `DrawingSparkle`. `lifted` adds the placeholder sticker's drop shadow; it is off by default, so stickers lie flat in rows, chips and pickers. Bespoke and bundled bitmaps are drawn as they are. Rows pass `contentDescription = null`, because the row text already names the item. Callers pass `IconCatalog.displayRef(item, busy)`.
 - **AisleBasket** draws the container art for `kind` (one vector or bitmap per basket kind from the art pass; the catalog's `drawHint`s describe each). The first **2–5** of `miniIcons` peek out of the basket, overlapping (fewer if fewer are given, at most 5). A `count` badge shows when `count > 0`. It is decorative.
-- **AisleHeader** is the single toggle target for its section. Collapsed: `AisleBasket` (basket, mini icons, count badge) beside the title. Expanded: `AisleMedallion` and the title. Cleared: a "cleared" stamp. It announces "`<title>`, `<count>` items" with the state description collapsed or expanded. Unsorted and the checked section use it with `number = null` and `aisleIndex = -1`. With `rowsBelow = true` it is the open top band of its section, otherwise a closed card.
-- **ItemRowCard** holds the visual content of a row only, opaque on the section's inner surface. Wrap it in `AisleSectionRow`; it draws no card, outline or shadow of its own. The screen adds click (toggles checked), long-press (opens edit) and `SwipeToDismissBox` (delete with undo). A checked item shows the filled `CheckMark`, a strike-through and the softer `inkSoft` colour. State is never shown by colour alone.
+- **AisleHeader** is the single toggle target for its section. Collapsed: `AisleBasket` (basket, mini icons, count badge) beside the title. Expanded: `AisleMedallion` and the title. Cleared: a "cleared" stamp in the trailing slot, replacing the count and the chevron (nothing is left to show or hide), never laid over them. It announces "`<title>`, `<count>` items" with the state description collapsed or expanded. Unsorted and the checked section use it with `number = null` and `aisleIndex = -1`. With `rowsBelow = true` it is the open top band of its section, otherwise a closed card. The halftone accent fades out before an open band's bottom edge.
+- **ItemRowCard** holds the visual content of a row only, opaque on the section's inner surface. Wrap it in `AisleSectionRow`; it draws no card, outline or shadow of its own. The screen adds click (toggles checked), long-press (opens edit) and `SwipeToDismissBox` (delete with undo). A checked item shows the filled `CheckMark`, a strike-through and the softer `inkSoft` colour. State is never shown by colour alone. `pressed` (from the screen's interaction source) is the press feedback: the row takes its section's pastel wash at once (it has no card edge to move or shrink). `TokensContrastTest` keeps ink, inkSoft and the checkbox ring readable on it.
+- **Strike-through means done** everywhere. Screens that let the user skip items (the Add preview) fade a skipped row and leave its box empty; they never strike it.
 
 ### 11.5 Previews and accessibility rules
 

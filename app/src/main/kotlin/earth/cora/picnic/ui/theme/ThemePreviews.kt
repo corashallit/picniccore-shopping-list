@@ -151,13 +151,13 @@ private fun DecorDuskPreview() = PreviewFrame(dark = true) { DecorSample() }
 @Composable
 private fun ItemIconsSample() {
     val catalog = IconCatalog.default
-    Caption("ItemIcon placeholder per category (+ DEFAULT_ICON, + drawing)")
+    Caption("ItemIcon placeholder per category (+ DEFAULT_ICON, + drawing), lifted (on the ground)")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        catalog.categories.forEach { ItemIcon(IconRef(it.fallbackIcon), contentDescription = it.label, size = 48.dp) }
-        ItemIcon(IconRef(IconCatalog.DEFAULT_ICON), contentDescription = "Default", size = 48.dp)
-        ItemIcon(IconRef("condiments_generic"), contentDescription = "Drawing", size = 48.dp, drawing = true)
+        catalog.categories.forEach { ItemIcon(IconRef(it.fallbackIcon), contentDescription = it.label, size = 48.dp, lifted = true) }
+        ItemIcon(IconRef(IconCatalog.DEFAULT_ICON), contentDescription = "Default", size = 48.dp, lifted = true)
+        ItemIcon(IconRef("condiments_generic"), contentDescription = "Drawing", size = 48.dp, drawing = true, lifted = true)
     }
-    Caption("Row size (40 dp) and mini size (20 dp)")
+    Caption("Row size (40 dp, flat as in a section row) and mini size (20 dp)")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         listOf("lemon", "baguette", "milk_bag", "salmon_fillet", "dish_soap").forEach { ItemIcon(IconRef(it), contentDescription = null) }
         listOf("lemon", "baguette", "milk_bag", "salmon_fillet", "dish_soap").forEach { ItemIcon(IconRef(it), contentDescription = null, size = 20.dp) }
@@ -205,7 +205,8 @@ private fun BasketsDuskPreview() = PreviewFrame(dark = true) { BasketsSample() }
 @Composable
 private fun ListPiecesSample() {
     // Sections as the list draws them: header band + AisleSectionRows touching (no spacing), one
-    // container per aisle; collapsed and cleared aisles are just the band.
+    // container per aisle; collapsed and cleared aisles are just the band. The Gochujang row shows
+    // the pressed tint.
     Column {
         AisleHeader(
             title = "Unsorted", number = null, aisleIndex = -1, basket = BasketKind.DEFAULT,
@@ -222,14 +223,14 @@ private fun ListPiecesSample() {
     )
     Column {
         AisleHeader(
-            title = "Aisle 2 - Baking & spices", number = 3, aisleIndex = 2, basket = BasketKind.JAR_SHELF,
+            title = "Aisle 3 - Baking & spices", number = 3, aisleIndex = 2, basket = BasketKind.JAR_SHELF,
             miniIcons = emptyList(), count = 2, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
         )
         AisleSectionRow(aisleIndex = 2, first = true, last = false) {
             ItemRowCard(name = "All-purpose flour", detail = "2 kg", icon = IconRef("flour"), checked = false)
         }
         AisleSectionRow(aisleIndex = 2, first = false, last = false) {
-            ItemRowCard(name = "Gochujang", detail = "500 g tub · for the bibimbap", icon = IconRef("condiments_generic"), checked = false, drawing = true)
+            ItemRowCard(name = "Gochujang", detail = "500 g tub · for the bibimbap", icon = IconRef("condiments_generic"), checked = false, drawing = true, pressed = true)
         }
         AisleSectionRow(aisleIndex = 2, first = false, last = true) {
             ItemRowCard(name = "Milk", detail = "4 L bag", icon = IconRef("milk_bag"), checked = true)

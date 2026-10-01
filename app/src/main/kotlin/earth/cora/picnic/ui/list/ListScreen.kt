@@ -1,7 +1,5 @@
 package earth.cora.picnic.ui.list
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -12,14 +10,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,8 +35,12 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -44,8 +49,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -333,21 +338,44 @@ private fun EmptyList(actions: ListActions, modifier: Modifier) {
 private fun ListContent(state: ListUiState, actions: ListActions, padding: PaddingValues) {
     val d = PicnicTheme.dimens
     val direction = LocalLayoutDirection.current
+    val sections = rememberTickDwell(state.sections)
+    val listState = rememberLazyListState()
+    val onePixel = with(LocalDensity.current) { 1.toDp() }
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        // The viewport starts under the top bar (not behind it, via content padding) so a pinned
+        // section band sits just below the bar. Scrolled rows vanish at the same line either way: the
+        // bar repaints the ground behind itself.
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = padding.calculateTopPadding()),
         contentPadding = PaddingValues(
             start = padding.calculateStartPadding(direction) + d.gutter,
             end = padding.calculateEndPadding(direction) + d.gutter,
-            top = padding.calculateTopPadding() + d.xs,
+            top = d.xs,
             bottom = padding.calculateBottomPadding() + FAB_CLEARANCE,
         ),
     ) {
         // Each section is ONE container drawn slice by slice (theme ListPieces.kt): the header is its
         // top band, every row its own keyed item inside, the last row the cap. Slices must touch, so
-        // there is no list-wide spacing: the gap goes above each header instead.
-        state.sections.forEachIndexed { index, section ->
+        // there is no list-wide spacing: a spacer item sits between sections instead.
+        // Section bands are sticky headers: once an open section's rows scroll under the top, its band
+        // stays pinned (drawn closed, a card over its own rows), so a long aisle never becomes rows
+        // without a name. A one-pixel sticky marker closes every section and pushes its band off as
+        // the section ends (a collapsed band, followed by its marker straight away, just scrolls).
+        // Every header stays a sticky item, collapsed or not, so expanding or collapsing keeps the
+        // same composable and the band's closure animates.
+        var position = 0 // lazy-list index of the next item (the pinned check needs the header's)
+        sections.forEachIndexed { index, section ->
             val open = !section.collapsed && section.items.isNotEmpty()
-            item(key = "header:${section.id}", contentType = "header") {
+            if (index > 0) {
+                item(key = "gap:${section.id}", contentType = "gap") {
+                    Spacer(Modifier.itemMotion(this).fillMaxWidth().height(d.sectionGap))
+                }
+                position++
+            }
+            val headerPosition = position
+            val header: @Composable LazyItemScope.(rowsBelow: Boolean) -> Unit = { rowsBelow ->
                 AisleHeader(
                     title = sectionTitle(section),
                     number = section.number,
@@ -358,14 +386,25 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                     collapsed = section.collapsed,
                     cleared = section.cleared,
                     onToggle = { actions.onToggleSection(section.id) },
-                    rowsBelow = open,
-                    modifier = Modifier
-                        .itemMotion(this)
-                        .padding(top = if (index > 0) d.sectionGap else 0.dp),
+                    rowsBelow = rowsBelow,
+                    modifier = Modifier.itemMotion(this),
                 )
             }
+            stickyHeader(key = "header:${section.id}", contentType = "header") {
+                val pinned by remember(listState, headerPosition) {
+                    derivedStateOf {
+                        listState.firstVisibleItemIndex > headerPosition ||
+                            (listState.firstVisibleItemIndex == headerPosition && listState.firstVisibleItemScrollOffset > 0)
+                    }
+                }
+                header(open && !pinned)
+            }
+            position++
             if (open) {
-                itemsIndexed(section.items, key = { _, row -> row.id }, contentType = { _, _ -> "row" }) { i, row ->
+                // Basket rows get their own keys: ticking or unticking fades a row out of one section and
+                // into the other (after the dwell) instead of sliding its slice across the sections between.
+                val keyOf: (ItemRowUi) -> String = if (section.kind == SectionKind.CHECKED) { row -> "basket:${row.id}" } else { row -> row.id }
+                itemsIndexed(section.items, key = { _, row -> keyOf(row) }, contentType = { _, _ -> "row" }) { i, row ->
                     AisleSectionRow(
                         aisleIndex = section.aisleIndex,
                         first = i == 0,
@@ -375,7 +414,11 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                         ItemRow(row, actions)
                     }
                 }
+                position += section.items.size
             }
+            // One pixel tall: the list ignores zero-size items when choosing which header to pin.
+            stickyHeader(key = "end:${section.id}", contentType = "end") { Spacer(Modifier.fillMaxWidth().height(onePixel)) }
+            position++
             if (section.kind == SectionKind.CHECKED && section.count > 0) {
                 item(key = "clear-checked", contentType = "button") {
                     Box(
@@ -393,6 +436,7 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                         )
                     }
                 }
+                position++
             }
         }
         item(key = "gesture-hint", contentType = "hint") {
@@ -403,6 +447,54 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                     .fillMaxWidth()
                     .padding(top = d.l),
             )
+        }
+    }
+}
+
+/** Where a just-ticked row was shown: its aisle section and position there. */
+private class TickDwell(val sectionId: String, val index: Int)
+
+/**
+ * [sections] as shown: a row just ticked in an aisle stays there, ticked, for [TICK_DWELL_MS] so its
+ * check stamp plays in place (the state already lists it in the basket, which leaves it out
+ * meanwhile). Then it fades out of the aisle and into the basket. Unticking it during the dwell,
+ * removing it, or its section disappearing ends the dwell at once. Presentation only: the state and
+ * its counts are untouched.
+ */
+@Composable
+private fun rememberTickDwell(sections: List<SectionUi>): List<SectionUi> {
+    // Unchecked rows of open sections as last shown (plain map: written after composition).
+    val shown = remember { HashMap<String, TickDwell>() }
+    val dwelling = remember { mutableStateMapOf<String, TickDwell>() }
+    val basket = sections.firstOrNull { it.kind == SectionKind.CHECKED }?.items.orEmpty()
+    val fresh = basket.mapNotNull { row -> shown[row.id]?.takeIf { row.id !in dwelling }?.let { row.id to it } }.toMap()
+    // Only while the row is still in the basket and its aisle is still listed (an emptied section
+    // may vanish, Unsorted does): otherwise the row goes straight to where the state puts it.
+    val active = (dwelling + fresh).filter { (id, at) -> basket.any { it.id == id } && sections.any { it.id == at.sectionId } }
+    SideEffect {
+        dwelling.putAll(fresh)
+        dwelling.keys.filter { it !in active }.forEach { dwelling.remove(it) }
+        shown.clear()
+        sections.forEach { s ->
+            if (s.kind != SectionKind.CHECKED && !s.collapsed) s.items.forEachIndexed { i, row -> if (!row.checked) shown[row.id] = TickDwell(s.id, i) }
+        }
+    }
+    active.keys.forEach { id ->
+        key(id) {
+            LaunchedEffect(Unit) {
+                delay(TICK_DWELL_MS)
+                dwelling.remove(id)
+            }
+        }
+    }
+    if (active.isEmpty()) return sections
+    val rows = basket.associateBy { it.id }
+    return sections.map { s ->
+        if (s.kind == SectionKind.CHECKED) {
+            s.copy(items = s.items.filterNot { it.id in active })
+        } else {
+            val mine = active.entries.filter { it.value.sectionId == s.id }.sortedBy { it.value.index }
+            if (mine.isEmpty()) s else s.copy(items = s.items.toMutableList().apply { mine.forEach { (id, at) -> add(at.index.coerceAtMost(size), rows.getValue(id)) } })
         }
     }
 }
@@ -442,12 +534,6 @@ private fun ItemRow(row: ItemRowUi, actions: ListActions, modifier: Modifier = M
     val dismissState = rememberSwipeToDismissBoxState()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val motion = PicnicTheme.motion
-    val squish by animateFloatAsState(
-        targetValue = if (pressed) 0.98f else 1f,
-        animationSpec = if (motion.reduced) snap() else tween(motion.shortMillis),
-        label = "rowPress",
-    )
     val editLabel = stringResource(R.string.list_row_edit)
     val removeLabel = stringResource(R.string.list_row_remove)
     val stateText = stringResource(if (row.checked) R.string.list_row_checked else R.string.list_row_unchecked)
@@ -470,11 +556,9 @@ private fun ItemRow(row: ItemRowUi, actions: ListActions, modifier: Modifier = M
             icon = row.icon,
             checked = row.checked,
             drawing = row.drawing,
+            // Press feedback: the row takes its section's tint at once (it has no card edge to move).
+            pressed = pressed,
             modifier = Modifier
-                .graphicsLayer {
-                    scaleX = squish
-                    scaleY = squish
-                }
                 .combinedClickable(
                     interactionSource = interaction,
                     indication = null,
@@ -534,3 +618,6 @@ private fun RowScope.SwipeBackground(state: SwipeToDismissBoxState) {
 private val FAB_CLEARANCE = 96.dp
 
 private const val UNDISMISS_DELAY_MS = 700L
+
+/** How long a just-ticked row stays in its aisle (the check stamp settles well within it). */
+private const val TICK_DWELL_MS = 600L

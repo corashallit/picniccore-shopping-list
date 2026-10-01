@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Picnic List proxy, self-hosted (docs/PROXY.md §4). Build context: proxy/. Run it with compose.yaml.
 #
 # The proxy has no runtime dependencies (wrangler is only for Cloudflare deploys), so nothing is installed:

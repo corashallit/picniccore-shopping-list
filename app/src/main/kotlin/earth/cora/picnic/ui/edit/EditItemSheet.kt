@@ -169,7 +169,7 @@ internal fun EditDetails(
             verticalArrangement = Arrangement.spacedBy(d.m),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(d.m)) {
-                ItemIcon(state.icon, contentDescription = null, size = 64.dp, drawing = state.drawing)
+                ItemIcon(state.icon, contentDescription = null, size = 64.dp, drawing = state.drawing, lifted = true)
                 PicnicTextField(
                     value = name,
                     onValueChange = onNameChange,

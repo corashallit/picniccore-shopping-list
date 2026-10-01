@@ -18,6 +18,13 @@
 	reverse_proxy 127.0.0.1:8787 {
 		# Pass every chunk on at once: streamed (SSE) answers arrive event by event.
 		flush_interval -1
+		# Restarts: the old process stops accepting at once, then finishes its in-flight calls (up to
+		# SHUTDOWN_GRACE_SECONDS, 120 s) before the new one starts. Caddy holds new requests meanwhile and
+		# sends them on as soon as the new process accepts, instead of answering 502. A request is only
+		# retried when its connection was refused, so nothing reaches the proxy twice. The cost: if the proxy
+		# is down for good, requests wait (and the app times out) instead of failing at once.
+		lb_try_duration 130s
+		lb_try_interval 250ms
 		transport http {
 			dial_timeout 5s
 			# The proxy gives up on OpenAI after 180 s (504) and answers then, so this is only a backstop.

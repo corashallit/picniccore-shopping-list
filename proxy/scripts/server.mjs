@@ -46,6 +46,11 @@ const REQUEST_TIMEOUT_MS = 300_000; // complete request, body included (a 26 MB 
 // Longer than the reverse proxy keeps idle upstream connections (60 s in deploy/), so the proxy never
 // sends a request on a connection Node is closing at the same moment (a classic source of stray 502s).
 const KEEP_ALIVE_TIMEOUT_MS = 75_000;
+// A request body the Worker didn't read to the end (a 401, 429, 404 or 415 on an upload, or a 413) is read
+// and thrown away after the answer, up to this much: the device sees the answer instead of a reset, and the
+// connection can carry its next request. That covers anything Caddy or nginx let through (27 MiB, deploy/).
+// A body declared bigger than this gets "Connection: close" instead; one that keeps going is cut off here.
+const DISCARD_LIMIT_BYTES = 27 * 1024 * 1024;
 const HOP_BY_HOP = new Set(['connection', 'keep-alive', 'transfer-encoding', 'upgrade', 'proxy-connection', 'te', 'trailer']);
 // Methods the WHATWG Request constructor refuses; everything else reaches the Worker (which 404s it).
 const FORBIDDEN_METHODS = new Set(['CONNECT', 'TRACE', 'TRACK']);
@@ -152,6 +157,8 @@ export async function startServer({ env = process.env, log = defaultLog } = {}) 
   const handle = createHandler({ log });
   let draining = false;
   let inflight = 0;
+  /** Requests whose answer is out but whose unread body is still being thrown away. */
+  const discarding = new Set();
 
   const server = createServer({ headersTimeout: HEADERS_TIMEOUT_MS, requestTimeout: REQUEST_TIMEOUT_MS }, (req, res) => {
     inflight++;
@@ -162,8 +169,32 @@ export async function startServer({ env = process.env, log = defaultLog } = {}) 
       if (!res.writableFinished) abort.abort();
       if (draining) setImmediate(() => server.closeIdleConnections());
     });
+    // Runs after Node's own 'finish' handling, which already discards a body nobody started reading.
+    res.on('finish', () => {
+      if (!req.complete && !req.destroyed) discardUnreadBody(req);
+    });
     serve(req, res, abort).catch(() => res.destroy());
   });
+
+  /**
+   * Reads and drops what is left of a request body after its answer went out (see DISCARD_LIMIT_BYTES).
+   * Without this the socket stays paused mid-request: the next request on it is never answered, a close
+   * from the other end goes unnoticed, and shutdown waits for it as if a request were still running.
+   */
+  function discardUnreadBody(req) {
+    let budget = DISCARD_LIMIT_BYTES;
+    discarding.add(req);
+    req.removeAllListeners('readable'); // a body read the Worker abandoned (bodyStream) must not block flowing
+    req.on('data', (chunk) => {
+      budget -= chunk.length;
+      if (budget < 0) req.destroy();
+    });
+    req.once('end', () => {
+      if (draining) setImmediate(() => server.closeIdleConnections());
+    });
+    req.once('close', () => discarding.delete(req));
+    req.resume();
+  }
   // A socket with no traffic either way for this long is dropped. A non-streamed reasoning call is silent
   // until OpenAI answers, and the proxy gives up on OpenAI after UPSTREAM_TIMEOUT_SECONDS (504) first.
   server.timeout = settings.idleTimeoutSeconds * 1000;
@@ -196,7 +227,11 @@ export async function startServer({ env = process.env, log = defaultLog } = {}) 
     response.headers.forEach((value, name) => {
       headers[name] = value;
     });
-    if (draining) headers.connection = 'close';
+    // While draining, and when the device declared more body than is worth reading to the end, this is
+    // the last answer on the connection.
+    if (draining || (!req.complete && Number(req.headers['content-length']) > DISCARD_LIMIT_BYTES)) {
+      headers.connection = 'close';
+    }
     res.writeHead(response.status, headers);
     if (!response.body || method === 'HEAD') {
       await response.body?.cancel().catch(() => {});
@@ -247,6 +282,8 @@ export async function startServer({ env = process.env, log = defaultLog } = {}) 
     shutdownStarted = Date.now();
     draining = true;
     log({ event: 'shutdown', signal, inflight, graceSeconds: settings.shutdownGraceSeconds });
+    // Their answers are out; only the rest of a rejected upload is still arriving.
+    for (const req of discarding) req.destroy();
     const timer = setTimeout(() => {
       log({ event: 'shutdown_timeout', inflight });
       server.closeAllConnections();
@@ -280,10 +317,62 @@ function toWebRequest(req, signal) {
   return new Request(url, {
     method: req.method,
     headers,
-    body: hasBody ? Readable.toWeb(req) : undefined,
+    body: hasBody ? bodyStream(req) : undefined,
     duplex: 'half',
     signal,
   });
+}
+
+/**
+ * The request body as a web stream that reads from the socket only when the Worker reads it (not
+ * Readable.toWeb, for two reasons):
+ *  - A body the Worker never reads (401, 429, 404, 415, a 413 from Content-Length) stays untouched, so
+ *    Node discards it after the answer, as for any plain Node handler.
+ *  - Cancelling it (readBodyLimited does on a 413) only stops reading. Readable.toWeb's cancel destroys the
+ *    request, and its 'data' handler then throws on the closed stream, which crashed the process.
+ * Whatever is left unread is thrown away after the answer (discardUnreadBody).
+ */
+function bodyStream(req) {
+  let waiting = null;
+  const events = ['readable', 'end', 'error', 'close'];
+  const stopWaiting = () => {
+    if (!waiting) return;
+    for (const event of events) req.off(event, waiting);
+    waiting = null;
+  };
+  return new ReadableStream(
+    {
+      pull(controller) {
+        return new Promise((resolve) => {
+          const step = () => {
+            const chunk = req.destroyed ? null : req.read();
+            if (chunk !== null) {
+              stopWaiting();
+              controller.enqueue(new Uint8Array(chunk)); // a copy, detached from Node's buffer pool
+            } else if (req.readableEnded) {
+              stopWaiting();
+              controller.close();
+            } else if (req.destroyed) {
+              stopWaiting();
+              controller.error(req.errored ?? new Error('request body aborted'));
+            } else {
+              if (!waiting) {
+                waiting = step;
+                for (const event of events) req.on(event, step);
+              }
+              return;
+            }
+            resolve();
+          };
+          step();
+        });
+      },
+      cancel() {
+        stopWaiting();
+      },
+    },
+    { highWaterMark: 0 },
+  );
 }
 
 async function main() {

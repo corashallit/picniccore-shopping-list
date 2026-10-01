@@ -28,6 +28,8 @@ import earth.cora.picnic.core.model.IconRef
  * - [drawing] = the icon is being decided or drawn: overlay DrawingSparkle (callers pass the
  *   category fallback ref meanwhile, via IconCatalog.displayRef(item, busy)).
  * - [contentDescription] null = decorative (rows already read the item name).
+ * - [lifted] = the sticker floats on the ground (edit sheet hero): placeholder art adds its drop
+ *   shadow. Default flat: rows, chips and pickers never put an offset shadow under a circle.
  */
 @Composable
 fun ItemIcon(
@@ -36,6 +38,7 @@ fun ItemIcon(
     modifier: Modifier = Modifier,
     size: Dp = PicnicTheme.dimens.itemIcon,
     drawing: Boolean = false,
+    lifted: Boolean = false,
 ) {
     val images = LocalIconImages.current
     // Restarts whenever the ref changes (e.g. a bespoke icon got attached): the previous bitmap stays
@@ -56,7 +59,7 @@ fun ItemIcon(
         if (bmp != null) {
             Image(bmp, contentDescription = null, modifier = Modifier.size(size), filterQuality = FilterQuality.Medium)
         } else {
-            PlaceholderIconArt(icon.key, size)
+            PlaceholderIconArt(icon.key, size, lifted)
         }
         if (drawing) {
             DrawingSparkle(
@@ -71,7 +74,7 @@ fun ItemIcon(
 
 /** Placeholder sticker for an icon key: its category's object; the paper bag for DEFAULT_ICON and unknown keys. */
 @Composable
-private fun PlaceholderIconArt(key: String, size: Dp) {
+private fun PlaceholderIconArt(key: String, size: Dp, lifted: Boolean) {
     val catalog = LocalIconCatalog.current
     val category = catalog.categoryOf(key)?.key
     val rim = PicnicTheme.colors.outline
@@ -82,6 +85,7 @@ private fun PlaceholderIconArt(key: String, size: Dp) {
                 isDefault = key == IconCatalog.DEFAULT_ICON || category == null,
                 rim = rim,
                 disc = size >= STICKER_DISC_MIN,
+                lifted = lifted,
             )
         }
     }

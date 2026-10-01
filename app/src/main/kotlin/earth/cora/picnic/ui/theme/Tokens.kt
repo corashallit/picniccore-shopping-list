@@ -72,7 +72,7 @@ data class PicnicColors(
      */
     val neutral: AisleColors,
     /**
-     * Cel highlight on the Primary button face (a short rounded band under the top outline), already
+     * Cel highlight on the Primary button face (a tapered lens under the top outline), already
      * including its alpha; null = no gloss. Off where the face is too light for a highlight to read.
      */
     val buttonGloss: Color?,
