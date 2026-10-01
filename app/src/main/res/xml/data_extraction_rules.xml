@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 31+. Allow-list: only the list state is backed up / transferred. Everything else
+     (Keystore-encrypted token, which can't be decrypted on another device; icon cache) is excluded
+     implicitly. Don't add <exclude> for paths outside an <include>: lint FullBackupContent errors. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="state.json" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="state.json" />
+    </device-transfer>
+</data-extraction-rules>
