@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Runs the Worker outside Cloudflare: Node 22+, Bun or Deno. For local development and self-hosting.
+// Runs the Worker outside Cloudflare: Node 22+, Bun or Deno. For local development; to run the proxy as a
+// service (self-hosting), use scripts/server.mjs instead (docs/PROXY.md §4).
 //
 //   node scripts/serve.mjs                    # http://127.0.0.1:8787/v1
 //   PORT=9000 HOST=0.0.0.0 node scripts/serve.mjs

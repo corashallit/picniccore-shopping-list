@@ -182,6 +182,7 @@ fun AisleSectionRow(
     val d = PicnicTheme.dimens
     val shapes = PicnicTheme.shapes
     val family = c.aisle(aisleIndex)
+    val line = c.sectionLine(aisleIndex)
     val outer = shapes.section
     val inner = shapes.sectionInner
     Box(
@@ -200,12 +201,12 @@ fun AisleSectionRow(
                     clipRect(0f, 0f, size.width, size.height) {
                         drawPath(outerPath, family.pastel)
                         drawPath(innerPath, c.surface)
-                        inkInside(innerPath, family.base, rule)
+                        inkInside(innerPath, line, rule)
                         inkInside(outerPath, c.outline, stroke)
                     }
                     drawContent()
                     // Rules stay put over the rows (a swiped row slides under them).
-                    if (!first) drawRect(family.base.copy(alpha = RULE_ALPHA), Offset(inset + indent, 0f), Size(size.width - 2 * (inset + indent), rule))
+                    if (!first) drawRect(line.copy(alpha = RULE_ALPHA), Offset(inset + indent, 0f), Size(size.width - 2 * (inset + indent), rule))
                 }
             }
             .padding(
@@ -301,6 +302,17 @@ private fun SectionBand(
     }
 }
 
+/**
+ * Thin-line colour of a section's inner surface (its edge and the rules between rows): the aisle's
+ * cel shade at noon (the pale bases, lemon above all, vanish on white), its brighter base at dusk
+ * (the shades sink into the dark surface). Neutral sections use their soft ink: a second full ink
+ * line inside the outline would read as a double border.
+ */
+internal fun PicnicColors.sectionLine(aisleIndex: Int): Color {
+    val family = aisle(aisleIndex)
+    return if (isDark || aisleIndex < 0) family.base else family.shadow
+}
+
 /** [this] shape with the corners on its open (shared) edges squared off. */
 internal fun CornerBasedShape.slice(top: Boolean, bottom: Boolean): CornerBasedShape = copy(
     topStart = if (top) topStart else ZeroCornerSize,
@@ -355,8 +367,8 @@ private fun DrawScope.drawHalftone(color: Color) {
 
 private const val OVERHANG_DP = 8
 
-/** Rules between rows: the aisle's base colour, softened so item names stay the strongest line. */
-private const val RULE_ALPHA = 0.5f
+/** Rules between rows: the section line, softened so item names stay the strongest marks. */
+private const val RULE_ALPHA = 0.55f
 
 /* ---------------- small pieces ---------------- */
 

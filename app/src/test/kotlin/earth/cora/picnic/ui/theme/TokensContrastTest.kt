@@ -36,6 +36,13 @@ class TokensContrastTest {
         }
         // Outlines and hard shadows are graphics: 3:1 against the ground.
         assertAa("$label outline/background", c.outline, c.background, min = 3.0)
+        // The CheckMark box is a UI component: its ink ring needs 3:1 on the row surface (unchecked),
+        // and the tick 3:1 on the highlight fill (checked; the AA text pair above already covers it).
+        assertAa("$label check ring outline/surface", c.outline, c.surface, min = 3.0)
+        // Section inner edge and row rules must stay visible separators on the row surface.
+        for (i in -1 until c.aisles.size) {
+            assertAa("$label aisle[$i] sectionLine/surface", c.sectionLine(i), c.surface, min = 2.0)
+        }
     }
 
     @Test

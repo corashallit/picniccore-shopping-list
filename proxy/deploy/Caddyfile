@@ -1,0 +1,56 @@
+# Caddy in front of the self-hosted Picnic List proxy (docs/PROXY.md §4). Caddy gets and renews the TLS
+# certificate itself. It needs a DNS record for picnic.cora.earth pointing at this machine (on Cloudflare
+# DNS: "DNS only", grey cloud; see docs/PROXY.md §4.1) and ports 80 and 443 open.
+#
+#   sudo cp deploy/Caddyfile /etc/caddy/Caddyfile        # or paste the blocks into your existing Caddyfile
+#   caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#
+# The app's base URL is then https://picnic.cora.earth/v1, the same as with the Cloudflare Worker.
+# Caddy sets no write timeout of its own, so long answers and streams are not cut off. If your global
+# options set servers { timeouts { write ... } }, keep that at 300s or more.
+
+(picnic_proxy) {
+	# Just above the proxy's largest route limit (26 MiB, transcriptions), so the proxy answers oversized
+	# uploads itself, with an OpenAI-shaped 413 the app understands.
+	request_body {
+		max_size 27MiB
+	}
+	reverse_proxy 127.0.0.1:8787 {
+		# Pass every chunk on at once: streamed (SSE) answers arrive event by event.
+		flush_interval -1
+		transport http {
+			dial_timeout 5s
+			# The proxy gives up on OpenAI after 180 s (504) and answers then, so this is only a backstop.
+			response_header_timeout 200s
+			# Matches the proxy's own idle limit (IDLE_TIMEOUT_SECONDS, 300 s).
+			read_timeout 300s
+			write_timeout 300s
+			# Shorter than the proxy's keep-alive (75 s), so Caddy never reuses a connection Node is closing.
+			keepalive 60s
+		}
+	}
+}
+
+picnic.cora.earth {
+	header Strict-Transport-Security "max-age=31536000"
+
+	# Only the proxy's own paths reach Node.
+	@picnic path /v1/* /healthz
+	handle @picnic {
+		import picnic_proxy
+	}
+	handle {
+		respond 404
+	}
+}
+
+# Alternative: a path under the main site instead of a subdomain. The app's base URL is then
+# https://cora.earth/picnic/v1, and the health check is https://cora.earth/picnic/healthz (scripts/smoke.mjs
+# checks /healthz at the root of the host, so read its first line with that in mind).
+#
+# cora.earth {
+# 	handle_path /picnic/* {
+# 		import picnic_proxy
+# 	}
+# 	# ...the rest of cora.earth...
+# }

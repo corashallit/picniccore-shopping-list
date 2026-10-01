@@ -20,3 +20,9 @@ The app never ships with an API key. It talks to an OpenAI-compatible endpoint s
 
 - **Proxy (recommended):** a small proxy (for example on `cora.earth`) holds the real key. It accepts only the endpoints the app uses and only per-device access tokens.
 - **Your own key:** paste your own OpenAI key in settings. It is stored encrypted with the Android Keystore.
+
+## Releasing
+
+- **Sideloading:** every push builds an installable APK; tags `v*` attach it to a GitHub Release. See [docs/BUILDING.md](docs/BUILDING.md).
+- **Google Play:** the [Play release workflow](.github/workflows/play-release.yml) builds the signed App Bundle and uploads it to a Play track (internal testing by default). The one-time setup, the first manual upload, and the Play Console forms are in [docs/RELEASING.md](docs/RELEASING.md).
+- **Privacy:** [docs/PRIVACY.md](docs/PRIVACY.md) is the privacy policy draft, written to match what the app actually stores and sends.

@@ -65,10 +65,21 @@ data class PicnicColors(
     val scrim: Color,
     /** Aisle rotation, in walking order; use [aisle]. */
     val aisles: List<AisleColors>,
+    /**
+     * The neutral family of Unsorted and In the basket ([aisle] with a negative index). Its pastel must
+     * not be mistaken for any rotation pastel (a paper/greige tone, TokensContrastTest checks it) and
+     * stays light in both palettes, like the rotation's, so its tray reads the same way.
+     */
+    val neutral: AisleColors,
+    /**
+     * Cel highlight on the Primary button face (a short rounded band under the top outline), already
+     * including its alpha; null = no gloss. Off where the face is too light for a highlight to read.
+     */
+    val buttonGloss: Color?,
 ) {
-    /** Colours for an aisle by 0-based index (position - 1); negative = Unsorted/Checked (neutral family). */
+    /** Colours for an aisle by 0-based index (position - 1); negative = Unsorted/Checked ([neutral]). */
     fun aisle(index: Int): AisleColors =
-        if (index < 0) AisleColors(base = inkSoft, shadow = outline, pastel = surfaceSunken, deep = ink)
+        if (index < 0) neutral
         else aisles[index % aisles.size]
 }
 
@@ -174,6 +185,13 @@ private val Rotation = listOf(
     AisleColors(Color(0xFFC98455), Color(0xFFA45C3B), Color(0xFFF3E1D0), Color(0xFF7A4220)), // cocoa
 )
 
+/**
+ * Neutral sections: plum medallion disc on a paper band, plum ink. Low chroma, so it reads as "not an
+ * aisle" next to the rotation pastels (it used to borrow surfaceSunken, which is the sky pastel at noon).
+ */
+private val NeutralNoon = AisleColors(Color(0xFF5E4466), Color(0xFF2A1730), Color(0xFFEAE8E3), Color(0xFF2A1730))
+private val NeutralDusk = AisleColors(Color(0xFF5E4466), Color(0xFF2A1730), Color(0xFFE2DFDA), Color(0xFF2A1730))
+
 /** "Picnic at noon". */
 val PlaceholderLightColors = PicnicColors(
     isDark = false,
@@ -200,6 +218,8 @@ val PlaceholderLightColors = PicnicColors(
     strike = Color(0xFFB5193C),
     scrim = Color(0x992A1730),
     aisles = Rotation,
+    neutral = NeutralNoon,
+    buttonGloss = Color.White.copy(alpha = 0.4f),
 )
 
 /** "Picnic at dusk". */
@@ -228,6 +248,9 @@ val PlaceholderDarkColors = PicnicColors(
     strike = Color(0xFFFF7A93),
     scrim = Color(0xB3120C1E),
     aisles = Rotation,
+    neutral = NeutralDusk,
+    // The pale pink face leaves a white highlight nothing to contrast with.
+    buttonGloss = null,
 )
 
 /** Placeholder type: system families until the art pass bundles fonts in res/font (Robolectric can't use downloadable fonts). */

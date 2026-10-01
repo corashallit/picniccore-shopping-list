@@ -116,7 +116,7 @@ Verified on this skeleton (2026-10-01): `./gradlew -p core build` (9 contract te
 | `app/…/settings/AppSettings.kt` (`AppSettings`, `SettingsRepository`, `InMemorySettingsRepository`, `maskToken`), `settings/TokenStore.kt` | app-shell | app-screens |
 | `app/…/icons/IconRepository.kt` (`IconRepository`, `IconImages`, `NoOpIconRepository`) | app-shell | app-screens, theme |
 | `app/…/platform/{Captures,PhotoPreparer,VoiceRecorder (AudioRecorder),TokenCipher}.kt` | app-shell | app-screens |
-| `app/…/ui/theme/*` (tokens, `PicnicTheme`, components, decor slots, `ItemIcon`, `AisleBasket`, `AisleHeader`, `ItemRowCard`, `Glyph`) | app-shell | app-screens |
+| `app/…/ui/theme/*` (tokens, `PicnicTheme`, components, decor slots, `ItemIcon`, `AisleBasket`, `AisleHeader`, `AisleSectionTitle`, `AisleSectionRow`, `ItemRowCard`, `Glyph`) | app-shell | app-screens |
 | `app/…/ui/PicnicAppRoot.kt` (`PicnicAppRoot(container)`) | app-screens | app-shell (MainActivity) |
 | HTTP API surface: `/responses`, `/audio/transcriptions`, `/images/edits`, `/models/{id}`; `MODEL_MAP` | proxy | core |
 
@@ -794,7 +794,7 @@ The ingest context is taken when the request is sent (`state.ingestContext(listI
 
 ## 11. Theme layer contract (app-shell provides, app-screens consumes, art pass replaces)
 
-**Rule for screens:** use only `PicnicTheme.*` tokens, the theme components, the decor slots, `ItemIcon`/`AisleBasket`/`AisleHeader`/`ItemRowCard` and `Glyph`.
+**Rule for screens:** use only `PicnicTheme.*` tokens, the theme components, the decor slots, `ItemIcon`/`AisleBasket`/`AisleHeader`/`AisleSectionTitle`/`AisleSectionRow`/`ItemRowCard` and `Glyph`.
 
 - Never use raw `Color(…)`, `MaterialTheme.colorScheme` or `material-icons`. The project does not depend on material-icons.
 - Never hand-roll a card or button style.
@@ -813,9 +813,10 @@ data class PicnicColors(isDark, background, backgroundPattern, surface, surfaceR
 data class AisleColors(base, shadow, pastel, deep)        // cel base, hard shade, pale fill, deep text
 data class PicnicTypography(wordmark, screenTitle, aisleTitle, aisleNumber, itemName /*>=16sp*/, body,
     detail /*>=13sp*/, label, caption, script /*decorative*/, handwriting, counter)
-data class PicnicShapes(card, row, chip, button, field, sheet /*top corners*/, badge, medallion)
-data class PicnicDimens(gutter=16, xxs..xxl, rowGap, sectionGap, rowMinHeight=64, touchTarget=48, itemIcon=40,
-    miniIcon=20, basket=64, medallion=44, outline=2, hardShadow=DpOffset(0,3))
+data class PicnicShapes(card, row, chip, button, field, sheet /*top corners*/, badge, medallion,
+    section: CornerBasedShape /*aisle section container*/, sectionInner: CornerBasedShape /*its row surface*/)
+data class PicnicDimens(gutter=16, xxs..xxl, rowGap, sectionGap=14, sectionInset=8 /*tray wall*/, rule=1.5,
+    rowMinHeight=64, touchTarget=48, itemIcon=40, miniIcon=20, basket=64, medallion=44, outline=2, hardShadow=DpOffset(0,3))
 data class PicnicMotion(reduced, stepFps = 8, shortMillis = 150, mediumMillis = 280)
 val LocalIconImages: ProvidableCompositionLocal<IconImages>   // default IconImages.None (placeholder art)
 val LocalIconCatalog: ProvidableCompositionLocal<IconCatalog> // default IconCatalog.default
@@ -830,7 +831,7 @@ val LocalIconCatalog: ProvidableCompositionLocal<IconCatalog> // default IconCat
 | Composable | Purpose |
 |---|---|
 | `PicnicSurface(modifier, shape, color, outlined, shadow, content: BoxScope.()->Unit)` | Every card or row container: fill, ink outline and a **hard offset shadow** (no blur elevation) |
-| `PicnicButton(text, onClick, modifier, style: Primary/Secondary/Text, enabled, glyph?)` | Buttons, at least 48 dp tall |
+| `PicnicButton(text, onClick, modifier, style: Primary/Secondary/Text, enabled, glyph?)` | Buttons, at least 48 dp tall. Any gloss must read as intentional cel shading clipped to the face and clear of the label (the placeholder Primary has a rim light along the top contour), never a loose highlight stroke. |
 | `PicnicIconButton(glyph, contentDescription, onClick, modifier, enabled, emphasized)` | 48 dp round glyph button |
 | `PicnicChip(text, selected, onClick, modifier, leading?)` | Aisle chips, Sources chips and filter chips |
 | `PicnicTextField(value, onValueChange, modifier, placeholder, label, singleLine, minLines, maxLines, isError, supportingText, enabled, keyboardOptions, keyboardActions, visualTransformation, trailing?)` | All text input. For the token field, pass `PasswordVisualTransformation`. The visible `label` is the editable node's content description (TalkBack: "Amount, 2, edit box") and is cleared from the label `Text`; tests find fields by `hasContentDescription(label)`. |
@@ -849,7 +850,7 @@ These have no semantics unless a parameter says otherwise. Each direction's meta
 | `PicnicBackground(modifier, content)` | as the root of each screen | gingham / star tile / pinstripe |
 | `SectionDivider(modifier, major)` | between regions | bunting / gold filigree / perforation |
 | `AisleMedallion(number?, aisleIndex, modifier, size)` | in the expanded aisle header (the aisle header ornament) | numbered medallion with a pattern ring |
-| `CheckMark(checked, modifier)` | in the row (the row provides the touch target) | star / halo / hanko stamp |
+| `CheckMark(checked, modifier)` | in the row (the row provides the touch target); 48 dp footprint | an unmistakable box: bold ink outline, **no offset shadow**; checked = filled, heavy tick, a small flourish, stamped in (springy pop, instant with reduced motion). Placeholder: rounded square, lemon fill, strawberry twinkle. A / B / C may restyle it (star / halo / hanko), but the unchecked state must still read as an empty box at a glance in both palettes. |
 | `TripProgress(done, total, modifier)` | in the top bar's `bottom` slot (progress metaphor) | episode ribbon / charm bracelet / stamp card |
 | `EmptyState(title, body, modifier, action?)` | for an empty list or screen | sleepy bee on the hamper, etc. |
 | `LoadingSparkle(modifier, label?)` | while the AI is thinking (the label is announced) | bee figure-8 / firefly / sparkle sweep |
@@ -863,15 +864,37 @@ These have no semantics unless a parameter says otherwise. Each direction's meta
 @Composable fun AisleBasket(kind: BasketKind, miniIcons: List<IconRef>, count: Int, modifier = Modifier,
                             size: Dp = PicnicTheme.dimens.basket)
 @Composable fun AisleHeader(title: String, number: Int?, aisleIndex: Int, basket: BasketKind, miniIcons: List<IconRef>,
-                            count: Int, collapsed: Boolean, cleared: Boolean, onToggle: () -> Unit, modifier = Modifier)
+                            count: Int, collapsed: Boolean, cleared: Boolean, onToggle: () -> Unit, modifier = Modifier,
+                            rowsBelow: Boolean = false)
+@Composable fun AisleSectionTitle(title: String, number: Int?, aisleIndex: Int, modifier = Modifier)
+@Composable fun AisleSectionRow(aisleIndex: Int, first: Boolean, last: Boolean, modifier = Modifier,
+                                content: @Composable () -> Unit)
 @Composable fun ItemRowCard(name: String, detail: String?, icon: IconRef, checked: Boolean,
                             modifier = Modifier, drawing: Boolean = false)
 ```
 
+**Aisle sections: an aisle owns its rows.** An aisle and its items read as **one container**, never as a stack of equal floating cards. The header is the container's top band, tinted with the aisle's `pastel`. The rows sit on a lighter inner surface (`colors.surface`, shape `shapes.sectionInner`) inside a tray of that same tint (`dimens.sectionInset` wall), divided by thin rules (`dimens.rule`). The last row closes the container with a rounded cap, the tray margin and the hard shadow. Collapsed or emptied sections are just the band with its basket.
+
+The container is drawn **slice by slice, one slice per lazy-list item**, so every row keeps its own key (swipe state, placement animation) and a section can cross the viewport edge without one giant item:
+
+```kotlin
+item(key = "header:$id") { AisleHeader(…, rowsBelow = expanded && items.isNotEmpty()) }   // top band
+itemsIndexed(items, key = { _, r -> r.id }) { i, r ->
+    AisleSectionRow(aisleIndex, first = i == 0, last = i == items.lastIndex) {           // middle rows / bottom cap
+        SwipeToDismissBox(…) { ItemRowCard(…, modifier = Modifier.combinedClickable(…)) }
+    }
+}
+```
+
+- Slices must touch: no `verticalArrangement` spacing in the list. Put `dimens.sectionGap` above each header (except the first) instead. Each slice draws its outline past its open edges and clips it to its own bounds, so adjacent slices join without a visible seam.
+- **AisleSectionRow** draws the tray walls, the inner surface, a rule above every row but the `first`, and on the `last` row the cap. It clips `content` to the inner surface, so a swiped row slides out under the walls and the swipe background fills exactly that row's slot. Gestures, semantics and keys stay with the screen.
+- **AisleSectionTitle** is a non-interactive band (small medallion and title, announced as a heading) for read-only groupings such as the Add sheet's preview. Follow it with `AisleSectionRow`s, in a plain `Column` if the group is short.
+- If a later screen adds sticky headers, pin the header band only; rows keep drawing their own slice.
+
 - **ItemIcon** uses `LocalIconImages.cached(ref)` first; if that's null, it calls `load(ref)` in `produceState`; if the result is still null, it draws placeholder art keyed by the icon's category. `drawing` overlays `DrawingSparkle`. Rows pass `contentDescription = null`, because the row text already names the item. Callers pass `IconCatalog.displayRef(item, busy)`.
 - **AisleBasket** draws the container art for `kind` (one vector or bitmap per basket kind from the art pass; the catalog's `drawHint`s describe each). The first **2–5** of `miniIcons` peek out of the basket, overlapping (fewer if fewer are given, at most 5). A `count` badge shows when `count > 0`. It is decorative.
-- **AisleHeader** is the single toggle target for its section. Collapsed: `AisleBasket` (basket, mini icons, count badge) beside the title. Expanded: `AisleMedallion` and the title. Cleared: a "cleared" stamp. It announces "`<title>`, `<count>` items" with the state description collapsed or expanded. Unsorted and the checked section use it with `number = null` and `aisleIndex = -1`.
-- **ItemRowCard** holds the visual content of a row only. The screen adds click (toggles checked), long-press (opens edit) and `SwipeToDismissBox` (delete with undo). A checked item shows the mark, a strike-through and the softer `inkSoft` colour. State is never shown by colour alone.
+- **AisleHeader** is the single toggle target for its section. Collapsed: `AisleBasket` (basket, mini icons, count badge) beside the title. Expanded: `AisleMedallion` and the title. Cleared: a "cleared" stamp. It announces "`<title>`, `<count>` items" with the state description collapsed or expanded. Unsorted and the checked section use it with `number = null` and `aisleIndex = -1`. With `rowsBelow = true` it is the open top band of its section, otherwise a closed card.
+- **ItemRowCard** holds the visual content of a row only, opaque on the section's inner surface. Wrap it in `AisleSectionRow`; it draws no card, outline or shadow of its own. The screen adds click (toggles checked), long-press (opens edit) and `SwipeToDismissBox` (delete with undo). A checked item shows the filled `CheckMark`, a strike-through and the softer `inkSoft` colour. State is never shown by colour alone.
 
 ### 11.5 Previews and accessibility rules
 

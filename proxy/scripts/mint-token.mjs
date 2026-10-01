@@ -63,13 +63,17 @@ SHA-256 hash (the only thing the proxy stores):
 
   ${hash}
 
-Register it with ONE of:
+Register it:
 
-  KV namespace (recommended; per-device disable/delete without redeploying):
-    npx wrangler kv key put --binding TOKENS --remote ${hash} '${kvValue}'
+  Self-hosted (docs/PROXY.md §4): add this entry to ACCESS_TOKEN_HASHES (comma-separated) in
+  /etc/picnic-proxy/picnic-proxy.env, then restart the proxy:
+    ${entry}
 
-  ACCESS_TOKEN_HASHES secret (comma-separated list; re-enter the whole list each time):
-    add  ${entry}  then run: npx wrangler secret put ACCESS_TOKEN_HASHES
+  Cloudflare Worker, with ONE of:
+    KV namespace (recommended; per-device disable/delete without redeploying):
+      npx wrangler kv key put --binding TOKENS --remote ${hash} '${kvValue}'
+    ACCESS_TOKEN_HASHES secret (comma-separated list; re-enter the whole list each time):
+      add  ${entry}  then run: npx wrangler secret put ACCESS_TOKEN_HASHES
 `);
 }
 

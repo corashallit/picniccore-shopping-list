@@ -113,6 +113,21 @@ export function createRateLimiter({ limit, periodMs = 60_000, now = () => Date.n
   };
 }
 
+/**
+ * Values copied unchanged from deploy/picnic-proxy.env.example. They are well-formed, so the proxy would
+ * start and then fail every request (upstream_auth_failed, invalid_api_key); refuse them at startup instead.
+ */
+export function templatePlaceholders(env) {
+  const problems = [];
+  if (typeof env.OPENAI_API_KEY === 'string' && env.OPENAI_API_KEY.includes('REPLACE_ME')) {
+    problems.push('OPENAI_API_KEY is still the placeholder from picnic-proxy.env.example');
+  }
+  if (typeof env.ACCESS_TOKEN_HASHES === 'string' && /(^|[:,\s])0{64}(?=$|[,\s])/.test(env.ACCESS_TOKEN_HASHES)) {
+    problems.push('ACCESS_TOKEN_HASHES still has the placeholder entry from picnic-proxy.env.example');
+  }
+  return problems;
+}
+
 const urlHost = (host) => (host.includes(':') ? `[${host}]` : host);
 
 /**
@@ -126,6 +141,7 @@ export async function startServer({ env = process.env, log = defaultLog } = {}) 
   const workerEnv = { ...env };
   delete workerEnv.RATE_LIMITER;
   if (settings.rateLimitPerMinute > 0) workerEnv.RATE_LIMITER = createRateLimiter({ limit: settings.rateLimitPerMinute });
+  problems.push(...templatePlaceholders(env));
   const config = getConfig(workerEnv);
   if (!config.ok) problems.push(...config.problems);
   else if (settings.idleTimeoutSeconds * 1000 <= config.config.upstreamTimeoutMs) {

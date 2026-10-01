@@ -3,7 +3,7 @@
 #
 # The proxy has no runtime dependencies (wrangler is only for Cloudflare deploys), so nothing is installed:
 # the image is the official Node image plus a few kilobytes of JavaScript, owned by root and read-only to
-# the unprivileged "node" user that runs it. Works with a read-only root filesystem.
+# the unprivileged "node" user (uid 1000) that runs it. Works with a read-only root filesystem.
 #
 # Node 22 LTS on Alpine, pinned by the multi-arch index digest (amd64, arm64, ...). To update: look up the
 # current 22.x-alpine tag on https://hub.docker.com/_/node and replace both the tag and the digest
@@ -19,7 +19,8 @@ COPY package.json ./
 COPY src/ ./src/
 COPY scripts/server.mjs scripts/healthcheck.mjs scripts/mint-token.mjs scripts/smoke.mjs ./scripts/
 
-USER node
+# The base image's unprivileged "node" user, by number so runtimes can check it isn't root.
+USER 1000:1000
 EXPOSE 8787
 
 # GET /healthz answers 200 only while the configuration is valid.

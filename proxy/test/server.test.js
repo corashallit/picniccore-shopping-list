@@ -5,9 +5,10 @@ import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { connect } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
+import { parseEnv, promisify } from 'node:util';
 import { hashOf, REAL_KEY, TOKEN } from './helpers.js';
 import {
   createRateLimiter, DEFAULT_SETTINGS, EXIT_CONFIG, parseServerSettings, startServer,
@@ -116,6 +117,23 @@ test('startServer refuses a broken configuration and listens on nothing', async 
     env: proxyEnv('https://api.openai.com/v1', { IDLE_TIMEOUT_SECONDS: '120' }), log: () => {},
   });
   assert.deepEqual(timeouts, { ok: false, problems: ['IDLE_TIMEOUT_SECONDS must be longer than UPSTREAM_TIMEOUT_SECONDS'] });
+});
+
+test('deploy/picnic-proxy.env.example parses, and its placeholders are refused until replaced', async () => {
+  const example = parseEnv(readFileSync(new URL('../deploy/picnic-proxy.env.example', import.meta.url), 'utf8'));
+  assert.deepEqual(Object.keys(example).sort(), ['ACCESS_TOKEN_HASHES', 'OPENAI_API_KEY']);
+  const untouched = await startServer({ env: { ...example, PORT: '0' }, log: () => {} });
+  assert.deepEqual(untouched, {
+    ok: false,
+    problems: [
+      'OPENAI_API_KEY is still the placeholder from picnic-proxy.env.example',
+      'ACCESS_TOKEN_HASHES still has the placeholder entry from picnic-proxy.env.example',
+    ],
+  });
+  // The commented MODEL_MAP line, uncommented, is the single-quoted form systemd and compose also read.
+  const line = readFileSync(new URL('../deploy/picnic-proxy.env.example', import.meta.url), 'utf8')
+    .split('\n').find((l) => l.startsWith('# MODEL_MAP='));
+  assert.deepEqual(JSON.parse(parseEnv(line.slice(2)).MODEL_MAP), { 'gpt-5.6-terra': 'gpt-6.2-terra' });
 });
 
 test('serves the proxy: healthz, 401, JSON forwarding, header allow-list; logs hold no token, key or body', async (t) => {
