@@ -56,10 +56,18 @@ const ctx = { waitUntil: (p) => Promise.resolve(p).catch(() => {}), passThroughO
 export async function serveNode({ port, host, env }) {
   const http = await import('node:http');
   const { Readable } = await import('node:stream');
+  // The production server's body adapter: reads only what the Worker reads, and survives its cancel.
+  const { bodyStream } = await import('./server.mjs');
   const server = http.createServer(async (req, res) => {
     const abort = new AbortController();
     res.on('close', () => {
       if (!res.writableFinished) abort.abort();
+    });
+    // A body the Worker stopped reading (a 413) is thrown away, so the socket doesn't stay paused.
+    res.on('finish', () => {
+      if (req.complete || req.destroyed) return;
+      req.removeAllListeners('readable');
+      req.resume();
     });
     try {
       const headers = new Headers();
@@ -71,7 +79,7 @@ export async function serveNode({ port, host, env }) {
       const request = new Request(new URL(req.url ?? '/', `http://${host}:${port}`), {
         method: req.method,
         headers,
-        body: hasBody ? Readable.toWeb(req) : undefined,
+        body: hasBody ? bodyStream(req) : undefined,
         duplex: 'half',
         signal: abort.signal,
       });

@@ -332,7 +332,7 @@ function toWebRequest(req, signal) {
  *    request, and its 'data' handler then throws on the closed stream, which crashed the process.
  * Whatever is left unread is thrown away after the answer (discardUnreadBody).
  */
-function bodyStream(req) {
+export function bodyStream(req) {
   let waiting = null;
   const events = ['readable', 'end', 'error', 'close'];
   const stopWaiting = () => {

@@ -82,7 +82,7 @@ cannot evaluate AGP 9 builds, and never run `gradle wrapper` in this repository.
 | Compare with goldens (never fails) | `./gradlew :app:compareRoborazziDebug` → diffs in `app/build/outputs/roborazzi/` |
 | Verify against goldens (fails on a diff) | `./gradlew :app:verifyRoborazziDebug` |
 | Lint (CI gate) | `./gradlew :app:lintDebug` |
-| R8 release build (unsigned; Play later) | `./gradlew :app:assembleRelease` |
+| R8 release bundle for Play (signed when the `PICNIC_UPLOAD_*` settings are set, see docs/RELEASING.md §5.1) | `./gradlew :app:bundleRelease` |
 
 Pass `-Ppicnic.versionCode=<n> -Ppicnic.versionName=<name>` to stamp a version (CI does this).
 Never put an API key in a Gradle file or `gradle.properties`: the CLI and live tests read
@@ -126,17 +126,22 @@ To cut a release: `git tag v0.2.0 && git push origin v0.2.0`.
 
 Live API tests never run in CI.
 
-## 6. Signing, and Play later
+Two more workflows: `play-release.yml` tests, signs and uploads the Play bundle (docs/RELEASING.md §7), and
+`proxy.yml` tests the OpenAI proxy in `proxy/` (docs/PROXY.md §4.9).
+
+## 6. Signing: sideload and Play
 
 - Debug and sideload builds are signed with the **committed** `app/debug.keystore` (alias `androiddebugkey`,
   passwords `android`; certificate SHA-256 `69:7c:19:5b:83:2c:38:83:6e:d9:76:13:54:27:e4:5d:8f:c9:9d:23:b0:49:db:74:b2:54:fe:ee:8b:a2:83:8c`).
   Never regenerate or replace it: installed copies could no longer be updated in place.
 - Anyone with the repository can sign an "update" with that key. That is acceptable for a sideloaded
   build for one friend, and it is why Play uses a separate key.
-- **Google Play internal testing** needs an AAB (`./gradlew :app:bundleRelease`) signed with an
-  upload key kept in CI secrets (Play App Signing), a non-debuggable build, `targetSdk` ≥ 36 (set),
-  a privacy policy URL (the app records audio) and a Data safety form that discloses that text,
-  photos and audio go to OpenAI or the proxy when the user asks.
+- **Google Play** builds are the `release` build type: R8, not debuggable, an AAB
+  (`./gradlew :app:bundleRelease`). It is signed with the private upload key when the `PICNIC_UPLOAD_*`
+  environment variables or `picnic.upload.*` Gradle properties are set, and unsigned when none are.
+  `play-release.yml` does this in CI with the key from GitHub secrets, and Google re-signs what it
+  delivers (Play App Signing). Making the key, the secrets and the Play Console setup:
+  [RELEASING.md](RELEASING.md) §1 and §4; the signing settings: §11; Play installs vs sideloaded APKs: §10.
 
 ## 7. What the APK contains and asks for
 

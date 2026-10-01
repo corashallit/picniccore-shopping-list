@@ -11,7 +11,7 @@ Researched 2026-10-01; Play Console moves things around, so the [sources](#13-so
 | Make the upload key and back it up | once | [1](#1-the-upload-key) |
 | Create the app in Play Console | once | [2](#2-create-the-app-in-play-console) |
 | Google Cloud service account, invited in Play Console | once | [3](#3-google-play-developer-api-access-service-account) |
-| GitHub secrets | once | [4](#4-github-secrets) |
+| GitHub environment and secrets | once | [4](#4-github-secrets) |
 | First bundle, uploaded **by hand** | once | [5](#5-the-first-release-by-hand) |
 | Internal testers | once, then as needed | [6](#6-internal-testers) |
 | Releases from GitHub Actions | every release | [7](#7-releases-from-github-actions) |
@@ -79,7 +79,7 @@ The workflow publishes through the Google Play Developer API as a service accoun
 - [ ] **3.3 Create the service account:** **IAM & Admin → Service accounts → Create service account**.
   - **Name:** `picnic-play-publisher`.
   - **Roles:** none. Its permissions live in Play Console, not in Cloud IAM.
-- [ ] **3.4 Create a JSON key:** open the service account → **Keys → Add key → Create new key → JSON**. The file downloads once; you upload it to GitHub in §4 and then delete it.
+- [ ] **3.4 Create a JSON key:** open the service account → **Keys → Add key → Create new key → JSON**. The file downloads once. Move it to `$HOME/keys/picnic/`, next to the upload key and **outside the repository checkout**, so a `git add -A` can never pick it up. You upload it to GitHub in §4 and then delete it.
 
   The gcloud equivalent of 3.2–3.4:
 
@@ -87,7 +87,7 @@ The workflow publishes through the Google Play Developer API as a service accoun
   gcloud services enable androidpublisher.googleapis.com --project picnic-play
   gcloud iam service-accounts create picnic-play-publisher --project picnic-play \
     --display-name "Picnic List Play publisher"
-  gcloud iam service-accounts keys create picnic-play-publisher.json \
+  gcloud iam service-accounts keys create "$HOME/keys/picnic/picnic-play-publisher.json" \
     --iam-account picnic-play-publisher@picnic-play.iam.gserviceaccount.com
   ```
 
@@ -106,33 +106,56 @@ The workflow publishes through the Google Play Developer API as a service accoun
 
 ## 4. GitHub secrets
 
-Under **Settings → Secrets and variables → Actions → Repository secrets**, or with the GitHub CLI from the repository checkout:
+The secrets go in a GitHub **environment** called `play`. The release workflow's `build` and `upload` jobs use that environment, and its **deployment branches and tags** rule lets only `main` and `play-v*` tags read the secrets. Repository secrets, by contrast, can be read by any workflow on any branch: an edited `android.yml` on a pushed branch, or `gh workflow run play-release.yml --ref <branch>`, which would run that branch's Gradle build with the key.
+
+> **Which GitHub plan?** The repository is private. For a private repository on a personal account, environment secrets and the branch rule need **GitHub Pro**. On **GitHub Free**, put the same names in **repository secrets** instead (leave out `--env play` below). The workflow reads either. It also refuses to run from anything but `main` or a `play-v*` tag, but a pushed branch could edit that check, so this only protects against accidents. Required reviewers (a manual approval before each release) are only available on private repositories with GitHub Enterprise.
 
 | Secret | Value | Required |
 |---|---|---|
 | `PICNIC_UPLOAD_KEYSTORE_BASE64` | `picnic-upload.jks`, base64-encoded | yes |
 | `PICNIC_UPLOAD_STORE_PASSWORD` | the keystore password | yes |
-| `PICNIC_UPLOAD_KEY_ALIAS` | `upload` | yes |
 | `PICNIC_UPLOAD_KEY_PASSWORD` | only for an old JKS keystore with a separate key password; leave unset for PKCS12 | no |
 | `PLAY_SERVICE_ACCOUNT_JSON` | the whole service account JSON file | yes, unless a run only builds (§5) |
 
-```bash
-base64 < "$HOME/keys/picnic/picnic-upload.jks" | tr -d '\n' | gh secret set PICNIC_UPLOAD_KEYSTORE_BASE64
-gh secret set PICNIC_UPLOAD_STORE_PASSWORD          # prompts; paste the password
-gh secret set PICNIC_UPLOAD_KEY_ALIAS --body upload
-gh secret set PLAY_SERVICE_ACCOUNT_JSON < picnic-play-publisher.json
-shred -u picnic-play-publisher.json                 # macOS: rm -P; make a new key if you ever need one
-```
+**The key alias is not a secret.** The workflow uses `upload` (§1.1). If you made the key with a different `-alias`, set the **repository variable** `PICNIC_UPLOAD_KEY_ALIAS` (`gh variable set PICNIC_UPLOAD_KEY_ALIAS --body <alias>`). Don't make the alias a secret: GitHub masks a secret's value everywhere in the log, so a common word like `upload` would become `***` all through it. It also drops any job output that contains a secret's value, which could empty the bundle's artifact name.
+
+1. **Create the environment.** In the GitHub UI: **Settings → Environments → New environment** `play`, then **Deployment branches and tags → Selected branches and tags**, and add the branch rule `main` and the tag rule `play-v*`. With the CLI:
+
+   ```bash
+   repo=corashallit/picniccore-shopping-list
+   gh api -X PUT "repos/$repo/environments/play" \
+     -F 'deployment_branch_policy[protected_branches]=false' \
+     -F 'deployment_branch_policy[custom_branch_policies]=true'
+   gh api -X POST "repos/$repo/environments/play/deployment-branch-policies" -f name=main -f type=branch
+   gh api -X POST "repos/$repo/environments/play/deployment-branch-policies" -f name='play-v*' -f type=tag
+   ```
+
+2. **Add the secrets** from `$HOME/keys/picnic`, not from the repository checkout. `-R` names the repository, so the JSON key never has to sit inside the checkout:
+
+   ```bash
+   cd "$HOME/keys/picnic"
+   repo=corashallit/picniccore-shopping-list
+   base64 < picnic-upload.jks | tr -d '\n' | gh secret set PICNIC_UPLOAD_KEYSTORE_BASE64 --env play -R "$repo"
+   gh secret set PICNIC_UPLOAD_STORE_PASSWORD --env play -R "$repo"     # prompts; paste the password
+   gh secret set PLAY_SERVICE_ACCOUNT_JSON --env play -R "$repo" < picnic-play-publisher.json
+   shred -u picnic-play-publisher.json                                  # macOS: rm -P; make a new key if you ever need one
+   ```
+
+   On GitHub Free, leave out `--env play`, which makes them repository secrets.
+
+3. **Check:** `gh secret list --env play -R "$repo"` lists the names, never the values.
 
 Optional **repository variable**: `PLAY_TAG_STATUS=draft` (`gh variable set PLAY_TAG_STATUS --body draft`). It makes tag pushes create draft releases while the app is still a draft app (§5.4). Delete it afterwards.
 
 **What the workflow does with them.**
-- Its first step lists any missing secret by name and stops; it only ever checks whether a value is set.
-- The upload key is decoded into the runner's temp directory just before signing. It is checked with keytool and deleted afterwards.
-- The upload key and the Play credential never meet in one job:
+- The upload key and the Play credential never meet in one job, and the repository's test code never runs next to either. Each job gets its own fresh runner:
+  - `test` runs the core and app unit tests and has no secrets;
   - `build` has the key;
-  - `upload` has the JSON and runs the third-party upload action, which is pinned to a commit.
-- The signing build runs with `--no-configuration-cache`, so no Gradle cache entry ever holds the passwords.
+  - `upload` has the JSON and runs the third-party upload action.
+- Every action in the workflow is pinned to a full commit SHA, so a moved tag can't change what runs next to the key. Dependabot (`.github/dependabot.yml`) opens a weekly pull request to update them.
+- `build` first lists any missing secret by name and stops; it only ever checks whether a value is set.
+- The upload key is decoded into the runner's temp directory just before signing. It is checked with keytool and deleted afterwards.
+- The signing build runs as `./gradlew --no-daemon --no-configuration-cache -Pkotlin.compiler.execution.strategy=in-process`. No Gradle or Kotlin daemon outlives it with the passwords in its environment, and no Gradle cache entry holds them.
 
 **Rotation.** Make a new JSON key (3.4), update `PLAY_SERVICE_ACCOUNT_JSON`, then delete the old key in Cloud Console. Once a year is plenty.
 
@@ -188,25 +211,30 @@ The Play Developer API can't create an app: the package name is bound by the fir
 
 ## 7. Releases from GitHub Actions
 
-`.github/workflows/play-release.yml`:
+`.github/workflows/play-release.yml` runs only from `main` or a `play-v*` tag. A run started on any other branch stops at once, and so does the `play` environment (§4):
 
 | Trigger | Track | Status | Version name |
 |---|---|---|---|
-| **Run workflow** (Actions tab, or `gh workflow run play-release.yml -f track=internal -f status=completed`) | input: `internal` (default), `alpha` (closed testing), `beta` (open testing), `production` | input: `completed` (default) or `draft` | `0.1.0-<commit>` (or the tag, if run on a tag) |
+| **Run workflow** on `main` (Actions tab, or `gh workflow run play-release.yml -f track=internal -f status=completed`) | input: `internal` (default), `alpha` (closed testing), `beta` (open testing), `production` | input: `completed` (default) or `draft` | `0.1.0-<commit>` (or the tag, if run on a `play-v*` tag) |
 | `git tag play-v1.2.3 && git push origin play-v1.2.3` | `internal` | `completed`, or `PLAY_TAG_STATUS` | `1.2.3` |
+
+A manual run has two more inputs: **upload** (untick to only build the signed bundle, §5.1) and **changes-not-sent-for-review** (§12).
 
 The `play-v` tags don't trigger `android.yml`, which builds the sideload APK on `v*` tags.
 
-**What a run does:**
+**What a run does.** Three jobs, each on its own fresh runner:
 
-1. **Check secrets.** It fails at once, naming each missing secret.
-2. **Version.** It computes the version code (§7.2) and name.
-3. **Core tests** (`./gradlew -p core test`) and **app unit tests** (`./gradlew :app:testDebugUnitTest`). These run before the key is on the runner.
-4. **Decode the upload key** and check it: a wrong password, alias or base64 fails here with keytool's message.
-5. **Build the signed bundle:** `./gradlew --no-configuration-cache :app:bundleRelease`, with R8 and resource shrinking. Lint's release checks (`lintVitalRelease`) run as part of it.
-6. **Delete the key**, then **verify the signature**: the bundle must be signed, and with exactly the upload certificate.
-7. **Upload the bundle and `mapping.txt` as a run artifact.** The artifact keeps your repository's retention, 90 days by default.
-8. **Upload to Play** with [r0adkll/upload-google-play](https://github.com/r0adkll/upload-google-play) v1.1.5, pinned to its commit. It sends the bundle, the mapping file and the release name (`<version name> (<version code>)`).
+1. **`test`** (no secrets):
+   1. It checks the branch or tag.
+   2. It runs the **core tests** (`./gradlew -p core test`) and the **app unit tests** (`./gradlew :app:testDebugUnitTest`).
+2. **`build`** (environment `play`, the upload key), only once the tests have passed:
+   1. **Check secrets.** It fails at once, naming each missing secret.
+   2. **Version.** It computes the version code (§7.2) and name.
+   3. **Decode the upload key** and check it: a wrong password, alias or base64 fails here with keytool's message.
+   4. **Build the signed bundle:** `./gradlew --no-daemon --no-configuration-cache -Pkotlin.compiler.execution.strategy=in-process :app:bundleRelease`, with R8 and resource shrinking. Lint's release checks (`lintVitalRelease`) run as part of it.
+   5. **Delete the key** and stop Gradle, then **verify the signature**: the bundle must be signed, and with exactly the upload certificate.
+   6. **Upload the bundle and `mapping.txt` as a run artifact.** The artifact keeps your repository's retention, 90 days by default.
+3. **`upload`** (environment `play`, the Play credential): **upload to Play** with [r0adkll/upload-google-play](https://github.com/r0adkll/upload-google-play) v1.1.5, pinned to its commit. It sends the bundle, the mapping file and the release name (`<version name> (<version code>)`).
 
 ### 7.1 Why this upload action
 
@@ -408,13 +436,16 @@ Give every screenshot alt text in Play Console.
 
 | Symptom | Cause and fix |
 |---|---|
-| Workflow: "Missing repository secrets: …" | Add the named secrets (§4). |
-| Workflow: "Couldn't open the upload key (keytool error: … password was incorrect / Alias <x> does not exist)" | Wrong `PICNIC_UPLOAD_STORE_PASSWORD` or `PICNIC_UPLOAD_KEY_ALIAS`. |
+| Workflow: "Play releases run only from main or a play-v* tag" | The run was started on another branch. Merge first, then run it on `main` or push a `play-v*` tag (§7). |
+| Workflow: "Branch … is not allowed to deploy to play due to environment protection rules" | The same rule, enforced by the `play` environment (§4). |
+| Workflow: "Missing secrets: …" | Add the named secrets to the `play` environment, or as repository secrets on GitHub Free (§4). |
+| Workflow: "Couldn't open the upload key (keytool error: … password was incorrect / Alias <x> does not exist)" | Wrong `PICNIC_UPLOAD_STORE_PASSWORD`, or the key's alias isn't `upload`: set the repository variable `PICNIC_UPLOAD_KEY_ALIAS` to the `-alias` you used (§4). |
 | Workflow: "… is not valid base64" | Re-create `PICNIC_UPLOAD_KEYSTORE_BASE64` with the command in §4. |
 | Gradle: "Release signing is only partly configured" | Set all of store file, store password and alias, or none. |
 | Play: "Package not found: earth.cora.picnic" | The first upload wasn't done by hand yet (§5), or the service account was invited for a different app. |
 | Play: "Only releases with status draft may be created on draft app" | Run with **status: draft** and roll out from Play Console (§5.4). |
 | Play: "The caller does not have permission" (403) | The service account isn't invited, lacks **Release apps to testing tracks** for this app, or the permission hasn't applied yet; wait and re-run. Check that the JSON's `client_email` is the invited address. |
+| Play: "Changes cannot be sent for review automatically. Please set the query parameter changesNotSentForReview to true" | Play Console holds other changes that haven't been sent for review yet, for example a saved store listing or App content edit. Open **Publishing overview**, send those changes for review, then re-run. Or re-run with **changes-not-sent-for-review** ticked: the release is then saved, and you send it for review from **Publishing overview** yourself. |
 | Play: "Version code … has already been used" | Two uploads computed the same minute, for example a manual one. Re-run: a new run gets a new code. |
 | Play: "Your Android App Bundle is signed with the wrong key" | The secret holds a different key than the first upload used. Use the original, or reset the upload key (1.4). |
 | Play: "…signed in debug mode" | Signed with `app/debug.keystore`. The workflow's signature check prevents this; for local builds, check the env vars. |
@@ -441,5 +472,6 @@ All fetched 2026-10-01.
 - Google Play Developer API: [Getting started](https://developers.google.com/android-publisher/getting_started)
 - Android developer verification: [guide](https://developer.android.com/developer-verification/guides), [FAQ](https://developer.android.com/developer-verification/guides/faq), [limited distribution](https://developer.android.com/developer-verification/guides/limited-distribution)
 - Google Cloud: [Secure-by-default organizations](https://cloud.google.com/resource-manager/docs/secure-by-default-organizations)
+- GitHub: [Deployments and environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments) (environment secrets, deployment branches and tags, and which plans have them), [REST API for deployment branch policies](https://docs.github.com/en/rest/deployments/branch-policies)
 - Upload action: [r0adkll/upload-google-play](https://github.com/r0adkll/upload-google-play), tag `v1.1.5` = commit `e738b9dd8f2476ea806d921b64aacd24f34515a5`, `runs.using: node24`. Alternative: [Gradle Play Publisher](https://github.com/Triple-T/gradle-play-publisher) 4.1.1.
 - OpenAI: [Data controls in the OpenAI platform](https://developers.openai.com/api/docs/guides/your-data) (used in §8.3 and PRIVACY.md)

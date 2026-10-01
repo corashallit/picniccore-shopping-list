@@ -242,7 +242,16 @@ cd /opt/picnic-proxy/proxy
 
 - There is nothing to install. The proxy has no runtime dependencies (`npm install` only fetches wrangler, which is for Cloudflare).
 - The checkout stays owned by root, and the service only reads it.
-- If the repository is private, clone it with a read-only deploy key. To run a branch other than the default, add `--branch <name>`.
+- If the repository is private, clone it with a read-only deploy key.
+- To run a branch other than the default, add `--branch <name>`. With `--depth 1` the checkout then follows only that branch, so `git pull` (§4.9) keeps pulling it, and fails once the branch is deleted. After it is merged, move the checkout to `main` (`/etc/picnic-proxy` is outside the checkout and isn't touched):
+
+  ```bash
+  sudo git -C /opt/picnic-proxy remote set-branches origin main
+  sudo git -C /opt/picnic-proxy fetch --depth 1 origin main
+  sudo git -C /opt/picnic-proxy checkout -B main origin/main
+  ```
+
+  Then restart as in §4.9.
 
 ### 4.3 Device tokens and the env file
 
@@ -343,10 +352,29 @@ The proxy speaks plain HTTP on loopback. The reverse proxy adds TLS and passes o
 - **Caddy** (recommended, because it gets and renews the certificate itself):
   1. Copy `deploy/Caddyfile` to `/etc/caddy/Caddyfile`, or paste its two blocks into your existing one.
   2. Run `sudo systemctl reload caddy`.
-- **nginx:**
-  1. Get a certificate: `sudo certbot certonly --webroot -w /var/www/html -d picnic.cora.earth`.
-  2. Copy `deploy/nginx-picnic.conf` to `/etc/nginx/conf.d/`.
-  3. Run `sudo nginx -t && sudo systemctl reload nginx`.
+- **nginx** with certbot. The HTTPS block can't load before its certificate exists, so it goes in last:
+  1. **Port 80 first.** Install only the part of `deploy/nginx-picnic.conf` above its `# ---- HTTPS` line. It answers certbot's challenge from its own directory, so it doesn't depend on what nginx's default site serves.
+
+     ```bash
+     sudo install -d /var/www/letsencrypt
+     sed '/^# ---- HTTPS/,$d' deploy/nginx-picnic.conf | sudo tee /etc/nginx/conf.d/picnic.cora.earth.conf
+     sudo nginx -t && sudo systemctl reload nginx
+     ```
+
+  2. **The certificate**, with a deploy hook. certbot saves the hook with the certificate and runs it after every renewal. Without it, certbot's timer renews the files but nginx keeps serving the old certificate from memory, and about 90 days later every app request fails TLS.
+
+     ```bash
+     sudo certbot certonly --webroot -w /var/www/letsencrypt -d picnic.cora.earth \
+       --deploy-hook 'systemctl reload nginx'
+     ```
+
+  3. **The whole file**, then a renewal rehearsal:
+
+     ```bash
+     sudo cp deploy/nginx-picnic.conf /etc/nginx/conf.d/picnic.cora.earth.conf
+     sudo nginx -t && sudo systemctl reload nginx
+     sudo certbot renew --dry-run
+     ```
 
 Both examples:
 
@@ -362,6 +390,7 @@ Both examples:
 | Proxy socket | 300 s with no data | `IDLE_TIMEOUT_SECONDS` |
 | Caddy or nginx → proxy | 300 s with no data | `read_timeout` / `proxy_read_timeout` |
 | Shutdown drain | 120 s; compose and systemd wait 130 s | `SHUTDOWN_GRACE_SECONDS` |
+| Caddy, while the proxy restarts | holds new requests for up to 130 s (§4.8); nginx answers 502 at once | `lb_try_duration` |
 
 **A path instead of a subdomain.** Both files include a commented-out variant that serves the proxy at `https://cora.earth/picnic/v1`. The subdomain is simpler, though:
 
@@ -408,7 +437,13 @@ sudo docker compose up -d --force-recreate     # Docker, from /opt/picnic-proxy/
 sudo systemctl restart picnic-proxy            # systemd
 ```
 
-Restarts are graceful: the old process finishes its in-flight requests first, for up to 120 s. A request that arrives in the second or two between the old process and the new one gets a 502 from Caddy or nginx, and the app retries it.
+**What a restart does to requests.** The old process stops accepting connections as soon as it gets `SIGTERM`, then finishes the calls already in flight, for up to `SHUTDOWN_GRACE_SECONDS` (120 s). systemd and compose both start the new process only after the old one has exited. In between, every new request finds nothing listening:
+
+- With nothing in flight, that gap is about a second. With a slow reasoning call running, it lasts until that call is done, which can be up to 120 s.
+- **Caddy** (`deploy/Caddyfile`) holds those requests (`lb_try_duration 130s`) and passes them on as soon as the new process accepts. Devices see a slower answer instead of an error. It only retries a request whose connection was refused, so nothing reaches the proxy twice.
+- **nginx** has no equivalent for a single upstream, so it answers 502 at once. The app retries a 502 twice, 1 s and 2 s apart. That covers a gap of a second or two but not a long drain, and drawing an icon (an image edit) isn't retried at all.
+
+To keep the gap short with nginx, restart when nobody is using the app. Alternatively, lower `SHUTDOWN_GRACE_SECONDS` (say to 30): a call still running after that is cut off, and the app reports it as a network error. The `shutdown` log line records how many calls it waited for (`"inflight"`).
 
 - **Add a device:** mint a token (§4.3), add its entry to `ACCESS_TOKEN_HASHES`, and restart.
 - **Revoke a device:** delete its entry and restart. The next request with that token gets 401. To disable a device for a while, turn its entry into a `#` comment line instead.
@@ -449,9 +484,9 @@ curl https://picnic.cora.earth/healthz
 ```
 
 - **Changed config files:** if `deploy/picnic-proxy.service` changed, copy it again and run `sudo systemctl daemon-reload` before the restart. Do the same for your Caddy or nginx file.
-- **Tests:** `npm test` (Node 22+) runs the proxy's tests on the server too, with nothing to install.
+- **Tests:** the **Proxy** workflow (`.github/workflows/proxy.yml`) runs them on Node 22 and 24 for every change to `proxy/`, and builds and starts the Docker image with `compose.yaml`. Pull only a commit whose run is green. `npm test` (Node 22+) runs the same tests on the server, with nothing to install.
 - **Node updates:** the `Dockerfile` pins Node by digest, so a rebuild never changes Node by surprise.
-  - To take a Node security release, update the tag and digest on its `FROM` line (the comment above it says how). Dependabot's `docker` ecosystem can open those pull requests for you.
+  - To take a Node security release, update the tag and digest on its `FROM` line (the comment above it says how). Dependabot (`.github/dependabot.yml`) opens those pull requests weekly, within Node 22.
   - With systemd, Node updates with the OS packages.
 - **Node 22 end of life (April 2027):** move to the next LTS before then. Change the `FROM` line or the system package, run `npm test`, and restart.
 
@@ -687,7 +722,7 @@ Every error the proxy makes uses OpenAI's shape, `{"error":{"message","type","pa
 | 500 | `proxy_misconfigured` | Broken config | The log line `config_error` lists the problems; `healthz` is `{"ok":false}`. A self-hosted proxy doesn't start at all (§4.5). The app does **not** retry it and says "The proxy can't reach OpenAI right now. Ask whoever runs it." |
 | 502 | `upstream_auth_failed` | OpenAI rejected the **proxy's** key | Rotate `OPENAI_API_KEY` (§5.4). Not retried by the app; same message as above. |
 | 502 / 504 | `upstream_unreachable` / `upstream_timeout` | Network trouble, or no response headers within 180 s | Transient. The app retries 502/503/504 (except the two codes above). |
-| 502 / 504 from Caddy or nginx (not JSON) | — | The self-hosted proxy isn't running, or is restarting | Run `sudo docker compose ps` or `systemctl status picnic-proxy`, then read its logs. The app retries these. |
+| 502 / 504 from Caddy or nginx (not JSON) | — | The self-hosted proxy isn't running, or is restarting | Run `sudo docker compose ps` or `systemctl status picnic-proxy`, then read its logs. The app retries a 502 for about 3 s (not for image edits), which doesn't cover a restart that waits for a slow call (§4.8). Caddy holds requests during a restart instead of answering 502. |
 | 404 | `null` | A route the proxy doesn't serve | Check that the base URL ends in `/v1`. The app maps any 404 other than `model_not_found` to "Check the base URL in Settings" with an **Open Settings** button. |
 
 ---
@@ -731,7 +766,7 @@ npx wrangler dev                          # the real Workers runtime (workerd), 
 - `serve.mjs` reads `.dev.vars` and then the process environment, which overrides it. It has no KV or rate-limit binding, so use `ACCESS_TOKEN_HASHES`.
 - `serve.mjs` is for development. To run the proxy as a service, use `scripts/server.mjs` (§4).
 - Behind an outbound HTTP proxy, Node's `fetch` needs `NODE_USE_ENV_PROXY=1` (Node ≥ 22.21).
-- **Tests** (`proxy/test/`, 56 cases, mocked upstream `fetch`):
+- **Tests** (`proxy/test/`, 60 cases, mocked upstream `fetch`; CI: `.github/workflows/proxy.yml`):
   - routes, healthz and 404s;
   - auth through hashes and KV (active, disabled, malformed) and the exact 401 body;
   - fail-closed config;
@@ -750,6 +785,7 @@ npx wrangler dev                          # the real Workers runtime (workerd), 
     - settings validation, and refusing a broken config or the env template's placeholders (exit 78, no values logged);
     - the in-memory rate limit;
     - SSE pass-through, and cancelling the upstream call when the device disconnects;
+    - rejected uploads (401, 415, a streamed or declared 413): the device gets the answer, the connection serves its next request or closes, and shutdown doesn't wait for the rest of the body;
     - graceful and forced shutdown;
     - the healthcheck script.
 - **Fixture:** `test/fixtures/okhttp-transcription.multipart` is a body produced by the app's HTTP client, OkHttp 5.5.0. Its audio bytes contain a fake `model` part that must stay inside the file.
@@ -773,11 +809,13 @@ npx wrangler dev                          # the real Workers runtime (workerd), 
     - SSE arrived event by event;
     - a 5 MiB upload arrived byte-identical;
     - 26.5 MiB got the proxy's JSON 413, and 28 MiB got the reverse proxy's 413;
-    - a call silent for 130 s completed.
+    - a call silent for 130 s completed;
+    - a restart of `server.mjs` with a slow call in flight: Caddy 2.11.6 held a POST sent during the drain and delivered it, once, to the new process.
   - **The real API.** `smoke.mjs` passed through Caddy and `server.mjs` to the real API.
   - **Static checks:**
     - `hadolint` reports no findings;
     - `docker compose config` validates `compose.yaml`;
+    - `nginx -t` passes for both install stages of `nginx-picnic.conf` (port 80 alone, then the whole file);
     - `systemd-analyze verify` passes, and `systemd-analyze security` rates the unit 1.2.
 
 ---

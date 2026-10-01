@@ -41,7 +41,7 @@ Only after you've added a key or token in Settings. From then on:
 |---|---|
 | **Ask the AI** in "Write" (for example "ingredients for pancakes") | Your text. Also, to sort the results: your aisle names in walking order, the names of unchecked items on the list (to avoid duplicates), up to 60 of your aisle corrections, and the icons you've chosen for item names. |
 | **Snap or pick a photo** of a handwritten list | The photo, re-saved as a JPEG of at most 1600 pixels, plus the same context as above. **Location tags and other photo metadata are not sent:** the app re-encodes the image without them. |
-| **Record a voice note** | The recording (a short audio file), with a hint list of item names already on the list so they're spelled right. The transcript then goes on like typed text. |
+| **Record a voice note** | The recording (a short audio file), with a hint list so names come out spelled right: the names of items on the list (ticked ones too) and of your aisle corrections, up to 100 names. The transcript then goes on like typed text. |
 | **Add items** (including "Add as typed"), **rename** them, or **change your aisles** | Item names and aisle names, so the app can sort items into aisles, choose a basket picture for each aisle and pick an icon for each item. This happens in the background. |
 | Have **"Draw new icons with AI"** on (the default) | For an item with no fitting icon: its name and the app's built-in style sheet image, to draw a small icon. At most 40 automatic drawings a day. You can turn this off in Settings. |
 | Tap **Test connection** | Nothing about you: it only asks the server whether the AI model is available. |
@@ -93,11 +93,11 @@ My server at `picnic.cora.earth`:
 
 - *Self-hosted with Caddy* (the setup in the proxy's `deploy/Caddyfile`):
   - It runs on a server [FILL IN: provider and country].
-  - The web front end keeps **no access log**.
+  - The web front end keeps **no access log**. Its error log, in the server's system journal, records requests that fail (for example while the service is down): the IP address the request came from, the time, the address requested and the app's network library name, never your token. It is kept for [FILL IN: number] days.
   - The proxy's log lines are kept for [FILL IN: number] days.
 - *Self-hosted with nginx:*
   - It runs on a server [FILL IN: provider and country].
-  - nginx's access log also records the **IP address** your request came from, the time, the address requested and the app's network library name. It is kept for [FILL IN: number] days. I use it only to keep the service running and secure.
+  - nginx's access log also records the **IP address** your request came from, the time, the address requested and the app's network library name. Its error log records the same details for requests that fail. Both are kept for [FILL IN: number] days. I use them only to keep the service running and secure.
 - *On Cloudflare Workers:*
   - Cloudflare hosts it on my behalf.
   - Cloudflare keeps the log lines, plus request details it adds itself (such as country and network), for 3 days (7 days on a paid plan).
