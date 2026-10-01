@@ -41,7 +41,7 @@ class AppShellSmokeTest {
     fun settingsDefaultsWithoutAToken() = runBlocking {
         val container = ApplicationProvider.getApplicationContext<PicnicApp>().container
         val s = container.settings.current()
-        assertEquals(LlmConfig.DEFAULT_BASE_URL, s.baseUrl)
+        assertEquals(LlmConfig.DEFAULT_BASE_URL, container.configSource.config().baseUrl)
         assertTrue(s.drawIcons)
         assertFalse(s.hasToken)
         assertEquals(null, container.tokenSource.token())

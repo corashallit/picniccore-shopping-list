@@ -38,7 +38,7 @@ class PicnicAppRootTest {
         waitForText("The basket is empty")
 
         compose.onNodeWithContentDescription("Settings").performClick()
-        waitForText("Connection")
+        waitForText("Your OpenAI key")
         compose.onNodeWithText("Draw new icons with AI").assertExists()
         compose.onNodeWithContentDescription("Back").performClick()
         waitForText("The basket is empty")

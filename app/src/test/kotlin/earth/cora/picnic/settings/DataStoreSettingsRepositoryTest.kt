@@ -1,6 +1,9 @@
 package earth.cora.picnic.settings
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
 import earth.cora.picnic.core.llm.LlmConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,33 +41,99 @@ class DataStoreSettingsRepositoryTest {
         scope.cancel()
     }
 
-    private fun repo(tokens: TokenStore = InMemoryTokenStore()) =
-        DataStoreSettingsRepository(PreferenceDataStoreFactory.create(scope = scope) { file }, tokens)
+    // One DataStore per file per process: a test that seeds the file reuses that instance.
+    private fun dataStore(): DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scope) { file }
 
-    @Test
-    fun defaults() = runBlocking {
-        val s = repo().current()
-        assertEquals(LlmConfig.DEFAULT_BASE_URL, s.baseUrl)
-        assertTrue(s.drawIcons)
-        assertFalse(s.hasToken)
-        assertNull(s.tokenHint)
-        assertTrue(s.usesDefaultEndpoint)
+    private fun repo(tokens: TokenStore = InMemoryTokenStore(), store: DataStore<Preferences> = dataStore()) =
+        DataStoreSettingsRepository(store, tokens)
+
+    /** What a build with the server-address setting left behind. */
+    private suspend fun seedLegacy(store: DataStore<Preferences>, baseUrl: String, hint: String) {
+        store.edit {
+            it[DataStoreSettingsRepository.LEGACY_BASE_URL] = baseUrl
+            it[DataStoreSettingsRepository.TOKEN_HINT] = hint
+        }
     }
 
     @Test
-    fun baseUrlIsNormalizedValidatedAndResettable() = runBlocking {
+    fun defaults() = runBlocking {
         val r = repo()
-        assertTrue(r.setBaseUrl("  https://picnic.cora.earth/v1/ "))
-        assertEquals("https://picnic.cora.earth/v1", r.current().baseUrl)
-        assertEquals("https://picnic.cora.earth/v1", r.llmConfig().baseUrl)
-        assertFalse(r.settings.first().usesDefaultEndpoint)
+        val s = r.current()
+        assertTrue(s.drawIcons)
+        assertFalse(s.hasToken)
+        assertNull(s.tokenHint)
+        assertEquals(LlmConfig.DEFAULT_BASE_URL, r.llmConfig().baseUrl)
+    }
 
-        assertFalse(r.setBaseUrl("http://picnic.cora.earth/v1"))
-        assertFalse(r.setBaseUrl("not a url"))
-        assertEquals("https://picnic.cora.earth/v1", r.current().baseUrl)
+    @Test
+    fun upgradeDeletesAKeySavedForAnotherServerBeforeItCanBeSent() = runBlocking {
+        val store = dataStore()
+        seedLegacy(store, "https://lists.example/v1", "ab_…cdef")
+        val tokens = InMemoryTokenStore("ab_live_0123456789abcdef")
+        val r = repo(tokens, store)
 
-        assertTrue(r.setBaseUrl(""))
-        assertEquals(LlmConfig.DEFAULT_BASE_URL, r.current().baseUrl)
+        assertNull("the very first read already goes without it", r.token())
+        assertNull(tokens.read())
+        val s = r.settings.first()
+        assertFalse(s.hasToken)
+        assertNull(s.tokenHint)
+        assertNull(store.data.first()[DataStoreSettingsRepository.LEGACY_BASE_URL])
+        assertEquals(LlmConfig.DEFAULT_BASE_URL, r.llmConfig().baseUrl)
+
+        // Runs once: a key pasted afterwards stays.
+        r.setToken("sk-proj-abcdefghijklmnop1234")
+        assertEquals("sk-proj-abcdefghijklmnop1234", r.token())
+        assertTrue(r.current().hasToken)
+    }
+
+    @Test
+    fun upgradeRunsBeforeTheFirstSettingsEmission() = runBlocking {
+        val store = dataStore()
+        seedLegacy(store, "https://lists.example/v1", "ab_…cdef")
+        val tokens = InMemoryTokenStore("ab_live_0123456789abcdef")
+        assertFalse(repo(tokens, store).settings.first().hasToken)
+        assertNull(tokens.read())
+    }
+
+    @Test
+    fun upgradeKeepsAKeySavedForOpenAi() = runBlocking {
+        val store = dataStore()
+        seedLegacy(store, "https://API.openai.com:443/v1beta", "sk-…1234")
+        val r = repo(InMemoryTokenStore("sk-proj-abcdefghijklmnop1234"), store)
+        assertEquals("sk-proj-abcdefghijklmnop1234", r.token())
+        assertEquals("sk-…1234", r.current().tokenHint)
+        assertNull(store.data.first()[DataStoreSettingsRepository.LEGACY_BASE_URL])
+        assertEquals(LlmConfig.DEFAULT_BASE_URL, r.llmConfig().baseUrl)
+    }
+
+    @Test
+    fun anUnfinishedUpgradeSendsNoKeyAndTriesAgain() = runBlocking {
+        val store = dataStore()
+        seedLegacy(store, "https://lists.example/v1", "ab_…cdef")
+        var busy = true
+        val tokens = object : TokenStore {
+            var stored: String? = "ab_live_0123456789abcdef"
+            override suspend fun read(): String? = stored
+            override suspend fun write(token: String?) {
+                if (busy) throw IOException("can't delete right now")
+                stored = token
+            }
+        }
+        val r = repo(tokens, store)
+        assertNull("never sent while the old key is still there", r.token())
+        assertEquals("ab_live_0123456789abcdef", tokens.stored)
+        busy = false
+        assertNull(r.token())
+        assertNull(tokens.stored)
+        assertFalse(r.current().hasToken)
+    }
+
+    @Test
+    fun sameHostComparesHostAndPort() {
+        assertTrue(DataStoreSettingsRepository.sameHost("https://a.example/v1", "https://A.example:443/other"))
+        assertFalse(DataStoreSettingsRepository.sameHost("https://a.example/v1", "https://a.example:8443/v1"))
+        assertFalse(DataStoreSettingsRepository.sameHost("https://a.example/v1", "https://b.example/v1"))
+        assertFalse(DataStoreSettingsRepository.sameHost("not a url", "not a url"))
     }
 
     @Test
@@ -99,7 +168,7 @@ class DataStoreSettingsRepositoryTest {
     fun undecryptableTokenFlipsHasTokenOff() = runBlocking {
         val tokens = InMemoryTokenStore()
         val r = repo(tokens)
-        r.setToken("pk_live_0123456789abcdef")
+        r.setToken("sk-proj-0123456789abcdef")
         tokens.write(null) // e.g. Keystore key invalidated: the store now reads null
         assertNull(r.token())
         assertFalse(r.current().hasToken)
@@ -119,12 +188,12 @@ class DataStoreSettingsRepositoryTest {
             }
         }
         val r = repo(tokens)
-        r.setToken("pk_live_0123456789abcdef")
+        r.setToken("sk-proj-0123456789abcdef")
         busy = true
         assertNull("this call goes without a token", r.token())
         assertTrue("but the token is not forgotten", r.current().hasToken)
         busy = false
-        assertEquals("pk_live_0123456789abcdef", r.token())
+        assertEquals("sk-proj-0123456789abcdef", r.token())
     }
 
     @Test

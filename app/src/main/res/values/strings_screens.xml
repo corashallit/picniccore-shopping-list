@@ -167,23 +167,20 @@
     <string name="aisles_leave_discard">Discard</string>
     <string name="aisles_leave_keep">Keep editing</string>
 
-    <!-- Settings (amendment A1: connection and icons only, nothing about models) -->
+    <!-- Settings (amendment A1: the OpenAI key and icons only, nothing about models or addresses) -->
     <string name="settings_title">Settings</string>
-    <string name="settings_connection">Connection</string>
-    <string name="settings_connection_intro">Picnic List uses OpenAI to sort your items and look up recipes. Use your own OpenAI key, or the address and access token Cora gave you.</string>
-    <string name="settings_base_url">Server address</string>
-    <string name="settings_base_url_default">OpenAI directly, for your own API key.</string>
-    <string name="settings_base_url_proxy">A proxy (like Cora\'s) or another OpenAI-compatible server.</string>
-    <string name="settings_use_openai">Use OpenAI directly</string>
-    <string name="settings_token">API key or access token</string>
-    <string name="settings_token_placeholder">sk-… or pk_…</string>
-    <string name="settings_token_saved_placeholder">Saved: %1$s</string>
-    <string name="settings_token_saved">Saved on this phone, encrypted. Type a new one to replace it.</string>
-    <string name="settings_token_missing">Not set yet: adding items with AI needs it.</string>
-    <string name="settings_token_show">Show</string>
-    <string name="settings_token_hide">Hide</string>
+    <string name="settings_key_title">Your OpenAI key</string>
+    <string name="settings_key_intro">Picnic List uses OpenAI to sort your items into aisles, read photos and voice notes, and draw icons. Paste an OpenAI API key to turn that on.</string>
+    <string name="settings_key_label">OpenAI API key</string>
+    <string name="settings_key_placeholder">sk-…</string>
+    <string name="settings_key_saved_placeholder">Saved: %1$s</string>
+    <string name="settings_key_saved">Saved. Paste a new key here to replace it.</string>
+    <string name="settings_key_missing">Not set yet: adding items with AI needs it.</string>
+    <string name="settings_key_show">Show</string>
+    <string name="settings_key_hide">Hide</string>
     <string name="settings_save">Save</string>
-    <string name="settings_remove_token">Remove key</string>
+    <string name="settings_remove_key">Remove key</string>
+    <string name="settings_key_storage">Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.</string>
     <string name="settings_test">Test connection</string>
     <string name="settings_test_running">Checking…</string>
     <string name="settings_test_ok">Connected · %1$d ms</string>
@@ -191,9 +188,10 @@
     <string name="settings_icons">Icons</string>
     <string name="settings_draw_icons">Draw new icons with AI</string>
     <string name="settings_draw_icons_note">When the icon library has nothing that fits, the app draws one. Drawing a new icon takes about 10 s and costs about 1.5¢ (US).</string>
-    <string name="settings_help_title">Own key or Cora\'s proxy?</string>
-    <string name="settings_help_own_key">Your own OpenAI key: keep the address at https://api.openai.com/v1 and paste the key (it starts with sk-). OpenAI bills you directly.</string>
-    <string name="settings_help_proxy">Cora\'s proxy: set the address to https://picnic.cora.earth/v1 and paste the access token Cora gave you (it starts with pk_). No OpenAI account needed.</string>
-    <string name="settings_help_privacy">The key or token stays encrypted on this phone and is only sent to the address above. Text, photos and recordings go there when you ask the app to sort or read them. Item names also go there in the background, to sort them into aisles and to pick or draw their icons (you can turn drawing off above).</string>
+    <string name="settings_help_title">About your key</string>
+    <string name="settings_help_budget">Make the key in its own OpenAI project with a monthly budget and \"Enforce a hard limit\" turned on, so a lost phone or a leaked key can\'t run up a big bill.</string>
+    <string name="settings_help_restricted">A restricted key is enough: List models (Read), Model capabilities (Request) and Responses API (Write). One key per person.</string>
+    <string name="settings_help_guide">If someone else made your key, they have a step-by-step guide for these settings.</string>
+    <string name="settings_help_privacy">Text, photos and recordings go to OpenAI when you ask the app to sort or read them. Item names also go there in the background, to sort them into aisles and to pick or draw their icons (you can turn drawing off above).</string>
     <string name="settings_version">%1$s %2$s</string>
 </resources>

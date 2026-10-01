@@ -17,7 +17,7 @@ data object ListRoute
 @Serializable
 data object AislesRoute
 
-/** Connection (base URL + token) and "Draw new icons with AI". */
+/** "Your OpenAI key" (with Test connection) and "Draw new icons with AI". */
 @Serializable
 data object SettingsRoute
 

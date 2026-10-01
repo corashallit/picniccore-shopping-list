@@ -4,8 +4,7 @@ package earth.cora.picnic.core.llm
  * THE ONE PLACE where the app's models and their request details are chosen (client amendment A1).
  *
  * Not user-editable: there is no Settings field and no persisted override. To change a model,
- * maintainers edit this file and ship an APK, or remap it server-side without an APK through the
- * proxy's MODEL_MAP (docs/PROXY.md). Values come from the live benchmark of 2026-10-01
+ * maintainers edit this file and ship an APK. Values come from the live benchmark of 2026-10-01
  * (research/openai_api.md §0). Model-specific request rules (allowed efforts, prompt-cache fields)
  * live in ModelCapabilities (core-internal), which keys off the model id sent.
  */

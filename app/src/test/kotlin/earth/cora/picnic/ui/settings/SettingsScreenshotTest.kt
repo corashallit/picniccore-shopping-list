@@ -1,8 +1,9 @@
 package earth.cora.picnic.ui.settings
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import earth.cora.picnic.core.llm.LlmError
-import earth.cora.picnic.ui.common.ScreenText
 import earth.cora.picnic.ui.common.snap
 import earth.cora.picnic.ui.common.themeParameters
 import org.junit.Rule
@@ -13,8 +14,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Goldens: settings_own_key (default endpoint, key saved, test OK), settings_proxy (new token typed),
- * settings_failed, settings_new_host (the address changed host, so the old token was dropped).
+ * Goldens: settings_no_key (first run), settings_key_typed (a key pasted and shown, not saved yet),
+ * settings_key_saved (key saved, test OK), settings_failed (the key lacks a permission),
+ * settings_about_key (scrolled down to the key advice and what is sent).
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -24,7 +26,27 @@ class SettingsScreenshotTest(private val dark: Boolean, @Suppress("unused") priv
     val compose = createComposeRule()
 
     @Test
-    fun ownKey() = compose.snap("settings_own_key", dark) {
+    fun noKey() = compose.snap("settings_no_key", dark) {
+        SettingsScreen(SettingsUiState(appVersion = "0.1.0-dev", loading = false), SettingsActions())
+    }
+
+    @Test
+    fun keyTyped() = compose.snap("settings_key_typed", dark) {
+        SettingsScreen(
+            SettingsUiState(
+                tokenInput = "sk-proj-7Hq2xWv9Lm3Ks8Rt",
+                tokenVisible = true,
+                drawIcons = false,
+                canSave = true,
+                appVersion = "0.1.0-dev",
+                loading = false,
+            ),
+            SettingsActions(),
+        )
+    }
+
+    @Test
+    fun keySaved() = compose.snap("settings_key_saved", dark) {
         SettingsScreen(
             SettingsUiState(
                 hasToken = true,
@@ -38,31 +60,12 @@ class SettingsScreenshotTest(private val dark: Boolean, @Suppress("unused") priv
     }
 
     @Test
-    fun proxyWithANewToken() = compose.snap("settings_proxy", dark) {
-        SettingsScreen(
-            SettingsUiState(
-                baseUrlInput = "https://picnic.cora.earth/v1",
-                usesDefaultEndpoint = false,
-                tokenInput = "pk_live_7Hq2xWv9Lm3Ks8Rt",
-                tokenVisible = true,
-                drawIcons = false,
-                canSave = true,
-                appVersion = "0.1.0-dev",
-                loading = false,
-            ),
-            SettingsActions(),
-        )
-    }
-
-    @Test
     fun failedTest() = compose.snap("settings_failed", dark) {
         SettingsScreen(
             SettingsUiState(
-                baseUrlInput = "https://picnic.cora.earth/v1",
-                usesDefaultEndpoint = false,
                 hasToken = true,
-                tokenHint = "pk_…Rt",
-                test = ConnectionTestUi.Failed(LlmError.Unauthorized(401).friendlyMessage),
+                tokenHint = "sk-…a1b2",
+                test = ConnectionTestUi.Failed(LlmError.Unauthorized(401, missingScopes = listOf("api.model.read")).friendlyMessage),
                 appVersion = "0.1.0-dev",
                 loading = false,
             ),
@@ -71,16 +74,14 @@ class SettingsScreenshotTest(private val dark: Boolean, @Suppress("unused") priv
     }
 
     @Test
-    fun newHostAsksForItsToken() = compose.snap("settings_new_host", dark) {
+    fun aboutTheKey() = compose.snap(
+        "settings_about_key",
+        dark,
+        // The version footer is the last thing on the screen: the whole advice card is in view.
+        before = { onNodeWithText("0.1.0-dev", substring = true).performScrollTo() },
+    ) {
         SettingsScreen(
-            SettingsUiState(
-                baseUrlInput = "https://picnic.cora.earth/v1",
-                usesDefaultEndpoint = false,
-                hasToken = false,
-                notice = ScreenText.TOKEN_FOR_NEW_SERVER,
-                appVersion = "0.1.0-dev",
-                loading = false,
-            ),
+            SettingsUiState(hasToken = true, tokenHint = "sk-…a1b2", appVersion = "0.1.0-dev", loading = false),
             SettingsActions(),
         )
     }

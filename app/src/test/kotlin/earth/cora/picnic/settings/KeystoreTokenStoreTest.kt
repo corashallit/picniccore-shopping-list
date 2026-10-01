@@ -49,7 +49,7 @@ class KeystoreTokenStoreTest {
     fun nullClearsTheFile() = runTest {
         val file = File(tmp.root, "token.bin")
         val s = KeystoreTokenStore(file, { FakeCipher() }, StandardTestDispatcher(testScheduler))
-        s.write("pk_abc")
+        s.write("sk-abc")
         s.write(null)
         assertFalse(file.exists())
         assertNull(s.read())

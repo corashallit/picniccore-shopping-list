@@ -1,6 +1,5 @@
 package earth.cora.picnic.ui.settings
 
-import earth.cora.picnic.core.llm.LlmConfig
 import earth.cora.picnic.core.llm.LlmError
 import earth.cora.picnic.settings.AppSettings
 import earth.cora.picnic.settings.InMemorySettingsRepository
@@ -8,8 +7,8 @@ import earth.cora.picnic.settings.SettingsRepository
 import earth.cora.picnic.ui.common.FakeAssistant
 import earth.cora.picnic.ui.common.MainDispatcherRule
 import earth.cora.picnic.ui.common.ScreenText
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -41,55 +40,59 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun showsTheSavedConnectionWithoutEverShowingTheToken() = runTest {
+    fun showsTheSavedKeyOnlyAsAHint() = runTest {
         val f = fixture(token = "sk-proj-abcdefghijklmnop1234")
         val s = f.vm.state.value
         assertFalse(s.loading)
-        assertEquals(LlmConfig.DEFAULT_BASE_URL, s.baseUrlInput)
-        assertTrue(s.usesDefaultEndpoint)
         assertTrue(s.hasToken)
         assertEquals("sk-…1234", s.tokenHint)
         assertEquals("", s.tokenInput)
         assertFalse(s.canSave)
+        assertNull(s.notice)
         assertEquals("0.1.0-test", s.appVersion)
     }
 
     @Test
-    fun anInvalidAddressIsRejectedAndNothingIsSaved() = runTest {
+    fun savingAKeyTrimsItClearsTheFieldAndTestsTheConnection() = runTest {
         val f = fixture()
-        f.vm.setBaseUrlInput("http://picnic.cora.earth/v1")
-        f.vm.setTokenInput("pk_live_0123456789abcdef")
+        f.vm.setTokenInput("  sk-proj-abcdefghijklmnop1234  ")
+        f.vm.toggleTokenVisible()
         runCurrent()
         assertTrue(f.vm.state.value.canSave)
+
         f.vm.saveConnection()
         advanceUntilIdle()
-        assertEquals(ScreenText.BASE_URL_INVALID, f.vm.state.value.baseUrlError)
-        assertEquals(LlmConfig.DEFAULT_BASE_URL, f.settings.current().baseUrl)
-        assertNull("the token waits for a valid address", f.settings.token())
-
-        f.vm.setBaseUrlInput("https://picnic.cora.earth/v1/")
-        runCurrent()
-        assertNull("typing clears the error", f.vm.state.value.baseUrlError)
-    }
-
-    @Test
-    fun savingAProxyAndTokenClearsTheFieldsAndTestsTheConnection() = runTest {
-        val f = fixture()
-        f.vm.setBaseUrlInput(" https://picnic.cora.earth/v1/ ")
-        f.vm.setTokenInput("  pk_live_0123456789abcdef  ")
-        f.vm.saveConnection()
-        advanceUntilIdle()
-
-        assertEquals("https://picnic.cora.earth/v1", f.settings.current().baseUrl)
-        assertEquals("pk_live_0123456789abcdef", f.settings.token())
+        assertEquals("sk-proj-abcdefghijklmnop1234", f.settings.token())
         val s = f.vm.state.value
-        assertEquals("https://picnic.cora.earth/v1", s.baseUrlInput)
-        assertFalse(s.usesDefaultEndpoint)
         assertEquals("", s.tokenInput)
+        assertFalse("the field hides again", s.tokenVisible)
         assertTrue(s.hasToken)
+        assertEquals("sk-…1234", s.tokenHint)
         assertFalse(s.canSave)
         assertEquals(ConnectionTestUi.Ok(412), s.test)
         assertEquals(1, f.assistant.tests)
+    }
+
+    @Test
+    fun aBlankKeyIsNotSaved() = runTest {
+        val f = fixture(token = "sk-proj-abcdefghijklmnop1234")
+        f.vm.setTokenInput("   ")
+        runCurrent()
+        assertFalse(f.vm.state.value.canSave)
+        f.vm.saveConnection()
+        advanceUntilIdle()
+        assertEquals("the saved key stays", "sk-proj-abcdefghijklmnop1234", f.settings.token())
+        assertEquals(0, f.assistant.tests)
+    }
+
+    @Test
+    fun aNewKeyReplacesTheSavedOne() = runTest {
+        val f = fixture(token = "sk-proj-abcdefghijklmnop1234")
+        f.vm.setTokenInput("sk-proj-zyxwvutsrqponmlk9876")
+        f.vm.saveConnection()
+        advanceUntilIdle()
+        assertEquals("sk-proj-zyxwvutsrqponmlk9876", f.settings.token())
+        assertEquals("sk-…9876", f.vm.state.value.tokenHint)
     }
 
     @Test
@@ -97,90 +100,88 @@ class SettingsViewModelTest {
         val gate = CompletableDeferred<Unit>()
         val f = fixture(token = "sk-proj-abcdefghijklmnop1234", assistant = FakeAssistant(testConnection = {
             gate.await()
-            throw LlmError.Unauthorized(401)
+            throw LlmError.Unauthorized(401, missingScopes = listOf("api.model.read"))
         }))
         f.vm.testConnection()
         runCurrent()
         assertEquals(ConnectionTestUi.Running, f.vm.state.value.test)
         gate.complete(Unit)
         advanceUntilIdle()
-        assertEquals(ConnectionTestUi.Failed(LlmError.Unauthorized(401).friendlyMessage), f.vm.state.value.test)
+        val failed = f.vm.state.value.test as ConnectionTestUi.Failed
+        assertTrue(failed.message.contains("missing a permission the app needs (api.model.read)"))
     }
 
     @Test
-    fun clearTokenAndUseOpenAiDirectly() = runTest {
-        val f = fixture(initial = AppSettings(baseUrl = "https://picnic.cora.earth/v1"), token = "pk_live_0123456789abcdef")
+    fun testConnectionSavesATypedKeyFirst() = runTest {
+        val f = fixture()
+        f.vm.setTokenInput("sk-proj-abcdefghijklmnop1234")
+        f.vm.testConnection()
+        advanceUntilIdle()
+        assertEquals("sk-proj-abcdefghijklmnop1234", f.settings.token())
+        assertEquals(ConnectionTestUi.Ok(412), f.vm.state.value.test)
+        assertEquals(1, f.assistant.tests)
+    }
+
+    @Test
+    fun testConnectionWithoutAKeySendsNothing() = runTest {
+        val f = fixture()
+        f.vm.testConnection()
+        advanceUntilIdle()
+        assertEquals(ConnectionTestUi.Idle, f.vm.state.value.test)
+        assertEquals(0, f.assistant.tests)
+    }
+
+    @Test
+    fun removeKey() = runTest {
+        val f = fixture(token = "sk-proj-abcdefghijklmnop1234")
         f.vm.clearToken()
-        f.vm.useOpenAiDirectly()
         advanceUntilIdle()
         val s = f.vm.state.value
         assertFalse(s.hasToken)
-        assertTrue(s.usesDefaultEndpoint)
-        assertEquals(LlmConfig.DEFAULT_BASE_URL, s.baseUrlInput)
+        assertNull(s.tokenHint)
         assertNull(f.settings.token())
     }
 
     @Test
-    fun aNewHostNeverGetsTheOldToken() = runTest {
-        val f = fixture(token = "sk-proj-abcdefghijklmnop1234")
-        f.vm.setBaseUrlInput("https://picnic.cora.earth/v1")
-        f.vm.saveConnection()
+    fun aKeyTheKeystoreRefusedStaysInTheFieldWithANotice() = runTest {
+        // DataStoreSettingsRepository.setToken: a Keystore failure stores nothing and doesn't throw.
+        val refusing = object : SettingsRepository by InMemorySettingsRepository() {
+            override suspend fun setToken(token: String?) = Unit
+        }
+        val assistant = FakeAssistant()
+        val vm = SettingsViewModel(refusing, assistant, "0.1.0-test")
         advanceUntilIdle()
-        assertEquals("https://picnic.cora.earth/v1", f.settings.current().baseUrl)
-        assertNull("the OpenAI key is not kept for the proxy", f.settings.token())
-        assertEquals(ScreenText.TOKEN_FOR_NEW_SERVER, f.vm.state.value.notice)
-        assertEquals("no request went to the new host", 0, f.assistant.tests)
-    }
+        vm.setTokenInput("sk-proj-abcdefghijklmnop1234")
+        vm.saveConnection()
+        advanceUntilIdle()
+        assertEquals(ScreenText.SAVE_FAILED, vm.state.value.notice)
+        assertEquals("sk-proj-abcdefghijklmnop1234", vm.state.value.tokenInput)
+        assertEquals(0, assistant.tests)
 
-    @Test
-    fun theSameHostKeepsTheTokenAndANewTokenIsSavedForANewHost() = runTest {
-        val f = fixture(initial = AppSettings(baseUrl = "https://picnic.cora.earth/v1"), token = "pk_live_0123456789abcdef")
-        f.vm.setBaseUrlInput("https://PICNIC.cora.earth:443/v2")
-        f.vm.saveConnection()
-        advanceUntilIdle()
-        assertEquals("pk_live_0123456789abcdef", f.settings.token())
-        assertNull(f.vm.state.value.notice)
-
-        f.vm.setBaseUrlInput("https://other.example/v1")
-        f.vm.setTokenInput("pk_live_fedcba9876543210")
-        f.vm.saveConnection()
-        advanceUntilIdle()
-        assertEquals("pk_live_fedcba9876543210", f.settings.token())
-        assertNull(f.vm.state.value.notice)
-
-        f.vm.useOpenAiDirectly()
-        advanceUntilIdle()
-        assertNull("the proxy token is not sent to OpenAI either", f.settings.token())
-        assertEquals(ScreenText.TOKEN_FOR_NEW_SERVER, f.vm.state.value.notice)
+        vm.setTokenInput("sk-proj-abcdefghijklmnop12345")
+        runCurrent()
+        assertNull("typing clears the notice", vm.state.value.notice)
     }
 
     @Test
     fun aFailedSettingsWriteIsReportedNotThrown() = runTest {
         val failing = object : SettingsRepository by InMemorySettingsRepository() {
             override suspend fun setDrawIcons(enabled: Boolean) = throw IOException("disk full")
-            override suspend fun setBaseUrl(url: String): Boolean = throw IOException("disk full")
+            override suspend fun setToken(token: String?) = throw IOException("disk full")
         }
         val vm = SettingsViewModel(failing, FakeAssistant(), "0.1.0-test")
         advanceUntilIdle()
         vm.setDrawIcons(false)
         advanceUntilIdle()
         assertEquals(ScreenText.SAVE_FAILED, vm.state.value.notice)
-        vm.setBaseUrlInput("https://picnic.cora.earth/v1")
+        vm.setTokenInput("sk-proj-abcdefghijklmnop1234")
         vm.saveConnection()
         advanceUntilIdle()
         assertEquals(ScreenText.SAVE_FAILED, vm.state.value.notice)
     }
 
     @Test
-    fun sameHostComparesHostAndPort() {
-        assertTrue(SettingsViewModel.sameHost("https://a.example/v1", "https://A.example:443/other"))
-        assertFalse(SettingsViewModel.sameHost("https://a.example/v1", "https://a.example:8443/v1"))
-        assertFalse(SettingsViewModel.sameHost("https://a.example/v1", "https://b.example/v1"))
-        assertFalse(SettingsViewModel.sameHost("not a url", "not a url"))
-    }
-
-    @Test
-    fun drawIconsToggleAndTokenVisibility() = runTest {
+    fun drawIconsToggleAndKeyVisibility() = runTest {
         val f = fixture()
         f.vm.setDrawIcons(false)
         f.vm.toggleTokenVisible()

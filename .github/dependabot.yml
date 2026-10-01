@@ -1,7 +1,6 @@
 # Dependabot version updates (pull requests only; nothing merges by itself).
 #  - github-actions: the workflows pin every action to a commit SHA with a "# vX.Y.Z" comment, and
 #    Dependabot moves both together.
-#  - docker: the proxy image's node:22-alpine base, pinned by tag and digest (docs/PROXY.md §4.9).
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -11,12 +10,3 @@ updates:
     groups:
       actions:
         patterns: ['*']
-
-  - package-ecosystem: docker
-    directory: /proxy
-    schedule:
-      interval: weekly
-    # Stay on Node 22 LTS; moving to the next LTS is a deliberate change (docs/PROXY.md §4.9).
-    ignore:
-      - dependency-name: node
-        update-types: ['version-update:semver-major']

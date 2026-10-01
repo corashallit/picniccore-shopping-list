@@ -104,8 +104,8 @@ android {
         }
         // What friends install (CI's APK): the debug build's code and committed signing key, so it
         // installs over earlier debug APKs, but NOT debuggable. A debuggable app lets anyone with
-        // brief USB access `adb shell run-as` into its files and Keystore key (the stored OpenAI key
-        // or proxy token) or attach a debugger. Not minified: the same bytecode the unit tests cover.
+        // brief USB access `adb shell run-as` into its files and Keystore key (the stored OpenAI key)
+        // or attach a debugger. Not minified: the same bytecode the unit tests cover.
         create("sideload") {
             initWith(getByName("debug"))
             isDebuggable = false

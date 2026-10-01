@@ -85,10 +85,10 @@ class AppContainer(private val app: Application) {
         )
     }
 
-    /** DataStore (base URL, draw-icons, install id, token hint) + the Keystore-encrypted token. */
+    /** DataStore (draw-icons, install id, key hint) + the Keystore-encrypted OpenAI key. */
     val settings: SettingsRepository by lazy { DataStoreSettingsRepository(app, KeystoreTokenStore(app)) }
 
-    /** Base URL + safety identifier, read before every call. */
+    /** OpenAI's base URL + the safety identifier, read before every call. */
     val configSource: ConfigSource = ConfigSource { settings.llmConfig() }
 
     /** The token is decrypted per request and never stored anywhere else. */

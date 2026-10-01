@@ -85,9 +85,9 @@ fun interface LlmLog {
 }
 
 /**
- * Thin OpenAI-compatible HTTP client on OkHttp (OkHttp stays an implementation detail of core:
- * `implementation`, not `api`). All paths are relative to LlmConfig.baseUrl, so api.openai.com
- * and Cora's proxy behave the same.
+ * Thin OpenAI HTTP client on OkHttp (OkHttp stays an implementation detail of core:
+ * `implementation`, not `api`). All paths are relative to LlmConfig.baseUrl, which the app always
+ * leaves at api.openai.com (tests point it at a mock server).
  *
  * CONTRACT (details in docs/ARCHITECTURE.md §7.2):
  * - Reads [config] and [token] before every call. Missing/blank token or a base URL that fails
@@ -96,11 +96,12 @@ fun interface LlmLog {
  * - Suspends with cancellation: cancelling the coroutine cancels the OkHttp call.
  * - Per-call timeout (OkHttp call timeout) = the [timeout] argument; connect timeout LlmTimeouts.CONNECT.
  * - Retries (max 2 extra attempts, backoff 1 s / 2 s + jitter, honours Retry-After up to 20 s):
- *   429 rate limits (not insufficient_quota / spend or usage limits), 500, 502, 503, 504, except the
- *   proxy's own fatal codes (upstream_auth_failed, proxy_misconfigured). [imageEdit] is never retried.
+ *   429 rate limits (not insufficient_quota / spend or usage limits), 500, 502, 503, 504.
+ *   [imageEdit] is never retried.
  * - [responses] also performs the one-shot capability downgrade on HTTP 400 (param reasoning.effort,
- *   prompt_cache_options or prompt_cache_breakpoint), so a server-side MODEL_MAP to a model with
- *   different parameter support still works.
+ *   prompt_cache_options or prompt_cache_breakpoint), so a model whose parameter support
+ *   ModelCapabilities doesn't know yet (a new ModelDefaults value, the developer CLI's --smart/--fast)
+ *   still works.
  * - Maps every failure to LlmError (research/openai_api.md §2.8).
  */
 class OpenAiClient(
@@ -252,8 +253,8 @@ class OpenAiClient(
             throw LlmError.NotConfigured("token unavailable (${e.javaClass.simpleName})")
         }
         val bearer = raw?.trim()?.removePrefix("Bearer ")?.trim()
-        if (bearer.isNullOrEmpty()) throw LlmError.NotConfigured("no API key or token")
-        if (bearer.any { it.code <= 0x20 || it.code >= 0x7f }) throw LlmError.NotConfigured("token contains invalid characters")
+        if (bearer.isNullOrEmpty()) throw LlmError.NotConfigured("no API key")
+        if (bearer.any { it.code <= 0x20 || it.code >= 0x7f }) throw LlmError.NotConfigured("API key contains invalid characters")
         return Connection(base, bearer, cfg.safetyIdentifier?.takeIf { it.isNotBlank() })
     }
 

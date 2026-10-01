@@ -11,8 +11,8 @@ class MaskTokenTest {
     }
 
     @Test
-    fun proxyTokensKeepUnderscorePrefix() {
-        assertEquals("pk_…7890", maskToken("pk_live_abcdef1234567890"))
+    fun underscorePrefixesAreKeptToo() {
+        assertEquals("ab_…7890", maskToken("ab_live_abcdef1234567890"))
     }
 
     @Test

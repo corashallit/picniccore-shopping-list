@@ -29,7 +29,6 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
-import earth.cora.picnic.core.llm.LlmConfig
 import earth.cora.picnic.ui.common.BackButton
 import earth.cora.picnic.ui.common.HintText
 import earth.cora.picnic.ui.common.ScreenScaffold
@@ -49,12 +48,10 @@ import kotlinx.coroutines.Dispatchers
 @Stable
 class SettingsActions(
     val onBack: () -> Unit = {},
-    val onBaseUrlChange: (String) -> Unit = {},
     val onTokenChange: (String) -> Unit = {},
     val onToggleTokenVisible: () -> Unit = {},
     val onSave: () -> Unit = {},
     val onClearToken: () -> Unit = {},
-    val onUseOpenAi: () -> Unit = {},
     val onDrawIconsChange: (Boolean) -> Unit = {},
     val onTest: () -> Unit = {},
 )
@@ -66,12 +63,10 @@ fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit) {
     val actions = remember(vm) {
         SettingsActions(
             onBack = onBack,
-            onBaseUrlChange = vm::setBaseUrlInput,
             onTokenChange = vm::setTokenInput,
             onToggleTokenVisible = vm::toggleTokenVisible,
             onSave = vm::saveConnection,
             onClearToken = vm::clearToken,
-            onUseOpenAi = vm::useOpenAiDirectly,
             onDrawIconsChange = vm::setDrawIcons,
             onTest = vm::testConnection,
         )
@@ -79,7 +74,7 @@ fun SettingsRoute(vm: SettingsViewModel, onBack: () -> Unit) {
     SettingsScreen(state, actions)
 }
 
-/** Stateless Settings screen: Connection, Icons, how the connection works, and the app version. */
+/** Stateless Settings screen: your OpenAI key, Icons, advice about the key, and the app version. */
 @Composable
 fun SettingsScreen(state: SettingsUiState, actions: SettingsActions, modifier: Modifier = Modifier) {
     val d = PicnicTheme.dimens
@@ -100,11 +95,12 @@ fun SettingsScreen(state: SettingsUiState, actions: SettingsActions, modifier: M
                 .padding(start = d.gutter, end = d.gutter, top = d.xs, bottom = d.xxl),
             verticalArrangement = Arrangement.spacedBy(d.m),
         ) {
-            ConnectionCard(state, actions)
+            KeyCard(state, actions)
             IconsCard(state, actions)
             SectionCard(stringResource(R.string.settings_help_title)) {
-                HelpLine(stringResource(R.string.settings_help_own_key))
-                HelpLine(stringResource(R.string.settings_help_proxy))
+                HelpLine(stringResource(R.string.settings_help_budget))
+                HelpLine(stringResource(R.string.settings_help_restricted))
+                HelpLine(stringResource(R.string.settings_help_guide))
                 HelpLine(stringResource(R.string.settings_help_privacy))
             }
             HintText(
@@ -117,44 +113,28 @@ fun SettingsScreen(state: SettingsUiState, actions: SettingsActions, modifier: M
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ConnectionCard(state: SettingsUiState, actions: SettingsActions) {
+private fun KeyCard(state: SettingsUiState, actions: SettingsActions) {
     val d = PicnicTheme.dimens
-    SectionCard(stringResource(R.string.settings_connection), glyph = PicnicGlyph.Key) {
-        Text(stringResource(R.string.settings_connection_intro), style = PicnicTheme.type.body, color = PicnicTheme.colors.inkSoft)
-        PicnicTextField(
-            value = state.baseUrlInput,
-            onValueChange = actions.onBaseUrlChange,
-            label = stringResource(R.string.settings_base_url),
-            placeholder = LlmConfig.DEFAULT_BASE_URL,
-            singleLine = true,
-            isError = state.baseUrlError != null,
-            supportingText = state.baseUrlError ?: stringResource(
-                if (state.usesDefaultEndpoint) R.string.settings_base_url_default else R.string.settings_base_url_proxy,
-            ),
-            enabled = !state.loading,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false, imeAction = ImeAction.Next),
-        )
-        if (!state.usesDefaultEndpoint) {
-            PicnicButton(stringResource(R.string.settings_use_openai), onClick = actions.onUseOpenAi, style = PicnicButtonStyle.Text)
-        }
+    SectionCard(stringResource(R.string.settings_key_title), glyph = PicnicGlyph.Key) {
+        Text(stringResource(R.string.settings_key_intro), style = PicnicTheme.type.body, color = PicnicTheme.colors.inkSoft)
         PicnicTextField(
             value = state.tokenInput,
             onValueChange = actions.onTokenChange,
-            label = stringResource(R.string.settings_token),
+            label = stringResource(R.string.settings_key_label),
             placeholder = if (state.hasToken) {
-                stringResource(R.string.settings_token_saved_placeholder, state.tokenHint.orEmpty())
+                stringResource(R.string.settings_key_saved_placeholder, state.tokenHint.orEmpty())
             } else {
-                stringResource(R.string.settings_token_placeholder)
+                stringResource(R.string.settings_key_placeholder)
             },
             singleLine = true,
             enabled = !state.loading,
-            supportingText = stringResource(if (state.hasToken) R.string.settings_token_saved else R.string.settings_token_missing),
+            supportingText = stringResource(if (state.hasToken) R.string.settings_key_saved else R.string.settings_key_missing),
             visualTransformation = if (state.tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false, imeAction = ImeAction.Done),
             trailing = if (state.tokenInput.isNotEmpty()) {
                 {
                     PicnicButton(
-                        stringResource(if (state.tokenVisible) R.string.settings_token_hide else R.string.settings_token_show),
+                        stringResource(if (state.tokenVisible) R.string.settings_key_hide else R.string.settings_key_show),
                         onClick = actions.onToggleTokenVisible,
                         style = PicnicButtonStyle.Text,
                     )
@@ -166,10 +146,11 @@ private fun ConnectionCard(state: SettingsUiState, actions: SettingsActions) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(d.s), verticalArrangement = Arrangement.spacedBy(d.xs)) {
             PicnicButton(stringResource(R.string.settings_save), onClick = actions.onSave, enabled = state.canSave, glyph = PicnicGlyph.Check)
             if (state.hasToken) {
-                PicnicButton(stringResource(R.string.settings_remove_token), onClick = actions.onClearToken, style = PicnicButtonStyle.Text, glyph = PicnicGlyph.Delete)
+                PicnicButton(stringResource(R.string.settings_remove_key), onClick = actions.onClearToken, style = PicnicButtonStyle.Text, glyph = PicnicGlyph.Delete)
             }
         }
         state.notice?.let { Notice(it) }
+        HintText(stringResource(R.string.settings_key_storage))
         SectionDivider()
         PicnicButton(
             stringResource(R.string.settings_test),

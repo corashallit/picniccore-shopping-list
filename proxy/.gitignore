@@ -1,7 +1,0 @@
-node_modules/
-.wrangler/
-.dev.vars*
-!.dev.vars.example
-.env*
-# Self-hosting env files hold the real key: keep them in /etc/picnic-proxy, never in the checkout.
-*.env

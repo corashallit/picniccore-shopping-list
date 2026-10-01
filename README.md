@@ -16,10 +16,9 @@ Early work in progress. The visual direction is being chosen from three candidat
 
 ## API keys
 
-The app never ships with an API key. It talks to an OpenAI-compatible endpoint set in its settings, in one of two ways:
+The app never ships with an API key, and none is ever baked into the APK. Whoever uses it pastes their own OpenAI API key into **Settings → Your OpenAI key**, and the phone then talks to OpenAI directly. The key is stored encrypted with the Android Keystore, it is never shown again (only a hint like `sk-…a1b2`), and it is left out of backups.
 
-- **Proxy (recommended):** a small proxy (for example on `cora.earth`) holds the real key. It accepts only the endpoints the app uses and only per-device access tokens.
-- **Your own key:** paste your own OpenAI key in settings. It is stored encrypted with the Android Keystore.
+Making a key for a friend? Use a project of its own with a hard monthly budget, and a restricted key with only the three permissions the app needs. The steps are in [docs/OPENAI_KEY.md](docs/OPENAI_KEY.md).
 
 ## Releasing
 

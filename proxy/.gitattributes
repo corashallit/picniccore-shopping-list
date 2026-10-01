@@ -1,2 +1,0 @@
-# Byte-exact test fixtures (multipart bodies with CRLF framing and binary parts).
-test/fixtures/** binary

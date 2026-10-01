@@ -16,17 +16,11 @@ internal object ScreenText {
     const val MIC_DENIED = "Picnic List needs the microphone to hear your list. You can allow it in Android settings."
     const val CAMERA_UNAVAILABLE = "No camera app was found. Choose a photo from the gallery instead."
     const val SAVE_FAILED = "Couldn't save. Try again."
-    const val BASE_URL_INVALID = "Use an https:// address, like https://picnic.cora.earth/v1"
     const val NOTHING_NEW = "Everything there is already on your list."
-    const val TOKEN_FOR_NEW_SERVER = "New address saved. Paste the key or token for it: the old one was removed so it is never sent to a different server."
 }
 
 /**
- * True when the fix is in Settings: no token, a rejected token, or a base URL that isn't an
- * OpenAI-compatible API (the UI then offers "Open Settings").
+ * True when the fix is in Settings: no OpenAI key yet, or a key OpenAI rejected or that lacks a
+ * permission (the UI then offers "Open Settings").
  */
-internal fun LlmError.needsSettings(): Boolean = when (this) {
-    is LlmError.NotConfigured, is LlmError.Unauthorized -> true
-    is LlmError.BadResponse -> code == LlmError.ENDPOINT_NOT_FOUND
-    else -> false
-}
+internal fun LlmError.needsSettings(): Boolean = this is LlmError.NotConfigured || this is LlmError.Unauthorized

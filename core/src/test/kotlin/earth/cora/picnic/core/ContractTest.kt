@@ -65,10 +65,10 @@ class ContractTest {
 
     @Test
     fun baseUrlNormalization() {
-        assertEquals("https://picnic.cora.earth/v1", LlmConfig.normalizeBaseUrl("  https://picnic.cora.earth/v1/ "))
+        assertEquals(LlmConfig.DEFAULT_BASE_URL, LlmConfig.normalizeBaseUrl("  https://api.openai.com/v1/ "))
         assertEquals("http://127.0.0.1:8787/v1", LlmConfig.normalizeBaseUrl("http://127.0.0.1:8787/v1"))
-        assertNull(LlmConfig.normalizeBaseUrl("http://picnic.cora.earth/v1"))
-        assertNull(LlmConfig.normalizeBaseUrl("picnic.cora.earth"))
+        assertNull(LlmConfig.normalizeBaseUrl("http://api.openai.com/v1"))
+        assertNull(LlmConfig.normalizeBaseUrl("api.openai.com"))
         assertNull(LlmConfig.normalizeBaseUrl(""))
     }
 

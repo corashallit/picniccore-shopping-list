@@ -290,22 +290,22 @@ Internal testing is exempt from the Data safety form and "might not be subject t
 These belong to the app's code owners. All three are Play policy requirements that apply to this app.
 
 - [ ] **In-app privacy policy link.** Apps that use a sensitive permission (here `RECORD_AUDIO`) must link the privacy policy both on the store listing *and inside the app*. Settings' About footer is the natural place.
-- [ ] **In-app reporting of AI-generated content.** The AI-Generated Content policy covers images generated from text prompts, which is what "Draw new icons with AI" does. Such apps "must contain in-app user reporting or flagging features that allow users to report or flag offensive content to developers without needing to exit the app". A "Report this icon" action in the edit sheet would do. It could send the item name and icon to Cora, for example through a small proxy route, and offer "Draw a new icon".
-- [ ] **A prominent disclosure for background sending.** Item names you type also go to the AI in the background, to sort them into aisles and pick or draw icons. Today only Settings says so (`settings_help_privacy`). The User Data policy wants a disclosure "displayed in the normal usage of the app", followed by an affirmative choice, when data use may not be expected. One option: a one-time dialog the first time a key or token is saved, saying what is sent where, with "Turn on AI" / "Not now".
+- [ ] **In-app reporting of AI-generated content.** The AI-Generated Content policy covers images generated from text prompts, which is what "Draw new icons with AI" does. Such apps "must contain in-app user reporting or flagging features that allow users to report or flag offensive content to developers without needing to exit the app". A "Report this icon" action in the edit sheet would do. It could open an email to Cora with the item name and icon attached, and offer "Draw a new icon".
+- [ ] **A prominent disclosure for background sending.** Item names you type also go to the AI in the background, to sort them into aisles and pick or draw icons. Today only Settings says so (`settings_help_privacy`). The User Data policy wants a disclosure "displayed in the normal usage of the app", followed by an affirmative choice, when data use may not be expected. One option: a one-time dialog the first time an OpenAI key is saved, saying what is sent where, with "Turn on AI" / "Not now".
 
 ### 8.2 Policy declarations
 
 | Declaration | Answer for Picnic List |
 |---|---|
-| **Privacy policy** | The URL where [PRIVACY.md](PRIVACY.md) is hosted, for example `https://cora.earth/picnic/privacy`: a public web page that isn't editable by others. `picnic.cora.earth` only serves `/v1/*` and `/healthz` through the proxy's Caddy/nginx config, so use the main site. |
+| **Privacy policy** | The URL where [PRIVACY.md](PRIVACY.md) is hosted, for example `https://cora.earth/picnic/privacy`: a public web page that isn't editable by others. |
 | **Ads** | No ads. |
-| **Sign-in details** (app access) | "All or some functionality is restricted." The AI features need a key or token. Give reviewers a dedicated device token, `node scripts/mint-token.mjs play-review` (docs/PROXY.md), with the instructions: *Settings → Connection → base URL `https://picnic.cora.earth/v1`, paste the token, Save, Test connection.* Revoke it if you stop testing. Typing items, aisles and lists work without it. |
+| **Sign-in details** (app access) | "All or some functionality is restricted." The AI features need an OpenAI API key. Give reviewers **a separate key made only for the review**, never a friend's key or your own: a project of its own (for example "Picnic List – Play review") with **Enforce a hard limit** on a small monthly budget (US$5 is plenty), and a restricted key with only List models: Read, Model capabilities: Request and Responses API: Write ([OPENAI_KEY.md](OPENAI_KEY.md), steps 2 to 5). Instructions for the form: *Settings → Your OpenAI key → paste the key → Save. Test connection runs by itself.* Delete the key when the review is over and make a new one for the next review. Typing items, aisles and lists work without a key. |
 | **Content rating** | See 8.4. |
 | **Target audience and content** | **18 and over** only. The app sends what you add to OpenAI, whose terms carry their own age rules, and adults-only keeps it clear of the Families policy. Answer the "could it appeal to children" question truthfully: the pastel magical-girl style is decoration on a grocery tool for adults. |
 | **Data safety** | See 8.3. |
 | **Advertising ID** | No. The app has no `AD_ID` permission: the merged manifest has only INTERNET, RECORD_AUDIO and androidx's internal receiver permission. |
 | **Government apps / Financial features / Health apps / News apps** | No / none / none / no. |
-| **Account deletion** | Not applicable: nobody creates an account in the app. Device tokens are issued by hand outside it. |
+| **Account deletion** | Not applicable: nobody creates an account in the app. OpenAI keys are made by hand outside it, in OpenAI's dashboard. |
 
 ### 8.3 Data safety form, tailored
 
@@ -314,15 +314,16 @@ Answers follow what the code does (see [PRIVACY.md](PRIVACY.md) for the details)
 Some background for the "shared" and "ephemeral" questions:
 - OpenAI processes requests on the developer's behalf, as a **service provider**, which Play does not count as sharing.
 - With a user's own key, the user sends their data to their own OpenAI account.
-- Nothing goes off the phone until the user connects a key or token.
+- With a key Cora set up, the requests are made under her OpenAI account, with OpenAI as her service provider.
+- Nothing goes off the phone until the user adds an OpenAI key.
 
 **Overview questions:**
 
 | Question | Answer |
 |---|---|
 | Does your app collect or share any of the required user data types? | **Yes** |
-| Is all of the user data collected by your app encrypted in transit? | **Yes**. HTTPS only: Android blocks cleartext at targetSdk 36, and the base URL must be `https://`. |
-| Do you provide a way for users to request that their data is deleted? | **Yes**: by email, per PRIVACY.md. The proxy logs and OpenAI's abuse-monitoring logs also expire within 90 days, which Play accepts for this badge. |
+| Is all of the user data collected by your app encrypted in transit? | **Yes**. HTTPS only: every request goes to `https://api.openai.com/v1` (the app has no address setting), and Android blocks cleartext at targetSdk 36. |
+| Do you provide a way for users to request that their data is deleted? | **Yes**: by email, per PRIVACY.md. Nothing reaches a server of Cora's, and OpenAI's abuse-monitoring logs expire within 30 days, well inside the 90 days Play accepts for this badge. |
 
 **Data types:**
 
@@ -331,14 +332,11 @@ Some background for the "shared" and "ephemeral" questions:
 | **Photos and videos → Photos** (a photo of a handwritten list) | Yes | No | No: OpenAI may keep requests up to 30 days for abuse monitoring | Optional | App functionality |
 | **Audio files → Voice or sound recordings** (voice notes) | Yes | No | No (conservative; OpenAI doesn't keep transcription requests, so "Yes" would also be defensible) | Optional | App functionality |
 | **App activity → Other user-generated content** (typed requests, item names, aisle names, transcripts) | Yes | No | No | Optional (the app works without AI) | App functionality |
-| **App activity → App interactions** (Cora's proxy logs which AI feature each device used, and when) | Yes | No | No | Optional | App functionality; Fraud prevention, security, and compliance |
-| **Device or other IDs** (a random per-install ID, hashed, sent as OpenAI's `safety_identifier`; the per-device proxy token) | Yes | No | No | Required whenever AI is used | Fraud prevention, security, and compliance; App functionality |
+| **Device or other IDs** (a random per-install ID, hashed, sent as OpenAI's `safety_identifier`) | Yes | No | No | Required whenever AI is used | Fraud prevention, security, and compliance |
 
 **Everything else: No.**
 - **Location:** No. The web-search hint "Ontario, Canada" is fixed in the app, not read from the phone, and photos are re-encoded without EXIF, so no GPS tags.
 - **Personal info, financial, health, messages, contacts, calendar, files, web browsing, installed apps, crash logs and diagnostics:** none. There is no analytics or crash reporting.
-
-If you serve the proxy behind a web server that keeps **access logs with IP addresses**, say so in the privacy policy. Play only asks for an IP data type when it is used to infer location.
 
 ### 8.4 Content rating (IARC questionnaire)
 
@@ -364,7 +362,7 @@ If you serve the proxy behind a web server that keeps **access logs with IP addr
 |---|---|---|
 | App name | ≤ 30 characters | Picnic List |
 | Short description | ≤ 80 characters | "A grocery list that sorts itself into your store's aisles, with AI help." |
-| Full description | ≤ 4000 characters | What it does (README "What it does"), plus one plain paragraph saying it uses OpenAI (your own key or an access token) and what is sent. |
+| Full description | ≤ 4000 characters | What it does (README "What it does"), plus one plain paragraph saying it uses OpenAI (with an OpenAI API key you paste in) and what is sent. |
 | **App icon** | **512 × 512** PNG, 32-bit with alpha, ≤ 1024 KB | Export from the art pass's launcher icon master, not the adaptive XML. |
 | **Feature graphic** | **1024 × 500**, JPEG or 24-bit PNG, **no alpha**. Required to publish the listing. | Picnic blanket plus wordmark from the chosen art direction. |
 | **Phone screenshots** | 2–8; JPEG or 24-bit PNG (no alpha); each side 320–3840 px; long side ≤ 2× short side. To be eligible for Play's large-format recommendations: ≥ 4 screenshots, 9:16, ≥ 1080 × 1920. | From the Roborazzi goldens after the art pass, see below. |
@@ -376,7 +374,7 @@ If you serve the proxy behind a web server that keeps **access logs with IP addr
 
   ```bash
   mkdir -p store
-  for s in list_mixed_light list_mixed_dark add_preview_light edit_icons_light aisles_editor_light settings_proxy_light; do
+  for s in list_mixed_light list_mixed_dark add_preview_light edit_icons_light aisles_editor_light settings_key_saved_light; do
     magick "app/src/test/screenshots/$s.png" -gravity north -crop 1233x2192+0+0 +repage \
       -resize 1080x1920 -background white -alpha remove -alpha off "store/$s.png"
   done

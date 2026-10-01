@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarVisuals
@@ -16,7 +15,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -79,18 +77,17 @@ private fun ControlsSample() {
     Caption("PicnicTextField")
     PicnicTextField(value = "", onValueChange = {}, placeholder = "Add something… or \"pancakes from scratch\"", minLines = 2)
     PicnicTextField(
-        value = "https://picnic.example/v1",
+        value = "Fresh Market",
         onValueChange = {},
-        label = "Server address",
+        label = "Store name",
         singleLine = true,
         isError = true,
-        supportingText = "Use an https:// address",
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        supportingText = "Couldn't save. Try again.",
     )
     PicnicTextField(
         value = "sk-proj-secret",
         onValueChange = {},
-        label = "Access token",
+        label = "OpenAI API key",
         singleLine = true,
         supportingText = "Saved: sk-…wxyz",
         visualTransformation = PasswordVisualTransformation(),

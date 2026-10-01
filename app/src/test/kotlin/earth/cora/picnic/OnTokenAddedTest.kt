@@ -20,11 +20,11 @@ class OnTokenAddedTest {
         runCurrent()
         assertEquals("not for the initial value", 0, calls)
 
-        settings.setToken("pk_live_0123456789abcdef")
+        settings.setToken("sk-proj-0123456789abcdef")
         runCurrent()
         assertEquals(1, calls)
 
-        settings.setToken("pk_live_fedcba9876543210") // replaced: still set
+        settings.setToken("sk-proj-fedcba9876543210") // replaced: still set
         settings.setDrawIcons(false)
         runCurrent()
         assertEquals(1, calls)
@@ -39,7 +39,7 @@ class OnTokenAddedTest {
 
     @Test
     fun aStartWithATokenDoesNotFireAndFailuresDoNotStopIt() = runTest {
-        val settings = InMemorySettingsRepository(AppSettings(), storedToken = "pk_live_0123456789abcdef")
+        val settings = InMemorySettingsRepository(AppSettings(), storedToken = "sk-proj-0123456789abcdef")
         var calls = 0
         val job = launch {
             onTokenAdded(settings) {
@@ -51,11 +51,11 @@ class OnTokenAddedTest {
         assertEquals(0, calls)
         settings.setToken(null)
         runCurrent()
-        settings.setToken("pk_live_0123456789abcdef")
+        settings.setToken("sk-proj-0123456789abcdef")
         runCurrent()
         settings.setToken(null)
         runCurrent()
-        settings.setToken("pk_live_0123456789abcdef")
+        settings.setToken("sk-proj-0123456789abcdef")
         runCurrent()
         assertEquals(2, calls)
         job.cancel()

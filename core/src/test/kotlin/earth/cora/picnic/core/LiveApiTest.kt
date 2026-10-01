@@ -36,8 +36,9 @@ import kotlin.test.assertTrue
 /**
  * Real OpenAI calls with the production prompts and ModelDefaults. Run only with
  * `OPENAI_API_KEY=… ./gradlew -p core test -Plive=true` (excluded otherwise; never in CI).
- * Optional: PICNIC_BASE_URL (e.g. Cora's proxy), PICNIC_STYLE_REF (PNG for the drawing test; defaults
- * to the app's bundled assets/icons/_style_reference.png when present). Cost per full run: about US$0.10.
+ * Optional: PICNIC_BASE_URL (another OpenAI-compatible endpoint; default api.openai.com),
+ * PICNIC_STYLE_REF (PNG for the drawing test; defaults to the app's bundled
+ * assets/icons/_style_reference.png when present). Cost per full run: about US$0.10.
  */
 @Tag("live")
 class LiveApiTest {

@@ -23,12 +23,13 @@ enum class ReasoningEffort(val wire: String) {
 }
 
 /**
- * The user-editable part of the LLM setup: WHERE to send requests (amendment A1: no model settings).
- * Non-secret. The token is NOT part of this class (it must never sit in a data class whose toString
+ * WHERE to send requests (amendment A1: no model settings). Non-secret. The app always uses
+ * [DEFAULT_BASE_URL] (there is no address setting); [baseUrl] stays configurable for tests and the
+ * developer CLI. The key is NOT part of this class (it must never sit in a data class whose toString
  * could be logged); it comes from [TokenSource] at request time.
  */
 data class LlmConfig(
-    /** Normalized base URL (see [normalizeBaseUrl]), e.g. https://api.openai.com/v1 or https://picnic.cora.earth/v1. */
+    /** Normalized base URL (see [normalizeBaseUrl]), e.g. https://api.openai.com/v1. */
     val baseUrl: String = DEFAULT_BASE_URL,
     /** Opaque hashed per-install id sent as `safety_identifier` on /responses (never the user's identity). */
     val safetyIdentifier: String? = null,
@@ -37,10 +38,10 @@ data class LlmConfig(
         const val DEFAULT_BASE_URL: String = "https://api.openai.com/v1"
 
         /**
-         * CONTRACT (shared by the Settings UI and OpenAiClient): trims, drops trailing '/', requires a
+         * CONTRACT (used by OpenAiClient before every call): trims, drops trailing '/', requires a
          * parseable absolute URL with a host and scheme https (http is accepted only for localhost,
-         * 127.0.0.1 and [::1]: tests and local proxy development). Returns null when invalid.
-         * Blank input is invalid here; the settings layer maps blank to [DEFAULT_BASE_URL].
+         * 127.0.0.1 and [::1]: tests and local development). Returns null when invalid, including
+         * for blank input.
          */
         fun normalizeBaseUrl(input: String): String? {
             val trimmed = input.trim().trimEnd('/')
@@ -74,7 +75,7 @@ fun interface ConfigSource {
     suspend fun config(): LlmConfig
 }
 
-/** Bearer token (user's OpenAI key or a proxy device token), decrypted on demand; null/blank = not configured. */
+/** Bearer token (the user's OpenAI API key), decrypted on demand; null/blank = not configured. */
 fun interface TokenSource {
     suspend fun token(): String?
 }

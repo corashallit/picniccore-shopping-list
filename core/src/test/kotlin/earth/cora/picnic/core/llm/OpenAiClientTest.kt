@@ -97,17 +97,51 @@ class OpenAiClientTest {
     }
 
     @Test
-    fun forbiddenIsUnauthorizedExceptTheProxyModelBlock() = runTest {
-        api.enqueue(403, """{"error":{"message":"Project does not have access","type":"invalid_request_error","code":"unsupported_country_region_territory"}}""")
-        assertEquals(403, assertFailsWith<LlmError.Unauthorized> { api.client.responses(body()) }.status)
-        api.enqueueFixture(403, "errors/403_model_not_allowed.json")
-        val e = assertFailsWith<LlmError.BadResponse> { api.client.responses(body()) }
-        assertEquals("model_not_allowed", e.code)
-        assertTrue(e.friendlyMessage.contains("can't use the AI model"))
+    fun aMissingPermissionNamesTheScopeButNeverTheServerText() = runTest {
+        api.enqueueFixture(401, "errors/401_missing_scopes.json")
+        val e = assertFailsWith<LlmError.Unauthorized> { api.client.model("gpt-5.6-terra") }
+        assertEquals(listOf("api.model.read"), e.missingScopes)
+        assertTrue(e.friendlyMessage.contains("missing a permission the app needs (api.model.read)"))
+        assertFalse(e.friendlyMessage.contains("Reader"), "nothing else from the server's text")
+
+        // Several scopes, and the variant without a "Missing scopes" list.
+        api.enqueue(401, """{"error":{"message":"You have insufficient permissions for this operation. Missing scopes: model.request, api.responses.write. Check that you have the correct role.","type":"invalid_request_error","param":null,"code":null}}""")
+        assertEquals(
+            listOf("model.request", "api.responses.write"),
+            assertFailsWith<LlmError.Unauthorized> { api.client.responses(body()) }.missingScopes,
+        )
+        api.enqueue(401, """{"error":{"message":"You have insufficient permissions for this operation.","type":"invalid_request_error","param":null,"code":null}}""")
+        val unnamed = assertFailsWith<LlmError.Unauthorized> { api.client.responses(body()) }
+        assertEquals(emptyList(), unnamed.missingScopes)
+        assertTrue(unnamed.friendlyMessage.contains("missing a permission"))
+        assertEquals(3, api.server.requestCount, "never retried")
     }
 
     @Test
-    fun modelNotFoundAndMissingEndpoint() = runTest {
+    fun aWrongKeyIsNotAPermissionProblem() = runTest {
+        api.enqueueFixture(401, "errors/401_invalid_api_key.json")
+        val e = assertFailsWith<LlmError.Unauthorized> { api.client.model("gpt-5.6-terra") }
+        assertNull(e.missingScopes)
+        assertTrue(e.friendlyMessage.contains("Settings"))
+    }
+
+    @Test
+    fun forbiddenIsUnauthorizedExceptAModelTheProjectDoesNotAllow() = runTest {
+        api.enqueue(403, """{"error":{"message":"Country, region, or territory not supported","type":"request_forbidden","param":null,"code":"unsupported_country_region_territory"}}""")
+        assertEquals(403, assertFailsWith<LlmError.Unauthorized> { api.client.responses(body()) }.status)
+
+        // OpenAI's answer when the key's project has an allowed-models list without this model.
+        api.enqueueFixture(403, "errors/403_project_model_not_found.json")
+        val e = assertFailsWith<LlmError.BadResponse> { api.client.model("gpt-5.6-terra") }
+        assertEquals("model_not_found", e.code)
+        assertEquals(403, e.httpStatus)
+        assertFalse(e.retryable)
+        assertTrue(e.friendlyMessage.contains("can't use one of the AI models"))
+        assertFalse(e.message!!.contains("proj_"), "the project id stays out of the log line")
+    }
+
+    @Test
+    fun modelNotFoundAndOtherNotFound() = runTest {
         api.enqueueFixture(404, "errors/404_model_not_found.json")
         val e = assertFailsWith<LlmError.BadResponse> { api.client.model("gpt-nope-1") }
         assertEquals("model_not_found", e.code)
@@ -115,40 +149,18 @@ class OpenAiClientTest {
         assertEquals("/v1/models/gpt-nope-1", api.take().url.encodedPath)
 
         api.server.enqueue(MockResponse.Builder().code(404).body("<html>Not Found</html>").build())
-        val missing = assertFailsWith<LlmError.BadResponse> { api.client.model("gpt-5.6-terra") }
-        assertEquals(LlmError.ENDPOINT_NOT_FOUND, missing.code)
-        assertTrue(missing.friendlyMessage.contains("base URL"))
+        val other = assertFailsWith<LlmError.BadResponse> { api.client.model("gpt-5.6-terra") }
+        assertEquals(404, other.httpStatus)
+        assertNull(other.code)
+        assertFalse(other.retryable)
     }
 
     @Test
-    fun theProxysOwn404PointsAtTheAddress() = runTest {
-        // What Cora's proxy answers for https://picnic.cora.earth (no /v1): an OpenAI-shaped 404.
-        api.enqueue(
-            404,
-            """{"error":{"message":"Invalid URL (GET /models/gpt-5.6-terra). This proxy serves only POST /v1/responses, POST /v1/audio/transcriptions, POST /v1/images/edits and GET /v1/models/{id}.","type":"invalid_request_error","param":null,"code":null}}""",
-        )
-        val e = assertFailsWith<LlmError.BadResponse> { api.client.model("gpt-5.6-terra") }
-        assertEquals(LlmError.ENDPOINT_NOT_FOUND, e.code)
-        assertTrue(e.friendlyMessage.contains("base URL"))
-        assertFalse(e.retryable)
-        assertEquals(1, api.server.requestCount)
-    }
-
-    @Test
-    fun theProxysFatalCodesAreNotRetriedAndSayWhoCanFixThem() = runTest {
-        val bodies = listOf(
-            502 to """{"error":{"message":"The proxy's OpenAI credentials were rejected. Ask whoever runs the proxy.","type":"server_error","param":null,"code":"upstream_auth_failed"}}""",
-            500 to """{"error":{"message":"Proxy misconfigured","type":"server_error","param":null,"code":"proxy_misconfigured"}}""",
-        )
-        for ((status, json) in bodies) {
-            api.enqueue(status, json)
-            val e = assertFailsWith<LlmError.BadResponse> { api.client.responses(body()) }
-            assertEquals(status, e.httpStatus)
-            assertFalse(e.retryable)
-            assertEquals("The proxy can't reach OpenAI right now. Ask whoever runs it.", e.friendlyMessage)
-        }
-        assertEquals(2, api.server.requestCount, "one request each, no automatic retries")
-        assertTrue(api.sleeps.isEmpty())
+    fun serverErrorsAreRetriedThenReportedAsNetwork() = runTest {
+        repeat(3) { api.enqueue(502, """{"error":{"message":"Bad gateway","type":"server_error","param":null,"code":null}}""") }
+        assertFailsWith<LlmError.Network> { api.client.responses(body()) }
+        assertEquals(3, api.server.requestCount)
+        assertEquals(2, api.sleeps.size)
     }
 
     @Test

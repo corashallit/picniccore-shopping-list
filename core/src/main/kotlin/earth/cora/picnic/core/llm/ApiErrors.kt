@@ -41,39 +41,37 @@ internal object ApiErrors {
     )
 
     /**
-     * Cora's proxy's own failures (docs/PROXY.md): its OpenAI key was rejected (502) or its config is
-     * broken (500). Retrying or blaming the phone's connection can't help; whoever runs it must act.
+     * A key without a permission the endpoint needs (a restricted key) gets 401 "You have insufficient
+     * permissions for this operation. Missing scopes: api.model.read. Check that you have the correct
+     * role…". Unlike the invalid-key 401, this text names no key, only scopes.
      */
-    private val PROXY_FATAL_CODES = setOf(LlmError.PROXY_UPSTREAM_AUTH_FAILED, LlmError.PROXY_MISCONFIGURED)
+    private const val INSUFFICIENT_PERMISSIONS = "insufficient permissions"
+    private val MISSING_SCOPES = Regex("""Missing scopes?:\s*([A-Za-z0-9_.,\s]+?)(?:\.\s|\.?$)""")
+    private val SCOPE = Regex("""^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$""")
 
     fun isQuota(error: ApiErrorBody?): Boolean =
         error != null && (error.type == "insufficient_quota" || error.code in QUOTA_CODES)
 
-    /** 429 rate limits (not quota) and transient 5xx are retried automatically (not the proxy's fatal codes). */
+    /** 429 rate limits (not quota) and transient 5xx are retried automatically. */
     fun isRetryable(status: Int, error: ApiErrorBody?): Boolean =
-        ((status == 429 && !isQuota(error)) || status == 500 || status == 502 || status == 503 || status == 504) &&
-            error?.code !in PROXY_FATAL_CODES
+        (status == 429 && !isQuota(error)) || status == 500 || status == 502 || status == 503 || status == 504
 
     fun toLlmError(f: ApiFailure): LlmError {
         val e = f.error
         val rid = f.requestId
+        val scopes = if (f.status == 401 || f.status == 403) missingScopes(e) else null
         return when {
+            scopes != null -> LlmError.Unauthorized(f.status, rid, scopes)
             // The server's 401 text echoes a masked key: never keep it.
             f.status == 401 -> LlmError.Unauthorized(401, rid)
-            f.status == 403 && e?.code == "model_not_allowed" ->
-                LlmError.BadResponse("model not allowed by the proxy", 403, e.code, rid)
+            // "Project `proj_…` does not have access to model `…`": the project's allowed models exclude it.
+            f.status == 403 && e?.code == "model_not_found" ->
+                LlmError.BadResponse("model not available to this key's project", 403, e.code, rid)
             f.status == 403 -> LlmError.Unauthorized(403, rid)
             f.status == 429 && isQuota(e) -> LlmError.QuotaExceeded(e?.code ?: e?.type, rid)
-            e?.code in PROXY_FATAL_CODES ->
-                LlmError.BadResponse(e?.message.orEmpty().take(300).ifEmpty { "HTTP ${f.status}" }, f.status, e?.code, rid)
             f.status == 429 || f.status == 503 -> LlmError.RateLimited(f.retryAfterSeconds, rid)
             f.status >= 500 -> LlmError.Network(IOException("HTTP ${f.status}"), rid)
             e?.code == "moderation_blocked" -> LlmError.Refusal("moderation_blocked", rid)
-            // A path the server doesn't serve: OpenAI answers an empty 404, Cora's proxy an
-            // "Invalid URL (...)" error. Both usually mean a base URL without /v1 (or a typo).
-            // model_not_found is a real model problem and keeps its own message.
-            f.status == 404 && e?.code != "model_not_found" ->
-                LlmError.BadResponse((e?.message ?: "HTTP 404 without an API error body").take(300), 404, LlmError.ENDPOINT_NOT_FOUND, rid)
             else -> LlmError.BadResponse(
                 detail = (e?.message ?: "HTTP ${f.status}").take(300) + (e?.param?.let { " (param $it)" } ?: ""),
                 httpStatus = f.status,
@@ -81,6 +79,18 @@ internal object ApiErrors {
                 requestId = rid,
             )
         }
+    }
+
+    /**
+     * For the "insufficient permissions" error: the scope names it lists (only well-formed names such as
+     * `api.model.read`, nothing else from the server's text), or an empty list when it names none.
+     * Null for any other error.
+     */
+    fun missingScopes(error: ApiErrorBody?): List<String>? {
+        val message = error?.message ?: return null
+        if (!message.contains(INSUFFICIENT_PERMISSIONS, ignoreCase = true)) return null
+        val listed = MISSING_SCOPES.find(message)?.groupValues?.get(1).orEmpty()
+        return listed.split(',', ' ').map { it.trim() }.filter { SCOPE.matches(it) }.distinct().take(5)
     }
 
     /**

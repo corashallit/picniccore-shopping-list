@@ -29,7 +29,7 @@ Cache-friendly order (research brief §2.1 and §2.6). The first developer messa
 
 Fixed fields: `store: false`, `max_output_tokens` and `reasoning.effort` from `ModelDefaults`, a strict `json_schema` in `text.format`, and `safety_identifier` (a hashed install id) added by `OpenAiClient`. `temperature` is never sent.
 
-`OpenAiClient` adapts the body to the model id it sends (`ModelCapabilities`): cache fields only for `gpt-5.6*`/`gpt-6*`, `low` instead of `none` for `gpt-6.1-sol`/`gpt-6-astra`, and `minimal` without `web_search` for `gpt-5-mini`/`nano`. A 400 on `reasoning.effort` or a cache field gets one automatic retry with the nearest supported value or without the cache fields. That is what lets the proxy's `MODEL_MAP` swap models without an APK.
+`OpenAiClient` adapts the body to the model id it sends (`ModelCapabilities`): cache fields only for `gpt-5.6*`/`gpt-6*`, `low` instead of `none` for `gpt-6.1-sol`/`gpt-6-astra`, and `minimal` without `web_search` for `gpt-5-mini`/`nano`. A 400 on `reasoning.effort` or a cache field gets one automatic retry with the nearest supported value or without the cache fields. That keeps a new `ModelDefaults` model, or a developer CLI comparison (`--smart`/`--fast`), working before `ModelCapabilities` knows its rules.
 
 Measured on 2026-10-01: the ingest prefix (tools + schema + rules + catalog) is about **8,200 tokens** and is read from cache on every warm call (`cached_tokens` 8,176 of 8,500), so a warm pancake ingest costs about **US$0.006**.
 
@@ -274,7 +274,7 @@ source <env file with OPENAI_API_KEY>          # never commit or print the key
 ./gradlew -p core liveEval --args="--rescore=build/eval/<label>.json"  # re-score a saved run offline (no key, no cost)
 ```
 
-Options: `--aisles=<file>`, `--existing="A,B"`, `--correction="name=aisle-id"` (repeatable), `--quiet`. Developer-only: `--smart=<model> --smart-effort=<e> --fast=<model> --fast-effort=<e>` to compare models; the app has no equivalent. `PICNIC_BASE_URL` points the CLI at the proxy.
+Options: `--aisles=<file>`, `--existing="A,B"`, `--correction="name=aisle-id"` (repeatable), `--quiet`. Developer-only: `--smart=<model> --smart-effort=<e> --fast=<model> --fast-effort=<e>` to compare models; the app has no equivalent. `PICNIC_BASE_URL` points the CLI at another OpenAI-compatible endpoint (default `https://api.openai.com/v1`; the app itself always uses OpenAI).
 
 After changing a prompt: run the unit tests (this page must still quote the file), run the eval (§10) at least once (twice for a decision), add a row to the results log in §10.1, update §8 if behaviour changed, and keep the cached prefix stable (put anything per-request in developer message 2 or the user message, never in the rules). Never copy eval inputs into prompt examples: examples leak, and the eval would stop measuring generalisation.
 
@@ -405,7 +405,7 @@ This study spent about **US$2.77**: the eval runs, probes and the two generated 
   - gpt-6.1-sol / low is the quality ceiling (24/25 clean), but it is about 3× slower (p90 15.5 s).
   - terra / medium bought nothing.
   - terra / none is about a third faster at p90 (4.6 s) but was less precise: it mixed a béchamel and a ricotta lasagna. Re-test it with `--repeat=3` if latency becomes the complaint.
-  - gpt-6-luna / low costs a twentieth per call, but it searched well-known recipes (3 of 6) and kept "1 pint (473 mL)". It is the `MODEL_MAP` candidate if cost ever matters more than polish.
+  - gpt-6-luna / low costs a twentieth per call, but it searched well-known recipes (3 of 6) and kept "1 pint (473 mL)". It is the candidate for `ModelDefaults.SMART` if cost ever matters more than polish.
 - **Recategorize, baskets and the IconDecider stay on gpt-6-luna / none** (`ModelDefaults.FAST`).
 
 ### 10.6 Known misses in the final run

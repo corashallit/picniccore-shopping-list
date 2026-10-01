@@ -28,10 +28,5 @@ captures/
 picnic-play-*.json
 *service-account*.json
 
-# Cloudflare Worker (proxy/)
-node_modules/
-.wrangler/
-.dev.vars*
-
 # Local-only Gradle init scripts / scratch
 *.init.gradle

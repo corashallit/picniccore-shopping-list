@@ -9,8 +9,8 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Per-model request rules for /responses, keyed by the model id being SENT (research/openai_api.md
- * §2.2 and §2.6). With fixed models this mostly matters when a proxy MODEL_MAP or the developer CLI
- * changes the model; the one-shot downgrade in OpenAiClient covers anything this table misses.
+ * §2.2 and §2.6). With fixed models this mostly matters when ModelDefaults moves to a new model or the
+ * developer CLI compares models; the one-shot downgrade in OpenAiClient covers anything this table misses.
  */
 internal object ModelCapabilities {
     private val GPT5_SMALL = Regex("^gpt-5-(mini|nano)(\\b|-).*")

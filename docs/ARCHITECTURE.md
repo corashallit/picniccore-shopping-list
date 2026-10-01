@@ -26,7 +26,7 @@ Units are metric (g, kg, mL, L), and Canadian specifics apply (4 L bagged milk).
 
 ### 1.1 Client amendments (override the original spec)
 
-- **A1. No model settings.** There are no model-name fields, reasoning-effort choices, "Best/Budget" presets or web-search toggle anywhere a user can reach. Models are fixed defaults maintained by the developers in **one place**, core's `ModelDefaults` (§7.1). Settings keep only the connection (base URL + access token or own key, with "Test connection") and the "Draw new icons with AI" toggle. The proxy gets an optional `MODEL_MAP` so maintainers can upgrade models server-side without shipping an APK (§16.2).
+- **A1. No model settings.** There are no model-name fields, reasoning-effort choices, "Best/Budget" presets or web-search toggle anywhere a user can reach. Models are fixed defaults maintained by the developers in **one place**, core's `ModelDefaults` (§7.1). Settings keep only the user's OpenAI key (with "Test connection") and the "Draw new icons with AI" toggle. Changing a model means editing `ModelDefaults` and shipping an APK.
 - **A2. Icon matching cascade.** Every item that doesn't already carry an icon from the ingest call (typed items, the offline raw-lines fallback, renames) goes through: (1) a local match (normalized name against catalog keys, labels and aliases, plus learned icon overrides), then (2) an LLM decision through the `IconDecider` interface (gpt-6-luna today; OpenAI's Decisions API is the intended future implementation, §8.6), then (3) live generation of a bespoke icon. Each step falls through on failure or offline to the category fallback icon. The ingest call's own icon choice counts as step 2 for the items it returns (§8.2).
 
 ---
@@ -54,11 +54,12 @@ picniccore-shopping-list/
 │  ├─ proguard-rules.pro
 │  └─ src/main/{AndroidManifest.xml, kotlin/earth/cora/picnic/…, res/…, assets/icons/…}
 │     src/test/{kotlin/…, resources/robolectric.properties (sdk=36), screenshots/ (goldens)}
-├─ proxy/                       Cloudflare Worker: OpenAI-compatible passthrough (not a Gradle project)
-├─ docs/                        ARCHITECTURE.md, BUILDING.md, PROXY.md, PROMPTS.md
+├─ docs/                        ARCHITECTURE.md, BUILDING.md, OPENAI_KEY.md, PRIVACY.md, PROMPTS.md, RELEASING.md
 ├─ design/concepts/             art-direction concept renders (reference only)
 └─ .github/workflows/android.yml
 ```
+
+History: the OpenAI proxy (`proxy/`, `docs/PROXY.md`, `.github/workflows/proxy.yml`) was removed; it was last present in commit `e31554e` (`git checkout e31554e -- proxy docs/PROXY.md .github/workflows/proxy.yml`).
 
 Toolchain: AGP 9.4.1 with built-in Kotlin. **Never** apply `org.jetbrains.kotlin.android` or kapt. Kotlin is 2.4.20 (compose and serialization plugins; `kotlin.jvm` is declared only inside core's separate build). Compose BOM is 2026.09.00, which requires `compileSdk 37`. SDK levels are `targetSdk 36` (Play requirement since 2026-08-31) and `minSdk 26`. The JDK is 21, with bytecode 17 (core: `options.release=17` + `-Xjdk-release=17`; no `jvmToolchain(17)`, there is no JDK 17). The rationale for every value is in `research/android_build.md`.
 
@@ -90,7 +91,6 @@ Verified on this skeleton (2026-10-01): `./gradlew -p core build` (9 contract te
 | **core** | Everything under `core/` (sources, resources incl. `prompts/*.txt`, tests, `core/build.gradle.kts`, `core/settings.gradle.kts`, the CLI), plus `docs/PROMPTS.md`. |
 | **app-shell** | Root `settings.gradle.kts`/`build.gradle.kts`/`gradle.properties`/`gradle/**`/`gradlew*`/`.gitignore`; `app/build.gradle.kts`, `app/proguard-rules.pro`, `app/debug.keystore` (never change it); `app/src/main/AndroidManifest.xml`, `app/src/main/res/**` (except `values/strings_screens.xml`), `app/src/main/assets/**` (icons, style reference, fonts), the launcher icon.<br>Kotlin: `PicnicApp.kt`, `AppContainer.kt`, `MainActivity.kt`, `settings/**` (DataStore settings, Keystore token store), `platform/**` (captures, photo prep, voice recorder, TokenCipher), `icons/**` (IconRepository, IconImages, bespoke cache, decider batcher, live drawing queue), `ui/theme/**` (tokens, components, decor slots, ItemIcon, AisleBasket, list pieces, glyphs, placeholder art, previews).<br>Tests under `app/src/test/kotlin/earth/cora/picnic/{settings,platform,icons,ui/theme}/**` and the theme preview goldens.<br>Also `.github/workflows/android.yml` and `docs/BUILDING.md`. |
 | **app-screens** | `ui/PicnicAppRoot.kt`, `ui/nav/**`, `ui/list/**`, `ui/add/**`, `ui/edit/**`, `ui/aisles/**`, `ui/settings/**`, `ui/common/**` (screens, ViewModels, UI-state classes, navigation), `res/values/strings_screens.xml`.<br>Tests under `app/src/test/kotlin/earth/cora/picnic/ui/{list,add,edit,aisles,settings,nav,common}/**`, including the screen screenshot tests and their goldens in `app/src/test/screenshots/`. |
-| **proxy** | `proxy/**` and `docs/PROXY.md`. |
 
 `gradle/libs.versions.toml` is shared **append-only**: any owner may add an entry. Changing a version is app-shell's call, and core must still build standalone afterwards. Nobody but core edits `core/build.gradle.kts`.
 
@@ -106,7 +106,7 @@ Verified on this skeleton (2026-10-01): `./gradlew -p core build` (9 contract te
 | `core/…/store/StateStore.kt` (`StateStore`, `JsonFileStateStore`, `InMemoryStateStore`) | core | app-shell (container), app-screens (tests) |
 | `core/…/catalog/IconCatalog.kt` (`IconCatalog`, `BasketCatalog`, `match`, `displayRef`, `fallbackFor`) | core | app-shell, app-screens |
 | `core/…/llm/ModelDefaults.kt` (`ModelDefaults`, `ModelSet`, model specs): **the one place for models** | core | core only (app never configures models) |
-| `core/…/llm/LlmConfig.kt` (`LlmConfig` + `normalizeBaseUrl`, `LlmTimeouts`, `ReasoningEffort`, `ConfigSource`, `TokenSource`) | core | app-shell (settings, container), app-screens (settings UI validation) |
+| `core/…/llm/LlmConfig.kt` (`LlmConfig` + `normalizeBaseUrl`, `LlmTimeouts`, `ReasoningEffort`, `ConfigSource`, `TokenSource`) | core | app-shell (settings, container) |
 | `core/…/llm/LlmError.kt` | core | app-shell, app-screens |
 | `core/…/llm/OpenAiClient.kt` | core | app-shell (container constructs it) |
 | `core/…/assistant/GroceryAssistant.kt` (+ input/result types, `assignBasketsOrGuess`) | core | app-shell, app-screens |
@@ -118,7 +118,6 @@ Verified on this skeleton (2026-10-01): `./gradlew -p core build` (9 contract te
 | `app/…/platform/{Captures,PhotoPreparer,VoiceRecorder (AudioRecorder),TokenCipher}.kt` | app-shell | app-screens |
 | `app/…/ui/theme/*` (tokens, `PicnicTheme`, components, decor slots, `ItemIcon`, `AisleBasket`, `AisleHeader`, `AisleSectionTitle`, `AisleSectionRow`, `ItemRowCard`, `Glyph`) | app-shell | app-screens |
 | `app/…/ui/PicnicAppRoot.kt` (`PicnicAppRoot(container)`) | app-screens | app-shell (MainActivity) |
-| HTTP API surface: `/responses`, `/audio/transcriptions`, `/images/edits`, `/models/{id}`; `MODEL_MAP` | proxy | core |
 
 ### 3.3 Hand-off points between implementers (the seams that must line up)
 
@@ -130,7 +129,6 @@ Verified on this skeleton (2026-10-01): `./gradlew -p core build` (9 contract te
 | app-shell → core | `iconDecider.decide`, `assistant.drawIcon`, `store.update { applyIconDecisions / attachCustomIcon }`, `itemsNeedingIconDecision()` | The icon cascade, §8. |
 | app-shell → app-screens | `PicnicAppRoot(container)` inside `PicnicTheme` + `LocalIconImages`; theme components | Screens use only theme tokens/components (§11). |
 | app-shell → core | `ConfigSource { settings.llmConfig() }`, `TokenSource { settings.token() }` | Read before every call; the token never leaves `token()`. |
-| core → proxy | Base URL + bearer token; the four routes; model ids from `ModelDefaults` | The proxy may rewrite model ids (`MODEL_MAP`); the client absorbs parameter mismatches with its one-shot downgrade retry. |
 
 ---
 
@@ -280,7 +278,7 @@ class BasketCatalog(entries) { fun entry(kind); fun guess(aisleName): BasketKind
 | Path | Owner | Contents | Backed up? |
 |---|---|---|---|
 | `filesDir/state.json` | core `JsonFileStateStore` | `AppState` (lists, store, corrections, icon overrides) | **Yes**: the only entry on the allow-list (`data_extraction_rules.xml`, `backup_rules.xml`) |
-| `filesDir/datastore/settings.preferences_pb` | app-shell `DataStoreSettingsRepository` | `base_url`, `draw_icons`, `install_id`, `token_hint` | no |
+| `filesDir/datastore/settings.preferences_pb` | app-shell `DataStoreSettingsRepository` | `draw_icons`, `install_id`, `token_hint` (a `base_url` from older builds is removed on upgrade, §9) | no |
 | `noBackupFilesDir/token.bin` | app-shell `KeystoreTokenStore` | TokenCipher blob `base64(iv):base64(ct)` | no (and undecryptable elsewhere) |
 | `filesDir/icons/custom/<customIconId>.webp`, `filesDir/icons/index.json` | app-shell `IconRepository` | bespoke icons (192 px) and the name index | no |
 | `cacheDir/captures/*.jpg`, `cacheDir/voice/*.m4a` | app-shell platform | transient capture files; deleted after use | no |
@@ -346,7 +344,7 @@ Nothing has shipped yet, so v1 includes `IconFit.PENDING` and `iconOverrides`. F
 
 ### 7.1 Models: `ModelDefaults` is the one place (amendment A1)
 
-`core/src/main/kotlin/earth/cora/picnic/core/llm/ModelDefaults.kt` is **the single source of truth** for models and their request details. There is no user setting, no persisted override and no preset list. Maintainers change a value there and ship an APK, or remap a model server-side with the proxy's `MODEL_MAP` (§16.2).
+`core/src/main/kotlin/earth/cora/picnic/core/llm/ModelDefaults.kt` is **the single source of truth** for models and their request details. There is no user setting, no persisted override and no preset list. Maintainers change a value there and ship an APK.
 
 | Use | `ModelDefaults` | Request details |
 |---|---|---|
@@ -357,7 +355,7 @@ Nothing has shipped yet, so v1 includes `IconFit.PENDING` and `iconOverrides`. F
 
 `ModelDefaults.models: ModelSet` bundles them. `OpenAiGroceryAssistant(client, catalog, models = ModelDefaults.models)` and `ResponsesIconDecider(client, catalog, model = ModelDefaults.FAST)` take them as defaulted parameters only so that tests and the developer CLI can vary them. App code never passes them.
 
-**Connection config (the only user-editable part):**
+**Connection config (not user-editable; the key comes from `TokenSource`):**
 
 ```kotlin
 data class LlmConfig(val baseUrl: String = DEFAULT_BASE_URL, val safetyIdentifier: String? = null) {
@@ -369,7 +367,7 @@ fun interface ConfigSource { suspend fun config(): LlmConfig }
 fun interface TokenSource { suspend fun token(): String? }
 ```
 
-`normalizeBaseUrl` trims, drops a trailing `/`, and requires an absolute `https://` URL with a host and no query or fragment (`http://` only for `localhost`, `127.0.0.1`, `[::1]`: tests and local proxy development). Both the Settings UI and `OpenAiClient` use it. **The token is never inside `LlmConfig`.** `ConfigSource.config()` and `TokenSource.token()` are read before every call, so Settings changes apply immediately.
+`normalizeBaseUrl` trims, drops a trailing `/`, and requires an absolute `https://` URL with a host and no query or fragment (`http://` only for `localhost`, `127.0.0.1`, `[::1]`: tests and local development). `OpenAiClient` checks it before every call. **The app never changes `baseUrl`:** there is no address setting, so every request goes to `https://api.openai.com/v1`. The field stays for tests (MockWebServer) and the developer CLI's `PICNIC_BASE_URL`. **The token is never inside `LlmConfig`.** `ConfigSource.config()` and `TokenSource.token()` are read before every call, so Settings changes apply immediately.
 
 ### 7.2 `OpenAiClient` (core-internal behaviour; the app only constructs it)
 
@@ -386,12 +384,12 @@ data class ApiResult(val json: JsonObject, val requestId: String?, val latencyMs
 class ImageResult(val bytes: ByteArray, val requestId: String?, val latencyMs: Long)
 ```
 
-- **Endpoints:** all are relative to `baseUrl`, and auth is `Authorization: Bearer <token>`. This works the same against api.openai.com and Cora's proxy (§16).
+- **Endpoints:** all are relative to `baseUrl`, and auth is `Authorization: Bearer <token>`. The app always uses api.openai.com, with the user's OpenAI key as the bearer token.
 - **Not configured:** a missing or blank token, or a base URL that fails `normalizeBaseUrl`, throws `LlmError.NotConfigured` without sending a request.
 - **Implementation:** OkHttp 5 stays an implementation detail of core (`implementation`, not `api`). Calls go through `enqueue` inside `suspendCancellableCoroutine`, and `invokeOnCancellation { call.cancel() }` cancels them. The per-call timeout is the OkHttp call timeout; connect timeout `LlmTimeouts.CONNECT`. Large JSON encode/decode runs on `Dispatchers.Default`. `http.newCall` runs on `Dispatchers.IO`, because the first call builds the lazy `OkHttpClient` (platform TLS, system CA store) and callers are often on the main thread.
 - **Logging:** never log the token, the `Authorization` header or request bodies. Log the method, path, status, `x-request-id` and latency.
-- **Retries:** up to 2 extra attempts on 429 rate limits (**not** `insufficient_quota` or the spend/usage-limit codes) and on 500/502/503/504 (**not** the proxy's `upstream_auth_failed` / `proxy_misconfigured`). Back off 1 s, then 2 s, with up to 0.5 s of jitter. Honour `Retry-After` up to 20 s. **`imageEdit` is never retried automatically:** a drawing is slow and billed, and its caller (the app's icon queue, §8.3) retries it at most once itself.
-- **Model capabilities** (`ModelCapabilities`, internal, keyed by the model id being sent; with fixed models this mostly matters when the proxy remaps them):
+- **Retries:** up to 2 extra attempts on 429 rate limits (**not** `insufficient_quota` or the spend/usage-limit codes) and on 500/502/503/504. Back off 1 s, then 2 s, with up to 0.5 s of jitter. Honour `Retry-After` up to 20 s. **`imageEdit` is never retried automatically:** a drawing is slow and billed, and its caller (the app's icon queue, §8.3) retries it at most once itself.
+- **Model capabilities** (`ModelCapabilities`, internal, keyed by the model id being sent; with fixed models this mostly matters when `ModelDefaults` moves to a new model or the developer CLI compares models):
   - `gpt-5.6*` and `gpt-6*`: send explicit prompt caching (`prompt_cache_options: {"mode":"explicit"}` plus `prompt_cache_breakpoint: {"mode":"explicit"}` on the last stable `input_text` part). Every other family gets **no** cache fields (gpt-5.5/5.4 answer 400 `invalid_parameter`).
   - `gpt-6.1-sol*` and `gpt-6-astra*` don't accept `none`: send `low`.
   - `gpt-5-mini|nano`: `minimal` instead of `none`, and no `web_search` with `minimal`.
@@ -400,11 +398,11 @@ class ImageResult(val bytes: ByteArray, val requestId: String?, val latencyMs: L
   - `param == "reasoning.effort"`: parse "Supported values are: …" and retry with the nearest supported value, going up first.
   - `param` is `prompt_cache_options` or `prompt_cache_breakpoint`: retry without the cache fields.
 - **Error mapping** (`LlmError`; HTTP details in `research/openai_api.md` §2.8):
-  - 401, and 403 other than `model_not_allowed` → `Unauthorized`. The server's message echoes a masked key, so drop it.
-  - 429 with type `insufficient_quota` or a spend/usage-limit code (`credit_balance_exhausted`, `organization_spend_limit_exceeded`, `project_spend_limit_exceeded`, `organization_usage_limit_exceeded`) → `QuotaExceeded`. Any other 429, or 503 after retries → `RateLimited`.
-  - 404 `model_not_found`, the proxy's 403 `model_not_allowed`, and other 4xx → `BadResponse(code)`. The friendly text for the two model codes is "This key or proxy can't use the AI model the app needs. Ask whoever set it up." (there is no model setting to point at).
-  - Any other 404 (OpenAI's empty 404 for a path without `/v1`, the proxy's "Invalid URL" 404) → `BadResponse(code = ENDPOINT_NOT_FOUND)`: "Check the base URL in Settings", with **Open Settings**.
-  - The proxy's own fatal codes, 502 `upstream_auth_failed` (its OpenAI key was rejected) and 500 `proxy_misconfigured` → `BadResponse(code)`, not retried: "The proxy can't reach OpenAI right now. Ask whoever runs it." Any other 5xx after retries → `Network`.
+  - 401 and 403 → `Unauthorized`, except OpenAI's 403 `model_not_found` (below). The invalid-key message echoes a masked key, so drop it.
+  - A 401/403 whose message says "insufficient permissions" (a restricted key without a permission: "… Missing scopes: api.model.read. …") → `Unauthorized(missingScopes)`. Only well-formed scope names are kept from the text, and the friendly message names them: "This OpenAI key is missing a permission the app needs (api.model.read). Check the key's permissions." (setup: docs/OPENAI_KEY.md).
+  - 429 with type `insufficient_quota` or a spend/usage-limit code (`credit_balance_exhausted`, `organization_spend_limit_exceeded`, `project_spend_limit_exceeded`, `organization_usage_limit_exceeded`) → `QuotaExceeded`: "The OpenAI account behind this key is out of credit or over its monthly budget." Any other 429, or 503 after retries → `RateLimited`.
+  - 404 `model_not_found`, and the 403 `model_not_found` OpenAI sends when the key's project has an allowed-models list without the model ("Project … does not have access to model …") → `BadResponse(code = "model_not_found")`: "This OpenAI key can't use one of the AI models the app needs. Check which models its project allows." (there is no model setting to point at). Other 4xx, including any other 404 → `BadResponse(code)`.
+  - Any 5xx after retries → `Network`.
   - IOException → `Network` (including `UnknownServiceException` for cleartext). `SocketTimeoutException` or an exceeded call timeout → `Timeout`.
   - `image_generation_user_error` with `moderation_blocked` → `Refusal`; other image user errors → `BadResponse`; neither is retried.
 
@@ -458,7 +456,7 @@ Every operation is main-safe and cancellable, and throws only `LlmError` (plus `
 
 **drawIcon** (cascade step 3) makes one `POST /images/edits` (multipart) call: `model`, `prompt`, `image[]` = the style reference PNG, then `background`, `output_format`, `output_compression`, `quality`, `size` from `ModelDefaults.IMAGE`, and `n=1`. The prompt is `prompts/icon_prompt.txt` (from `research/openai_api.md` §6.1) with the item name substituted, plus the optional hint. It returns the decoded `data[0].b64_json` bytes; trimming and downscaling happen on the device (§8.4).
 
-**testConnection** calls `GET /models/{ModelDefaults.SMART.id}`. It is free, and it checks the URL, the token and model access in one go.
+**testConnection** calls `GET /models/{ModelDefaults.SMART.id}`. It is free, and it checks the key and access to the model in one go. A restricted key needs only **List models: Read** for it (`api.model.read`), so a passing test doesn't prove the other two permissions (`docs/OPENAI_KEY.md`).
 
 ### 7.4 `IconDecider` (cascade step 2, `assistant/IconDecider.kt`)
 
@@ -600,47 +598,46 @@ The seam is ready:
 - `IconDecider` (core) is the only interface the app uses for step 2; `AppContainer.iconDecider` is the only construction site.
 - `ResponsesIconDecider` stays the implementation until the checklist below is done.
 
-Switch-over checklist (owner: core, with proxy):
+Switch-over checklist (owner: core):
 
 1. Confirm access (the 403 above goes away) and get the published request/response schema.
 2. Add `OpenAiClient.decisions(body)` (`POST {base}/decisions`) and `DecisionsIconDecider(client, catalog)` in `core/…/assistant/`, mapping to `IconDecision` (icon or none, plus category).
 3. MockWebServer tests from recorded real responses; a live comparison against `ResponsesIconDecider` on a fixed name set (accuracy, latency, cost), noted in `docs/PROMPTS.md`.
-4. Proxy: add the `POST /v1/decisions` route with its model allow-list and `MODEL_MAP` handling.
-5. Construct it in `AppContainer.iconDecider`, wrapped so a 403/404 from a key or proxy without access falls back to `ResponsesIconDecider`.
+4. Add the Decisions permission to the restricted-key list in `docs/OPENAI_KEY.md`.
+5. Construct it in `AppContainer.iconDecider`, wrapped so a 403/404 from a key without access falls back to `ResponsesIconDecider`.
 
 ---
 
-## 9. Settings and the token security model (app-shell, `earth.cora.picnic.settings`)
+## 9. Settings and the key security model (app-shell, `earth.cora.picnic.settings`)
 
-Amendment A1: the only settings are the **connection** (base URL + token, "Test connection") and **"Draw new icons with AI"**. There is no model, effort, web-search, theme or motion setting: theme follows the system dark mode and motion follows the system "remove animations" setting.
+Amendment A1: the only settings are **"Your OpenAI key"** (paste, Save, Remove key, "Test connection") and **"Draw new icons with AI"**. There is no server-address, model, effort, web-search, theme or motion setting: requests always go to `LlmConfig.DEFAULT_BASE_URL` (`https://api.openai.com/v1`), theme follows the system dark mode and motion follows the system "remove animations" setting. Internally the key keeps its older name, "token" (`setToken`, `hasToken`, `tokenHint`, `TokenStore`, core's `TokenSource`).
 
 ```kotlin
-data class AppSettings(val baseUrl: String = LlmConfig.DEFAULT_BASE_URL, val drawIcons: Boolean = true,
-                       val hasToken: Boolean = false, val tokenHint: String? = null) { val usesDefaultEndpoint: Boolean }
+data class AppSettings(val drawIcons: Boolean = true, val hasToken: Boolean = false, val tokenHint: String? = null)
 interface SettingsRepository {
     val settings: Flow<AppSettings>; suspend fun current(): AppSettings
-    suspend fun setBaseUrl(url: String): Boolean   // blank -> default; invalid -> false, nothing stored
     suspend fun setDrawIcons(enabled: Boolean)
     suspend fun setToken(token: String?); suspend fun token(): String?
-    suspend fun llmConfig(): LlmConfig             // baseUrl + safetyIdentifier, for core's ConfigSource
+    suspend fun llmConfig(): LlmConfig             // DEFAULT_BASE_URL + safetyIdentifier, for core's ConfigSource
 }
 interface TokenStore { suspend fun read(): String?; suspend fun write(token: String?) }
 fun maskToken(token: String): String              // "sk-…a1b2"
 ```
 
-- **`DataStoreSettingsRepository`** (production, `androidx.datastore:datastore-preferences` 1.2.1): keys `base_url` (absent = default), `draw_icons` (absent = true), `token_hint`, `install_id` (a random UUID created on first run). `llmConfig().safetyIdentifier` = the first 32 hex characters of `sha256(install_id)`.
+- **`DataStoreSettingsRepository`** (production, `androidx.datastore:datastore-preferences` 1.2.1): keys `draw_icons` (absent = true), `token_hint`, `install_id` (a random UUID created on first run). `llmConfig()` = the default base URL plus `safetyIdentifier` = the first 32 hex characters of `sha256(install_id)`.
+- **Upgrade from builds with an address setting.** Older builds could store a `base_url`. Before the first read of the settings, the key or `setToken`, a one-time step removes it. If its host (host and port) isn't `api.openai.com`, it first deletes the stored key and its hint, so a key entered for another server is never sent to OpenAI; a key entered for OpenAI's own host is kept. If the key can't be deleted or the settings can't be read, `token()` returns null for that call and the step runs again next time. Tests: `DataStoreSettingsRepositoryTest`.
 - **`InMemorySettingsRepository`** is for tests and previews (implemented).
 
-**Token security model:**
+**Key security model:**
 
-- **Never in the repo or APK.** The user pastes either their own OpenAI key or a per-device proxy token from Cora (`pk_…`).
-- **Encryption.** The token is encrypted with an AndroidKeyStore AES-256-GCM key (`platform/TokenCipher`). The Keystore picks the IV, and the stored form is `iv:ct`. The blob lives in `noBackupFilesDir/token.bin`, outside the backup allow-list; a restored blob can't be decrypted on another device anyway, because Keystore keys aren't backed up.
+- **Never in the repo or APK.** The user pastes an OpenAI API key: their own, or one Cora made for them (a dedicated project with a hard monthly budget and a restricted key, `docs/OPENAI_KEY.md`).
+- **Encryption.** The key is encrypted with an AndroidKeyStore AES-256-GCM key (`platform/TokenCipher`). The Keystore picks the IV, and the stored form is `iv:ct`. The blob lives in `noBackupFilesDir/token.bin`, outside the backup allow-list; a restored blob can't be decrypted on another device anyway, because Keystore keys aren't backed up.
 - **Unreadable token.** Only a permanent failure (`KeyPermanentlyInvalidatedException`, `AEADBadTagException`, a malformed blob) deletes `token.bin` and clears `token_hint` (`hasToken = false`, ask again). Any other Keystore failure (`KeyStoreException`, `UnrecoverableEntryException`, `ProviderException`: a busy or restarting keystore2, early boot) is `KeystoreUnavailableException` (an `IOException`): `TokenStore.read()` throws it and keeps the blob, and `token()` returns null for that one call (core reports `NotConfigured`) without touching the hint. `SecretCipher.decrypt` returns null only for the permanent cases.
-- **One token per host.** A token is only ever sent to the host it was entered for. When Save (or "Use OpenAI directly") changes the base URL's host or port, the stored token is deleted **before** the new URL is stored, and the screen says "New address saved. Paste the key or token for it…" (`SettingsUiState.notice`). A token typed together with the new address is saved for it. A path change on the same host keeps the token.
-- **Failed writes.** Every settings write runs through one wrapper that turns a DataStore `IOException` into `notice = "Couldn't save. Try again."` instead of a crash.
+- **What it protects against.** Other apps, backups and device transfers, and USB debugging of the sideload APK (not debuggable). Not against someone with the unlocked phone, who can use the AI features freely: the project's hard spend limit is the real cap (`docs/OPENAI_KEY.md`).
+- **Failed writes.** Every settings write runs through one wrapper that turns a DataStore `IOException` into `notice = "Couldn't save. Try again."` instead of a crash. A key the Keystore refused (nothing stored) gets the same notice and stays in the field.
 - **Where it can appear.** It is decrypted only inside `token()`, which `TokenSource` calls per request. It is never put in a data class, a `StateFlow`, a log line or an exception message. The Settings field is write-only: it shows `tokenHint` and is never pre-filled. `LlmError.Unauthorized` discards the server text, which echoes a masked key. There is no `HttpLoggingInterceptor` in any build type.
 - **Tests.** The Keystore doesn't exist under Robolectric, so tests use `InMemoryTokenStore`.
-- **Network.** Cleartext is blocked by default at targetSdk ≥ 28, and `normalizeBaseUrl` refuses `http://` except loopback.
+- **Network.** Cleartext is blocked by default at targetSdk ≥ 28, the only host is api.openai.com, and `normalizeBaseUrl` refuses `http://` except loopback.
 
 ---
 
@@ -745,17 +742,16 @@ data class AislesUiState(val storeName: String, val text: String, val parsed: Li
 data class AislePreviewUi(val aisle: Aisle, val basket: BasketKind)
 class AislesViewModel(store, aisleSync, baskets, appScope)   // save(): setStoreName + setAislesText, then appScope.launch{aisleSync.sync()}
 
-// ui/settings (amendment A1: connection + draw-icons only)
-data class SettingsUiState(val baseUrlInput: String, val baseUrlError: String? = null, val usesDefaultEndpoint: Boolean,
-    val tokenInput: String = "", val hasToken: Boolean, val tokenHint: String?, val drawIcons: Boolean,
-    val test: ConnectionTestUi = ConnectionTestUi.Idle, val appVersion: String,
-    val notice: String? = null /* failed write, or "paste the token for this new host" */)
+// ui/settings (amendment A1: the OpenAI key + draw-icons only)
+data class SettingsUiState(val tokenInput: String = "", val hasToken: Boolean, val tokenHint: String?, val drawIcons: Boolean,
+    val test: ConnectionTestUi = ConnectionTestUi.Idle, val appVersion: String, val tokenVisible: Boolean = false,
+    val canSave: Boolean = false, val loading: Boolean = true, val notice: String? = null /* failed write */)
 sealed interface ConnectionTestUi { Idle; Running; Ok(latencyMs: Long); Failed(message: String) }
 class SettingsViewModel(settings: SettingsRepository, assistant: GroceryAssistant, appVersion: String)
-    // setBaseUrlInput, setTokenInput, saveConnection(), clearToken(), useOpenAiDirectly(), setDrawIcons(on), testConnection()
+    // setTokenInput, toggleTokenVisible(), saveConnection() (save, then test), clearToken(), setDrawIcons(on), testConnection()
 ```
 
-- **Settings screen content:** a "Connection" card (base URL field with the OpenAI default and a hint for Cora's proxy, write-only token field showing `tokenHint`, Save, Test connection with the result inline) and an "Icons" card ("Draw new icons with AI" switch plus the cost note). An "About" footer may show the app version and font licences. Nothing about models.
+- **Settings screen content:** a "Your OpenAI key" card (a short intro, a write-only key field with Show/Hide that shows `tokenHint` once saved, Save, Remove key, the note "Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.", and Test connection with the result inline), an "Icons" card ("Draw new icons with AI" switch plus the cost note), and an "About your key" card (hard monthly budget, restricted key with its three permissions, a line saying whoever made the key has a step-by-step guide (that guide is `docs/OPENAI_KEY.md`; the repository is private, so the app names no path or link), and what is sent). The app version is the footer. Nothing about models or server addresses.
 - **Lifecycle of saves.** Commits, deletes, edits and aisle syncs run in `appScope` (via the store), so closing a sheet or screen doesn't cancel a save. LLM calls the user is waiting for run in `viewModelScope`, so they are cancelled when the user dismisses the sheet.
 - **Snackbars.** Swipe-to-delete emits `ListEvent.Deleted`. The screen shows "Removed <name>" with **Undo**, which calls `undoDelete(item, index)`.
 - **Edit sheet:** rename, quantity and note use `saveEdit`; "Move to aisle" uses `moveToAisle` (learned correction); "Change icon" shows a grid of catalog keys, starting with the item's category, and calls `setIcon` (learned override); "Draw a new icon" calls `redrawIcon` (shown when `canDraw`).
@@ -920,15 +916,15 @@ itemsIndexed(items, key = { _, r -> r.id }) { i, r ->
 |---|---|---|
 | ingest (text / transcript) | any `LlmError` | `Failed` with `friendlyMessage`, **Try again** if `retryable`, and **Add as plain lines** |
 | ingest (photo) | any `LlmError` | `Failed` with **Try again** |
-| any AI call | `NotConfigured` / `Unauthorized` | message and **Open Settings** |
-| any AI call | `BadResponse(model_not_found / model_not_allowed)` | "This key or proxy can't use the AI model the app needs. Ask whoever set it up." |
-| any AI call | `BadResponse(endpoint_not_found)` (a 404 other than `model_not_found`) | "That server address doesn't look like an OpenAI-compatible API. Check the base URL in Settings." and **Open Settings** |
-| any AI call | `BadResponse(upstream_auth_failed / proxy_misconfigured)` (Cora's proxy, never retried) | "The proxy can't reach OpenAI right now. Ask whoever runs it." |
+| any AI call | `NotConfigured` | "Add your OpenAI key in Settings first." and **Open Settings** |
+| any AI call | `Unauthorized` | "OpenAI didn't accept this key. Check it in Settings, or paste a new one." (or, with `missingScopes`, "This OpenAI key is missing a permission the app needs (…)") and **Open Settings** |
+| any AI call | `BadResponse(model_not_found)` (404, or 403 from a project's allowed-models list) | "This OpenAI key can't use one of the AI models the app needs. Check which models its project allows." |
+| any AI call | `QuotaExceeded` (credits, or the project's hard spend limit) | "The OpenAI account behind this key is out of credit or over its monthly budget." |
 | transcribe | empty text | "Didn't catch that. Try again a little closer to the mic." |
 | transcribe | `LlmError` | `Failed` with **Try again** (the recording is kept in memory while the sheet is open) |
 | photo decode | `IOException` / `IllegalStateException` | "Couldn't open that photo." |
 | aisle sync / sortItems | `report.error` | snackbar: friendly message plus "N items left in Unsorted" (sortItems: silent unless the user is on the list) |
-| IconDecider (step 2) | any | nothing; items keep the fallback icon and stay PENDING until the next process start or a token is added |
+| IconDecider (step 2) | any | nothing; items keep the fallback icon and stay PENDING until the next process start or a key is added |
 | icon drawing (step 3) | any | nothing (a background enhancement); a refusal blocks the name |
 | Test connection | any | inline: ✓ and latency, or the friendly message |
 | settings write | `IOException` (DataStore) | inline notice "Couldn't save. Try again." |
@@ -957,7 +953,7 @@ The tool is **Roborazzi 1.76.0** with Robolectric 4.17, native graphics, Robolec
 - **Goldens** live in `app/src/test/screenshots/`. Previews (app-shell) are named `<Class>.<Function>.<Preview_name>.png`. Explicit screen tests (app-screens) are named `<screen>_<state>_<light|dark>.png`.
 - **Explicit screen tests.** Use `@RunWith(AndroidJUnit4::class)`, `@GraphicsMode(NATIVE)`, `@Config(qualifiers = "w411dp-h891dp-night-xxhdpi")` (or without `-night`) and `androidx.compose.ui.test.junit4.v2.createComposeRule`. Render the **stateless** `XxxScreen(state)`, then call `onRoot().captureRoboImage("src/test/screenshots/<name>.png")`.
 - **Qualifier order.** `night` comes before the density. The other order throws.
-- **States to cover:** List: empty; mixed sections with a collapsed basket, a cleared aisle, a drawing sparkle, a PENDING item and checked items. Add sheet: write, thinking, preview with sources, failed with plain lines, and speak with a transcript. Edit sheet (with the icon grid). Aisles editor. Settings: token set, default endpoint vs proxy, a failed connection test, and a new host asking for its token.
+- **States to cover:** List: empty; mixed sections with a collapsed basket, a cleared aisle, a drawing sparkle, a PENDING item and checked items. Add sheet: write, thinking, preview with sources, failed with plain lines, and speak with a transcript. Edit sheet (with the icon grid). Aisles editor. Settings: no key, a key typed and shown, a saved key with a passing test, a failed test (a missing permission), and the "About your key" card scrolled into view.
 - **Commands.** Record locally with `recordRoborazziDebug`. CI runs `compareRoborazziDebug`, which doesn't fail, and uploads the diffs. Switch CI to `verifyRoborazziDebug` once the art settles.
 
 ---
@@ -975,47 +971,11 @@ The workflow is `.github/workflows/android.yml`. Copy it verbatim from `research
 
 ---
 
-## 16. Proxy contract (proxy owner; consumed by core)
-
-Cora's Cloudflare Worker gives friends a token that is not an OpenAI key. To the app, it looks exactly like OpenAI: base URL `https://picnic.cora.earth/v1` and `Authorization: Bearer pk_<device token>`.
-
-### 16.1 Routes and policy
-
-| Route (passthrough to `https://api.openai.com/v1`) | Body | Notes |
-|---|---|---|
-| `POST /v1/responses` | JSON (`stream` false or true; pass SSE through unbuffered) | Model mapped, then checked against the allow-list. The proxy may force `store:false`, cap `max_output_tokens` at 16000 and strip `service_tier`. |
-| `POST /v1/audio/transcriptions` | multipart, ≤ 26 MB | Map and check the `model` field. Re-send the form unchanged otherwise, keeping the filename (its extension matters). |
-| `POST /v1/images/edits` | multipart (also accept JSON), ≤ 20 MB | Map and check the model. Cost policy: `n` ≤ `MAX_IMAGES_PER_REQUEST` (1), `quality` in `IMAGE_ALLOWED_QUALITIES` (`low,medium`), `size` in `IMAGE_ALLOWED_SIZES` (`1024x1024,auto`), ≤ `MAX_IMAGE_INPUTS` (2) reference images; a missing quality/size gets the list's first value unless `auto` is allowed. Otherwise 400 `invalid_value`. |
-| `GET /v1/models/{id}` | none | Used by "Test connection"; `{id}` is mapped and checked like a body model |
-
-- **Anything else:** 404, using OpenAI's error shape.
-- **Auth:** device tokens are stored only as SHA-256 hashes, in KV (`TOKENS`: hash → `{name, created, disabled}`). A bad or disabled token gets **401** `{"error":{"message":"Invalid device token","type":"invalid_request_error","code":"invalid_api_key"}}`.
-- **Allow-list:** `ALLOWED_MODELS` holds **upstream** model ids (after mapping). The defaults are the four `ModelDefaults` ids: `gpt-5.6-terra`, `gpt-6-luna`, `gpt-transcribe`, `gpt-image-2.5-flare`. A model outside it gets **403** `{"error":{…,"type":"invalid_request_error","code":"model_not_allowed"}}` (core maps it to `BadResponse`, not `Unauthorized`).
-- **Rate limiting:** per token (Workers Rate Limiting binding) → **429** `{"error":{…,"type":"rate_limit_error","code":"rate_limit_exceeded"}}` plus `Retry-After`.
-- **Headers:** the real key is the Worker secret `OPENAI_API_KEY`. The client's `Authorization` header is replaced and never forwarded or logged. Pass `x-request-id`, `retry-after`, `content-type` and `openai-processing-ms` back to the client.
-- **Long requests:** they can take 20–40 s or more. Stream the upstream body and don't add a timeout shorter than 150 s.
-- **Tooling:** a minting script prints a new token once and stores only its hash. Tests run locally with Node 22 (vitest or `node:test`, with a fake upstream `fetch`). `docs/PROXY.md` covers deploy (wrangler), secrets, KV, token management and `MODEL_MAP`.
-
-The app sends `safety_identifier` (a hashed install id) on `/responses`, so OpenAI abuse signals can be attributed per device.
-
-### 16.2 `MODEL_MAP` (amendment A1)
-
-An optional Worker environment variable (plain var or secret) holding a JSON object of requested model id → upstream model id, for example `{"gpt-5.6-terra":"gpt-6.2-terra","gpt-6-luna":"gpt-6.1-luna"}`. It lets the maintainers upgrade the models every installed APK uses without shipping a new APK.
-
-- **Where:** the `model` field of JSON bodies (`/responses`, JSON `/images/edits`), the `model` form field of multipart bodies (`/audio/transcriptions`, multipart `/images/edits`; re-encode the form with every other part byte-identical, filenames included), and the `{id}` of `GET /models/{id}`.
-- **Order:** map **first**, then check `ALLOWED_MODELS` against the mapped id. Unmapped ids pass through unchanged and are checked as-is.
-- **Single step:** no chaining (`a→b` and `b→c` does not turn `a` into `c`). Keys and values are exact, case-sensitive ids.
-- **Bad config fails closed:** if `MODEL_MAP` is not a JSON object of string → string, every request gets **500** `{"error":{"message":"Proxy misconfigured","type":"server_error","code":"proxy_misconfigured"}}` and the Worker logs why (never the body or token).
-- **Responses are not rewritten:** the upstream `model` field (the real model) reaches the app; the app only logs it.
-- **Parameter compatibility:** the app picks request parameters for the model id it *sent* (§7.2). If a map target rejects one (e.g. a gpt-5.5 target rejects the prompt-cache fields; gpt-6.1-sol rejects effort `none`), the client's one-shot downgrade retry absorbs the 400 at the cost of one extra round trip. Prefer targets in the same family, and run the live smoke (`./gradlew -p core run --args="test"` with `PICNIC_BASE_URL` pointing at the proxy) after changing the map.
-
----
-
-## 17. Privacy and Play compliance
+## 16. Privacy and Play compliance
 
 - **Permissions:** `INTERNET` and `RECORD_AUDIO` (runtime, foreground only). There is **no `CAMERA` permission**, because the system camera intent is used. `<uses-feature>` marks camera and microphone as `required="false"`. The photo picker needs no permission. The `<queries>` entry for `IMAGE_CAPTURE` is present. Verified in the merged manifest: INTERNET, RECORD_AUDIO and androidx's `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` only.
-- **Data sent off the device:** text, photos and audio go to OpenAI, or to Cora's proxy, only when the user asks; item names go there in the background, including for "Add as typed": to the fast model for aisle placement and icon decisions, and to the image model for bespoke icons (when "Draw new icons with AI" is on). The Settings help text says the same. Requests use `store: false`. Nothing else leaves the device, and there are no analytics.
+- **Data sent off the device:** text, photos and audio go directly to OpenAI only when the user asks; item names go there in the background, including for "Add as typed": to the fast model for aisle placement and icon decisions, and to the image model for bespoke icons (when "Draw new icons with AI" is on). The Settings help text says the same. Requests use `store: false`. Nothing else leaves the device, and there are no analytics.
 - **Backups:** only `state.json` is backed up.
 - **Play:** a later Play release needs a privacy policy URL (because of `RECORD_AUDIO`) and a Data safety form that discloses the processing.
-- **Security:** no secrets in the repo or APK, ever. `*.env`, `.env*` and `.dev.vars*` are gitignored.
+- **Security:** no secrets in the repo or APK, ever. `*.env` and `.env*` are gitignored.
 - **Legal and IP:** OFL fonts are bundled with their licences. Art uses only generic genre motifs (see the IP rules in `research/directions.md`), with no real brand packaging.

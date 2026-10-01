@@ -17,19 +17,22 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.IOException
+import java.net.URI
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Production settings (docs/ARCHITECTURE.md §9): Preferences DataStore at
- * filesDir/datastore/settings.preferences_pb (not backed up) plus the encrypted token in [tokenStore].
+ * filesDir/datastore/settings.preferences_pb (not backed up) plus the encrypted OpenAI key in [tokenStore].
  *
- * Keys: `base_url` (absent = LlmConfig.DEFAULT_BASE_URL), `draw_icons` (absent = true),
- * `token_hint` (masked token; present = a token is stored), `install_id` (random UUID, created on
- * first use; hashed into LlmConfig.safetyIdentifier). The token itself never enters DataStore,
- * a Flow, a data class or a log line: it is decrypted only inside [token].
+ * Keys: `draw_icons` (absent = true), `token_hint` (masked key; present = a key is stored),
+ * `install_id` (random UUID, created on first use; hashed into LlmConfig.safetyIdentifier). Builds
+ * with a server-address setting also stored `base_url`; [migrateOnce] removes it. The key itself
+ * never enters DataStore, a Flow, a data class or a log line: it is decrypted only inside [token].
  */
 class DataStoreSettingsRepository(
     private val dataStore: DataStore<Preferences>,
@@ -44,6 +47,10 @@ class DataStoreSettingsRepository(
     )
 
     private val tokenChecked = AtomicBoolean(false)
+    private val migration = Mutex()
+
+    @Volatile
+    private var migrated = false
 
     private val prefs: Flow<Preferences> = dataStore.data.catch { e ->
         if (e is IOException) {
@@ -57,21 +64,15 @@ class DataStoreSettingsRepository(
     override val settings: Flow<AppSettings> = prefs
         .map { it.toSettings() }
         .distinctUntilChanged()
-        // Once per process: a token that can no longer be decrypted (key invalidated) reads as unset.
-        .onStart { if (tokenChecked.compareAndSet(false, true)) token() }
-
-    override suspend fun current(): AppSettings = prefs.first().toSettings()
-
-    override suspend fun setBaseUrl(url: String): Boolean {
-        if (url.isBlank()) {
-            dataStore.edit { it.remove(BASE_URL) }
-            return true
+        .onStart {
+            migrateQuietly()
+            // Once per process: a key that can no longer be decrypted (Keystore key invalidated) reads as unset.
+            if (tokenChecked.compareAndSet(false, true)) token()
         }
-        val normalized = LlmConfig.normalizeBaseUrl(url) ?: return false
-        dataStore.edit {
-            if (normalized == LlmConfig.DEFAULT_BASE_URL) it.remove(BASE_URL) else it[BASE_URL] = normalized
-        }
-        return true
+
+    override suspend fun current(): AppSettings {
+        migrateQuietly()
+        return prefs.first().toSettings()
     }
 
     override suspend fun setDrawIcons(enabled: Boolean) {
@@ -79,11 +80,13 @@ class DataStoreSettingsRepository(
     }
 
     /**
-     * Stores the token encrypted (blank/null clears it). If the Keystore refuses (rare OEM bugs),
+     * Stores the key encrypted (blank/null clears it). If the Keystore refuses (rare OEM bugs),
      * nothing is stored and [AppSettings.hasToken] stays false, so the UI asks again; never throws
-     * for that, and never logs the token.
+     * for that, and never logs the key.
      */
     override suspend fun setToken(token: String?) {
+        // A pending upgrade must not delete the key saved here afterwards.
+        migrateOnce()
         val clean = token?.trim()?.takeIf { it.isNotEmpty() }
         val stored = try {
             tokenStore.write(clean)
@@ -97,6 +100,13 @@ class DataStoreSettingsRepository(
     }
 
     override suspend fun token(): String? {
+        try {
+            migrateOnce()
+        } catch (e: IOException) {
+            // Can't tell yet whether the stored key was saved for another server: send none this time.
+            PicnicLog.w("settings upgrade pending; no key for this call", e)
+            return null
+        }
         val token = try {
             tokenStore.read()?.takeIf { it.isNotBlank() }
         } catch (e: IOException) {
@@ -123,16 +133,49 @@ class DataStoreSettingsRepository(
             dataStore.edit { if (it[INSTALL_ID] == null) it[INSTALL_ID] = UUID.randomUUID().toString() }
             prefs.first()[INSTALL_ID]
         }
-        return LlmConfig(
-            baseUrl = p[BASE_URL] ?: LlmConfig.DEFAULT_BASE_URL,
-            safetyIdentifier = installId?.let(::safetyIdentifierFor),
-        )
+        // Always OpenAI: there is no address setting (LlmConfig's default base URL).
+        return LlmConfig(safetyIdentifier = installId?.let(::safetyIdentifierFor))
+    }
+
+    /**
+     * One-time upgrade from builds that had a server-address setting (since removed): a stored
+     * `base_url` is dropped, so requests go to OpenAI again. A key saved for another host is deleted
+     * first, so it is never sent to OpenAI; a key saved for OpenAI's own host is kept. Throws
+     * [IOException] when the settings can't be read or the old key can't be deleted: nothing has
+     * changed then, and the next call tries again.
+     */
+    private suspend fun migrateOnce() {
+        if (migrated) return
+        migration.withLock {
+            if (migrated) return
+            val legacyUrl = dataStore.data.first()[LEGACY_BASE_URL]
+            if (legacyUrl != null) {
+                val keepKey = sameHost(legacyUrl, LlmConfig.DEFAULT_BASE_URL)
+                if (!keepKey) {
+                    tokenStore.write(null)
+                    PicnicLog.w("removed the key saved for a custom server address; the app now talks to OpenAI only")
+                }
+                dataStore.edit {
+                    it.remove(LEGACY_BASE_URL)
+                    if (!keepKey) it.remove(TOKEN_HINT)
+                }
+            }
+            migrated = true
+        }
+    }
+
+    /** For reads that fall back to what DataStore holds: [token] stays the gate for the key itself. */
+    private suspend fun migrateQuietly() {
+        try {
+            migrateOnce()
+        } catch (e: IOException) {
+            PicnicLog.w("settings upgrade failed; will retry", e)
+        }
     }
 
     private fun Preferences.toSettings(): AppSettings {
         val hint = this[TOKEN_HINT]
         return AppSettings(
-            baseUrl = this[BASE_URL] ?: LlmConfig.DEFAULT_BASE_URL,
             drawIcons = this[DRAW_ICONS] ?: true,
             hasToken = hint != null,
             tokenHint = hint,
@@ -142,10 +185,23 @@ class DataStoreSettingsRepository(
     companion object {
         const val FILE_NAME: String = "settings"
 
-        internal val BASE_URL = stringPreferencesKey("base_url")
+        /** Written only by builds with a server-address setting; read once by [migrateOnce], then removed. */
+        internal val LEGACY_BASE_URL = stringPreferencesKey("base_url")
         internal val DRAW_ICONS = booleanPreferencesKey("draw_icons")
         internal val TOKEN_HINT = stringPreferencesKey("token_hint")
         internal val INSTALL_ID = stringPreferencesKey("install_id")
+
+        /** Same scheme-less authority (host and port, default ports filled in); unparsable URLs never match. */
+        internal fun sameHost(a: String, b: String): Boolean {
+            fun authority(url: String) = runCatching {
+                val uri = URI(url.trim())
+                val host = uri.host?.lowercase() ?: return@runCatching null
+                val port = if (uri.port != -1) uri.port else if (uri.scheme.equals("http", true)) 80 else 443
+                "$host:$port"
+            }.getOrNull()
+            val x = authority(a)
+            return x != null && x == authority(b)
+        }
 
         /** First 32 hex characters of sha256(installId): opaque, stable per install, not the user's identity. */
         fun safetyIdentifierFor(installId: String): String =

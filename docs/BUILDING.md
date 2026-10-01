@@ -1,13 +1,14 @@
 # Building and installing Picnic List
 
 This page covers getting the APK onto a phone, building it yourself, and the tests and CI behind it.
-The design itself is in [ARCHITECTURE.md](ARCHITECTURE.md); the optional API proxy is in [PROXY.md](PROXY.md).
+The design itself is in [ARCHITECTURE.md](ARCHITECTURE.md); making an OpenAI key for someone is in
+[OPENAI_KEY.md](OPENAI_KEY.md).
 
 ## 1. Get the APK
 
 Every push builds the sideloadable APK (`.github/workflows/android.yml`): the `sideload` build type,
 which is the debug build's code and signing key but **not debuggable**, so nobody with brief USB
-access can read the app's stored key or token with `adb shell run-as` or a debugger. Pick whichever is easiest:
+access can read the app's stored OpenAI key with `adb shell run-as` or a debugger. Pick whichever is easiest:
 
 | Where | How | Who can get it |
 |---|---|---|
@@ -38,15 +39,16 @@ committed). Uninstall it once, then install again. Uninstalling deletes the list
 
 Open **Settings** in the app:
 
-- **Connection.** Either paste your own OpenAI API key (the server address stays `https://api.openai.com/v1`),
-  or enter Cora's proxy address (for example `https://picnic.cora.earth/v1`) and the device token she gives
-  you. Tap **Test connection**. The token is encrypted on the phone with the Android Keystore, it is
-  never shown again (only a hint like `sk-…a1b2`), and it is never included in backups.
+- **Your OpenAI key.** Paste an OpenAI API key (your own, or one Cora set up for you following
+  [OPENAI_KEY.md](OPENAI_KEY.md)) and tap **Save**; **Test connection** runs by itself. The app talks to
+  `https://api.openai.com/v1` directly; there is no address to set. The key is encrypted on the phone
+  with the Android Keystore, it is never shown again (only a hint like `sk-…a1b2`), and it is never
+  included in backups.
 - **Draw new icons with AI** (on by default). Items without a fitting icon get one drawn live: about
   10 s and about 1.5¢ (US) each, at most 40 automatic drawings a day.
 
 There are no model settings. The models are fixed by the developers in core's `ModelDefaults`
-(see ARCHITECTURE §7.1), and the proxy can remap them server-side (PROXY.md, `MODEL_MAP`).
+(see ARCHITECTURE §7.1); changing one means shipping a new APK.
 
 ## 3. Build it yourself
 
@@ -126,8 +128,7 @@ To cut a release: `git tag v0.2.0 && git push origin v0.2.0`.
 
 Live API tests never run in CI.
 
-Two more workflows: `play-release.yml` tests, signs and uploads the Play bundle (docs/RELEASING.md §7), and
-`proxy.yml` tests the OpenAI proxy in `proxy/` (docs/PROXY.md §4.9).
+One more workflow: `play-release.yml` tests, signs and uploads the Play bundle (docs/RELEASING.md §7).
 
 ## 6. Signing: sideload and Play
 
@@ -147,9 +148,9 @@ Two more workflows: `play-release.yml` tests, signs and uploads the Play bundle 
 
 - Permissions: `INTERNET` and `RECORD_AUDIO` (asked at runtime, only when you tap the mic). No camera
   permission: photos go through the system camera app or the photo picker.
-- Backups: only the lists (`files/state.json`). Settings, the encrypted token and drawn icons are not
-  backed up.
-- No API keys or tokens are ever in the repository or the APK.
+- Backups: only the lists (`files/state.json`). Settings, the encrypted OpenAI key and drawn icons are
+  not backed up.
+- No API keys are ever in the repository or the APK.
 
 ## 8. Troubleshooting
 
