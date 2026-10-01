@@ -5,14 +5,26 @@ import android.media.MediaRecorder
 import android.os.Build
 import java.io.File
 
+/** Voice capture seam (fake it in AddViewModel tests). CONTRACT: docs/ARCHITECTURE.md §10.4. */
+interface AudioRecorder {
+    /** Starts recording to a new .m4a file. Caller holds RECORD_AUDIO and is in the foreground. */
+    fun start(): File
+
+    /** Current input level 0..1 for the waveform (poll ~10x/s while recording); 0 when idle. */
+    fun level(): Float
+
+    /** Stops and returns the file, or null if nothing usable was captured (file deleted). Safe to call twice. */
+    fun stop(): File?
+}
+
 /** Records mono AAC in an MPEG-4 container (.m4a), which /audio/transcriptions accepts. */
-class VoiceRecorder(private val context: Context) {
+class VoiceRecorder(private val context: Context) : AudioRecorder {
     private var recorder: MediaRecorder? = null
     var output: File? = null
         private set
 
     /** Caller must hold RECORD_AUDIO (runtime permission) and be in the foreground. */
-    fun start(): File {
+    override fun start(): File {
         val file = File(context.cacheDir, "voice/${System.currentTimeMillis()}.m4a").apply { parentFile?.mkdirs() }
         val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(context)
@@ -34,8 +46,10 @@ class VoiceRecorder(private val context: Context) {
         return file
     }
 
+    override fun level(): Float = (recorder?.maxAmplitude ?: 0).coerceIn(0, 32767) / 32767f
+
     /** Returns the file, or null if the recording was too short (stop() throws RuntimeException then). */
-    fun stop(): File? {
+    override fun stop(): File? {
         val r = recorder ?: return null
         recorder = null
         return try {

@@ -3,6 +3,8 @@ package earth.cora.picnic.core.catalog
 import earth.cora.picnic.core.CoreJson
 import earth.cora.picnic.core.model.Aisle
 import earth.cora.picnic.core.model.BasketKind
+import earth.cora.picnic.core.model.GroceryItem
+import earth.cora.picnic.core.model.IconRef
 import kotlinx.serialization.Serializable
 
 /*
@@ -67,6 +69,16 @@ class IconCatalog(val file: CatalogFile) {
      */
     fun match(name: String): IconEntry? {
         TODO("core: IconCatalog.match")
+    }
+
+    /**
+     * What a row shows for [item]. CONTRACT: bespoke icon if attached; while a bespoke icon is being
+     * drawn ([drawing]), the category fallback (the row overlays a sparkle); otherwise the item's own key.
+     */
+    fun displayRef(item: GroceryItem, drawing: Boolean): IconRef = when {
+        item.customIconId != null -> IconRef(item.icon, item.customIconId)
+        drawing -> IconRef(fallbackFor(item.icon))
+        else -> IconRef(item.icon)
     }
 
     val baskets: BasketCatalog by lazy { BasketCatalog(file.baskets) }
