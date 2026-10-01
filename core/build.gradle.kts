@@ -46,11 +46,36 @@ tasks.test {
     useJUnitPlatform {
         if (!live) excludeTags("live")
     }
-    if (live) outputs.upToDateWhen { false }
+    if (live) {
+        outputs.upToDateWhen { false }
+        testLogging {
+            showStandardStreams = true
+            events("passed", "skipped", "failed")
+        }
+    }
 }
 
 application {
     mainClass.set("earth.cora.picnic.core.cli.MainKt")
+}
+
+// Live LLM eval (docs/PROMPTS.md §10): ./gradlew -p core liveEval -Plive=true [--args="--only=<ids> --repeat=2"]
+// Calls the real API (OPENAI_API_KEY inherited from the environment, like `run`), so it is gated on
+// -Plive=true and never runs as part of `build` or `test`. Reports go to core/build/eval/.
+val liveEvalEnabled = providers.gradleProperty("live").map(String::toBoolean).getOrElse(false)
+tasks.register<JavaExec>("liveEval") {
+    group = "verification"
+    description = "Runs the live LLM eval set against the real API (needs -Plive=true and OPENAI_API_KEY)."
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("earth.cora.picnic.core.eval.EvalMainKt")
+    workingDir = projectDir
+    jvmArgs("-Dfile.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
+    val enabled = liveEvalEnabled
+    doFirst {
+        // --rescore re-scores a saved report offline; everything else calls the API.
+        val offline = (this as JavaExec).args.orEmpty().any { it.startsWith("--rescore") }
+        if (!enabled && !offline) throw GradleException("liveEval calls the real OpenAI API and costs money: pass -Plive=true")
+    }
 }
 
 // ./gradlew -p core run --args="ingest 'ingredients for pancakes'"

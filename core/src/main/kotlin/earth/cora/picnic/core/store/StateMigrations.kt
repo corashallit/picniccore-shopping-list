@@ -13,10 +13,20 @@ object StateMigrations {
     val steps: List<(JsonObject) -> JsonObject> = emptyList()
 
     /** Runs every step from [fromVersion] up to STATE_SCHEMA_VERSION. Versions above current are returned unchanged. */
-    fun migrate(raw: JsonObject, fromVersion: Int): JsonObject {
+    fun migrate(raw: JsonObject, fromVersion: Int): JsonObject = migrate(raw, fromVersion, STATE_SCHEMA_VERSION, steps)
+
+    /** The general form (tests pass their own [steps] and [target]). A version below 1 counts as 1. */
+    fun migrate(
+        raw: JsonObject,
+        fromVersion: Int,
+        target: Int,
+        steps: List<(JsonObject) -> JsonObject>,
+    ): JsonObject {
         var json = raw
-        for (version in fromVersion until STATE_SCHEMA_VERSION) {
-            json = steps[version - 1](json)
+        for (version in fromVersion.coerceAtLeast(1) until target) {
+            val step = steps.getOrNull(version - 1)
+                ?: error("No state.json migration from version $version to ${version + 1}")
+            json = step(json)
         }
         return json
     }

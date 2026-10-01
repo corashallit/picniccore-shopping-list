@@ -1,0 +1,327 @@
+package earth.cora.picnic.core.model
+
+import earth.cora.picnic.core.TestSupport
+import earth.cora.picnic.core.assistant.NamedItem
+import earth.cora.picnic.core.catalog.IconCatalog
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotSame
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
+
+class StateOpsTest {
+    private val catalog = TestSupport.catalog
+
+    private fun item(
+        id: String,
+        name: String,
+        aisle: String? = null,
+        checked: Boolean = false,
+        fit: IconFit = IconFit.EXACT,
+        icon: String = "paper_bag",
+        custom: String? = null,
+        manual: Boolean = false,
+    ) = GroceryItem(
+        id = id, name = name, aisleId = aisle, icon = icon, iconFit = fit, customIconId = custom,
+        checked = checked, addedAt = id.hashCode().toLong(), manuallyPlaced = manual,
+    )
+
+    private fun state(vararg items: GroceryItem, other: List<GroceryItem> = emptyList()) = AppState(
+        lists = listOf(GroceryList("l1", "Groceries", 0, items.toList()), GroceryList("l2", "Party", 1, other)),
+        currentListId = "l1",
+    )
+
+    private fun AppState.items(listId: String = "l1") = list(listId)!!.items
+
+    @Test
+    fun initialState() {
+        val s = StateOps.initialState("x", 5)
+        assertEquals("x", s.currentListId)
+        assertEquals("Groceries", s.currentList().title)
+        assertEquals(STATE_SCHEMA_VERSION, s.version)
+        assertEquals(14, s.store.aisles().size)
+    }
+
+    @Test
+    fun addItemsDedupesAgainstUncheckedItemsAndWithinTheBatch() {
+        val s = state(item("a", "Lemons"), item("b", "Milk", checked = true))
+        val after = s.addItems("l1", listOf(item("c", "lemon"), item("d", "milk"), item("e", "Eggs"), item("f", "EGGS"), item("g", " ★ ")))
+        assertEquals(listOf("a", "b", "d", "e"), after.items().map { it.id }, "checked Milk does not block a new milk")
+        assertNull(after.findItem("c"))
+        assertSame(s, s.addItems("l1", emptyList()))
+        assertSame(s, s.addItems("l1", listOf(item("z", "Lemon"))))
+        assertSame(s, s.addItems("nope", listOf(item("y", "Kiwi"))))
+    }
+
+    @Test
+    fun addItemsNeverDuplicatesAnId() {
+        val s = state(item("a", "Lemons"), other = listOf(item("p", "Plates")))
+        val after = s.addItems("l1", listOf(item("p", "Pears")))
+        assertSame(s, after)
+    }
+
+    @Test
+    fun toggleRemoveRestore() {
+        val s = state(item("a", "A"), item("b", "B"), item("c", "C"))
+        val toggled = s.toggleChecked("l1", "b")
+        assertTrue(toggled.findItem("b")!!.checked)
+        assertFalse(toggled.toggleChecked("l1", "b").findItem("b")!!.checked)
+        assertSame(s, s.toggleChecked("l1", "nope"))
+
+        val removed = s.removeItem("l1", "b")
+        assertEquals(listOf("a", "c"), removed.items().map { it.id })
+        assertSame(s, s.removeItem("l1", "nope"))
+        val restored = removed.restoreItem("l1", s.findItem("b")!!, 1)
+        assertEquals(listOf("a", "b", "c"), restored.items().map { it.id })
+        assertSame(restored, restored.restoreItem("l1", s.findItem("b")!!, 0), "already present")
+        assertEquals(listOf("a", "c", "b"), removed.restoreItem("l1", s.findItem("b")!!, 99).items().map { it.id })
+        assertEquals(listOf("b", "a", "c"), removed.restoreItem("l1", s.findItem("b")!!, -3).items().map { it.id })
+    }
+
+    @Test
+    fun editItemDetailsKeepsIconWhenOnlyCaseOrDetailsChange() {
+        val s = state(item("a", "lemons", icon = "lemon", custom = "c-1"))
+        val after = s.editItemDetails("l1", "a", " Lemons ", " 2 ", "  ", catalog)
+        val edited = after.findItem("a")!!
+        assertEquals("Lemons", edited.name)
+        assertEquals("2", edited.quantity)
+        assertNull(edited.note)
+        assertEquals("lemon", edited.icon)
+        assertEquals("c-1", edited.customIconId)
+        assertSame(s, s.editItemDetails("l1", "a", "lemons", null, null, catalog))
+        assertEquals("lemons", s.editItemDetails("l1", "a", "   ", "1", null, catalog).findItem("a")!!.name, "blank name keeps the old one")
+    }
+
+    @Test
+    fun renameReResolvesTheIconLocally() {
+        val s = state(item("a", "Lemons", icon = "lemon", custom = "c-1"))
+        val toLimes = s.editItemDetails("l1", "a", "Limes", null, null, catalog).findItem("a")!!
+        assertEquals("lime", toLimes.icon)
+        assertEquals(IconFit.EXACT, toLimes.iconFit)
+        assertNull(toLimes.customIconId)
+
+        val toUnknown = s.editItemDetails("l1", "a", "Gochujang", null, null, catalog).findItem("a")!!
+        assertEquals(IconCatalog.DEFAULT_ICON, toUnknown.icon)
+        assertEquals(IconFit.PENDING, toUnknown.iconFit)
+
+        val withOverride = s.copy(iconOverrides = listOf(IconOverride("gochujang", "hot_sauce", 1)))
+        assertEquals("hot_sauce", withOverride.editItemDetails("l1", "a", "Gochujang", null, null, catalog).findItem("a")!!.icon)
+    }
+
+    @Test
+    fun moveItemToAisleRecordsAndReplacesCorrections() {
+        val s = state(item("a", "Oat milk"), item("b", "oat milks"))
+        val moved = s.moveItemToAisle("l1", "a", "dairy-eggs", now = 10)
+        assertEquals("dairy-eggs", moved.findItem("a")!!.aisleId)
+        assertTrue(moved.findItem("a")!!.manuallyPlaced)
+        assertEquals(listOf(Correction("oat milk", "dairy-eggs", 10)), moved.corrections)
+
+        val again = moved.moveItemToAisle("l1", "b", "bulk-natural-foods", now = 20)
+        assertEquals(listOf(Correction("oat milk", "bulk-natural-foods", 20)), again.corrections)
+
+        val toUnsorted = again.moveItemToAisle("l1", "a", null, now = 30)
+        assertNull(toUnsorted.findItem("a")!!.aisleId)
+        assertTrue(toUnsorted.findItem("a")!!.manuallyPlaced)
+        assertTrue(toUnsorted.corrections.isEmpty(), "moving to Unsorted drops the stale correction")
+
+        assertSame(s, s.moveItemToAisle("l1", "a", "not-an-aisle", 1))
+        assertSame(s, s.moveItemToAisle("l1", "nope", "produce", 1))
+    }
+
+    @Test
+    fun correctionsAndOverridesAreCapped() {
+        var s = state(*Array(StateOps.MAX_CORRECTIONS + 5) { item("i$it", "Thing $it") })
+        repeat(StateOps.MAX_CORRECTIONS + 5) { s = s.moveItemToAisle("l1", "i$it", "produce", it.toLong()) }
+        assertEquals(StateOps.MAX_CORRECTIONS, s.corrections.size)
+        assertEquals("thing 5", s.corrections.first().name, "oldest dropped first")
+        repeat(StateOps.MAX_ICON_OVERRIDES + 3) { s = s.setItemIcon("l1", "i$it", "lemon", it.toLong(), catalog) }
+        assertEquals(StateOps.MAX_ICON_OVERRIDES, s.iconOverrides.size)
+    }
+
+    @Test
+    fun setItemIconRecordsAnOverrideAndClearsTheBespokeIcon() {
+        val s = state(item("a", "Nooch", fit = IconFit.APPROXIMATE, custom = "c-9"))
+        val after = s.setItemIcon("l1", "a", "spice_jar", 50, catalog)
+        val a = after.findItem("a")!!
+        assertEquals("spice_jar", a.icon)
+        assertEquals(IconFit.EXACT, a.iconFit)
+        assertNull(a.customIconId)
+        assertEquals(listOf(IconOverride("nooch", "spice_jar", 50)), after.iconOverrides)
+        assertEquals("spice_jar", after.localIcon("NOOCH", catalog))
+        assertSame(s, s.setItemIcon("l1", "a", "no_such_icon", 50, catalog))
+    }
+
+    @Test
+    fun clearCheckedAndCollapse() {
+        val s = state(item("a", "A", checked = true), item("b", "B"))
+        assertEquals(listOf("b"), s.clearChecked("l1").items().map { it.id })
+        val cleared = s.clearChecked("l1")
+        assertSame(cleared, cleared.clearChecked("l1"))
+        val collapsed = s.setSectionCollapsed("l1", "produce", true)
+        assertEquals(setOf("produce"), collapsed.list("l1")!!.collapsedAisles)
+        assertSame(collapsed, collapsed.setSectionCollapsed("l1", "produce", true))
+        assertTrue(collapsed.setSectionCollapsed("l1", "produce", false).list("l1")!!.collapsedAisles.isEmpty())
+        val noChecked = state(item("b", "B"))
+        assertSame(noChecked, noChecked.clearChecked("l1"))
+    }
+
+    @Test
+    fun listLifecycle() {
+        val s = state()
+        val created = s.newList("l3", "  ", now = 9)
+        assertEquals("l3", created.currentListId)
+        assertEquals(DEFAULT_LIST_TITLE, created.list("l3")!!.title)
+        assertSame(created, created.newList("l3", "Again", 10))
+        assertEquals("l2", created.switchList("l2").currentListId)
+        assertSame(created, created.switchList("missing"))
+        assertEquals("BBQ", created.renameList("l3", " BBQ ").list("l3")!!.title)
+        assertSame(created, created.renameList("l3", "   "))
+
+        // Deleting the current list makes the neighbour current; the last list is never deleted.
+        val deleted = created.deleteList("l3")
+        assertEquals(listOf("l1", "l2"), deleted.lists.map { it.id })
+        assertEquals("l2", deleted.currentListId)
+        val first = created.switchList("l1").deleteList("l1")
+        assertEquals("l2", first.currentListId)
+        val single = AppState(lists = listOf(GroceryList("only", "Only", 0)), currentListId = "only")
+        assertSame(single, single.deleteList("only"))
+        assertEquals("l3", created.deleteList("l2").currentListId, "deleting another list keeps the current one")
+    }
+
+    @Test
+    fun storeNameAndAisleText() {
+        val s = state()
+        assertEquals("No Frills", s.setStoreName("  No Frills ").store.name)
+        assertSame(s, s.setStoreName("  "))
+
+        val withBaskets = s.copy(store = s.store.copy(aisleBaskets = mapOf("produce" to BasketKind.BERRY_PUNNET, "frozen" to BasketKind.COOLER)))
+        val after = withBaskets.setAislesText("Produce\nFleurs\nBoulangerie") { BasketKind.WIRE_BASKET }
+        assertEquals(
+            mapOf("produce" to BasketKind.BERRY_PUNNET, "fleurs" to BasketKind.WIRE_BASKET, "boulangerie" to BasketKind.WIRE_BASKET),
+            after.store.aisleBaskets,
+        )
+        assertSame(after, after.setAislesText("Produce\nFleurs\nBoulangerie") { BasketKind.COOLER })
+
+        val merged = after.setAisleBaskets(mapOf("fleurs" to BasketKind.FLOWER_BUCKET, "ghost" to BasketKind.COOLER))
+        assertEquals(BasketKind.FLOWER_BUCKET, merged.store.aisleBaskets["fleurs"])
+        assertFalse("ghost" in merged.store.aisleBaskets)
+        assertSame(merged, merged.setAisleBaskets(mapOf("fleurs" to BasketKind.FLOWER_BUCKET)))
+    }
+
+    @Test
+    fun applyAisleAssignmentsRespectsManualPlacements() {
+        val s = state(
+            item("a", "Hummus"),
+            item("b", "Diapers", aisle = "dairy-eggs", manual = true),
+            item("c", "Flowers", aisle = "gone", manual = true),
+            item("d", "Glitter", manual = true),
+            other = listOf(item("e", "Chips")),
+        )
+        val after = s.applyAisleAssignments(
+            mapOf("a" to "deli-cheese", "b" to "aisle-7-health-beauty-baby", "c" to "produce", "d" to "produce", "e" to "not-an-aisle"),
+        )
+        assertEquals("deli-cheese", after.findItem("a")!!.aisleId)
+        assertEquals("dairy-eggs", after.findItem("b")!!.aisleId, "manual placement into an existing aisle wins")
+        assertEquals("produce", after.findItem("c")!!.aisleId, "its aisle vanished, so it is re-placed")
+        assertFalse(after.findItem("c")!!.manuallyPlaced)
+        assertNull(after.findItem("d")!!.aisleId, "deliberately Unsorted stays Unsorted")
+        assertNull(after.findItem("e")!!.aisleId, "unknown ids become Unsorted")
+        assertSame(s, s.applyAisleAssignments(emptyMap()))
+    }
+
+    @Test
+    fun iconDecisionsOnlyTouchPendingItemsAcrossLists() {
+        val s = state(
+            item("a", "Gochujang", fit = IconFit.PENDING),
+            item("b", "gochujang", fit = IconFit.EXACT, icon = "hot_sauce"),
+            other = listOf(item("c", "Gochujang", fit = IconFit.PENDING)),
+        )
+        val after = s.applyIconDecisions(mapOf("gochujang" to ResolvedIcon("condiments_generic", IconFit.APPROXIMATE)))
+        assertEquals("condiments_generic", after.findItem("a")!!.icon)
+        assertEquals(IconFit.APPROXIMATE, after.findItem("c")!!.iconFit)
+        assertEquals("hot_sauce", after.findItem("b")!!.icon, "a user choice made meanwhile wins")
+        assertSame(s, s.applyIconDecisions(mapOf("kimchi" to ResolvedIcon("pickles", IconFit.EXACT))))
+    }
+
+    @Test
+    fun attachCustomIconWithAndWithoutOverwrite() {
+        val s = state(item("a", "Gochujang"), item("b", "gochujangs", custom = "old"), other = listOf(item("c", "Kimchi")))
+        val soft = s.attachCustomIcon("gochujang", "new", overwrite = false)
+        assertEquals("new", soft.findItem("a")!!.customIconId)
+        assertEquals("old", soft.findItem("b")!!.customIconId)
+        assertNull(soft.findItem("c")!!.customIconId)
+        val hard = s.attachCustomIcon("gochujang", "new", overwrite = true)
+        assertEquals("new", hard.findItem("b")!!.customIconId)
+        assertSame(hard, hard.attachCustomIcon("gochujang", "new", overwrite = true))
+    }
+
+    @Test
+    fun localIconPrefersTheNewestValidOverride() {
+        val s = state().copy(
+            iconOverrides = listOf(
+                IconOverride("lemon", "lime", 1),
+                IconOverride("lemon", "orange", 5),
+                IconOverride("kiwi", "retired_key", 9),
+            ),
+        )
+        assertEquals("orange", s.localIcon("Lemons", catalog))
+        assertEquals("kiwi", s.localIcon("Kiwis", catalog), "invalid override falls back to the catalog match")
+        assertNull(s.localIcon("Gochujang", catalog))
+        assertEquals(mapOf("lemon" to "orange", "kiwi" to "retired_key"), s.iconOverrideMap())
+    }
+
+    @Test
+    fun itemsNeedingIconDecisionAreDistinctNormalizedNames() {
+        val s = state(
+            item("a", "Gochujang", fit = IconFit.PENDING),
+            item("b", "gochujangs", fit = IconFit.PENDING),
+            item("c", "Lemons", fit = IconFit.EXACT),
+            other = listOf(item("d", "Spatula", fit = IconFit.PENDING)),
+        )
+        assertEquals(listOf(NamedItem("gochujang", "Gochujang"), NamedItem("spatula", "Spatula")), s.itemsNeedingIconDecision())
+    }
+
+    @Test
+    fun itemsNeedingAisle() {
+        val s = state(
+            item("a", "Hummus"),
+            item("b", "Milk", aisle = "dairy-eggs"),
+            item("c", "Ghost", aisle = "vanished"),
+            item("d", "Glitter", manual = true),
+            item("e", "Done", checked = true),
+            other = listOf(item("f", "Chips")),
+        )
+        assertEquals(listOf("a", "c", "e", "f"), s.itemsNeedingAisle().map { it.id })
+    }
+
+    @Test
+    fun ingestContextUsesNewestValidCorrectionsAndUncheckedNames() {
+        val s = state(item("a", "Butter"), item("b", "Bananas", checked = true)).copy(
+            corrections = listOf(
+                Correction("tortilla", "aisle-3-pasta-rice-international", 1),
+                Correction("ghost", "vanished", 2),
+                Correction("tortilla", "bakery", 3),
+                Correction("oat milk", "dairy-eggs", 4),
+            ),
+            iconOverrides = listOf(IconOverride("nooch", "spice_jar", 1)),
+        )
+        val ctx = s.ingestContext("l1")
+        assertEquals(14, ctx.aisles.size)
+        assertEquals(listOf("oat milk", "tortilla"), ctx.corrections.map { it.name })
+        assertEquals("bakery", ctx.corrections[1].aisleId, "newest correction per name")
+        assertEquals(listOf("Butter"), ctx.existingNames)
+        assertEquals(mapOf("nooch" to "spice_jar"), ctx.iconOverrides)
+    }
+
+    @Test
+    fun unknownIdsAreNoOps() {
+        val s = state(item("a", "A"))
+        assertSame(s, s.updateList("nope") { it.copy(title = "x") })
+        assertSame(s, s.updateList("l1") { it })
+        assertNotSame(s, s.updateList("l1") { it.copy(title = "x") })
+        assertSame(s, s.editItemDetails("l1", "nope", "B", null, null, catalog))
+        assertSame(s, s.setItemIcon("l1", "nope", "lemon", 1, catalog))
+    }
+}

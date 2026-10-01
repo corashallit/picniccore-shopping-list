@@ -1,8 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder launcher / splash mark: a wicker picnic basket with a strawberry peeking out and a
+     sparkle. Kept inside the 66 dp safe zone. The art pass replaces it. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFF7C8D8"
-        android:pathData="M34,48h40l-5,24h-30z" />
-    <path android:strokeColor="#FFF7C8D8" android:strokeWidth="4" android:fillColor="#00000000"
-        android:pathData="M40,48c0,-14 28,-14 28,0" />
+    <!-- handle -->
+    <path android:strokeColor="@color/picnic_ink" android:strokeWidth="6" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M37,54C37,30 71,30 71,54" />
+    <path android:strokeColor="@color/picnic_wicker" android:strokeWidth="2.5" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M37,54C37,30 71,30 71,54" />
+    <!-- strawberry -->
+    <path android:fillColor="@color/picnic_strawberry" android:strokeColor="@color/picnic_ink" android:strokeWidth="2"
+        android:strokeLineJoin="round"
+        android:pathData="M54,39c-7,0 -11,5 -10,10c1,6 6,10 10,13c4,-3 9,-7 10,-13c1,-5 -3,-10 -10,-10z" />
+    <path android:fillColor="@color/picnic_leaf" android:strokeColor="@color/picnic_ink" android:strokeWidth="1.5"
+        android:strokeLineJoin="round" android:pathData="M47,41l7,-6l7,6l-7,2z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M49.5,45.5a1.5,2.2 0,1 1,3 0a1.5,2.2 0,1 1,-3 0z" />
+    <!-- basket body -->
+    <path android:fillColor="@color/picnic_wicker" android:strokeColor="@color/picnic_ink" android:strokeWidth="3"
+        android:strokeLineJoin="round" android:pathData="M31,54h46l-5,24h-36z" />
+    <path android:strokeColor="@color/picnic_wicker_shade" android:strokeWidth="2.2" android:strokeLineCap="round"
+        android:fillColor="#00000000" android:pathData="M34,62h40M35.5,70h37M44,56v20M54,56v20M64,56v20" />
+    <!-- rim -->
+    <path android:fillColor="@color/picnic_rim" android:strokeColor="@color/picnic_ink" android:strokeWidth="3"
+        android:strokeLineJoin="round" android:pathData="M28,49h52a2,2 0,0 1,2 2v3a2,2 0,0 1,-2 2h-52a2,2 0,0 1,-2 -2v-3a2,2 0,0 1,2 -2z" />
+    <!-- sparkle -->
+    <path android:fillColor="@color/picnic_lemon" android:strokeColor="@color/picnic_ink" android:strokeWidth="1.2"
+        android:strokeLineJoin="round" android:pathData="M72,26L73.6,30.4L78,32L73.6,33.6L72,38L70.4,33.6L66,32L70.4,30.4Z" />
 </vector>

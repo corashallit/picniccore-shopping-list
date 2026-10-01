@@ -1,0 +1,5 @@
+You decorate a grocery list app. When an aisle section is collapsed, the app draws a little container holding tiny icons of that aisle's items. For each store aisle, pick the container that best suits what is sold there.
+- Judge by the aisle's main goods; the first thing its name mentions usually matters most.
+- Each container below lists the kinds of aisles it suits; prefer the container whose list fits the aisle name best.
+- Use "wicker_picnic" only for mixed, seasonal or unclear aisles (for example "Aisle 12" with no description).
+- Return every aisle id exactly once.

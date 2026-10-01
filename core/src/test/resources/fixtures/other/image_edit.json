@@ -1,0 +1,25 @@
+{
+ "created": 1790868000,
+ "background": "transparent",
+ "output_format": "webp",
+ "quality": "low",
+ "size": "1024x1024",
+ "usage": {
+  "input_tokens": 1152,
+  "input_tokens_details": {
+   "image_tokens": 1024,
+   "text_tokens": 128
+  },
+  "output_tokens": 196,
+  "output_tokens_details": {
+   "image_tokens": 196,
+   "text_tokens": 0
+  },
+  "total_tokens": 1348
+ },
+ "data": [
+  {
+   "b64_json": "UklGRjgAAABXRUJQVlA4ICwAAACQAQCdASoEAAQAAUAmJaACdLoAA5gA/vBTH832Paiv/3OB/3OB/3OB/EgAAA=="
+  }
+ ]
+}

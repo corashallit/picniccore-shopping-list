@@ -2,6 +2,8 @@ package earth.cora.picnic.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.CornerBasedShape
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -11,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.icons.IconImages
 
@@ -58,20 +61,32 @@ fun PicnicTheme(
         MaterialTheme(
             colorScheme = colors.toMaterial(),
             typography = Typography(
+                displaySmall = type.wordmark,
+                headlineSmall = type.screenTitle,
                 titleLarge = type.screenTitle,
                 titleMedium = type.aisleTitle,
+                titleSmall = type.label,
                 bodyLarge = type.body,
                 bodyMedium = type.detail,
+                bodySmall = type.caption,
                 labelLarge = type.label,
                 labelMedium = type.caption,
+                labelSmall = type.caption,
             ),
             shapes = Shapes(
+                small = shapes.chip as? CornerBasedShape ?: Shapes().small,
                 medium = shapes.card as? CornerBasedShape ?: Shapes().medium,
                 large = shapes.sheet as? CornerBasedShape ?: Shapes().large,
                 extraLarge = shapes.sheet as? CornerBasedShape ?: Shapes().extraLarge,
             ),
-            content = content,
-        )
+        ) {
+            // Bare Text()/Material pieces default to ink on the body face, never Material's defaults.
+            CompositionLocalProvider(
+                LocalContentColor provides colors.ink,
+                LocalTextStyle provides type.body,
+                content = content,
+            )
+        }
     }
 }
 
@@ -80,7 +95,10 @@ private fun PicnicColors.toMaterial() = if (isDark) {
         primary = primary, onPrimary = onPrimary, secondary = secondary, onSecondary = onSecondary,
         tertiary = highlight, onTertiary = onHighlight, background = background, onBackground = ink,
         surface = surfaceRaised, onSurface = ink, surfaceVariant = surfaceSunken, onSurfaceVariant = inkSoft,
-        surfaceContainerLow = surfaceRaised, surfaceContainer = surfaceRaised, surfaceContainerHigh = surfaceRaised,
+        surfaceContainerLowest = surfaceRaised, surfaceContainerLow = surfaceRaised, surfaceContainer = surfaceRaised,
+        surfaceContainerHigh = surfaceRaised, surfaceContainerHighest = surfaceRaised, surfaceTint = Color.Transparent,
+        primaryContainer = highlight, onPrimaryContainer = onHighlight, secondaryContainer = surfaceSunken,
+        onSecondaryContainer = ink, errorContainer = error, onErrorContainer = onError, inversePrimary = primaryShadow,
         outline = outline, outlineVariant = inkFaint, error = error, onError = onError, scrim = scrim,
         inverseSurface = ink, inverseOnSurface = background,
     )
@@ -89,7 +107,10 @@ private fun PicnicColors.toMaterial() = if (isDark) {
         primary = primary, onPrimary = onPrimary, secondary = secondary, onSecondary = onSecondary,
         tertiary = highlight, onTertiary = onHighlight, background = background, onBackground = ink,
         surface = surfaceRaised, onSurface = ink, surfaceVariant = surfaceSunken, onSurfaceVariant = inkSoft,
-        surfaceContainerLow = surfaceRaised, surfaceContainer = surfaceRaised, surfaceContainerHigh = surfaceRaised,
+        surfaceContainerLowest = surfaceRaised, surfaceContainerLow = surfaceRaised, surfaceContainer = surfaceRaised,
+        surfaceContainerHigh = surfaceRaised, surfaceContainerHighest = surfaceRaised, surfaceTint = Color.Transparent,
+        primaryContainer = highlight, onPrimaryContainer = onHighlight, secondaryContainer = surfaceSunken,
+        onSecondaryContainer = ink, errorContainer = error, onErrorContainer = onError, inversePrimary = primaryShadow,
         outline = outline, outlineVariant = inkFaint, error = error, onError = onError, scrim = scrim,
         inverseSurface = ink, inverseOnSurface = background,
     )

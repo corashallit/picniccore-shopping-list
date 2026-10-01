@@ -1,0 +1,88 @@
+{
+ "id": "resp_0911ec540c1bd0c0016abe7bd6192487d29f3fee163b26549b",
+ "object": "response",
+ "created_at": 1790868438,
+ "status": "completed",
+ "error": null,
+ "incomplete_details": null,
+ "max_output_tokens": 12000,
+ "model": "gpt-5.6-terra",
+ "output": [
+  {
+   "id": "rs_0911ec540c1bd0c0016abe7bd6c90c87d29479aa865f3f8df0",
+   "type": "reasoning",
+   "content": [],
+   "summary": []
+  },
+  {
+   "id": "ws_0911ec540c1bd0c0016abe7bd7e83c87d2be8068fec91ef734",
+   "type": "web_search_call",
+   "status": "completed",
+   "action": {
+    "type": "search",
+    "queries": [
+     "kuku sabzi recipe ingredients serves 4"
+    ],
+    "query": "kuku sabzi recipe ingredients serves 4"
+   }
+  },
+  {
+   "id": "rs_0911ec540c1bd0c0016abe7bdbcd5487d2b309a60675246949",
+   "type": "reasoning",
+   "content": [],
+   "summary": []
+  },
+  {
+   "id": "msg_0911ec540c1bd0c0016abe7bdda29c87d2b8aefba1cf323f63",
+   "type": "message",
+   "status": "completed",
+   "content": [
+    {
+     "type": "output_text",
+     "annotations": [],
+     "text": "{\"items\":[{\"name\":\"Flat-leaf parsley\",\"quantity\":\"2 bunches\",\"note\":null,\"aisle_id\":\"produce\",\"icon\":\"parsley\",\"icon_fit\":\"exact\"},{\"name\":\"Cilantro\",\"quantity\":\"1 bunch\",\"note\":null,\"aisle_id\":\"produce\",\"icon\":\"cilantro\",\"icon_fit\":\"exact\"},{\"name\":\"Fresh dill\",\"quantity\":\"1 bunch\",\"note\":null,\"aisle_id\":\"produce\",\"icon\":\"fresh_herbs\",\"icon_fit\":\"approximate\"},{\"name\":\"Green onions\",\"quantity\":\"1 bunch\",\"note\":null,\"aisle_id\":\"produce\",\"icon\":\"green_onion\",\"icon_fit\":\"exact\"},{\"name\":\"Baby spinach\",\"quantity\":\"142 g\",\"note\":null,\"aisle_id\":\"produce\",\"icon\":\"spinach\",\"icon_fit\":\"exact\"},{\"name\":\"Eggs\",\"quantity\":\"6\",\"note\":null,\"aisle_id\":\"dairy-eggs\",\"icon\":\"eggs\",\"icon_fit\":\"exact\"},{\"name\":\"Walnuts\",\"quantity\":\"100 g\",\"note\":\"Shelled\",\"aisle_id\":\"bulk-natural-foods\",\"icon\":\"nuts\",\"icon_fit\":\"approximate\"},{\"name\":\"Dried barberries\",\"quantity\":\"100 g\",\"note\":\"Check Persian or Middle Eastern section\",\"aisle_id\":\"bulk-natural-foods\",\"icon\":\"cat_international\",\"icon_fit\":\"approximate\"},{\"name\":\"Dried fenugreek leaves\",\"quantity\":\"1 small pack\",\"note\":\"Check Persian or Middle Eastern section\",\"aisle_id\":\"bulk-natural-foods\",\"icon\":\"dried_herbs\",\"icon_fit\":\"approximate\"},{\"name\":\"All-purpose flour\",\"quantity\":\"1 kg\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"flour\",\"icon_fit\":\"exact\"},{\"name\":\"Vegetable oil\",\"quantity\":\"1 L\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"vegetable_oil\",\"icon_fit\":\"exact\"},{\"name\":\"Turmeric\",\"quantity\":\"1 jar\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"spice_jar\",\"icon_fit\":\"approximate\"},{\"name\":\"Salt\",\"quantity\":\"1 container\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"salt\",\"icon_fit\":\"exact\"},{\"name\":\"Black pepper\",\"quantity\":\"1 jar\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"black_pepper\",\"icon_fit\":\"exact\"}],\"message\":\"Added ingredients for kuku sabzi for 4; your butter wasn’t needed.\"}"
+    }
+   ],
+   "phase": "final_answer",
+   "role": "assistant"
+  }
+ ],
+ "reasoning": {
+  "context": "all_turns",
+  "effort": "low",
+  "mode": "standard",
+  "summary": null
+ },
+ "service_tier": "default",
+ "store": false,
+ "usage": {
+  "input_tokens": 12875,
+  "input_tokens_details": {
+   "cache_write_tokens": 0,
+   "cached_tokens": 6187
+  },
+  "output_tokens": 807,
+  "output_tokens_details": {
+   "reasoning_tokens": 268
+  },
+  "total_tokens": 13682
+ },
+ "tool_usage": {
+  "image_gen": {
+   "input_tokens": 0,
+   "input_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "output_tokens": 0,
+   "output_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "total_tokens": 0
+  },
+  "web_search": {
+   "num_requests": 1
+  }
+ }
+}

@@ -19,12 +19,12 @@ sealed class LlmError(
     /** True when retrying later can help (offer "Try again"). */
     open val retryable: Boolean get() = false
 
-    /** No token configured, or the base URL is not a valid https URL. */
+    /** No token configured, or the base URL fails LlmConfig.normalizeBaseUrl (no request was sent). */
     class NotConfigured(val reason: String, override val requestId: String? = null) : LlmError("Not configured: $reason") {
         override val friendlyMessage: String get() = "Add your API key or proxy token in Settings first."
     }
 
-    /** 401/403: bad or revoked key/token, region or project not allowed. */
+    /** 401/403 (except the proxy's 403 model_not_allowed, which is BadResponse): bad or revoked key/token, region or project not allowed. */
     class Unauthorized(val status: Int, override val requestId: String? = null) : LlmError("HTTP $status unauthorized") {
         override val friendlyMessage: String get() = "The API key or token was not accepted. Check it in Settings."
     }
@@ -46,15 +46,16 @@ sealed class LlmError(
         override val retryable: Boolean get() = true
     }
 
-    /** Call exceeded its timeout (ingest 120 s, transcribe 60 s, image 120 s). */
+    /** Call exceeded its timeout (LlmTimeouts: ingest 120 s, transcribe 60 s, image 120 s). */
     class Timeout(override val requestId: String? = null) : LlmError("Timed out") {
         override val friendlyMessage: String get() = "That took too long. Try again, or try a shorter request."
         override val retryable: Boolean get() = true
     }
 
     /**
-     * 400/404/other 4xx, status "incomplete", unparsable or schema-violating output.
-     * [detail] is for logs; model_not_found gets its own friendly text.
+     * 400/404/other 4xx, status "incomplete", unparsable or schema-violating output, and the proxy's
+     * own fatal 5xx codes. [detail] is for logs; model_not_found, a wrong address and a broken proxy
+     * get their own friendly text.
      */
     class BadResponse(
         val detail: String,
@@ -63,11 +64,29 @@ sealed class LlmError(
         override val requestId: String? = null,
     ) : LlmError("Bad response: $detail (status=$httpStatus code=$code)") {
         override val friendlyMessage: String
-            get() = if (code == "model_not_found") {
-                "That model isn't available to this key. Check the model names in Settings."
-            } else {
-                "The assistant's answer couldn't be used. Try again or rephrase."
+            get() = when (code) {
+                // Models are fixed in ModelDefaults (no model settings): the key/proxy lacks access.
+                "model_not_found", "model_not_allowed" ->
+                    "This key or proxy can't use the AI model the app needs. Ask whoever set it up."
+                ENDPOINT_NOT_FOUND -> "That server address doesn't look like an OpenAI-compatible API. Check the base URL in Settings."
+                PROXY_UPSTREAM_AUTH_FAILED, PROXY_MISCONFIGURED ->
+                    "The proxy can't reach OpenAI right now. Ask whoever runs it."
+                else -> "The assistant's answer couldn't be used. Try again or rephrase."
             }
+
+        /** Answer-level problems (incomplete, unparsable, no message) often succeed on a second try; 4xx do not. */
+        override val retryable: Boolean get() = httpStatus == null
+    }
+
+    companion object {
+        /** BadResponse.code for an HTTP 404 on a path the server doesn't serve (usually a wrong base URL). */
+        const val ENDPOINT_NOT_FOUND: String = "endpoint_not_found"
+
+        /** BadResponse.code: the proxy's own OpenAI key was rejected (HTTP 502). Not retryable. */
+        const val PROXY_UPSTREAM_AUTH_FAILED: String = "upstream_auth_failed"
+
+        /** BadResponse.code: the proxy's configuration is invalid (HTTP 500). Not retryable. */
+        const val PROXY_MISCONFIGURED: String = "proxy_misconfigured"
     }
 
     /** The model refused, or image moderation blocked the request (moderation_blocked). */

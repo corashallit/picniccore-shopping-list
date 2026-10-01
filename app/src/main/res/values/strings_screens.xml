@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Screen strings (app-screens). Theme-layer strings live in strings.xml (app-shell).
+         Messages that ViewModels produce (errors, "Didn't catch that") come from code:
+         ui/common/ScreenText.kt and core's LlmError.friendlyMessage. -->
+
+    <!-- Shared -->
+    <string name="screens_back">Back</string>
+    <string name="screens_cancel">Cancel</string>
+    <string name="screens_close">Close</string>
+
+    <!-- List -->
+    <string name="list_add">Add</string>
+    <string name="list_switch_lists">Your lists</string>
+    <string name="list_open_aisles">Store aisles</string>
+    <string name="list_open_settings">Settings</string>
+    <string name="list_progress">%1$d of %2$d in the basket</string>
+    <string name="list_section_unsorted">Unsorted</string>
+    <string name="list_section_checked">In the basket</string>
+    <string name="list_empty_title">The basket is empty</string>
+    <string name="list_empty_body">Write, snap or say what you need. It gets sorted into your store\'s aisles.</string>
+    <string name="list_empty_action">Add items</string>
+    <string name="list_gesture_hint">Tap to tick off · hold to edit · swipe to remove</string>
+    <string name="list_row_checked">in the basket</string>
+    <string name="list_row_unchecked">still to get</string>
+    <string name="list_row_edit">Edit</string>
+    <string name="list_row_remove">Remove</string>
+    <string name="list_removed">Removed %1$s</string>
+    <string name="list_undo">Undo</string>
+    <plurals name="list_clear_checked">
+        <item quantity="one">Clear %1$d checked item</item>
+        <item quantity="other">Clear %1$d checked items</item>
+    </plurals>
+    <plurals name="list_cleared">
+        <item quantity="one">Cleared %1$d item</item>
+        <item quantity="other">Cleared %1$d items</item>
+    </plurals>
+    <plurals name="list_added">
+        <item quantity="one">Added %1$d item</item>
+        <item quantity="other">Added %1$d items</item>
+    </plurals>
+    <plurals name="list_sort_failed">
+        <item quantity="one">%1$s %2$d item is waiting in Unsorted.</item>
+        <item quantity="other">%1$s %2$d items are waiting in Unsorted.</item>
+    </plurals>
+
+    <!-- List switcher -->
+    <string name="lists_title">Your lists</string>
+    <string name="lists_all_done">All picked up</string>
+    <plurals name="lists_remaining">
+        <item quantity="one">%1$d to get</item>
+        <item quantity="other">%1$d to get</item>
+    </plurals>
+    <string name="lists_rename">Rename %1$s</string>
+    <string name="lists_rename_save">Save the new name</string>
+    <string name="lists_delete">Delete %1$s</string>
+    <string name="lists_delete_confirm_empty">Delete \"%1$s\"?</string>
+    <plurals name="lists_delete_confirm">
+        <item quantity="one">Delete \"%1$s\" and its %2$d item?</item>
+        <item quantity="other">Delete \"%1$s\" and its %2$d items?</item>
+    </plurals>
+    <string name="lists_delete_yes">Delete</string>
+    <string name="lists_delete_no">Keep it</string>
+    <string name="lists_new_label">New list</string>
+    <string name="lists_new_placeholder">Costco run, party snacks…</string>
+    <string name="lists_new_action">Start the new list</string>
+
+    <!-- Edit sheet -->
+    <string name="edit_title">Edit item</string>
+    <string name="edit_name">Name</string>
+    <string name="edit_quantity">Amount</string>
+    <string name="edit_quantity_placeholder">2, 500 g, 4 L</string>
+    <string name="edit_note">Note</string>
+    <string name="edit_note_placeholder">ripe ones, on sale…</string>
+    <string name="edit_aisle">Aisle</string>
+    <string name="edit_aisle_hint">Moving it teaches the app where this lives next time.</string>
+    <string name="edit_aisle_unsorted">Unsorted</string>
+    <string name="edit_icon">Icon</string>
+    <string name="edit_all_icons">All icons</string>
+    <string name="edit_icons_title">An icon for %1$s</string>
+    <string name="edit_draw">Draw a new icon</string>
+    <string name="edit_drawing">Drawing…</string>
+    <string name="edit_draw_hint">Draws a one-of-a-kind icon for \"%1$s\". It takes about 10 seconds and costs about 1.5¢ (US).</string>
+    <string name="edit_save">Save</string>
+    <string name="edit_remove">Remove</string>
+
+    <!-- Add sheet -->
+    <string name="add_title">Add to your list</string>
+    <string name="add_title_preview">Here\'s what I found</string>
+    <string name="add_mode_write">Write</string>
+    <string name="add_mode_snap">Snap</string>
+    <string name="add_mode_speak">Speak</string>
+    <string name="add_write_placeholder">milk, 2 lemons, eggs…\nor \"ingredients for pancakes from scratch\"</string>
+    <string name="add_write_ai">Sort it out</string>
+    <string name="add_write_typed">Add as typed</string>
+    <string name="add_write_hint">\"Sort it out\" can look up recipes on the web and puts everything in your aisles. \"Add as typed\" adds each line as it is.</string>
+    <string name="add_snap_camera">Take a photo</string>
+    <string name="add_snap_gallery">Choose a photo</string>
+    <string name="add_snap_hint">A clear, well-lit photo of a handwritten list works best.</string>
+    <string name="add_speak_start">Tap to speak</string>
+    <string name="add_speak_again">Record again</string>
+    <string name="add_speak_hint">Say your list out loud, like \"milk, two lemons and stuff for tacos\".</string>
+    <string name="add_speak_listening">Listening…</string>
+    <string name="add_speak_done">Done</string>
+    <string name="add_speak_limit">Recordings stop by themselves after 5 minutes.</string>
+    <string name="add_busy_transcribing">Transcribing…</string>
+    <string name="add_busy_photo">Reading your handwriting…</string>
+    <string name="add_busy_recipe">Looking up a recipe…</string>
+    <string name="add_busy_voice">Turning that into a list…</string>
+    <string name="add_busy_list">Sorting your list into aisles…</string>
+    <string name="add_busy_slow">Still working. A recipe with a web search can take up to a minute.</string>
+    <string name="add_retry">Try again</string>
+    <string name="add_open_settings">Open Settings</string>
+    <string name="add_plain_lines">Add as plain lines</string>
+    <string name="add_transcript_label">You said</string>
+    <string name="add_transcript_quoted">\"%1$s\"</string>
+    <string name="add_transcript_edit">Fix the words</string>
+    <string name="add_preview_plain_note">Added line by line, without AI. Items without an aisle get sorted in the background.</string>
+    <string name="add_preview_empty">Nothing new to add.</string>
+    <string name="add_preview_keep">will be added</string>
+    <string name="add_preview_skip">left out</string>
+    <string name="add_preview_skipped">Already on your list: %1$s</string>
+    <string name="add_preview_sources">Sources</string>
+    <string name="add_start_over">Start over</string>
+    <plurals name="add_commit">
+        <item quantity="one">Add %1$d item</item>
+        <item quantity="other">Add %1$d items</item>
+    </plurals>
+
+    <!-- Aisles -->
+    <string name="aisles_title">Store aisles</string>
+    <string name="aisles_store_card">Your store</string>
+    <string name="aisles_store_name">Store name</string>
+    <string name="aisles_text_label">Aisles, in walking order</string>
+    <string name="aisles_text_placeholder">Produce\nBakery\nAisle 2 - Baking &amp; spices</string>
+    <string name="aisles_text_hint">One aisle per line, in the order you walk through the store. Lines starting with # are notes.</string>
+    <plurals name="aisles_preview_title">
+        <item quantity="one">%1$d aisle</item>
+        <item quantity="other">%1$d aisles</item>
+    </plurals>
+    <string name="aisles_preview_empty">No aisles yet: everything goes to Unsorted.</string>
+    <plurals name="aisles_preview_detail">
+        <item quantity="one">%1$s · %2$d item</item>
+        <item quantity="other">%1$s · %2$d items</item>
+    </plurals>
+    <string name="aisles_save">Save aisles</string>
+    <string name="aisles_resort">Re-sort my list</string>
+    <string name="aisles_resort_hint">Re-sorting picks a basket for each aisle and places items that have no aisle.</string>
+    <plurals name="aisles_resort_hint_count">
+        <item quantity="one">Re-sorting picks a basket for each aisle and places the %1$d item that has no aisle.</item>
+        <item quantity="other">Re-sorting picks a basket for each aisle and places the %1$d items that have no aisle.</item>
+    </plurals>
+    <string name="aisles_syncing">Sorting your list into the aisles…</string>
+    <string name="aisles_save_failed">Couldn\'t save. Try again.</string>
+    <string name="aisles_report_nothing">Aisles saved. Everything is already in place.</string>
+    <plurals name="aisles_report_sorted">
+        <item quantity="one">Sorted %1$d item</item>
+        <item quantity="other">Sorted %1$d items</item>
+    </plurals>
+    <plurals name="aisles_report_left">
+        <item quantity="one">%1$d item left in Unsorted.</item>
+        <item quantity="other">%1$d items left in Unsorted.</item>
+    </plurals>
+    <string name="aisles_report_both">%1$s · %2$s</string>
+    <string name="aisles_leave_title">Save your aisle changes?</string>
+    <string name="aisles_leave_save">Save</string>
+    <string name="aisles_leave_discard">Discard</string>
+    <string name="aisles_leave_keep">Keep editing</string>
+
+    <!-- Settings (amendment A1: connection and icons only, nothing about models) -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_connection">Connection</string>
+    <string name="settings_connection_intro">Picnic List uses OpenAI to sort your items and look up recipes. Use your own OpenAI key, or the address and access token Cora gave you.</string>
+    <string name="settings_base_url">Server address</string>
+    <string name="settings_base_url_default">OpenAI directly, for your own API key.</string>
+    <string name="settings_base_url_proxy">A proxy (like Cora\'s) or another OpenAI-compatible server.</string>
+    <string name="settings_use_openai">Use OpenAI directly</string>
+    <string name="settings_token">API key or access token</string>
+    <string name="settings_token_placeholder">sk-… or pk_…</string>
+    <string name="settings_token_saved_placeholder">Saved: %1$s</string>
+    <string name="settings_token_saved">Saved on this phone, encrypted. Type a new one to replace it.</string>
+    <string name="settings_token_missing">Not set yet: adding items with AI needs it.</string>
+    <string name="settings_token_show">Show</string>
+    <string name="settings_token_hide">Hide</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_remove_token">Remove key</string>
+    <string name="settings_test">Test connection</string>
+    <string name="settings_test_running">Checking…</string>
+    <string name="settings_test_ok">Connected · %1$d ms</string>
+    <string name="settings_test_failed">Couldn\'t connect. %1$s</string>
+    <string name="settings_icons">Icons</string>
+    <string name="settings_draw_icons">Draw new icons with AI</string>
+    <string name="settings_draw_icons_note">When the icon library has nothing that fits, the app draws one. Drawing a new icon takes about 10 s and costs about 1.5¢ (US).</string>
+    <string name="settings_help_title">Own key or Cora\'s proxy?</string>
+    <string name="settings_help_own_key">Your own OpenAI key: keep the address at https://api.openai.com/v1 and paste the key (it starts with sk-). OpenAI bills you directly.</string>
+    <string name="settings_help_proxy">Cora\'s proxy: set the address to https://picnic.cora.earth/v1 and paste the access token Cora gave you (it starts with pk_). No OpenAI account needed.</string>
+    <string name="settings_help_privacy">The key or token stays encrypted on this phone and is only sent to the address above. Text, photos and recordings go there when you ask the app to sort or read them. Item names also go there in the background, to sort them into aisles and to pick or draw their icons (you can turn drawing off above).</string>
+    <string name="settings_version">%1$s %2$s</string>
+</resources>

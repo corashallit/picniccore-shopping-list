@@ -16,11 +16,19 @@ const val STATE_SCHEMA_VERSION: Int = 1
 @Serializable
 enum class ItemSource { TYPED, AI_TEXT, PHOTO, VOICE }
 
-/** How well [GroceryItem.icon] depicts the item. APPROXIMATE items are candidates for a live-drawn icon. */
+/**
+ * How well [GroceryItem.icon] depicts the item (the icon cascade, docs/ARCHITECTURE.md §8.2). Persisted by serial name.
+ * - EXACT: the catalog icon depicts this item (local match, learned override, ingest "exact", or IconDecider match).
+ * - APPROXIMATE: only a near neighbour / category icon fits (ingest "approximate", or IconDecider "none").
+ *   Candidate for a live-drawn bespoke icon (step 3).
+ * - PENDING: no local match yet and the IconDecider (step 2) has not answered (offline, or still running).
+ *   [GroceryItem.icon] is IconCatalog.DEFAULT_ICON meanwhile. IconRepository.resumePending() retries these.
+ */
 @Serializable
 enum class IconFit {
     @SerialName("exact") EXACT,
     @SerialName("approximate") APPROXIMATE,
+    @SerialName("pending") PENDING,
 }
 
 @Serializable
@@ -35,7 +43,7 @@ data class GroceryItem(
     val note: String? = null,
     /** Aisle id ([Aisle.id]); null means Unsorted. An id that is not in the current aisle list also renders as Unsorted. */
     val aisleId: String? = null,
-    /** Icon catalog key (always a valid key; see IconCatalog.sanitize). */
+    /** Icon catalog key (always a valid key; see IconCatalog.sanitize). DEFAULT_ICON while iconFit == PENDING. */
     val icon: String,
     val iconFit: IconFit = IconFit.EXACT,
     /** Id of a bespoke icon drawn on this device (IconRepository), or null. */
@@ -68,6 +76,9 @@ data class StoreProfile(
     val aisleBaskets: Map<String, BasketKind> = emptyMap(),
 )
 
+/** Result of icon resolution (local match, IconDecider, ingest): what to store in GroceryItem.icon / iconFit. */
+data class ResolvedIcon(val icon: String, val fit: IconFit)
+
 /** A learned "this item lives in that aisle" fact, recorded when the user moves an item by hand. */
 @Serializable
 data class Correction(
@@ -78,14 +89,30 @@ data class Correction(
     val at: Long,
 )
 
+/**
+ * A learned "this item uses that icon" fact, recorded when the user picks a catalog icon by hand
+ * (step 1 of the icon cascade: it beats the catalog match, the ingest model's choice and the IconDecider).
+ */
+@Serializable
+data class IconOverride(
+    /** normalizeName(item name). */
+    val name: String,
+    /** Catalog icon key. */
+    val icon: String,
+    /** Epoch millis; newest wins, the list is capped (see StateOps.MAX_ICON_OVERRIDES). */
+    val at: Long,
+)
+
 @Serializable
 data class AppState(
     val version: Int = STATE_SCHEMA_VERSION,
     val lists: List<GroceryList>,
     val currentListId: String,
     val store: StoreProfile = StoreProfile(),
-    /** Oldest first. */
+    /** Learned aisle corrections, oldest first. */
     val corrections: List<Correction> = emptyList(),
+    /** Learned icon choices, oldest first. */
+    val iconOverrides: List<IconOverride> = emptyList(),
 )
 
 /** One parsed line of [StoreProfile.aislesText]. Derived, never persisted on its own. */
@@ -109,9 +136,9 @@ object SectionIds {
 const val UNSORTED_WIRE_ID: String = "unsorted"
 
 /**
- * What to draw for an item: a catalog key plus an optional bespoke icon id.
- * Rendering order (theme layer, ItemIcon): custom file -> bundled asset for key ->
- * bundled asset for the key's category fallback -> placeholder art.
+ * What to draw for an item: a catalog key plus an optional bespoke icon id. Build it with
+ * IconCatalog.displayRef(item, busy). Rendering order (theme layer, ItemIcon via IconImages):
+ * custom file -> bundled asset for key -> bundled asset for the key's category fallback -> placeholder art.
  */
 @Serializable
 data class IconRef(val key: String, val customIconId: String? = null)

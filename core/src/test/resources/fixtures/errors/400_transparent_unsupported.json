@@ -1,0 +1,8 @@
+{
+ "error": {
+  "message": "Transparent background is not supported for this model.",
+  "type": "image_generation_user_error",
+  "param": "background",
+  "code": "invalid_value"
+ }
+}

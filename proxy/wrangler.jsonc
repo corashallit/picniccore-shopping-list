@@ -1,0 +1,47 @@
+// Cloudflare Worker config for the Picnic List proxy. Setup and operations: docs/PROXY.md.
+// Placeholders: <KV_NAMESPACE_ID> (from `npx wrangler kv namespace create TOKENS`) and the custom domain.
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "picnic-proxy",
+	"main": "src/worker.js",
+	"compatibility_date": "2026-09-01",
+	// Lets the Worker cancel the upstream OpenAI call when the device disconnects.
+	"compatibility_flags": ["enable_request_signal"],
+
+	// Served only on the custom domain (Cloudflare creates the DNS record and certificate on deploy).
+	// The app's base URL is then https://picnic.cora.earth/v1
+	"workers_dev": false,
+	"preview_urls": false,
+	"routes": [{ "pattern": "picnic.cora.earth", "custom_domain": true }],
+
+	// Secrets (never in this file): `npx wrangler secret put OPENAI_API_KEY`, optionally ACCESS_TOKEN_HASHES
+	// and MODEL_MAP. Local development reads them from .dev.vars (gitignored; see .dev.vars.example).
+	// No "secrets": {"required": [...]} block on purpose: it makes `wrangler dev` load ONLY the listed keys
+	// from .dev.vars, which drops the optional ones. A missing OPENAI_API_KEY fails closed instead
+	// (every request 500 proxy_misconfigured, /healthz 500, logged).
+
+	"vars": {
+		// Upstream model ids (after MODEL_MAP). Defaults to core's ModelDefaults when unset.
+		"ALLOWED_MODELS": "gpt-5.6-terra,gpt-6-luna,gpt-transcribe,gpt-image-2.5-flare",
+		// Requested id -> upstream id, applied before ALLOWED_MODELS. One step, exact ids. Example:
+		// "MODEL_MAP": { "gpt-5.6-terra": "gpt-6.2-terra" },
+		"MODEL_MAP": {},
+		"ALLOWED_TOOLS": "web_search",
+		"MAX_OUTPUT_TOKENS": "16000"
+	},
+
+	// Device tokens: key = SHA-256 hex of the token, value = {"name","created","disabled"}.
+	// Remove this block if you only use the ACCESS_TOKEN_HASHES secret.
+	"kv_namespaces": [{ "binding": "TOKENS", "id": "<KV_NAMESPACE_ID>" }],
+
+	// Optional per-device brake (per Cloudflare location, eventually consistent). The real spend cap is
+	// the OpenAI project's hard spend limit. namespace_id is any integer unique within your account.
+	"ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "4711", "simple": { "limit": 60, "period": 60 } }],
+
+	// Workers Logs: one JSON line per request (route, status, latency, device name, model, request id).
+	// Bodies, tokens and keys are never logged.
+	"observability": { "enabled": true, "head_sampling_rate": 1 }
+
+	// On the Workers Paid plan, large uploads have more CPU headroom with e.g.:
+	// "limits": { "cpu_ms": 30000 }
+}

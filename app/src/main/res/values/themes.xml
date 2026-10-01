@@ -1,6 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Compose draws everything; the window theme only sets the pre-Compose background. -->
-    <style name="Theme.Picnic" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/picnic_dusk</item>
+    <!-- Compose draws everything; the window theme only sets the pre-Compose ground (no white flash).
+         Bar colours/icons are set by enableEdgeToEdge() in MainActivity. -->
+    <style name="Theme.Picnic" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/picnic_ground</item>
+    </style>
+
+    <!-- Launch theme (androidx core-splashscreen, consistent on API 26+). installSplashScreen()
+         switches to postSplashScreenTheme before the first frame. -->
+    <style name="Theme.Picnic.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/picnic_ground</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.Picnic</item>
     </style>
 </resources>

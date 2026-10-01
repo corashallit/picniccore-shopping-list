@@ -4,8 +4,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- No CAMERA permission: we use the system camera via ACTION_IMAGE_CAPTURE (TakePicture). -->
-    <!-- Mic is optional so devices without one can still install. -->
+    <!-- No CAMERA permission: we use the system camera via ACTION_IMAGE_CAPTURE (TakePicture).
+         Declaring it without holding it would make ACTION_IMAGE_CAPTURE throw SecurityException. -->
+    <!-- Camera and mic are optional so devices without them can still install (Play filtering). -->
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -23,6 +24,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.Picnic"
@@ -31,6 +33,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:theme="@style/Theme.Picnic.Starting"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

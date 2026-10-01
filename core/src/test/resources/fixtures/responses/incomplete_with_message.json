@@ -1,0 +1,66 @@
+{
+ "id": "resp_00b5d1627948c6e2016abe799c9bec87d2be8354cbc7e72f06",
+ "object": "response",
+ "created_at": 1790867868,
+ "status": "incomplete",
+ "error": null,
+ "incomplete_details": {
+  "reason": "max_output_tokens"
+ },
+ "max_output_tokens": 12000,
+ "model": "gpt-5.6-terra",
+ "output": [
+  {
+   "id": "msg_00b5d1627948c6e2016abe799d5ae887d2b3b76c4f705534a1",
+   "type": "message",
+   "status": "incomplete",
+   "content": [
+    {
+     "type": "output_text",
+     "annotations": [],
+     "text": "{\"items\":[{\"name\":\"All-purpose flour\",\"quantity\":\"500 g\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"flour\",\""
+    }
+   ],
+   "phase": "final_answer",
+   "role": "assistant"
+  }
+ ],
+ "reasoning": {
+  "context": "all_turns",
+  "effort": "low",
+  "mode": "standard",
+  "summary": null
+ },
+ "service_tier": "default",
+ "store": false,
+ "usage": {
+  "input_tokens": 6483,
+  "input_tokens_details": {
+   "cache_write_tokens": 6112,
+   "cached_tokens": 0
+  },
+  "output_tokens": 249,
+  "output_tokens_details": {
+   "reasoning_tokens": 0
+  },
+  "total_tokens": 6732
+ },
+ "tool_usage": {
+  "image_gen": {
+   "input_tokens": 0,
+   "input_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "output_tokens": 0,
+   "output_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "total_tokens": 0
+  },
+  "web_search": {
+   "num_requests": 0
+  }
+ }
+}

@@ -14,19 +14,29 @@ import earth.cora.picnic.core.model.ItemSource
  */
 interface GroceryAssistant {
     /**
-     * One Responses API call to the smart model with a strict JSON schema. Text input may use
-     * web_search (model decides; only if LlmConfig.webSearch). Post-processing is already applied
-     * to the result: learned corrections override aisle_id, unknown/"unsorted" aisle -> null,
-     * invalid icon -> IconCatalog.DEFAULT_ICON, duplicates (vs context.existingNames and within
-     * the answer) removed and reported in [IngestResult.skippedDuplicates].
+     * One Responses API call to ModelDefaults.SMART with a strict JSON schema. Text and transcript
+     * input may use web_search (the model decides; ModelDefaults.WEB_SEARCH). Post-processing is
+     * already applied to the result: learned corrections override aisle_id, unknown/"unsorted"
+     * aisle -> null, learned icon overrides replace icon (fit EXACT), "exact" on a *_generic key holds
+     * only when the catalog lists the name for it, a model "approximate" becomes EXACT when IconCatalog.matchExact knows the name
+     * (curated key, label or alias; no head-noun guess), an invalid icon ->
+     * IconCatalog.DEFAULT_ICON + APPROXIMATE, duplicates (vs context.existingNames and within the
+     * answer) removed and reported in [IngestResult.skippedDuplicates]. The model's icon/icon_fit
+     * counts as step 2 of the icon cascade for these items. Blank input returns an empty result
+     * without a request. Sources are capped at 8 (cited and opened pages first).
      */
     suspend fun ingest(input: IngestInput, context: IngestContext): IngestResult
 
-    /** /audio/transcriptions with the transcription model. Empty text means "nothing heard" (not an error). */
+    /**
+     * /audio/transcriptions with ModelDefaults.TRANSCRIBE. Empty text means "nothing heard" (not an error).
+     * [AudioClip.fileName] must end in a format the API decodes by extension (m4a, mp4, mp3, wav, ogg,
+     * webm, flac); anything else (.aac, .3gp, no extension) -> LlmError.BadResponse(code "unsupported_audio")
+     * without a request.
+     */
     suspend fun transcribe(clip: AudioClip, keywords: List<String> = emptyList()): Transcript
 
     /**
-     * Fast model, no tools. Returns item id -> aisle id (null = unsorted) for EVERY input id.
+     * ModelDefaults.FAST, no tools. Returns item id -> aisle id (null = unsorted) for EVERY input id.
      * Corrections are applied client-side first (those items are not sent). Batches of <= 40 items.
      */
     suspend fun recategorize(
@@ -35,13 +45,17 @@ interface GroceryAssistant {
         corrections: List<Correction>,
     ): Map<String, String?>
 
-    /** Fast model, no tools. Returns a basket kind for every aisle id in [aisles]. */
+    /** ModelDefaults.FAST, no tools. Returns a basket kind for every aisle id in [aisles] (may omit some on a sloppy answer). */
     suspend fun assignBaskets(aisles: List<Aisle>): Map<String, BasketKind>
 
-    /** /images/edits with the image model and the style reference sheet. Returns the raw image (webp, 1024 px, alpha). */
+    /**
+     * Icon cascade step 3: /images/edits with ModelDefaults.IMAGE and the bundled style reference sheet.
+     * Returns the raw image (webp, 1024 px, alpha); the app trims and downsizes it to 192 px.
+     * Image moderation (moderation_blocked) -> LlmError.Refusal.
+     */
     suspend fun drawIcon(request: IconDrawRequest): DrawnIcon
 
-    /** GET /models/{smartModel}: verifies base URL + token + model access. */
+    /** GET /models/{ModelDefaults.SMART.id}: verifies base URL + token + model access in one free call. */
     suspend fun testConnection(): ConnectionCheck
 }
 
@@ -65,7 +79,19 @@ data class IngestContext(
     val corrections: List<Correction>,
     /** Display names of the list's UNCHECKED items (for dedupe and the prompt). */
     val existingNames: List<String>,
-)
+    /** Learned icon choices: normalizeName(item) -> catalog key (applied client-side, not sent). */
+    val iconOverrides: Map<String, String> = emptyMap(),
+    /**
+     * The app's UI language, in English ("English", "French"). The model answers in the language the
+     * user wrote in and falls back to this one when a request is too short to tell ("Ricardo's pouding
+     * chômeur" alone). The app is English-only today; pass the UI language once it is localized.
+     */
+    val appLanguage: String = DEFAULT_APP_LANGUAGE,
+) {
+    companion object {
+        const val DEFAULT_APP_LANGUAGE: String = "English"
+    }
+}
 
 /** One item the model proposed, after client-side post-processing. */
 data class ProposedItem(
@@ -76,6 +102,7 @@ data class ProposedItem(
     val aisleId: String?,
     /** Always a valid catalog key. */
     val icon: String,
+    /** EXACT / APPROXIMATE from the model; OfflineParser may also produce PENDING. */
     val iconFit: IconFit,
     /** True when a learned correction decided the aisle. */
     val aisleFromCorrection: Boolean = false,
@@ -102,6 +129,17 @@ data class CallMeta(
     val latencyMs: Long,
     /** Billable web searches (tool_usage.web_search.num_requests). */
     val webSearches: Int = 0,
+    /** Token usage of /responses calls (for logs and the developer CLI), when reported. */
+    val usage: TokenUsage? = null,
+)
+
+/** `usage` of a /responses call. cachedTokens > 0 means the prompt-cache prefix was reused. */
+data class TokenUsage(
+    val inputTokens: Int,
+    val cachedTokens: Int,
+    val cacheWriteTokens: Int,
+    val outputTokens: Int,
+    val reasoningTokens: Int,
 )
 
 data class IngestResult(
@@ -124,8 +162,12 @@ data class Transcript(val text: String) {
 data class NamedItem(val id: String, val name: String)
 
 class IconDrawRequest(
+    /** Display name of the item ("Gochujang"); the prompt names it. */
     val itemName: String,
-    /** Optional extra description (e.g. the closest catalog icon's drawHint is NOT used: it would bias the drawing). */
+    /**
+     * Optional extra description, e.g. the item's note. The closest catalog icon's drawHint is
+     * deliberately NOT used: it would bias the drawing towards the wrong object.
+     */
     val hint: String? = null,
     /** The bundled style sheet (app: assets/icons/_style_reference.png). */
     val styleReference: ByteArray,

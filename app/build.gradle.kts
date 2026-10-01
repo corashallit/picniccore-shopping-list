@@ -8,7 +8,7 @@ plugins {
 
 val jvmTargetVersion = libs.versions.jvmTarget.get()
 
-// APK file name: picnic-list-debug.apk instead of app-debug.apk.
+// APK file names: picnic-list-debug.apk / picnic-list-sideload.apk instead of app-*.apk.
 base {
     archivesName.set("picnic-list")
 }
@@ -51,6 +51,17 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // What friends install (CI's APK): the debug build's code and committed signing key, so it
+        // installs over earlier debug APKs, but NOT debuggable. A debuggable app lets anyone with
+        // brief USB access `adb shell run-as` into its files and Keystore key (the stored OpenAI key
+        // or proxy token) or attach a debugger. Not minified: the same bytecode the unit tests cover.
+        create("sideload") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            isJniDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
     }
 
@@ -114,6 +125,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
 
     implementation(platform(libs.androidx.compose.bom))

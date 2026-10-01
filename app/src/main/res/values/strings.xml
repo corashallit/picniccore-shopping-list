@@ -1,3 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- App-shell strings (theme layer accessibility). Screen strings live in strings_screens.xml (app-screens). -->
     <string name="app_name">Picnic List</string>
+
+    <plurals name="theme_aisle_header">
+        <item quantity="one">%1$s, %2$d item</item>
+        <item quantity="other">%1$s, %2$d items</item>
+    </plurals>
+    <string name="theme_state_collapsed">collapsed</string>
+    <string name="theme_state_expanded">expanded</string>
+    <string name="theme_aisle_cleared">All picked up!</string>
+    <string name="theme_aisle_cleared_stamp">CLEAR!</string>
+    <string name="theme_trip_progress">%1$d of %2$d in the basket</string>
+    <string name="theme_switch_on">On</string>
+    <string name="theme_switch_off">Off</string>
 </resources>

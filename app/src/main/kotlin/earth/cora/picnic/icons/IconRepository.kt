@@ -8,27 +8,45 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Bundled + bespoke item icons and the live drawing queue. CONTRACT (docs/ARCHITECTURE.md §8).
- * Production implementation (app-shell): bundled = assets/icons/<key>.webp; bespoke =
- * filesDir/icons/custom/<customIconId>.webp + filesDir/icons/index.json (normalizedName -> id, blocked names).
+ * Device side of the icon cascade (docs/ARCHITECTURE.md §8): bundled icons, bespoke (live-drawn)
+ * icons, the IconDecider batcher (step 2) and the drawing queue (step 3). CROSS-MODULE CONTRACT
+ * between app-shell (implements: AppIconRepository) and app-screens (calls it from ViewModels).
+ *
+ * Storage: bundled = assets/icons/<key>.webp; bespoke = filesDir/icons/custom/<customIconId>.webp +
+ * filesDir/icons/index.json (normalizedName -> customIconId, blocked names, daily counter).
+ * Every method returns immediately, never throws and never blocks adding items; the work runs in
+ * the app scope.
  */
 interface IconRepository {
-    /** normalizeName(item name) values whose bespoke icon is queued or being drawn (rows show a sparkle). */
-    val drawing: StateFlow<Set<String>>
+    /**
+     * normalizeName(item name) values whose icon is being decided (step 2) or drawn (step 3).
+     * Rows pass `normalizeName(item.name) in busy` to IconCatalog.displayRef and show the sparkle.
+     */
+    val busy: StateFlow<Set<String>>
 
     /** True if assets/icons/<key>.webp is bundled. */
     fun isBundled(key: String): Boolean
 
     /**
-     * Call after committing new items. For each item without customIconId: reuse a cached bespoke icon
-     * for its normalized name (attached via StateStore.update { attachCustomIcon(...) }); otherwise, if
-     * iconFit == APPROXIMATE and Settings "Draw new icons" is on and the name isn't blocked, enqueue it.
-     * Returns immediately; never throws.
+     * Run the cascade for items just committed (any source) or renamed in the edit sheet. Per item
+     * without customIconId:
+     * - a cached bespoke icon for its normalized name -> attach it (whatever the fit; [forgetBespoke]
+     *   removes the cache entry when the user picks a catalog icon instead);
+     * - iconFit PENDING -> batch to the IconDecider (debounced ~300 ms, <= 40 names per call)
+     *   -> store.update { applyIconDecisions(...) } -> "none" results continue as APPROXIMATE;
+     * - iconFit APPROXIMATE, "Draw new icons with AI" on, name not blocked, under the daily cap
+     *   -> enqueue a drawing (max 2 concurrent, retried once) -> attachCustomIcon.
      */
-    fun onItemsAdded(items: List<GroceryItem>)
+    fun submit(items: List<GroceryItem>)
 
-    /** Edit sheet "Draw a new icon": always enqueues (even if cached or setting off); result overwrites. */
+    /** App start (MainActivity.onCreate / first list load): submit every PENDING item left from an offline session. */
+    fun resumePending()
+
+    /** Edit sheet "Draw a new icon": always enqueues (ignores the setting, cache and cap); the result overwrites. */
     fun redraw(itemName: String)
+
+    /** The user picked a catalog icon for this name: forget its bespoke icon so it isn't re-attached later. */
+    fun forgetBespoke(itemName: String)
 }
 
 /** Decoded bitmaps for ItemIcon / AisleBasket (provided through LocalIconImages). */
@@ -49,11 +67,12 @@ interface IconImages {
     }
 }
 
-/** Does nothing; for previews and tests. */
-class NoOpIconRepository : IconRepository {
-    private val empty = MutableStateFlow<Set<String>>(emptySet())
-    override val drawing: StateFlow<Set<String>> = empty.asStateFlow()
+/** Does nothing; for previews and tests. [busyNames] lets screenshot tests show the sparkle. */
+class NoOpIconRepository(busyNames: Set<String> = emptySet()) : IconRepository {
+    override val busy: StateFlow<Set<String>> = MutableStateFlow(busyNames).asStateFlow()
     override fun isBundled(key: String): Boolean = false
-    override fun onItemsAdded(items: List<GroceryItem>) = Unit
+    override fun submit(items: List<GroceryItem>) = Unit
+    override fun resumePending() = Unit
     override fun redraw(itemName: String) = Unit
+    override fun forgetBespoke(itemName: String) = Unit
 }

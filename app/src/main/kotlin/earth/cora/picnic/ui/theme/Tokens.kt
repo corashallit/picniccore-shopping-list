@@ -137,7 +137,7 @@ data class PicnicDimens(
 
 @Immutable
 data class PicnicMotion(
-    /** System "remove animations" or the in-app switch: no decorative motion, fades <= 150 ms. */
+    /** System "Remove animations" (animator duration scale 0): no decorative loops, fades <= 150 ms. */
     val reduced: Boolean,
     /** Decorative loops animate "on threes": stepped frames at this rate. */
     val stepFps: Int = 8,
@@ -145,7 +145,9 @@ data class PicnicMotion(
     val mediumMillis: Int = 280,
 )
 
-/* ---------------- Placeholder values (art pass replaces these) ---------------- */
+/* ---------------- Placeholder values (art pass replaces these) ----------------
+ * Text pairs meet WCAG AA (>= 4.5:1): ink/inkSoft on every surface, inkFaint (placeholders) on
+ * surfaceSunken, onPrimary on primary, aisle deep on aisle pastel. TokensContrastTest enforces it. */
 
 private val Rotation = listOf(
     AisleColors(Color(0xFFF04462), Color(0xFFC92A55), Color(0xFFFFD6DE), Color(0xFFB5193C)), // strawberry
@@ -170,9 +172,9 @@ val PlaceholderLightColors = PicnicColors(
     outline = Color(0xFF2A1730),
     ink = Color(0xFF2A1730),
     inkSoft = Color(0xFF5E4466),
-    inkFaint = Color(0xFF8C7A93),
-    primary = Color(0xFFF04462),
-    primaryShadow = Color(0xFFC92A55),
+    inkFaint = Color(0xFF725F7B),
+    primary = Color(0xFFD62F55),
+    primaryShadow = Color(0xFFA8233A),
     onPrimary = Color(0xFFFFFFFF),
     secondary = Color(0xFF6CC9F2),
     onSecondary = Color(0xFF2A1730),

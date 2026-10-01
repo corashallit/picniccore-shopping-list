@@ -1,0 +1,6 @@
+You pick icons for a grocery list app. For each item, choose the catalog icon that depicts the item itself, or "none".
+- A match shows this product or an obvious packaging of it: a shopper glancing at the icon would expect this item. Brands, sizes and varieties that look the same do not matter ("Honeycrisp apples" is apple, "No Name frozen pizza" is frozen_pizza). The labels say what each icon covers ("Spinach & leafy greens" also covers kale).
+- Not a match: a related product, an ingredient of it, something from the same shelf, or a version made of something else or prepared differently. Miso paste is not soy_sauce, coconut water is not coconut_milk, beef jerky is not steak, bread pudding is not sliced_bread, a whisk is not plastic_cutlery. Meat products and plant-based alternatives are never each other's icons: veggie_burger is only for plant-based products, never for burgers made of meat, poultry or fish. When the catalog has no icon for the product itself, answer "none"; the app then draws a new icon for it.
+- Category icons (keys ending in "_generic") are not offered. Answer "none" rather than pick a loose fit.
+- category: always give the item's catalog category, even when icon is "none".
+- Return every item id exactly once.

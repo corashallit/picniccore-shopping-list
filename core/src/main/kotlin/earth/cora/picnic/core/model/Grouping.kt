@@ -49,6 +49,67 @@ object ListGrouping {
      * - collapsed: section id in list.collapsedAisles.
      */
     fun group(list: GroceryList, aisles: List<Aisle>, basketFor: (Aisle) -> BasketKind): GroupedList {
-        TODO("core: ListGrouping.group")
+        val aisleIds = aisles.mapTo(HashSet()) { it.id }
+        // Oldest first; sortedBy is stable, so equal timestamps keep list order.
+        val ordered = list.items.sortedBy { it.addedAt }
+        val bySection = ordered.groupBy { item -> item.aisleId?.takeIf { it in aisleIds } ?: SectionIds.UNSORTED }
+
+        val sections = mutableListOf<AisleSection>()
+        val checkedInWalkingOrder = mutableListOf<GroceryItem>()
+
+        val unsorted = bySection[SectionIds.UNSORTED].orEmpty()
+        val unsortedOpen = unsorted.filterNot { it.checked }
+        checkedInWalkingOrder += unsorted.filter { it.checked }
+        if (unsortedOpen.isNotEmpty()) {
+            sections += AisleSection(
+                id = SectionIds.UNSORTED,
+                kind = SectionKind.UNSORTED,
+                title = UNSORTED_TITLE,
+                aisle = null,
+                position = 0,
+                basket = BasketKind.DEFAULT,
+                items = unsortedOpen,
+                checkedCount = unsorted.size - unsortedOpen.size,
+                collapsed = SectionIds.UNSORTED in list.collapsedAisles,
+            )
+        }
+
+        for (aisle in aisles) {
+            val items = bySection[aisle.id] ?: continue
+            val open = items.filterNot { it.checked }
+            checkedInWalkingOrder += items.filter { it.checked }
+            sections += AisleSection(
+                id = aisle.id,
+                kind = SectionKind.AISLE,
+                title = aisle.name,
+                aisle = aisle,
+                position = aisle.position,
+                basket = basketFor(aisle),
+                items = open,
+                checkedCount = items.size - open.size,
+                collapsed = aisle.id in list.collapsedAisles,
+            )
+        }
+
+        if (checkedInWalkingOrder.isNotEmpty()) {
+            sections += AisleSection(
+                id = SectionIds.CHECKED,
+                kind = SectionKind.CHECKED,
+                title = CHECKED_TITLE,
+                aisle = null,
+                position = 0,
+                basket = BasketKind.DEFAULT,
+                items = checkedInWalkingOrder,
+                checkedCount = 0,
+                collapsed = SectionIds.CHECKED in list.collapsedAisles,
+            )
+        }
+
+        val remaining = list.items.count { !it.checked }
+        return GroupedList(sections = sections, total = list.items.size, remaining = remaining)
     }
+
+    /** Default titles of the special sections (the UI may show its own strings instead). */
+    const val UNSORTED_TITLE: String = "Unsorted"
+    const val CHECKED_TITLE: String = "In the basket"
 }
