@@ -12,7 +12,7 @@ Research this rests on (not in the repo): the OpenAI brief (`research/openai_api
 
 ## 1. What we're building
 
-An Android grocery list for one friend of Cora's, in Ontario, Canada. It is sideloaded first; Play internal testing may come later, so the build stays Play-compliant (targetSdk 36, minimal permissions, no secrets in the APK).
+An Android grocery list for one friend of Cora's, in Ontario, Canada. It is sideloaded to up to 20 authorized phones through a limited distribution account in Android Developer Console (docs/RELEASING.md); Google Play may come later, so the build stays Play-compliant (targetSdk 36, minimal permissions, no secrets in the APK).
 
 1. **Aisle sorting.** The user keeps a free-text list of their store's aisles, one per line, in walking order. Every item is assigned to one aisle (or Unsorted), and the list is shown grouped by aisle in walking order.
 2. **Free-form text.** Input such as "ingredients for pancakes from scratch" goes to a reasoning model with web search, which returns individual, already-categorized items. A plain list such as "milk, 2 lemons, eggs" takes the same path.
@@ -50,7 +50,7 @@ picniccore-shopping-list/
 │     src/main/resources/icon_catalog.json, prompts/*.txt
 │     src/test/kotlin/…, src/test/resources/fixtures/…
 ├─ app/                         Android application (AGP 9.4.1 built-in Kotlin, Compose, Material3 heavily themed)
-│  ├─ build.gradle.kts          compose, serialization, buildConfig, Roborazzi, debug signing
+│  ├─ build.gradle.kts          compose, serialization, buildConfig, Roborazzi, signing
 │  ├─ debug.keystore            COMMITTED (androiddebugkey / android / android); never regenerate
 │  ├─ proguard-rules.pro
 │  └─ src/main/{AndroidManifest.xml, kotlin/earth/cora/picnic/…, res/…, assets/icons/…}
@@ -969,11 +969,11 @@ The tool is **Roborazzi 1.76.0** with Robolectric 4.17, native graphics, Robolec
 The workflow is `.github/workflows/android.yml`. Copy it verbatim from `research/android_build.md` §6, where it is proven and passes actionlint.
 
 - **Triggers and environment:** push to any branch, tags `v*`, pull requests and `workflow_dispatch`. The runner is ubuntu-24.04 with JDK 21. setup-android installs `platforms;android-37.0 build-tools;36.0.0`. Gradle uses `cache-provider: basic`.
-- **Steps:** (1) `./gradlew -p core test`; (2) `./gradlew :app:compareRoborazziDebug :app:lintDebug :app:assembleDebug :app:assembleSideload -Ppicnic.versionCode=<run_number> -Ppicnic.versionName=<ver>`; (3) upload the bare **sideload** APK as `picnic-list-<ver>.apk` (`archive: false`) and the reports.
+- **Jobs:** `build` (no secrets): (1) `./gradlew -p core test`; (2) `./gradlew :app:compareRoborazziDebug :app:lintDebug :app:assembleDebug`; (3) upload the reports. Then `apk`, on its own runner with the signing key: `:app:assembleSideload -Ppicnic.versionCode=<run_number> -Ppicnic.versionName=<ver>`, a check that the APK carries exactly the registered certificate, and the bare **sideload** APK uploaded as `picnic-list-<ver>.apk` (`archive: false`).
 - **Releases:** on a `v*` tag, a release job attaches the APK to a GitHub Release.
-- **The installable APK is the `sideload` build type:** `initWith(debug)` (same code, not minified, no `debugImplementation` tooling) but `isDebuggable = false`, signed with the committed `app/debug.keystore`. A debuggable APK would let anyone with brief USB access `adb shell run-as` into the app's files and Keystore key (the stored token) or attach a debugger. Same applicationId and key, so it installs over earlier debug APKs and successive sideloads update in place. `assembleDebug` stays for development.
-- **Signing:** debug and sideload builds are signed with the committed `app/debug.keystore`. Play will need an AAB signed with a separate upload key from CI secrets. Play rejects debuggable builds.
-- **Secrets:** CI needs none. Live core tests are never run in CI.
+- **The installable APK is the `sideload` build type:** `initWith(debug)` (same code, not minified, no `debugImplementation` tooling) but `isDebuggable = false`, signed with the app's private key. A debuggable APK would let anyone with brief USB access `adb shell run-as` into the app's files and Keystore key (the stored token) or attach a debugger. Successive sideloads update in place; debug APKs (debug key) don't mix with them. `assembleDebug` stays for development.
+- **Signing:** sideload (and release) builds are signed with the private key registered for `earth.cora.picnic` in Android Developer Console, from the `PICNIC_SIGNING_*` settings (docs/RELEASING.md); without them, sideload falls back to the committed `app/debug.keystore`, which also signs debug builds and must never be registered.
+- **Secrets:** only the `apk` job reads them: the signing keystore and its password (docs/RELEASING.md §3). Live core tests are never run in CI.
 
 ---
 

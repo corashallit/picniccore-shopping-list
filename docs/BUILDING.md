@@ -7,8 +7,10 @@ The design itself is in [ARCHITECTURE.md](ARCHITECTURE.md); making an OpenAI key
 ## 1. Get the APK
 
 Every push builds the sideloadable APK (`.github/workflows/android.yml`): the `sideload` build type,
-which is the debug build's code and signing key but **not debuggable**, so nobody with brief USB
-access can read the app's stored OpenAI key with `adb shell run-as` or a debugger. Pick whichever is easiest:
+which is the debug build's code, signed with the app's private key (registered for `earth.cora.picnic`
+in Android Developer Console, see [RELEASING.md](RELEASING.md)), and **not debuggable**, so nobody
+with brief USB access can read the app's stored OpenAI key with `adb shell run-as` or a debugger.
+Pick whichever is easiest:
 
 | Where | How | Who can get it |
 |---|---|---|
@@ -25,15 +27,22 @@ version code is the CI run number, so every CI build is newer than the one befor
 2. Android asks to allow installs from that app: **Settings → Allow from this source**, then go back.
 3. Play Protect may warn about an unknown developer: **More details → Install anyway**.
 
-**Updates install over the previous version and keep the lists.** Every APK, from CI or from a local
-build, debug or sideload, is signed with the same committed key (`app/debug.keystore`), and CI version
-codes keep increasing. A local build has version code 1, so to put it over a CI build use the debug
-APK: `adb install -r -d app/build/outputs/apk/debug/picnic-list-debug.apk` (`-d` allows the
-downgrade, which Android permits only for debuggable apps). The next CI APK installs over it again.
+Testers' phones also need to be authorized in Android Developer Console (up to 20). Today that only
+matters once Google's enforcement reaches Canada (RELEASING.md §2.4, §4).
+
+**Updates install over the previous version and keep the lists.** Every CI APK is signed with the same
+private key, and CI version codes keep increasing.
+
+**Local debug builds don't mix with CI APKs.** They are signed with the committed debug key
+(`app/debug.keystore`), and Android only updates an app with the same key it was installed with. On
+your own phone, either stay with debug builds (`adb install -r -d …/picnic-list-debug.apk`; `-d`
+allows the downgrade, which Android permits only for debuggable apps) or with CI APKs. Switching means
+uninstalling. A local build signed with the private key installs over CI APKs (RELEASING.md §5.2).
 
 If Android ever says "App not installed" or "package conflicts with an existing package", the
-installed copy was signed with a different key (for example a build made before the key was
-committed). Uninstall it once, then install again. Uninstalling deletes the lists on the phone.
+installed copy was signed with a different key (a debug build, or a CI APK from before 2026-10-02,
+which used the debug key). Uninstall it once, then install again. Uninstalling deletes the lists on
+the phone.
 
 ### First run
 
@@ -74,7 +83,7 @@ cannot evaluate AGP 9 builds, and never run `gradle wrapper` in this repository.
 | What | Command |
 |---|---|
 | Debug APK (debuggable, for development) | `./gradlew :app:assembleDebug` → `app/build/outputs/apk/debug/picnic-list-debug.apk` |
-| Sideload APK (what friends install; not debuggable, same key) | `./gradlew :app:assembleSideload` → `app/build/outputs/apk/sideload/picnic-list-sideload.apk` |
+| Sideload APK (what testers install; not debuggable; signed with the private key when the `PICNIC_SIGNING_*` settings are set, see RELEASING.md §5.2, else with the debug key) | `./gradlew :app:assembleSideload` → `app/build/outputs/apk/sideload/picnic-list-sideload.apk` |
 | Install on a connected phone | `./gradlew :app:installDebug` (or `adb install -r -d <apk>`) |
 | core tests (core is a standalone build) | `./gradlew -p core test` |
 | core live tests (real API, costs a few cents) | `OPENAI_API_KEY=… ./gradlew -p core test -Plive=true` |
@@ -84,7 +93,7 @@ cannot evaluate AGP 9 builds, and never run `gradle wrapper` in this repository.
 | Compare with goldens (never fails) | `./gradlew :app:compareRoborazziDebug` → diffs in `app/build/outputs/roborazzi/` |
 | Verify against goldens (fails on a diff) | `./gradlew :app:verifyRoborazziDebug` |
 | Lint (CI gate) | `./gradlew :app:lintDebug` |
-| R8 release bundle for Play (signed when the `PICNIC_UPLOAD_*` settings are set, see docs/RELEASING.md §5.1) | `./gradlew :app:bundleRelease` |
+| R8 release APK (not shipped today; signed when the `PICNIC_SIGNING_*` settings are set, unsigned otherwise) | `./gradlew :app:assembleRelease` |
 
 Pass `-Ppicnic.versionCode=<n> -Ppicnic.versionName=<name>` to stamp a version (CI does this).
 Never put an API key in a Gradle file or `gradle.properties`: the CLI and live tests read
@@ -117,32 +126,34 @@ Gotchas (already configured in `app/build.gradle.kts` and `app/src/test/resource
 ## 5. CI and releases
 
 `.github/workflows/android.yml` runs on pushes to any branch, `v*` tags, pull requests and manual
-dispatch, on `ubuntu-24.04` with JDK 21. It needs **no secrets**.
+dispatch, on `ubuntu-24.04` with JDK 21. Three jobs, each on its own runner:
 
-1. `./gradlew -p core test`
-2. `./gradlew :app:compareRoborazziDebug :app:lintDebug :app:assembleDebug :app:assembleSideload -Ppicnic.versionCode=<run> -Ppicnic.versionName=<ver>`
-3. Uploads the bare sideload APK as `picnic-list-<ver>.apk` (`archive: false`) and the test, lint and screenshot reports.
-4. On a `v*` tag, a second job attaches the APK to a GitHub Release.
+1. **`build`** (no secrets): `./gradlew -p core test`, then
+   `./gradlew :app:compareRoborazziDebug :app:lintDebug :app:assembleDebug`, and uploads the test,
+   lint and screenshot reports.
+2. **`apk`** (the signing key from repository secrets, RELEASING.md §3): builds
+   `:app:assembleSideload -Ppicnic.versionCode=<run> -Ppicnic.versionName=<ver>`, checks that it is
+   signed with exactly the registered certificate, and uploads the bare APK as
+   `picnic-list-<ver>.apk` (`archive: false`). Dependabot's runs skip it (they get no secrets).
+3. **`release`**, on a `v*` tag: attaches the APK to a GitHub Release.
 
 To cut a release: `git tag v0.2.0 && git push origin v0.2.0`.
 
 Live API tests never run in CI.
 
-One more workflow: `play-release.yml` tests, signs and uploads the Play bundle (docs/RELEASING.md §7).
+## 6. Signing: the private key and the debug key
 
-## 6. Signing: sideload and Play
-
-- Debug and sideload builds are signed with the **committed** `app/debug.keystore` (alias `androiddebugkey`,
-  passwords `android`; certificate SHA-256 `69:7c:19:5b:83:2c:38:83:6e:d9:76:13:54:27:e4:5d:8f:c9:9d:23:b0:49:db:74:b2:54:fe:ee:8b:a2:83:8c`).
-  Never regenerate or replace it: installed copies could no longer be updated in place.
-- Anyone with the repository can sign an "update" with that key. That is acceptable for a sideloaded
-  build for one friend, and it is why Play uses a separate key.
-- **Google Play** builds are the `release` build type: R8, not debuggable, an AAB
-  (`./gradlew :app:bundleRelease`). It is signed with the private upload key when the `PICNIC_UPLOAD_*`
-  environment variables or `picnic.upload.*` Gradle properties are set, and unsigned when none are.
-  `play-release.yml` does this in CI with the key from GitHub secrets, and Google re-signs what it
-  delivers (Play App Signing). Making the key, the secrets and the Play Console setup:
-  [RELEASING.md](RELEASING.md) §1 and §4; the signing settings: §11; Play installs vs sideloaded APKs: §10.
+- **What testers install** (CI's sideload APK) is signed with the app's **private key**, registered for
+  `earth.cora.picnic` in Android Developer Console (certificate SHA-256
+  `A4:B1:24:97:04:CB:2C:77:3F:D7:36:19:08:B8:47:BD:27:0B:AD:B8:50:D8:0A:E0:F7:82:79:17:35:16:09:A5`).
+  It lives outside the repository and can't be replaced without losing updates for everyone. Where it
+  is, its secrets and its registration: [RELEASING.md](RELEASING.md).
+- **Debug builds**, and sideload builds made without the `PICNIC_SIGNING_*` settings, are signed with
+  the **committed** `app/debug.keystore` (alias `androiddebugkey`, passwords `android`; certificate
+  SHA-256 `69:7c:19:5b:83:2c:38:83:6e:d9:76:13:54:27:e4:5d:8f:c9:9d:23:b0:49:db:74:b2:54:fe:ee:8b:a2:83:8c`).
+  Never regenerate or replace it: your own debug installs could no longer be updated in place.
+- Anyone with the repository can sign an "update" with the debug key. That is why testers get the
+  private key's builds, and why the debug key must **never** be registered in Android Developer Console.
 
 ## 7. What the APK contains and asks for
 
@@ -161,4 +172,4 @@ One more workflow: `play-release.yml` tests, signs and uploads the Play bundle (
 | Robolectric: `Failed to interact with raw FileDescriptor internals` | The `--add-opens` flag is missing (it is set for `testDebugUnitTest`; custom test tasks need it too). |
 | Robolectric download errors (HTTP 429) | Use a local mirror init script, section 4. |
 | Screenshot diffs after an upgrade with no UI change | Anti-aliasing noise: re-record, or add a small `changeThreshold` to the compare options. |
-| "App not installed" on the phone | Different signing key: uninstall once, then install (section 2). |
+| "App not installed" on the phone | Different signing key (debug build vs CI APK): uninstall once, then install (section 2). |
