@@ -1,0 +1,32 @@
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android
+local.properties
+*.apk
+*.aab
+captures/
+.externalNativeBuild/
+.cxx/
+# Keystores are ignored EXCEPT the deliberately committed debug key.
+*.jks
+*.keystore
+!app/debug.keystore
+
+# IDE / OS
+.idea/
+*.iml
+.DS_Store
+
+# Secrets (never commit)
+*.env
+.env*
+# Google Cloud service account keys (the Play publisher's JSON key, docs/RELEASING.md §3.4)
+picnic-play-*.json
+*service-account*.json
+
+# Local-only Gradle init scripts / scratch
+*.init.gradle

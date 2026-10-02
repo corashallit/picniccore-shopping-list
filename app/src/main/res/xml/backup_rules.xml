@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 26-30 Auto Backup. Mirrors data_extraction_rules.xml (allow-list). -->
+<full-backup-content>
+    <include domain="file" path="state.json" />
+</full-backup-content>

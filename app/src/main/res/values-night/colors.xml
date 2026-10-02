@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- "Picnic at dusk" window ground (PicnicTheme dark background token). -->
+    <color name="picnic_ground">#FF2B2140</color>
+</resources>

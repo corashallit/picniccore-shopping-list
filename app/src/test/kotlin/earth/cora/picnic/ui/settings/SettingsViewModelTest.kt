@@ -1,0 +1,193 @@
+package earth.cora.picnic.ui.settings
+
+import earth.cora.picnic.core.llm.LlmError
+import earth.cora.picnic.settings.AppSettings
+import earth.cora.picnic.settings.InMemorySettingsRepository
+import earth.cora.picnic.settings.SettingsRepository
+import earth.cora.picnic.ui.common.FakeAssistant
+import earth.cora.picnic.ui.common.MainDispatcherRule
+import earth.cora.picnic.ui.common.ScreenText
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import java.io.IOException
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class SettingsViewModelTest {
+    @get:Rule
+    val main = MainDispatcherRule()
+
+    private class Fixture(val vm: SettingsViewModel, val settings: InMemorySettingsRepository, val assistant: FakeAssistant)
+
+    private fun TestScope.fixture(
+        initial: AppSettings = AppSettings(),
+        token: String? = null,
+        assistant: FakeAssistant = FakeAssistant(),
+    ): Fixture {
+        val settings = InMemorySettingsRepository(initial, token)
+        val vm = SettingsViewModel(settings, assistant, "0.1.0-test")
+        advanceUntilIdle()
+        return Fixture(vm, settings, assistant)
+    }
+
+    @Test
+    fun showsTheSavedKeyOnlyAsAHint() = runTest {
+        val f = fixture(token = "sk-proj-abcdefghijklmnop1234")
+        val s = f.vm.state.value
+        assertFalse(s.loading)
+        assertTrue(s.hasToken)
+        assertEquals("sk-…1234", s.tokenHint)
+        assertEquals("", s.tokenInput)
+        assertFalse(s.canSave)
+        assertNull(s.notice)
+        assertEquals("0.1.0-test", s.appVersion)
+    }
+
+    @Test
+    fun savingAKeyTrimsItClearsTheFieldAndTestsTheConnection() = runTest {
+        val f = fixture()
+        f.vm.setTokenInput("  sk-proj-abcdefghijklmnop1234  ")
+        f.vm.toggleTokenVisible()
+        runCurrent()
+        assertTrue(f.vm.state.value.canSave)
+
+        f.vm.saveConnection()
+        advanceUntilIdle()
+        assertEquals("sk-proj-abcdefghijklmnop1234", f.settings.token())
+        val s = f.vm.state.value
+        assertEquals("", s.tokenInput)
+        assertFalse("the field hides again", s.tokenVisible)
+        assertTrue(s.hasToken)
+        assertEquals("sk-…1234", s.tokenHint)
+        assertFalse(s.canSave)
+        assertEquals(ConnectionTestUi.Ok(412), s.test)
+        assertEquals(1, f.assistant.tests)
+    }
+
+    @Test
+    fun aBlankKeyIsNotSaved() = runTest {
+        val f = fixture(token = "sk-proj-abcdefghijklmnop1234")
+        f.vm.setTokenInput("   ")
+        runCurrent()
+        assertFalse(f.vm.state.value.canSave)
+        f.vm.saveConnection()
+        advanceUntilIdle()
+        assertEquals("the saved key stays", "sk-proj-abcdefghijklmnop1234", f.settings.token())
+        assertEquals(0, f.assistant.tests)
+    }
+
+    @Test
+    fun aNewKeyReplacesTheSavedOne() = runTest {
+        val f = fixture(token = "sk-proj-abcdefghijklmnop1234")
+        f.vm.setTokenInput("sk-proj-zyxwvutsrqponmlk9876")
+        f.vm.saveConnection()
+        advanceUntilIdle()
+        assertEquals("sk-proj-zyxwvutsrqponmlk9876", f.settings.token())
+        assertEquals("sk-…9876", f.vm.state.value.tokenHint)
+    }
+
+    @Test
+    fun testConnectionShowsRunningThenTheFriendlyError() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val f = fixture(token = "sk-proj-abcdefghijklmnop1234", assistant = FakeAssistant(testConnection = {
+            gate.await()
+            throw LlmError.Unauthorized(401, missingScopes = listOf("api.model.read"))
+        }))
+        f.vm.testConnection()
+        runCurrent()
+        assertEquals(ConnectionTestUi.Running, f.vm.state.value.test)
+        gate.complete(Unit)
+        advanceUntilIdle()
+        val failed = f.vm.state.value.test as ConnectionTestUi.Failed
+        assertTrue(failed.message.contains("missing a permission the app needs (api.model.read)"))
+    }
+
+    @Test
+    fun testConnectionSavesATypedKeyFirst() = runTest {
+        val f = fixture()
+        f.vm.setTokenInput("sk-proj-abcdefghijklmnop1234")
+        f.vm.testConnection()
+        advanceUntilIdle()
+        assertEquals("sk-proj-abcdefghijklmnop1234", f.settings.token())
+        assertEquals(ConnectionTestUi.Ok(412), f.vm.state.value.test)
+        assertEquals(1, f.assistant.tests)
+    }
+
+    @Test
+    fun testConnectionWithoutAKeySendsNothing() = runTest {
+        val f = fixture()
+        f.vm.testConnection()
+        advanceUntilIdle()
+        assertEquals(ConnectionTestUi.Idle, f.vm.state.value.test)
+        assertEquals(0, f.assistant.tests)
+    }
+
+    @Test
+    fun removeKey() = runTest {
+        val f = fixture(token = "sk-proj-abcdefghijklmnop1234")
+        f.vm.clearToken()
+        advanceUntilIdle()
+        val s = f.vm.state.value
+        assertFalse(s.hasToken)
+        assertNull(s.tokenHint)
+        assertNull(f.settings.token())
+    }
+
+    @Test
+    fun aKeyTheKeystoreRefusedStaysInTheFieldWithANotice() = runTest {
+        // DataStoreSettingsRepository.setToken: a Keystore failure stores nothing and doesn't throw.
+        val refusing = object : SettingsRepository by InMemorySettingsRepository() {
+            override suspend fun setToken(token: String?) = Unit
+        }
+        val assistant = FakeAssistant()
+        val vm = SettingsViewModel(refusing, assistant, "0.1.0-test")
+        advanceUntilIdle()
+        vm.setTokenInput("sk-proj-abcdefghijklmnop1234")
+        vm.saveConnection()
+        advanceUntilIdle()
+        assertEquals(ScreenText.SAVE_FAILED, vm.state.value.notice)
+        assertEquals("sk-proj-abcdefghijklmnop1234", vm.state.value.tokenInput)
+        assertEquals(0, assistant.tests)
+
+        vm.setTokenInput("sk-proj-abcdefghijklmnop12345")
+        runCurrent()
+        assertNull("typing clears the notice", vm.state.value.notice)
+    }
+
+    @Test
+    fun aFailedSettingsWriteIsReportedNotThrown() = runTest {
+        val failing = object : SettingsRepository by InMemorySettingsRepository() {
+            override suspend fun setDrawIcons(enabled: Boolean) = throw IOException("disk full")
+            override suspend fun setToken(token: String?) = throw IOException("disk full")
+        }
+        val vm = SettingsViewModel(failing, FakeAssistant(), "0.1.0-test")
+        advanceUntilIdle()
+        vm.setDrawIcons(false)
+        advanceUntilIdle()
+        assertEquals(ScreenText.SAVE_FAILED, vm.state.value.notice)
+        vm.setTokenInput("sk-proj-abcdefghijklmnop1234")
+        vm.saveConnection()
+        advanceUntilIdle()
+        assertEquals(ScreenText.SAVE_FAILED, vm.state.value.notice)
+    }
+
+    @Test
+    fun drawIconsToggleAndKeyVisibility() = runTest {
+        val f = fixture()
+        f.vm.setDrawIcons(false)
+        f.vm.toggleTokenVisible()
+        advanceUntilIdle()
+        assertFalse(f.settings.current().drawIcons)
+        assertFalse(f.vm.state.value.drawIcons)
+        assertTrue(f.vm.state.value.tokenVisible)
+    }
+}

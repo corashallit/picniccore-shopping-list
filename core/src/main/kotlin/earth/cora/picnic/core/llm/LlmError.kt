@@ -1,0 +1,95 @@
+package earth.cora.picnic.core.llm
+
+/**
+ * Typed failures of every GroceryAssistant / OpenAiClient call (research/openai_api.md §2.8).
+ * CONTRACT: core never throws anything else for API problems (CancellationException still propagates).
+ * [friendlyMessage] is safe to show in the UI; [message] is for logs and never contains the key
+ * or the server's raw 401 text (which echoes a masked key).
+ */
+sealed class LlmError(
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause) {
+    /** x-request-id of the failed call, when there was a response. */
+    abstract val requestId: String?
+
+    /** One short sentence for the user. */
+    abstract val friendlyMessage: String
+
+    /** True when retrying later can help (offer "Try again"). */
+    open val retryable: Boolean get() = false
+
+    /** No key configured, or the base URL fails LlmConfig.normalizeBaseUrl (no request was sent). */
+    class NotConfigured(val reason: String, override val requestId: String? = null) : LlmError("Not configured: $reason") {
+        override val friendlyMessage: String get() = "Add your OpenAI key in Settings first."
+    }
+
+    /**
+     * 401/403 (except a 403 model_not_found, which is BadResponse): a wrong, revoked or expired key, or
+     * an unsupported region. [missingScopes] is non-null when the key works but lacks a permission
+     * (a restricted key): the scope names OpenAI listed, possibly none.
+     */
+    class Unauthorized(
+        val status: Int,
+        override val requestId: String? = null,
+        val missingScopes: List<String>? = null,
+    ) : LlmError("HTTP $status unauthorized" + (missingScopes?.let { " (missing scopes: ${it.joinToString()})" } ?: "")) {
+        override val friendlyMessage: String
+            get() = when {
+                missingScopes == null -> "OpenAI didn't accept this key. Check it in Settings, or paste a new one."
+                missingScopes.isEmpty() -> "This OpenAI key is missing a permission the app needs. Check the key's permissions."
+                else -> "This OpenAI key is missing a permission the app needs (${missingScopes.joinToString()}). Check the key's permissions."
+            }
+    }
+
+    /** 429 rate limit / 503 overloaded, after the automatic retries were used up. */
+    class RateLimited(val retryAfterSeconds: Long?, override val requestId: String? = null) : LlmError("Rate limited") {
+        override val friendlyMessage: String get() = "The service is busy right now. Try again in a moment."
+        override val retryable: Boolean get() = true
+    }
+
+    /** 429 insufficient_quota / credit exhausted / spend or usage limits (e.g. the project's hard budget). Not retryable. */
+    class QuotaExceeded(val code: String?, override val requestId: String? = null) : LlmError("Quota exceeded: $code") {
+        override val friendlyMessage: String get() = "The OpenAI account behind this key is out of credit or over its monthly budget."
+    }
+
+    /** DNS, TLS, connection reset, cleartext blocked, 5xx after retries. */
+    class Network(cause: Throwable?, override val requestId: String? = null) : LlmError("Network error: ${cause?.javaClass?.simpleName}", cause) {
+        override val friendlyMessage: String get() = "Couldn't reach the server. Check your connection and try again."
+        override val retryable: Boolean get() = true
+    }
+
+    /** Call exceeded its timeout (LlmTimeouts: ingest 120 s, transcribe 60 s, image 120 s). */
+    class Timeout(override val requestId: String? = null) : LlmError("Timed out") {
+        override val friendlyMessage: String get() = "That took too long. Try again, or try a shorter request."
+        override val retryable: Boolean get() = true
+    }
+
+    /**
+     * 400/404/other 4xx, status "incomplete", unparsable or schema-violating output. [detail] is for
+     * logs; model_not_found (the model doesn't exist for this key, or its project doesn't allow it)
+     * gets its own friendly text.
+     */
+    class BadResponse(
+        val detail: String,
+        val httpStatus: Int? = null,
+        val code: String? = null,
+        override val requestId: String? = null,
+    ) : LlmError("Bad response: $detail (status=$httpStatus code=$code)") {
+        override val friendlyMessage: String
+            get() = when (code) {
+                // Models are fixed in ModelDefaults (no model settings): the key's project lacks access.
+                "model_not_found" ->
+                    "This OpenAI key can't use one of the AI models the app needs. Check which models its project allows."
+                else -> "The assistant's answer couldn't be used. Try again or rephrase."
+            }
+
+        /** Answer-level problems (incomplete, unparsable, no message) often succeed on a second try; 4xx do not. */
+        override val retryable: Boolean get() = httpStatus == null
+    }
+
+    /** The model refused, or image moderation blocked the request (moderation_blocked). */
+    class Refusal(val refusal: String, override val requestId: String? = null) : LlmError("Refusal: $refusal") {
+        override val friendlyMessage: String get() = "The assistant couldn't help with that one."
+    }
+}

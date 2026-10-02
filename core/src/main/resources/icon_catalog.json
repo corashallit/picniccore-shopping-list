@@ -1,0 +1,4044 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "key": "fruit",
+      "label": "Fruit",
+      "fallbackIcon": "fruit_generic"
+    },
+    {
+      "key": "vegetables",
+      "label": "Vegetables & herbs",
+      "fallbackIcon": "vegetables_generic"
+    },
+    {
+      "key": "bakery",
+      "label": "Bakery",
+      "fallbackIcon": "bakery_generic"
+    },
+    {
+      "key": "deli",
+      "label": "Deli & cheese",
+      "fallbackIcon": "deli_generic"
+    },
+    {
+      "key": "meat",
+      "label": "Meat & poultry",
+      "fallbackIcon": "meat_generic"
+    },
+    {
+      "key": "seafood",
+      "label": "Fish & seafood",
+      "fallbackIcon": "seafood_generic"
+    },
+    {
+      "key": "dairy",
+      "label": "Dairy & eggs",
+      "fallbackIcon": "dairy_generic"
+    },
+    {
+      "key": "plant_based",
+      "label": "Plant-based",
+      "fallbackIcon": "plant_based_generic"
+    },
+    {
+      "key": "breakfast",
+      "label": "Breakfast & spreads",
+      "fallbackIcon": "breakfast_generic"
+    },
+    {
+      "key": "baking",
+      "label": "Baking",
+      "fallbackIcon": "baking_generic"
+    },
+    {
+      "key": "condiments",
+      "label": "Spices, condiments & oils",
+      "fallbackIcon": "condiments_generic"
+    },
+    {
+      "key": "pantry",
+      "label": "Pasta, grains, canned & international",
+      "fallbackIcon": "pantry_generic"
+    },
+    {
+      "key": "snacks",
+      "label": "Snacks & candy",
+      "fallbackIcon": "snacks_generic"
+    },
+    {
+      "key": "beverages",
+      "label": "Drinks",
+      "fallbackIcon": "beverages_generic"
+    },
+    {
+      "key": "frozen",
+      "label": "Frozen",
+      "fallbackIcon": "frozen_generic"
+    },
+    {
+      "key": "baby",
+      "label": "Baby",
+      "fallbackIcon": "baby_generic"
+    },
+    {
+      "key": "pet",
+      "label": "Pet",
+      "fallbackIcon": "pet_generic"
+    },
+    {
+      "key": "household",
+      "label": "Household, cleaning & paper",
+      "fallbackIcon": "household_generic"
+    },
+    {
+      "key": "health",
+      "label": "Health, personal care & pharmacy",
+      "fallbackIcon": "health_generic"
+    },
+    {
+      "key": "garden",
+      "label": "Flowers, garden & picnic",
+      "fallbackIcon": "garden_generic"
+    }
+  ],
+  "icons": [
+    {
+      "key": "fruit_generic",
+      "label": "Fruit",
+      "category": "fruit",
+      "aliases": [
+        "fruit",
+        "fruits",
+        "mixed fruit",
+        "fresh fruit",
+        "fruits frais",
+        "fruit salad",
+        "salade de fruits"
+      ],
+      "drawHint": "A small cluster of mixed fruit: a red apple, a yellow banana and a bunch of purple grapes huddled together."
+    },
+    {
+      "key": "apple",
+      "label": "Apples",
+      "category": "fruit",
+      "aliases": [
+        "apples",
+        "pomme",
+        "pommes",
+        "mcintosh",
+        "gala apples",
+        "honeycrisp",
+        "granny smith"
+      ],
+      "drawHint": "A single round red apple with a short brown stem and one green leaf."
+    },
+    {
+      "key": "banana",
+      "label": "Bananas",
+      "category": "fruit",
+      "aliases": [
+        "bananas",
+        "banane",
+        "bananes",
+        "bunch of bananas",
+        "plantain",
+        "plantains"
+      ],
+      "drawHint": "A bunch of three curved yellow bananas joined at a brown stem tip."
+    },
+    {
+      "key": "orange",
+      "label": "Oranges",
+      "category": "fruit",
+      "aliases": [
+        "oranges",
+        "navel oranges",
+        "blood orange",
+        "valencia oranges",
+        "cara cara oranges"
+      ],
+      "drawHint": "A whole round orange with dimpled peel and a small green leaf at the stem."
+    },
+    {
+      "key": "clementine",
+      "label": "Clementines",
+      "category": "fruit",
+      "aliases": [
+        "clémentines",
+        "mandarin",
+        "mandarins",
+        "mandarines",
+        "tangerine",
+        "tangerines",
+        "box of clementines"
+      ],
+      "drawHint": "Two small flattened orange mandarins with glossy peel sharing one stem with a pair of dark green leaves."
+    },
+    {
+      "key": "lemon",
+      "label": "Lemons",
+      "category": "fruit",
+      "aliases": [
+        "lemons",
+        "citron",
+        "citrons",
+        "meyer lemons"
+      ],
+      "drawHint": "A bright yellow oval lemon with pointed ends and a small green leaf."
+    },
+    {
+      "key": "lime",
+      "label": "Limes",
+      "category": "fruit",
+      "aliases": [
+        "limes",
+        "lime verte",
+        "limes vertes",
+        "key limes"
+      ],
+      "drawHint": "A small round green lime beside its cut half showing pale green wedges."
+    },
+    {
+      "key": "strawberry",
+      "label": "Strawberries",
+      "category": "fruit",
+      "aliases": [
+        "strawberries",
+        "fraise",
+        "fraises",
+        "ontario strawberries",
+        "fraises du québec"
+      ],
+      "drawHint": "A plump red heart-shaped strawberry with tiny yellow seeds and a green leafy cap."
+    },
+    {
+      "key": "blueberries",
+      "label": "Blueberries",
+      "category": "fruit",
+      "aliases": [
+        "blueberry",
+        "bleuets",
+        "bleuet",
+        "wild blueberries",
+        "pint of blueberries"
+      ],
+      "drawHint": "A small heap of round dusty-blue blueberries, each with a tiny star-shaped crown."
+    },
+    {
+      "key": "raspberries",
+      "label": "Raspberries & blackberries",
+      "category": "fruit",
+      "aliases": [
+        "raspberry",
+        "framboises",
+        "framboise",
+        "blackberries",
+        "blackberry",
+        "mûres"
+      ],
+      "drawHint": "A few bumpy deep pink-red raspberries clustered together, one tipped to show its hollow centre."
+    },
+    {
+      "key": "grapes",
+      "label": "Grapes",
+      "category": "fruit",
+      "aliases": [
+        "grape",
+        "green grapes",
+        "red grapes",
+        "seedless grapes",
+        "concord grapes",
+        "cotton candy grapes"
+      ],
+      "drawHint": "A hanging bunch of round purple-red grapes with a short woody stem and a curling vine leaf."
+    },
+    {
+      "key": "watermelon",
+      "label": "Watermelon",
+      "category": "fruit",
+      "aliases": [
+        "watermelons",
+        "melon d'eau",
+        "pastèque",
+        "seedless watermelon",
+        "mini watermelon"
+      ],
+      "drawHint": "A thick triangular wedge of watermelon with red flesh, black seeds and a striped green rind."
+    },
+    {
+      "key": "pineapple",
+      "label": "Pineapple",
+      "category": "fruit",
+      "aliases": [
+        "pineapples",
+        "ananas",
+        "fresh pineapple",
+        "golden pineapple"
+      ],
+      "drawHint": "A whole golden pineapple with crosshatched diamond skin and a spiky green crown."
+    },
+    {
+      "key": "mango",
+      "label": "Mangoes",
+      "category": "fruit",
+      "aliases": [
+        "mangoes",
+        "mangos",
+        "mangue",
+        "mangues",
+        "ataulfo mangoes",
+        "champagne mango"
+      ],
+      "drawHint": "A plump kidney-shaped mango blushing from green to orange-red with a tiny stem."
+    },
+    {
+      "key": "peach",
+      "label": "Peaches & nectarines",
+      "category": "fruit",
+      "aliases": [
+        "peaches",
+        "pêche",
+        "pêches",
+        "nectarine",
+        "nectarines",
+        "apricots",
+        "niagara peaches"
+      ],
+      "drawHint": "A round fuzzy peach in warm orange and rosy pink with a crease down one side and a small leaf."
+    },
+    {
+      "key": "pear",
+      "label": "Pears",
+      "category": "fruit",
+      "aliases": [
+        "pears",
+        "poire",
+        "poires",
+        "bartlett pears",
+        "bosc pears",
+        "anjou pears"
+      ],
+      "drawHint": "A single yellow-green pear with a teardrop shape, a soft blush and a thin brown stem."
+    },
+    {
+      "key": "cherries",
+      "label": "Cherries",
+      "category": "fruit",
+      "aliases": [
+        "cherry",
+        "cerises",
+        "cerise",
+        "sweet cherries",
+        "sour cherries",
+        "bing cherries"
+      ],
+      "drawHint": "Two glossy dark red cherries hanging from joined green stems with one leaf."
+    },
+    {
+      "key": "kiwi",
+      "label": "Kiwis",
+      "category": "fruit",
+      "aliases": [
+        "kiwis",
+        "kiwifruit",
+        "kiwi fruit",
+        "golden kiwi"
+      ],
+      "drawHint": "A brown fuzzy oval kiwi beside its cut half showing bright green flesh, a pale centre and a ring of tiny black seeds."
+    },
+    {
+      "key": "avocado",
+      "label": "Avocados",
+      "category": "fruit",
+      "aliases": [
+        "avocados",
+        "avocat",
+        "avocats",
+        "hass avocados",
+        "ripe avocado"
+      ],
+      "drawHint": "A halved avocado with dark green pebbly skin, pale yellow-green flesh and a round brown pit."
+    },
+    {
+      "key": "vegetables_generic",
+      "label": "Vegetables",
+      "category": "vegetables",
+      "aliases": [
+        "vegetables",
+        "veggies",
+        "veg",
+        "légumes",
+        "fresh vegetables",
+        "crudités",
+        "veggie tray"
+      ],
+      "drawHint": "A small bundle of fresh vegetables, an orange carrot, a broccoli floret and a red tomato, tied together with twine."
+    },
+    {
+      "key": "carrot",
+      "label": "Carrots",
+      "category": "vegetables",
+      "aliases": [
+        "carrots",
+        "carotte",
+        "carottes",
+        "baby carrots",
+        "rainbow carrots",
+        "bag of carrots"
+      ],
+      "drawHint": "A bunch of two tapered orange carrots with feathery green tops."
+    },
+    {
+      "key": "potato",
+      "label": "Potatoes",
+      "category": "vegetables",
+      "aliases": [
+        "potatoes",
+        "pommes de terre",
+        "patates",
+        "yukon gold potatoes",
+        "russet potatoes",
+        "baby potatoes",
+        "bag of potatoes"
+      ],
+      "drawHint": "Two lumpy tan-brown potatoes with small dark eyes."
+    },
+    {
+      "key": "sweet_potato",
+      "label": "Sweet potatoes",
+      "category": "vegetables",
+      "aliases": [
+        "sweet potatoes",
+        "yams",
+        "yam",
+        "patates douces",
+        "patate douce"
+      ],
+      "drawHint": "An elongated sweet potato with reddish-copper skin tapering at both ends, one end cut to show orange flesh."
+    },
+    {
+      "key": "onion",
+      "label": "Onions",
+      "category": "vegetables",
+      "aliases": [
+        "onions",
+        "oignon",
+        "oignons",
+        "yellow onions",
+        "red onion",
+        "sweet onions",
+        "shallots"
+      ],
+      "drawHint": "A round golden-brown onion with papery skin, a pointed top and a wisp of roots at the base."
+    },
+    {
+      "key": "green_onion",
+      "label": "Green onions",
+      "category": "vegetables",
+      "aliases": [
+        "green onions",
+        "scallions",
+        "spring onions",
+        "échalotes",
+        "oignons verts",
+        "chives",
+        "ciboulette"
+      ],
+      "drawHint": "A small bundle of long thin green onions with white bulb ends and stringy roots, held by a band."
+    },
+    {
+      "key": "garlic",
+      "label": "Garlic",
+      "category": "vegetables",
+      "aliases": [
+        "garlic bulb",
+        "garlic cloves",
+        "ail",
+        "gousses d'ail",
+        "head of garlic",
+        "garlic head"
+      ],
+      "drawHint": "A plump white garlic bulb with faint purple streaks and one loose clove beside it."
+    },
+    {
+      "key": "ginger",
+      "label": "Ginger",
+      "category": "vegetables",
+      "aliases": [
+        "ginger root",
+        "fresh ginger",
+        "gingembre",
+        "gingembre frais"
+      ],
+      "drawHint": "A knobbly beige-tan piece of ginger root with short branching fingers."
+    },
+    {
+      "key": "tomato",
+      "label": "Tomatoes",
+      "category": "vegetables",
+      "aliases": [
+        "tomatoes",
+        "tomate",
+        "tomates",
+        "cherry tomatoes",
+        "roma tomatoes",
+        "grape tomatoes",
+        "tomatoes on the vine"
+      ],
+      "drawHint": "A round shiny red tomato with a star-shaped green calyx on top."
+    },
+    {
+      "key": "cucumber",
+      "label": "Cucumbers",
+      "category": "vegetables",
+      "aliases": [
+        "cucumbers",
+        "concombre",
+        "concombres",
+        "english cucumber",
+        "mini cucumbers",
+        "field cucumbers"
+      ],
+      "drawHint": "A long dark green cucumber with slightly bumpy skin and one pale cut end showing seeds."
+    },
+    {
+      "key": "lettuce",
+      "label": "Lettuce",
+      "category": "vegetables",
+      "aliases": [
+        "romaine",
+        "iceberg lettuce",
+        "laitue",
+        "head of lettuce",
+        "boston lettuce",
+        "green leaf lettuce",
+        "romaine hearts"
+      ],
+      "drawHint": "A round head of light green lettuce with ruffled, layered leaves."
+    },
+    {
+      "key": "salad_mix",
+      "label": "Salad mix",
+      "category": "vegetables",
+      "aliases": [
+        "spring mix",
+        "bagged salad",
+        "salad kit",
+        "mesclun",
+        "salade",
+        "caesar salad kit",
+        "coleslaw mix"
+      ],
+      "drawHint": "A clear clamshell box filled with mixed baby salad leaves in green and deep red."
+    },
+    {
+      "key": "spinach",
+      "label": "Spinach & leafy greens",
+      "category": "vegetables",
+      "aliases": [
+        "baby spinach",
+        "épinards",
+        "kale",
+        "chou frisé",
+        "swiss chard",
+        "leafy greens",
+        "arugula",
+        "roquette"
+      ],
+      "drawHint": "A small bunch of dark green, spoon-shaped spinach leaves on thin stems."
+    },
+    {
+      "key": "broccoli",
+      "label": "Broccoli",
+      "category": "vegetables",
+      "aliases": [
+        "brocoli",
+        "broccoli crowns",
+        "broccoli florets",
+        "broccolini"
+      ],
+      "drawHint": "A single broccoli crown with a thick pale green stalk and a bumpy dark green tree-like top."
+    },
+    {
+      "key": "cauliflower",
+      "label": "Cauliflower",
+      "category": "vegetables",
+      "aliases": [
+        "chou-fleur",
+        "cauliflower head",
+        "cauliflower florets",
+        "riced cauliflower"
+      ],
+      "drawHint": "A creamy-white cauliflower head with knobbly florets cupped by green leaves."
+    },
+    {
+      "key": "cabbage",
+      "label": "Cabbage",
+      "category": "vegetables",
+      "aliases": [
+        "green cabbage",
+        "red cabbage",
+        "chou",
+        "napa cabbage",
+        "bok choy",
+        "savoy cabbage",
+        "brussels sprouts"
+      ],
+      "drawHint": "A round, tightly packed pale green cabbage with veined outer leaves curling open."
+    },
+    {
+      "key": "celery",
+      "label": "Celery",
+      "category": "vegetables",
+      "aliases": [
+        "céleri",
+        "celery stalks",
+        "celery hearts",
+        "celery sticks"
+      ],
+      "drawHint": "A bunch of pale green ribbed celery stalks with leafy tops."
+    },
+    {
+      "key": "bell_pepper",
+      "label": "Bell peppers",
+      "category": "vegetables",
+      "aliases": [
+        "bell peppers",
+        "red pepper",
+        "green pepper",
+        "sweet peppers",
+        "poivron",
+        "poivrons",
+        "orange pepper",
+        "yellow pepper"
+      ],
+      "drawHint": "A glossy red bell pepper with three rounded lobes and a short green stem."
+    },
+    {
+      "key": "chili_pepper",
+      "label": "Hot peppers",
+      "category": "vegetables",
+      "aliases": [
+        "jalapeño",
+        "chilies",
+        "scotch bonnet",
+        "hot pepper",
+        "serrano",
+        "piment fort",
+        "thai chilies",
+        "habanero"
+      ],
+      "drawHint": "A slender glossy red chili pepper with a curved tip and a little green cap."
+    },
+    {
+      "key": "zucchini",
+      "label": "Zucchini",
+      "category": "vegetables",
+      "aliases": [
+        "courgette",
+        "courgettes",
+        "summer squash",
+        "yellow zucchini"
+      ],
+      "drawHint": "A long straight dark green zucchini with faint pale speckles and a cut stem end."
+    },
+    {
+      "key": "mushrooms",
+      "label": "Mushrooms",
+      "category": "vegetables",
+      "aliases": [
+        "mushroom",
+        "champignons",
+        "white mushrooms",
+        "cremini",
+        "portobello",
+        "button mushrooms",
+        "shiitake"
+      ],
+      "drawHint": "Two plump white-beige button mushrooms with domed caps and short thick stems."
+    },
+    {
+      "key": "corn",
+      "label": "Corn on the cob",
+      "category": "vegetables",
+      "aliases": [
+        "corn on the cob",
+        "sweet corn",
+        "maïs",
+        "épis de maïs",
+        "blé d'inde",
+        "peaches and cream corn"
+      ],
+      "drawHint": "An ear of yellow corn with rows of plump kernels, its green husk peeled back."
+    },
+    {
+      "key": "green_beans",
+      "label": "Green beans",
+      "category": "vegetables",
+      "aliases": [
+        "green bean",
+        "string beans",
+        "haricots verts",
+        "yellow beans",
+        "snap peas",
+        "snow peas"
+      ],
+      "drawHint": "A small bundle of long slender green beans tied loosely together."
+    },
+    {
+      "key": "asparagus",
+      "label": "Asparagus",
+      "category": "vegetables",
+      "aliases": [
+        "asperges",
+        "asperge",
+        "asparagus spears",
+        "white asparagus"
+      ],
+      "drawHint": "A bundle of straight green asparagus spears with purple-tinged pointed tips, held by a band."
+    },
+    {
+      "key": "squash",
+      "label": "Squash",
+      "category": "vegetables",
+      "aliases": [
+        "butternut squash",
+        "acorn squash",
+        "spaghetti squash",
+        "courge",
+        "courge musquée",
+        "winter squash"
+      ],
+      "drawHint": "A beige butternut squash with a long neck and a rounded bulb base."
+    },
+    {
+      "key": "pumpkin",
+      "label": "Pumpkins",
+      "category": "vegetables",
+      "aliases": [
+        "pumpkins",
+        "citrouille",
+        "citrouilles",
+        "pie pumpkin",
+        "sugar pumpkin",
+        "jack-o'-lantern"
+      ],
+      "drawHint": "A round ribbed orange pumpkin with a curly green stem and a small leaf."
+    },
+    {
+      "key": "basil",
+      "label": "Basil",
+      "category": "vegetables",
+      "aliases": [
+        "fresh basil",
+        "basilic",
+        "thai basil",
+        "basil plant",
+        "sweet basil"
+      ],
+      "drawHint": "A sprig of bright green basil with broad, glossy, cupped leaves."
+    },
+    {
+      "key": "parsley",
+      "label": "Parsley & cilantro",
+      "category": "vegetables",
+      "aliases": [
+        "persil",
+        "flat-leaf parsley",
+        "cilantro",
+        "coriander",
+        "coriandre",
+        "fresh herbs",
+        "fines herbes"
+      ],
+      "drawHint": "A loose bunch of flat-leaf parsley with frilly bright green leaves on long thin stems."
+    },
+    {
+      "key": "bakery_generic",
+      "label": "Bread",
+      "category": "bakery",
+      "aliases": [
+        "bread",
+        "artisan bread",
+        "sourdough",
+        "country loaf",
+        "pain au levain",
+        "rye bread",
+        "pain de campagne"
+      ],
+      "drawHint": "A round rustic loaf of crusty golden-brown bread with a scored cross on top and a light dusting of flour."
+    },
+    {
+      "key": "sliced_bread",
+      "label": "Sliced bread",
+      "category": "bakery",
+      "aliases": [
+        "sandwich bread",
+        "white bread",
+        "whole wheat bread",
+        "pain tranché",
+        "loaf of bread",
+        "multigrain bread",
+        "pain blanc"
+      ],
+      "drawHint": "A sliced sandwich loaf in a clear bag twisted shut with a tag, one slice tipped forward."
+    },
+    {
+      "key": "baguette",
+      "label": "Baguette",
+      "category": "bakery",
+      "aliases": [
+        "baguettes",
+        "french bread",
+        "french stick",
+        "pain baguette",
+        "ficelle"
+      ],
+      "drawHint": "A long thin golden baguette with diagonal slashes, partly tucked into a paper sleeve."
+    },
+    {
+      "key": "bagel",
+      "label": "Bagels",
+      "category": "bakery",
+      "aliases": [
+        "bagels",
+        "montreal bagels",
+        "sesame bagels",
+        "everything bagels",
+        "bagels au sésame"
+      ],
+      "drawHint": "A round golden bagel with a hole in the middle, sprinkled with sesame seeds."
+    },
+    {
+      "key": "croissant",
+      "label": "Croissants",
+      "category": "bakery",
+      "aliases": [
+        "croissants",
+        "butter croissants",
+        "chocolatine",
+        "chocolatines",
+        "pain au chocolat",
+        "almond croissant"
+      ],
+      "drawHint": "A flaky crescent-shaped golden croissant with visible curved layers."
+    },
+    {
+      "key": "buns",
+      "label": "Buns & rolls",
+      "category": "bakery",
+      "aliases": [
+        "hamburger buns",
+        "hot dog buns",
+        "dinner rolls",
+        "kaiser rolls",
+        "petits pains",
+        "pains à hamburger",
+        "brioche buns",
+        "sausage buns"
+      ],
+      "drawHint": "Two soft round golden hamburger buns with glossy tops, one sprinkled with sesame seeds."
+    },
+    {
+      "key": "tortillas",
+      "label": "Tortillas & wraps",
+      "category": "bakery",
+      "aliases": [
+        "tortilla",
+        "wraps",
+        "flour tortillas",
+        "corn tortillas",
+        "tortillas de blé",
+        "soft tacos"
+      ],
+      "drawHint": "A small stack of thin round pale flour tortillas with toasty brown spots, the top one folded over."
+    },
+    {
+      "key": "pita",
+      "label": "Pita & naan",
+      "category": "bakery",
+      "aliases": [
+        "pita bread",
+        "pitas",
+        "pains pita",
+        "naan",
+        "naan bread",
+        "flatbread",
+        "pain naan"
+      ],
+      "drawHint": "A round puffy pita flatbread with golden toasted spots, opened slightly to show its pocket."
+    },
+    {
+      "key": "muffin",
+      "label": "Muffins",
+      "category": "bakery",
+      "aliases": [
+        "muffins",
+        "blueberry muffins",
+        "bran muffins",
+        "muffins aux bleuets",
+        "cupcakes"
+      ],
+      "drawHint": "A domed muffin with a golden top studded with blueberries, in a pleated paper liner."
+    },
+    {
+      "key": "donut",
+      "label": "Doughnuts",
+      "category": "bakery",
+      "aliases": [
+        "doughnuts",
+        "donuts",
+        "doughnut",
+        "beignes",
+        "beignets",
+        "timbits",
+        "crullers"
+      ],
+      "drawHint": "A ring doughnut with pink icing and colourful sprinkles, showing the hole in the middle."
+    },
+    {
+      "key": "cake",
+      "label": "Cake",
+      "category": "bakery",
+      "aliases": [
+        "birthday cake",
+        "gâteau",
+        "layer cake",
+        "cheesecake",
+        "chocolate cake",
+        "gâteau d'anniversaire",
+        "slab cake"
+      ],
+      "drawHint": "A small round layer cake with white frosting, a drip of pink glaze and a single cherry on top."
+    },
+    {
+      "key": "pie",
+      "label": "Pie",
+      "category": "bakery",
+      "aliases": [
+        "apple pie",
+        "pumpkin pie",
+        "tarte",
+        "tourtière",
+        "blueberry pie",
+        "pie shells",
+        "tarte aux pommes"
+      ],
+      "drawHint": "A round golden pie with a crimped crust and a lattice top showing red fruit filling."
+    },
+    {
+      "key": "butter_tart",
+      "label": "Butter tarts",
+      "category": "bakery",
+      "aliases": [
+        "butter tarts",
+        "tartes au beurre",
+        "tartelettes au beurre",
+        "mini tarts",
+        "pecan butter tarts",
+        "tarts"
+      ],
+      "drawHint": "A small round tart in a fluted golden pastry shell filled with glossy caramel-brown syrupy filling and a few raisins."
+    },
+    {
+      "key": "deli_generic",
+      "label": "Deli & charcuterie",
+      "category": "deli",
+      "aliases": [
+        "deli",
+        "charcuterie",
+        "charcuterie board",
+        "traiteur",
+        "deli counter",
+        "antipasto",
+        "cheese platter"
+      ],
+      "drawHint": "A small wooden board with a wedge of yellow cheese, a few folded salami slices and a sprig of herbs."
+    },
+    {
+      "key": "deli_meat",
+      "label": "Sliced deli meat",
+      "category": "deli",
+      "aliases": [
+        "sliced ham",
+        "ham",
+        "jambon",
+        "sliced turkey",
+        "cold cuts",
+        "viandes froides",
+        "black forest ham",
+        "lunch meat"
+      ],
+      "drawHint": "A fan of thin folded pink ham slices on a sheet of white deli paper."
+    },
+    {
+      "key": "salami",
+      "label": "Salami & pepperoni",
+      "category": "deli",
+      "aliases": [
+        "pepperoni",
+        "genoa salami",
+        "saucisson",
+        "chorizo",
+        "pepperoni sticks",
+        "soppressata",
+        "summer sausage"
+      ],
+      "drawHint": "A short chubby salami log with one cut end showing a red, white-speckled round face, and two loose slices."
+    },
+    {
+      "key": "cheddar",
+      "label": "Cheddar & block cheese",
+      "category": "deli",
+      "aliases": [
+        "cheese",
+        "fromage",
+        "old cheddar",
+        "marble cheese",
+        "block cheese",
+        "cheese slices",
+        "gouda",
+        "fromage cheddar"
+      ],
+      "drawHint": "A thick orange-yellow block of cheddar cheese with a few cut slices leaning against it."
+    },
+    {
+      "key": "shredded_cheese",
+      "label": "Shredded cheese",
+      "category": "deli",
+      "aliases": [
+        "grated cheese",
+        "fromage râpé",
+        "shredded mozzarella",
+        "pizza mozzarella",
+        "tex-mex cheese",
+        "shredded cheddar"
+      ],
+      "drawHint": "A resealable clear pouch filled with fluffy shreds of yellow and white cheese."
+    },
+    {
+      "key": "brie",
+      "label": "Brie & soft cheese",
+      "category": "deli",
+      "aliases": [
+        "camembert",
+        "soft cheese",
+        "goat cheese",
+        "fromage de chèvre",
+        "oka cheese",
+        "triple cream brie",
+        "feta"
+      ],
+      "drawHint": "A round white-rinded wheel of brie with a triangular wedge cut out showing the creamy pale yellow inside."
+    },
+    {
+      "key": "mozzarella",
+      "label": "Mozzarella",
+      "category": "deli",
+      "aliases": [
+        "fresh mozzarella",
+        "bocconcini",
+        "burrata",
+        "string cheese",
+        "cheese strings",
+        "ficelles de fromage"
+      ],
+      "drawHint": "A smooth round white ball of fresh mozzarella with a soft sheen and one basil leaf."
+    },
+    {
+      "key": "parmesan",
+      "label": "Parmesan",
+      "category": "deli",
+      "aliases": [
+        "parmesan cheese",
+        "parmigiano",
+        "parmigiano reggiano",
+        "grana padano",
+        "pecorino",
+        "parmesan râpé"
+      ],
+      "drawHint": "A craggy pale golden wedge of parmesan with a darker rind along its curved back."
+    },
+    {
+      "key": "cheese_curds",
+      "label": "Cheese curds",
+      "category": "deli",
+      "aliases": [
+        "curds",
+        "fromage en grains",
+        "squeaky cheese",
+        "poutine cheese",
+        "poutine curds"
+      ],
+      "drawHint": "A small paper bag spilling a pile of irregular, plump creamy-white cheese curds."
+    },
+    {
+      "key": "hummus",
+      "label": "Hummus & dips",
+      "category": "deli",
+      "aliases": [
+        "houmous",
+        "dip",
+        "tzatziki",
+        "spinach dip",
+        "baba ghanoush",
+        "guacamole",
+        "trempette"
+      ],
+      "drawHint": "A small round tub of beige hummus swirled with a drizzle of olive oil and a sprinkle of red paprika."
+    },
+    {
+      "key": "rotisserie_chicken",
+      "label": "Rotisserie chicken",
+      "category": "deli",
+      "aliases": [
+        "roast chicken",
+        "barbecue chicken",
+        "poulet rôti",
+        "bbq chicken",
+        "cooked chicken",
+        "poulet barbecue"
+      ],
+      "drawHint": "A golden-brown whole roasted chicken with crispy skin inside a domed clear takeout container."
+    },
+    {
+      "key": "meat_generic",
+      "label": "Meat",
+      "category": "meat",
+      "aliases": [
+        "meat",
+        "viande",
+        "butcher",
+        "boucherie",
+        "roast",
+        "beef roast",
+        "pork roast",
+        "stewing beef"
+      ],
+      "drawHint": "A parcel wrapped in brown butcher paper and tied with red-and-white twine, a pink cut of meat peeking out."
+    },
+    {
+      "key": "ground_beef",
+      "label": "Ground meat",
+      "category": "meat",
+      "aliases": [
+        "ground veal",
+        "hamburger meat",
+        "boeuf haché",
+        "lean ground beef",
+        "ground pork",
+        "ground turkey",
+        "porc haché",
+        "ground chicken"
+      ],
+      "drawHint": "A foam tray of coarse pink-red ground meat covered in clear plastic wrap."
+    },
+    {
+      "key": "steak",
+      "label": "Steak",
+      "category": "meat",
+      "aliases": [
+        "steaks",
+        "beef steak",
+        "ribeye",
+        "striploin",
+        "sirloin",
+        "bifteck",
+        "t-bone"
+      ],
+      "drawHint": "A thick raw red ribeye steak with marbled white fat and a curved fat edge."
+    },
+    {
+      "key": "chicken_breast",
+      "label": "Chicken breasts",
+      "category": "meat",
+      "aliases": [
+        "chicken",
+        "skinless chicken breasts",
+        "boneless chicken",
+        "poitrines de poulet",
+        "poulet",
+        "chicken cutlets",
+        "chicken tenders"
+      ],
+      "drawHint": "Two plump pale pink boneless chicken breasts on a small tray."
+    },
+    {
+      "key": "chicken_drumstick",
+      "label": "Chicken drumsticks & thighs",
+      "category": "meat",
+      "aliases": [
+        "drumsticks",
+        "chicken thighs",
+        "chicken wings",
+        "chicken legs",
+        "pilons de poulet",
+        "cuisses de poulet",
+        "ailes de poulet"
+      ],
+      "drawHint": "A single raw chicken drumstick with pale pink skin and a knobby bone end."
+    },
+    {
+      "key": "pork_chop",
+      "label": "Pork chops",
+      "category": "meat",
+      "aliases": [
+        "pork chops",
+        "côtelettes de porc",
+        "pork tenderloin",
+        "pork loin",
+        "pork",
+        "porc",
+        "ribs",
+        "côtes levées"
+      ],
+      "drawHint": "A raw pink bone-in pork chop with a white fat rim, shaped like a rounded comma."
+    },
+    {
+      "key": "bacon",
+      "label": "Bacon",
+      "category": "meat",
+      "aliases": [
+        "bacon strips",
+        "back bacon",
+        "peameal bacon",
+        "turkey bacon",
+        "pancetta",
+        "bacon de dos",
+        "bacon tranché"
+      ],
+      "drawHint": "Two wavy strips of bacon striped with pink meat and white fat."
+    },
+    {
+      "key": "sausages",
+      "label": "Sausages",
+      "category": "meat",
+      "aliases": [
+        "sausage",
+        "saucisses",
+        "italian sausage",
+        "breakfast sausages",
+        "bratwurst",
+        "chorizo sausage",
+        "saucisses italiennes"
+      ],
+      "drawHint": "Three plump links of browned sausages joined in a gently curved chain."
+    },
+    {
+      "key": "hot_dogs",
+      "label": "Hot dogs",
+      "category": "meat",
+      "aliases": [
+        "hot dog",
+        "wieners",
+        "saucisses à hot-dog",
+        "franks",
+        "frankfurters",
+        "smokies",
+        "tofu dogs"
+      ],
+      "drawHint": "A grilled hot dog in a soft bun topped with a squiggle of yellow mustard and red ketchup."
+    },
+    {
+      "key": "whole_turkey",
+      "label": "Turkey",
+      "category": "meat",
+      "aliases": [
+        "turkey",
+        "dinde",
+        "fresh turkey",
+        "thanksgiving turkey",
+        "turkey breast",
+        "dinde entière"
+      ],
+      "drawHint": "A whole roast turkey, golden brown, with drumsticks pointing up and little white paper frills on the ends."
+    },
+    {
+      "key": "seafood_generic",
+      "label": "Fish & seafood",
+      "category": "seafood",
+      "aliases": [
+        "fish",
+        "poisson",
+        "seafood",
+        "fruits de mer",
+        "whole fish",
+        "trout",
+        "truite",
+        "poissonnerie"
+      ],
+      "drawHint": "A whole silvery-blue fish with a forked tail lying on a small bed of crushed ice beside a lemon wedge."
+    },
+    {
+      "key": "salmon_fillet",
+      "label": "Salmon",
+      "category": "seafood",
+      "aliases": [
+        "salmon",
+        "saumon",
+        "coho salmon",
+        "atlantic salmon",
+        "smoked salmon",
+        "saumon fumé",
+        "lox",
+        "arctic char"
+      ],
+      "drawHint": "A thick coral-orange salmon fillet with pale white fat lines and silver skin along one side."
+    },
+    {
+      "key": "fish_fillet",
+      "label": "White fish fillets",
+      "category": "seafood",
+      "aliases": [
+        "cod",
+        "haddock",
+        "tilapia",
+        "sole",
+        "morue",
+        "aiglefin",
+        "basa",
+        "white fish"
+      ],
+      "drawHint": "A flaky white fish fillet with a tapered tail end on a sheet of paper with a lemon slice."
+    },
+    {
+      "key": "shrimp",
+      "label": "Shrimp",
+      "category": "seafood",
+      "aliases": [
+        "shrimps",
+        "prawns",
+        "crevettes",
+        "tiger shrimp",
+        "cooked shrimp",
+        "shrimp ring"
+      ],
+      "drawHint": "A plump curled pink-orange shrimp with a striped back and a little tail fan."
+    },
+    {
+      "key": "mussels",
+      "label": "Mussels & clams",
+      "category": "seafood",
+      "aliases": [
+        "blue mussels",
+        "moules",
+        "pei mussels",
+        "clams",
+        "palourdes",
+        "oysters",
+        "huîtres",
+        "scallops"
+      ],
+      "drawHint": "A cluster of three glossy blue-black mussel shells, one open to show orange meat."
+    },
+    {
+      "key": "lobster",
+      "label": "Lobster & crab",
+      "category": "seafood",
+      "aliases": [
+        "homard",
+        "crab",
+        "crabe",
+        "snow crab legs",
+        "lobster tails",
+        "crab legs",
+        "imitation crab"
+      ],
+      "drawHint": "A bright red cooked lobster with two big claws, a segmented tail and long antennae."
+    },
+    {
+      "key": "dairy_generic",
+      "label": "Dairy",
+      "category": "dairy",
+      "aliases": [
+        "dairy",
+        "produits laitiers",
+        "dairy products",
+        "kefir",
+        "buttermilk",
+        "babeurre",
+        "eggnog"
+      ],
+      "drawHint": "A vintage glass milk bottle with rounded shoulders and a paper cap, filled with white milk."
+    },
+    {
+      "key": "milk_bag",
+      "label": "Bagged milk (4 L)",
+      "category": "dairy",
+      "aliases": [
+        "bagged milk",
+        "milk bags",
+        "4 l milk",
+        "4l milk",
+        "4 litre milk",
+        "sac de lait",
+        "lait en sac",
+        "bag of milk"
+      ],
+      "drawHint": "A clear plastic outer bag holding three soft, pillow-shaped white milk pouches with a blue stripe across each."
+    },
+    {
+      "key": "milk_carton",
+      "label": "Milk",
+      "category": "dairy",
+      "aliases": [
+        "milk",
+        "lait",
+        "2% milk",
+        "skim milk",
+        "homo milk",
+        "whole milk",
+        "chocolate milk",
+        "lactose-free milk"
+      ],
+      "drawHint": "A gable-top paper milk carton in white and sky blue with a folded peaked spout and a blank label."
+    },
+    {
+      "key": "eggs",
+      "label": "Eggs",
+      "category": "dairy",
+      "aliases": [
+        "egg",
+        "oeufs",
+        "omega-3 eggs",
+        "dozen eggs",
+        "free-range eggs",
+        "brown eggs",
+        "large eggs",
+        "egg whites"
+      ],
+      "drawHint": "An open pulp egg carton showing a row of smooth white and brown eggs."
+    },
+    {
+      "key": "butter",
+      "label": "Butter",
+      "category": "dairy",
+      "aliases": [
+        "beurre",
+        "salted butter",
+        "unsalted butter",
+        "margarine",
+        "butter sticks",
+        "ghee",
+        "pound of butter"
+      ],
+      "drawHint": "A pale yellow rectangular block of butter on a small dish, half unwrapped from its foil paper, with one curl shaved off."
+    },
+    {
+      "key": "yogurt",
+      "label": "Yogurt",
+      "category": "dairy",
+      "aliases": [
+        "yogourt",
+        "yoghurt",
+        "greek yogurt",
+        "yogurt cups",
+        "yogurt tubes",
+        "vanilla yogurt",
+        "plain yogurt",
+        "skyr"
+      ],
+      "drawHint": "A small round yogurt cup with its lid peeled back to reveal smooth white yogurt topped with a strawberry."
+    },
+    {
+      "key": "cream",
+      "label": "Cream",
+      "category": "dairy",
+      "aliases": [
+        "whipping cream",
+        "35% cream",
+        "half and half",
+        "10% cream",
+        "coffee cream",
+        "crème",
+        "coffee creamer",
+        "whipped cream"
+      ],
+      "drawHint": "A short squat half-pint cream carton with a soft yellow band and a glossy dollop of whipped cream beside it."
+    },
+    {
+      "key": "sour_cream",
+      "label": "Sour cream & cottage cheese",
+      "category": "dairy",
+      "aliases": [
+        "light sour cream",
+        "crème sûre",
+        "cottage cheese",
+        "fromage cottage",
+        "ricotta",
+        "crème fraîche",
+        "sour cream dip"
+      ],
+      "drawHint": "An open short round tub of thick white sour cream with a spoon-swirled peak."
+    },
+    {
+      "key": "cream_cheese",
+      "label": "Cream cheese",
+      "category": "dairy",
+      "aliases": [
+        "fromage à la crème",
+        "philadelphia",
+        "cream cheese spread",
+        "mascarpone",
+        "cream cheese brick"
+      ],
+      "drawHint": "A foil-wrapped silver brick of cream cheese, one end opened to show the smooth white block."
+    },
+    {
+      "key": "plant_based_generic",
+      "label": "Plant-based",
+      "category": "plant_based",
+      "aliases": [
+        "plant-based",
+        "vegan",
+        "végétalien",
+        "végane",
+        "meat alternatives",
+        "plant protein",
+        "seitan",
+        "tempeh"
+      ],
+      "drawHint": "A small green sprout with two round leaves growing out of a little cream-coloured bowl."
+    },
+    {
+      "key": "plant_milk",
+      "label": "Plant milk",
+      "category": "plant_based",
+      "aliases": [
+        "oat milk",
+        "almond milk",
+        "soy milk",
+        "boisson d'avoine",
+        "boisson d'amande",
+        "boisson de soya",
+        "coconut beverage",
+        "plant-based milk"
+      ],
+      "drawHint": "A tall slim oat-beige carton with a screw cap and a single grain stalk on its blank front."
+    },
+    {
+      "key": "tofu",
+      "label": "Tofu",
+      "category": "plant_based",
+      "aliases": [
+        "firm tofu",
+        "silken tofu",
+        "extra firm tofu",
+        "tofu ferme",
+        "bean curd",
+        "smoked tofu"
+      ],
+      "drawHint": "A smooth white cube of tofu with a smaller cut cube beside it in a shallow tray of water."
+    },
+    {
+      "key": "veggie_burger",
+      "label": "Veggie burgers & meat alternatives",
+      "category": "plant_based",
+      "aliases": [
+        "plant-based meat",
+        "veggie burgers",
+        "plant-based burger",
+        "beyond burger",
+        "plant-based ground",
+        "galettes végétariennes",
+        "veggie patties",
+        "vegan sausages"
+      ],
+      "drawHint": "A thick round brownish-green veggie patty with visible bits of vegetables and a sprig of greens."
+    },
+    {
+      "key": "breakfast_generic",
+      "label": "Breakfast",
+      "category": "breakfast",
+      "aliases": [
+        "breakfast",
+        "déjeuner",
+        "petit-déjeuner",
+        "brunch",
+        "breakfast items"
+      ],
+      "drawHint": "A sunny-side-up fried egg next to a slice of buttered toast on a small round plate."
+    },
+    {
+      "key": "cereal",
+      "label": "Cereal",
+      "category": "breakfast",
+      "aliases": [
+        "cereals",
+        "céréales",
+        "corn flakes",
+        "cheerios",
+        "bran flakes",
+        "cereal box",
+        "rice krispies",
+        "muesli"
+      ],
+      "drawHint": "A tall cereal box with a blank colourful front, tipped slightly with golden flakes spilling into a small bowl."
+    },
+    {
+      "key": "oatmeal",
+      "label": "Oats & oatmeal",
+      "category": "breakfast",
+      "aliases": [
+        "oats",
+        "rolled oats",
+        "quick oats",
+        "gruau",
+        "flocons d'avoine",
+        "instant oatmeal",
+        "steel-cut oats",
+        "porridge"
+      ],
+      "drawHint": "A round cardboard canister of rolled oats with its lid off, pale flakes showing, and a wooden scoop."
+    },
+    {
+      "key": "granola",
+      "label": "Granola",
+      "category": "breakfast",
+      "aliases": [
+        "granola cereal",
+        "granola clusters",
+        "granola bites",
+        "maple granola",
+        "granola aux noix"
+      ],
+      "drawHint": "A small glass jar with a gingham cloth lid filled with chunky golden granola clusters and dried berries."
+    },
+    {
+      "key": "pancake_mix",
+      "label": "Pancake & waffle mix",
+      "category": "breakfast",
+      "aliases": [
+        "pancake batter",
+        "waffle mix",
+        "mélange à crêpes",
+        "pancakes",
+        "buttermilk pancake mix",
+        "crêpes",
+        "waffles"
+      ],
+      "drawHint": "A stack of three fluffy golden pancakes with a pat of butter on top and a drizzle of syrup."
+    },
+    {
+      "key": "maple_syrup",
+      "label": "Maple syrup",
+      "category": "breakfast",
+      "aliases": [
+        "sirop d'érable",
+        "syrup",
+        "pancake syrup",
+        "pure maple syrup",
+        "maple butter",
+        "beurre d'érable",
+        "table syrup"
+      ],
+      "drawHint": "A small glass jug of amber maple syrup with a loop handle and a red maple leaf on its label."
+    },
+    {
+      "key": "honey",
+      "label": "Honey",
+      "category": "breakfast",
+      "aliases": [
+        "miel",
+        "liquid honey",
+        "creamed honey",
+        "honey bear",
+        "raw honey",
+        "clover honey"
+      ],
+      "drawHint": "A round honey pot with golden honey dripping down its side and a wooden honey dipper resting on top."
+    },
+    {
+      "key": "jam",
+      "label": "Jam",
+      "category": "breakfast",
+      "aliases": [
+        "confiture",
+        "strawberry jam",
+        "jelly",
+        "marmalade",
+        "preserves",
+        "gelée",
+        "confitures"
+      ],
+      "drawHint": "A small round jar of ruby-red jam with a red-and-white gingham cloth lid tied with string."
+    },
+    {
+      "key": "peanut_butter",
+      "label": "Peanut butter & spreads",
+      "category": "breakfast",
+      "aliases": [
+        "beurre d'arachide",
+        "beurre d'arachides",
+        "almond butter",
+        "nut butter",
+        "natural peanut butter",
+        "crunchy peanut butter",
+        "hazelnut spread",
+        "sunflower seed butter"
+      ],
+      "drawHint": "An open jar of creamy tan peanut butter with a butter knife coated in it and two peanuts beside it."
+    },
+    {
+      "key": "baking_generic",
+      "label": "Baking supplies",
+      "category": "baking",
+      "aliases": [
+        "baking",
+        "baking supplies",
+        "cuisson",
+        "baking ingredients",
+        "ingrédients de pâtisserie",
+        "cornstarch",
+        "fécule de maïs"
+      ],
+      "drawHint": "A cream mixing bowl with a wire whisk leaning in it and a little puff of flour above."
+    },
+    {
+      "key": "flour",
+      "label": "Flour",
+      "category": "baking",
+      "aliases": [
+        "farine",
+        "all-purpose flour",
+        "whole wheat flour",
+        "bread flour",
+        "cake flour",
+        "gluten-free flour",
+        "almond flour"
+      ],
+      "drawHint": "A cinched paper flour sack with a blank label and a little heap of white flour spilling at its base."
+    },
+    {
+      "key": "sugar",
+      "label": "Sugar",
+      "category": "baking",
+      "aliases": [
+        "white sugar",
+        "sucre",
+        "granulated sugar",
+        "brown sugar",
+        "cassonade",
+        "icing sugar",
+        "sucre à glacer",
+        "sugar cubes"
+      ],
+      "drawHint": "A small bowl heaped with sparkling white sugar crystals with two stacked sugar cubes beside it."
+    },
+    {
+      "key": "baking_soda",
+      "label": "Baking soda & powder",
+      "category": "baking",
+      "aliases": [
+        "sodium bicarbonate",
+        "baking powder",
+        "bicarbonate de soude",
+        "poudre à pâte",
+        "soda à pâte",
+        "cream of tartar"
+      ],
+      "drawHint": "A small upright cardboard box with an open pour spout and a little mound of fine white powder in front of it."
+    },
+    {
+      "key": "yeast",
+      "label": "Yeast",
+      "category": "baking",
+      "aliases": [
+        "levure",
+        "active dry yeast",
+        "instant yeast",
+        "quick-rise yeast",
+        "yeast packets",
+        "sourdough starter"
+      ],
+      "drawHint": "Three small connected paper yeast packets with a few beige granules scattered beside them."
+    },
+    {
+      "key": "vanilla",
+      "label": "Vanilla extract",
+      "category": "baking",
+      "aliases": [
+        "vanilla extract",
+        "vanille",
+        "extrait de vanille",
+        "vanilla beans",
+        "almond extract",
+        "pure vanilla"
+      ],
+      "drawHint": "A small dark amber glass bottle of vanilla extract with two dark vanilla pods crossed in front."
+    },
+    {
+      "key": "chocolate_chips",
+      "label": "Chocolate chips",
+      "category": "baking",
+      "aliases": [
+        "pépites de chocolat",
+        "baking chocolate",
+        "semi-sweet chips",
+        "white chocolate chips",
+        "chocolate chunks",
+        "brisures de chocolat"
+      ],
+      "drawHint": "A small heap of glossy teardrop-shaped brown chocolate chips."
+    },
+    {
+      "key": "cocoa_powder",
+      "label": "Cocoa powder",
+      "category": "baking",
+      "aliases": [
+        "cocoa",
+        "cacao",
+        "poudre de cacao",
+        "unsweetened cocoa",
+        "dutch-process cocoa",
+        "baking cocoa",
+        "hot chocolate mix"
+      ],
+      "drawHint": "A round tin of reddish-brown cocoa powder with the lid off and a spoon dusted with cocoa."
+    },
+    {
+      "key": "sprinkles",
+      "label": "Sprinkles",
+      "category": "baking",
+      "aliases": [
+        "nonpareils",
+        "jimmies",
+        "vermicelles",
+        "rainbow sprinkles",
+        "sprinkle mix",
+        "cake decorations",
+        "food colouring"
+      ],
+      "drawHint": "A small shaker jar overflowing with rainbow-coloured rod sprinkles, a few scattered in front."
+    },
+    {
+      "key": "cake_mix",
+      "label": "Cake & brownie mix",
+      "category": "baking",
+      "aliases": [
+        "boxed cake mix",
+        "brownie mix",
+        "cupcake mix",
+        "mélange à gâteau",
+        "muffin mix",
+        "cookie mix",
+        "frosting",
+        "glaçage"
+      ],
+      "drawHint": "A rectangular mix box with a blank front showing a picture of a slice of chocolate layer cake."
+    },
+    {
+      "key": "condiments_generic",
+      "label": "Condiments",
+      "category": "condiments",
+      "aliases": [
+        "condiments",
+        "condiment",
+        "sauces",
+        "seasonings",
+        "assaisonnements",
+        "toppings",
+        "relish",
+        "steak sauce"
+      ],
+      "drawHint": "A trio of little condiment bottles, a red squeeze bottle, a yellow squeeze bottle and a small spice shaker, huddled together."
+    },
+    {
+      "key": "salt",
+      "label": "Salt",
+      "category": "condiments",
+      "aliases": [
+        "sel",
+        "table salt",
+        "sea salt",
+        "kosher salt",
+        "iodized salt",
+        "fleur de sel",
+        "gros sel"
+      ],
+      "drawHint": "A round white salt shaker with a domed silver lid with holes and a few crystals sprinkled beside it."
+    },
+    {
+      "key": "black_pepper",
+      "label": "Pepper",
+      "category": "condiments",
+      "aliases": [
+        "cracked pepper",
+        "poivre",
+        "poivre noir",
+        "peppercorns",
+        "pepper grinder",
+        "ground pepper"
+      ],
+      "drawHint": "A wooden pepper mill with a round knob top and a few black peppercorns beside it."
+    },
+    {
+      "key": "spice_jar",
+      "label": "Spices",
+      "category": "condiments",
+      "aliases": [
+        "spices",
+        "épices",
+        "cinnamon",
+        "cannelle",
+        "cumin",
+        "paprika",
+        "oregano",
+        "garlic powder"
+      ],
+      "drawHint": "A small glass spice jar with a cork lid filled with rust-red ground spice, a cinnamon stick leaning against it."
+    },
+    {
+      "key": "ketchup",
+      "label": "Ketchup & BBQ sauce",
+      "category": "condiments",
+      "aliases": [
+        "catsup",
+        "tomato ketchup",
+        "bbq sauce",
+        "barbecue sauce",
+        "sauce bbq",
+        "sauce barbecue"
+      ],
+      "drawHint": "A red plastic squeeze bottle of ketchup with a white flip-top cap and a blank label."
+    },
+    {
+      "key": "mustard",
+      "label": "Mustard",
+      "category": "condiments",
+      "aliases": [
+        "moutarde",
+        "yellow mustard",
+        "dijon",
+        "dijon mustard",
+        "honey mustard",
+        "grainy mustard",
+        "moutarde de dijon"
+      ],
+      "drawHint": "A bright yellow squeeze bottle of mustard with a pointed red nozzle."
+    },
+    {
+      "key": "mayonnaise",
+      "label": "Mayonnaise",
+      "category": "condiments",
+      "aliases": [
+        "mayo",
+        "miracle whip",
+        "sandwich spread",
+        "aioli",
+        "tartar sauce",
+        "light mayonnaise"
+      ],
+      "drawHint": "A wide glass jar of creamy white mayonnaise with a blue screw lid and a blank label."
+    },
+    {
+      "key": "hot_sauce",
+      "label": "Hot sauce",
+      "category": "condiments",
+      "aliases": [
+        "sriracha",
+        "sauce piquante",
+        "tabasco",
+        "chili sauce",
+        "frank's red hot",
+        "chili oil",
+        "sambal oelek"
+      ],
+      "drawHint": "A slim glass bottle of bright red hot sauce with a narrow neck and a small chili pepper beside it."
+    },
+    {
+      "key": "soy_sauce",
+      "label": "Soy & Asian sauces",
+      "category": "condiments",
+      "aliases": [
+        "hoisin sauce",
+        "sauce soya",
+        "sauce soja",
+        "tamari",
+        "teriyaki sauce",
+        "oyster sauce",
+        "fish sauce",
+        "worcestershire sauce"
+      ],
+      "drawHint": "A small glass bottle of dark brown soy sauce with a red cap and a little dish of sauce in front."
+    },
+    {
+      "key": "salad_dressing",
+      "label": "Salad dressing",
+      "category": "condiments",
+      "aliases": [
+        "dressing",
+        "vinaigrette",
+        "ranch",
+        "caesar dressing",
+        "italian dressing",
+        "balsamic vinaigrette",
+        "vinaigrette italienne"
+      ],
+      "drawHint": "A tall glass dressing bottle with a pour cap, showing creamy white dressing flecked with green herbs."
+    },
+    {
+      "key": "olive_oil",
+      "label": "Olive oil",
+      "category": "condiments",
+      "aliases": [
+        "huile d'olive",
+        "extra virgin olive oil",
+        "evoo",
+        "avocado oil",
+        "sesame oil",
+        "huile de sésame",
+        "cooking oil"
+      ],
+      "drawHint": "A tall dark green glass bottle of olive oil with a cork stopper and a sprig of two olives tied at its neck."
+    },
+    {
+      "key": "canola_oil",
+      "label": "Canola & vegetable oil",
+      "category": "condiments",
+      "aliases": [
+        "vegetable oil",
+        "canola",
+        "huile de canola",
+        "huile végétale",
+        "sunflower oil",
+        "frying oil",
+        "corn oil"
+      ],
+      "drawHint": "A clear plastic jug of pale golden vegetable oil with a side handle and a yellow cap."
+    },
+    {
+      "key": "vinegar",
+      "label": "Vinegar",
+      "category": "condiments",
+      "aliases": [
+        "vinaigre",
+        "white vinegar",
+        "balsamic vinegar",
+        "apple cider vinegar",
+        "rice vinegar",
+        "red wine vinegar",
+        "vinaigre balsamique"
+      ],
+      "drawHint": "A slim glass cruet of vinegar with a tall stopper, holding clear pale amber liquid."
+    },
+    {
+      "key": "salsa",
+      "label": "Salsa",
+      "category": "condiments",
+      "aliases": [
+        "mild salsa",
+        "medium salsa",
+        "chunky salsa",
+        "pico de gallo",
+        "salsa verde",
+        "sauce salsa"
+      ],
+      "drawHint": "A small glass jar of chunky red tomato salsa with visible bits of onion and green pepper, its lid set aside."
+    },
+    {
+      "key": "pantry_generic",
+      "label": "Pantry staples",
+      "category": "pantry",
+      "aliases": [
+        "pantry",
+        "garde-manger",
+        "dry goods",
+        "canned goods",
+        "conserves",
+        "staples",
+        "international foods",
+        "épicerie"
+      ],
+      "drawHint": "A little wooden pantry shelf with a tin can, a glass jar and a small box lined up on it."
+    },
+    {
+      "key": "spaghetti",
+      "label": "Spaghetti & long pasta",
+      "category": "pantry",
+      "aliases": [
+        "linguine",
+        "fettuccine",
+        "spaghettini",
+        "angel hair",
+        "long pasta",
+        "nouilles spaghetti",
+        "spaghetti pasta"
+      ],
+      "drawHint": "A bundle of long, thin, straight golden dry spaghetti tied with a ribbon around its middle."
+    },
+    {
+      "key": "pasta",
+      "label": "Pasta",
+      "category": "pantry",
+      "aliases": [
+        "pâtes",
+        "penne",
+        "macaroni",
+        "fusilli",
+        "rotini",
+        "farfalle",
+        "lasagna noodles",
+        "short pasta"
+      ],
+      "drawHint": "A small heap of golden dry pasta shapes: penne tubes, a fusilli spiral and a bow-tie farfalle."
+    },
+    {
+      "key": "mac_and_cheese",
+      "label": "Mac & cheese",
+      "category": "pantry",
+      "aliases": [
+        "kraft dinner",
+        "kd",
+        "macaroni and cheese",
+        "mac n cheese",
+        "macaroni au fromage",
+        "boxed mac and cheese"
+      ],
+      "drawHint": "A small bowl of bright orange cheesy elbow macaroni with a fork resting in it."
+    },
+    {
+      "key": "rice",
+      "label": "Rice & grains",
+      "category": "pantry",
+      "aliases": [
+        "riz",
+        "white rice",
+        "brown rice",
+        "basmati rice",
+        "jasmine rice",
+        "quinoa",
+        "couscous",
+        "sushi rice"
+      ],
+      "drawHint": "A small cloth sack of rice tied at the top with a scoop of white grains in front."
+    },
+    {
+      "key": "noodles",
+      "label": "Noodles & ramen",
+      "category": "pantry",
+      "aliases": [
+        "ramen",
+        "instant noodles",
+        "rice noodles",
+        "udon",
+        "egg noodles",
+        "nouilles",
+        "soba",
+        "nouilles ramen"
+      ],
+      "drawHint": "A bowl of wavy noodles in broth with a pair of chopsticks resting across the rim."
+    },
+    {
+      "key": "pasta_sauce",
+      "label": "Pasta sauce",
+      "category": "pantry",
+      "aliases": [
+        "tomato sauce",
+        "spaghetti sauce",
+        "marinara",
+        "sauce à spaghetti",
+        "sauce tomate",
+        "alfredo sauce",
+        "pesto"
+      ],
+      "drawHint": "A tall glass jar of rich red tomato pasta sauce with a metal lid and a basil leaf on its blank label."
+    },
+    {
+      "key": "canned_tomatoes",
+      "label": "Canned tomatoes",
+      "category": "pantry",
+      "aliases": [
+        "diced tomatoes",
+        "crushed tomatoes",
+        "tomates en dés",
+        "tomates en conserve",
+        "tomato paste",
+        "pâte de tomates",
+        "passata",
+        "whole tomatoes"
+      ],
+      "drawHint": "An open tin can with a red label showing a tomato, filled with chunky diced tomatoes."
+    },
+    {
+      "key": "canned_beans",
+      "label": "Canned beans",
+      "category": "pantry",
+      "aliases": [
+        "chickpeas",
+        "black beans",
+        "kidney beans",
+        "pois chiches",
+        "haricots rouges",
+        "baked beans",
+        "fèves au lard",
+        "refried beans"
+      ],
+      "drawHint": "An opened tin can filled with glossy beans, with a few chickpeas and black beans spilling beside it."
+    },
+    {
+      "key": "lentils",
+      "label": "Lentils & dried beans",
+      "category": "pantry",
+      "aliases": [
+        "lentilles",
+        "red lentils",
+        "green lentils",
+        "split peas",
+        "dried beans",
+        "dried chickpeas",
+        "pois cassés",
+        "pearl barley"
+      ],
+      "drawHint": "A small clear bag of orange-red and green lentils closed with a twist tie, a few lentils scattered in front."
+    },
+    {
+      "key": "soup_can",
+      "label": "Soup",
+      "category": "pantry",
+      "aliases": [
+        "soupe",
+        "canned soup",
+        "chicken noodle soup",
+        "tomato soup",
+        "cream of mushroom",
+        "soup mix",
+        "canned chili"
+      ],
+      "drawHint": "A classic tin can of soup with a red-and-white blank label and a small steaming bowl in front."
+    },
+    {
+      "key": "broth",
+      "label": "Broth & stock",
+      "category": "pantry",
+      "aliases": [
+        "stock",
+        "chicken broth",
+        "beef broth",
+        "vegetable broth",
+        "bouillon",
+        "bouillon de poulet",
+        "stock cubes",
+        "gravy mix"
+      ],
+      "drawHint": "A tall rectangular carton of broth with a screw cap and a golden-amber band, two little bouillon cubes beside it."
+    },
+    {
+      "key": "canned_tuna",
+      "label": "Canned tuna & fish",
+      "category": "pantry",
+      "aliases": [
+        "tuna",
+        "thon",
+        "canned salmon",
+        "sardines",
+        "thon en conserve",
+        "flaked tuna",
+        "chunk light tuna",
+        "saumon en conserve"
+      ],
+      "drawHint": "A short flat round tin of tuna with its pull-tab lid rolled back to show pale pink flaked fish."
+    },
+    {
+      "key": "pickles",
+      "label": "Pickles",
+      "category": "pantry",
+      "aliases": [
+        "dill pickles",
+        "cornichons",
+        "marinades",
+        "gherkins",
+        "pickled beets",
+        "sauerkraut",
+        "kimchi",
+        "relish jar"
+      ],
+      "drawHint": "A glass mason jar packed with green dill pickles, a sprig of dill and a few garlic cloves in brine."
+    },
+    {
+      "key": "olives",
+      "label": "Olives",
+      "category": "pantry",
+      "aliases": [
+        "green olives",
+        "black olives",
+        "kalamata olives",
+        "olives vertes",
+        "olives noires",
+        "stuffed olives",
+        "tapenade"
+      ],
+      "drawHint": "A small dish of glossy green and black olives, one green olive stuffed with red pimento."
+    },
+    {
+      "key": "coconut_milk",
+      "label": "Coconut milk",
+      "category": "pantry",
+      "aliases": [
+        "lait de coco",
+        "coconut cream",
+        "crème de coco",
+        "canned coconut milk",
+        "light coconut milk",
+        "coconut"
+      ],
+      "drawHint": "A tin can beside a halved brown hairy coconut showing its white flesh."
+    },
+    {
+      "key": "curry_sauce",
+      "label": "Curry & simmer sauces",
+      "category": "pantry",
+      "aliases": [
+        "curry paste",
+        "korma sauce",
+        "butter chicken sauce",
+        "tikka masala sauce",
+        "pâte de cari",
+        "cari",
+        "simmer sauce",
+        "thai curry paste"
+      ],
+      "drawHint": "A small jar of golden-orange curry sauce with a spoon showing a bright yellow-orange drip."
+    },
+    {
+      "key": "snacks_generic",
+      "label": "Snacks",
+      "category": "snacks",
+      "aliases": [
+        "snacks",
+        "snack",
+        "collations",
+        "grignotines",
+        "treats",
+        "lunchbox snacks",
+        "goodies"
+      ],
+      "drawHint": "A little open paper snack bag spilling a mix of pretzels, crackers and a cookie."
+    },
+    {
+      "key": "potato_chips",
+      "label": "Chips",
+      "category": "snacks",
+      "aliases": [
+        "chips",
+        "croustilles",
+        "crisps",
+        "ketchup chips",
+        "all dressed chips",
+        "kettle chips",
+        "ripple chips",
+        "sour cream and onion chips"
+      ],
+      "drawHint": "A puffy crinkled chip bag with a blank front and a few golden wavy potato chips spilling out."
+    },
+    {
+      "key": "tortilla_chips",
+      "label": "Tortilla chips",
+      "category": "snacks",
+      "aliases": [
+        "nachos",
+        "nacho chips",
+        "corn chips",
+        "croustilles de maïs",
+        "tortilla scoops",
+        "taco shells"
+      ],
+      "drawHint": "A small heap of triangular golden-yellow tortilla chips with toasty spots."
+    },
+    {
+      "key": "popcorn",
+      "label": "Popcorn",
+      "category": "snacks",
+      "aliases": [
+        "maïs soufflé",
+        "microwave popcorn",
+        "kettle corn",
+        "popping corn",
+        "pop-corn",
+        "caramel corn"
+      ],
+      "drawHint": "A red-and-white striped paper popcorn box overflowing with fluffy white popcorn."
+    },
+    {
+      "key": "crackers",
+      "label": "Crackers & pretzels",
+      "category": "snacks",
+      "aliases": [
+        "craquelins",
+        "soda crackers",
+        "saltines",
+        "graham crackers",
+        "rice crackers",
+        "goldfish crackers",
+        "biscuits soda",
+        "pretzels"
+      ],
+      "drawHint": "A short stack of square golden crackers with little docking holes, one with a scalloped edge."
+    },
+    {
+      "key": "cookies",
+      "label": "Cookies",
+      "category": "snacks",
+      "aliases": [
+        "cookie",
+        "biscuits",
+        "chocolate chip cookies",
+        "oreos",
+        "biscotti",
+        "arrowroot cookies",
+        "shortbread",
+        "galettes"
+      ],
+      "drawHint": "Two round golden chocolate chip cookies, one with a bite taken out."
+    },
+    {
+      "key": "chocolate_bar",
+      "label": "Chocolate",
+      "category": "snacks",
+      "aliases": [
+        "chocolate",
+        "chocolat",
+        "chocolate bars",
+        "barre de chocolat",
+        "dark chocolate",
+        "milk chocolate",
+        "candy bar",
+        "tablette de chocolat"
+      ],
+      "drawHint": "A chocolate bar partly unwrapped from silver foil and a pastel paper sleeve, showing square segments with one corner snapped off."
+    },
+    {
+      "key": "candy",
+      "label": "Candy",
+      "category": "snacks",
+      "aliases": [
+        "candies",
+        "bonbons",
+        "gummies",
+        "gummy bears",
+        "jujubes",
+        "licorice",
+        "réglisse",
+        "lollipops"
+      ],
+      "drawHint": "A round hard candy in a clear twist wrapper striped pink and white, beside a little gummy bear."
+    },
+    {
+      "key": "nuts",
+      "label": "Nuts & trail mix",
+      "category": "snacks",
+      "aliases": [
+        "noix",
+        "mixed nuts",
+        "almonds",
+        "amandes",
+        "peanuts",
+        "cashews",
+        "trail mix",
+        "pistachios"
+      ],
+      "drawHint": "A small pile of mixed nuts: almonds, a cashew, a peanut in its shell and a walnut half."
+    },
+    {
+      "key": "dried_fruit",
+      "label": "Dried fruit",
+      "category": "snacks",
+      "aliases": [
+        "raisins",
+        "raisins secs",
+        "dried cranberries",
+        "craisins",
+        "dates",
+        "dried apricots",
+        "prunes",
+        "dried mango"
+      ],
+      "drawHint": "A small heap of wrinkly dark purple raisins with a few dried apricot halves and a date."
+    },
+    {
+      "key": "granola_bar",
+      "label": "Granola bars",
+      "category": "snacks",
+      "aliases": [
+        "granola bars",
+        "barres tendres",
+        "cereal bars",
+        "protein bars",
+        "chewy bars",
+        "barres granola",
+        "rice krispie squares"
+      ],
+      "drawHint": "A rectangular chewy granola bar studded with oats and chocolate bits, half out of a crinkled wrapper."
+    },
+    {
+      "key": "marshmallows",
+      "label": "Marshmallows",
+      "category": "snacks",
+      "aliases": [
+        "marshmallow",
+        "guimauves",
+        "guimauve",
+        "mini marshmallows",
+        "campfire marshmallows",
+        "s'mores"
+      ],
+      "drawHint": "A few puffy white cylindrical marshmallows, one toasted golden-brown on a little roasting stick."
+    },
+    {
+      "key": "beverages_generic",
+      "label": "Drinks",
+      "category": "beverages",
+      "aliases": [
+        "drinks",
+        "beverages",
+        "boissons",
+        "breuvages",
+        "iced tea",
+        "thé glacé",
+        "sports drinks",
+        "energy drinks"
+      ],
+      "drawHint": "A tall glass of a pink fizzy drink with ice cubes, a striped straw and a lemon slice on the rim."
+    },
+    {
+      "key": "coffee",
+      "label": "Coffee",
+      "category": "beverages",
+      "aliases": [
+        "café",
+        "ground coffee",
+        "coffee beans",
+        "instant coffee",
+        "k-cups",
+        "coffee pods",
+        "espresso",
+        "dark roast"
+      ],
+      "drawHint": "A kraft-paper coffee bag folded over at the top with a few dark roasted coffee beans in front."
+    },
+    {
+      "key": "tea",
+      "label": "Tea",
+      "category": "beverages",
+      "aliases": [
+        "thé",
+        "tea bags",
+        "green tea",
+        "black tea",
+        "herbal tea",
+        "tisane",
+        "orange pekoe",
+        "chai"
+      ],
+      "drawHint": "A teacup with a tea bag string and paper tag hanging over the rim and a curl of steam rising."
+    },
+    {
+      "key": "orange_juice",
+      "label": "Orange juice",
+      "category": "beverages",
+      "aliases": [
+        "oj",
+        "jus d'orange",
+        "juice",
+        "jus",
+        "fruit juice",
+        "jus de fruits",
+        "pulp-free orange juice",
+        "grapefruit juice"
+      ],
+      "drawHint": "A clear jug of bright orange juice with an orange cap and a halved orange beside it."
+    },
+    {
+      "key": "apple_juice",
+      "label": "Apple juice & cider",
+      "category": "beverages",
+      "aliases": [
+        "jus de pomme",
+        "apple cider",
+        "cider",
+        "cidre",
+        "cranberry juice",
+        "jus de canneberge",
+        "grape juice"
+      ],
+      "drawHint": "A clear bottle of golden apple juice with a green cap and a little red apple beside it."
+    },
+    {
+      "key": "juice_box",
+      "label": "Juice boxes",
+      "category": "beverages",
+      "aliases": [
+        "juice boxes",
+        "boîtes à jus",
+        "drinking boxes",
+        "kids juice",
+        "jus en boîte",
+        "juice pouches"
+      ],
+      "drawHint": "A small rectangular juice box with a bent straw poking out of the top and a blank fruity label."
+    },
+    {
+      "key": "bottled_water",
+      "label": "Bottled water",
+      "category": "beverages",
+      "aliases": [
+        "water",
+        "eau",
+        "water bottles",
+        "eau de source",
+        "spring water",
+        "case of water",
+        "distilled water",
+        "eau embouteillée"
+      ],
+      "drawHint": "A clear plastic water bottle with a light blue cap and a pale blue wave-shaped label."
+    },
+    {
+      "key": "sparkling_water",
+      "label": "Sparkling water",
+      "category": "beverages",
+      "aliases": [
+        "soda water",
+        "club soda",
+        "eau pétillante",
+        "carbonated water",
+        "seltzer",
+        "flavoured sparkling water",
+        "tonic water",
+        "eau gazéifiée"
+      ],
+      "drawHint": "A slim aluminum can in pastel teal with rising bubbles and a lime slice beside it."
+    },
+    {
+      "key": "soda",
+      "label": "Pop",
+      "category": "beverages",
+      "aliases": [
+        "pop",
+        "soft drinks",
+        "boissons gazeuses",
+        "cola",
+        "ginger ale",
+        "root beer",
+        "liqueurs douces",
+        "cans of pop"
+      ],
+      "drawHint": "A classic red soda can with a pull tab and a few bubbles fizzing above it."
+    },
+    {
+      "key": "lemonade",
+      "label": "Lemonade",
+      "category": "beverages",
+      "aliases": [
+        "limonade",
+        "pink lemonade",
+        "lemonade concentrate",
+        "frozen lemonade",
+        "lemon drink",
+        "citronnade"
+      ],
+      "drawHint": "A glass pitcher of pale yellow lemonade with ice cubes, floating lemon slices and a striped straw."
+    },
+    {
+      "key": "beer",
+      "label": "Beer",
+      "category": "beverages",
+      "aliases": [
+        "bière",
+        "bières",
+        "craft beer",
+        "lager",
+        "ale",
+        "six-pack",
+        "tallboys",
+        "non-alcoholic beer"
+      ],
+      "drawHint": "A frosty brown glass beer bottle with a gold crown cap and a blank oval label."
+    },
+    {
+      "key": "wine",
+      "label": "Wine",
+      "category": "beverages",
+      "aliases": [
+        "vin",
+        "red wine",
+        "white wine",
+        "vin rouge",
+        "vin blanc",
+        "rosé",
+        "sparkling wine",
+        "prosecco"
+      ],
+      "drawHint": "A dark green wine bottle with a burgundy foil top beside a stemmed glass of red wine."
+    },
+    {
+      "key": "frozen_generic",
+      "label": "Frozen food",
+      "category": "frozen",
+      "aliases": [
+        "frozen",
+        "frozen food",
+        "surgelés",
+        "congelés",
+        "aliments surgelés",
+        "frozen meals",
+        "frozen dinners",
+        "tv dinner"
+      ],
+      "drawHint": "A frosty pale blue box with a big white snowflake on its blank front and little ice crystals around it."
+    },
+    {
+      "key": "ice_cream",
+      "label": "Ice cream",
+      "category": "frozen",
+      "aliases": [
+        "crème glacée",
+        "gelato",
+        "ice cream tub",
+        "frozen yogurt",
+        "sorbet",
+        "ice cream cones",
+        "ice cream sandwiches",
+        "ice cream bars"
+      ],
+      "drawHint": "A waffle cone holding two scoops of ice cream, one strawberry pink and one mint green."
+    },
+    {
+      "key": "popsicle",
+      "label": "Popsicles & freezies",
+      "category": "frozen",
+      "aliases": [
+        "popsicles",
+        "freezies",
+        "ice pops",
+        "sucettes glacées",
+        "fruit bars",
+        "frozen treats",
+        "ice lollies"
+      ],
+      "drawHint": "A rocket-shaped popsicle with red, white and blue stripes on a wooden stick, with a bite out of the top."
+    },
+    {
+      "key": "frozen_pizza",
+      "label": "Pizza",
+      "category": "frozen",
+      "aliases": [
+        "pizza",
+        "pizza congelée",
+        "pizza surgelée",
+        "pizza pockets",
+        "pizzas",
+        "naan pizza",
+        "pizza rolls"
+      ],
+      "drawHint": "A whole round pepperoni pizza with melted cheese and one slice partly pulled away."
+    },
+    {
+      "key": "french_fries",
+      "label": "Fries",
+      "category": "frozen",
+      "aliases": [
+        "fries",
+        "frites",
+        "frozen fries",
+        "hash browns",
+        "tater tots",
+        "sweet potato fries",
+        "frites surgelées",
+        "potato wedges"
+      ],
+      "drawHint": "A red paper fry carton overflowing with golden french fries."
+    },
+    {
+      "key": "frozen_vegetables",
+      "label": "Frozen vegetables",
+      "category": "frozen",
+      "aliases": [
+        "frozen peas",
+        "frozen corn",
+        "frozen veg",
+        "légumes surgelés",
+        "petits pois",
+        "mixed vegetables",
+        "edamame",
+        "stir-fry vegetables"
+      ],
+      "drawHint": "A frosty clear bag of bright green peas and orange carrot cubes with a snowflake on one corner."
+    },
+    {
+      "key": "frozen_berries",
+      "label": "Frozen fruit",
+      "category": "frozen",
+      "aliases": [
+        "frozen raspberries",
+        "fruits surgelés",
+        "mixed berries",
+        "frozen strawberries",
+        "frozen mango",
+        "frozen blueberries",
+        "smoothie mix",
+        "petits fruits surgelés"
+      ],
+      "drawHint": "A frosty clear bag of mixed red and blue berries dusted with ice crystals and a snowflake on one corner."
+    },
+    {
+      "key": "perogies",
+      "label": "Perogies & dumplings",
+      "category": "frozen",
+      "aliases": [
+        "pierogi",
+        "pyrohy",
+        "dumplings",
+        "potstickers",
+        "gyoza",
+        "dim sum",
+        "raviolis chinois",
+        "dumpling"
+      ],
+      "drawHint": "Three plump half-moon perogies with crimped edges and golden browned spots."
+    },
+    {
+      "key": "chicken_nuggets",
+      "label": "Nuggets & fish sticks",
+      "category": "frozen",
+      "aliases": [
+        "nuggets",
+        "chicken fingers",
+        "pépites de poulet",
+        "chicken strips",
+        "breaded chicken",
+        "fish sticks",
+        "bâtonnets de poisson",
+        "popcorn chicken"
+      ],
+      "drawHint": "Three golden breaded chicken nuggets in rounded blobby shapes beside a little cup of dipping sauce."
+    },
+    {
+      "key": "ice_bag",
+      "label": "Bag of ice",
+      "category": "frozen",
+      "aliases": [
+        "ice",
+        "glace",
+        "ice cubes",
+        "bag of ice",
+        "sac de glace",
+        "glaçons",
+        "ice block",
+        "party ice"
+      ],
+      "drawHint": "A frosty clear plastic bag of ice cubes knotted at the top, with a blue snowflake and drips of melt."
+    },
+    {
+      "key": "baby_generic",
+      "label": "Baby",
+      "category": "baby",
+      "aliases": [
+        "baby",
+        "bébé",
+        "baby supplies",
+        "baby bottle",
+        "biberon",
+        "pacifier",
+        "suce",
+        "soins pour bébé"
+      ],
+      "drawHint": "A baby bottle with milk inside, a pastel yellow collar and a soft rounded nipple."
+    },
+    {
+      "key": "diapers",
+      "label": "Diapers",
+      "category": "baby",
+      "aliases": [
+        "diaper",
+        "couches",
+        "nappies",
+        "pull-ups",
+        "training pants",
+        "swim diapers",
+        "couches pour bébé"
+      ],
+      "drawHint": "A single folded white baby diaper with pastel tabs and a little star pattern."
+    },
+    {
+      "key": "baby_wipes",
+      "label": "Baby wipes",
+      "category": "baby",
+      "aliases": [
+        "wipes",
+        "lingettes",
+        "lingettes pour bébé",
+        "wet wipes",
+        "sensitive wipes",
+        "wipes refill"
+      ],
+      "drawHint": "A soft rectangular pack of baby wipes with a pastel flip lid and a white wipe pulled halfway out."
+    },
+    {
+      "key": "baby_formula",
+      "label": "Baby formula",
+      "category": "baby",
+      "aliases": [
+        "formula",
+        "infant formula",
+        "préparation pour nourrissons",
+        "lait maternisé",
+        "toddler formula",
+        "formula powder",
+        "ready-to-feed formula"
+      ],
+      "drawHint": "A round tin of formula with a scoop resting on its open top and a pastel blank label with a baby bottle silhouette."
+    },
+    {
+      "key": "baby_food",
+      "label": "Baby food",
+      "category": "baby",
+      "aliases": [
+        "purées",
+        "baby food pouches",
+        "baby cereal",
+        "céréales pour bébé",
+        "compotes",
+        "teething biscuits",
+        "baby food jars"
+      ],
+      "drawHint": "A small squeeze pouch of baby food purée with a round spout cap and a picture of a pear."
+    },
+    {
+      "key": "pet_generic",
+      "label": "Pet supplies",
+      "category": "pet",
+      "aliases": [
+        "pet",
+        "pets",
+        "animaux",
+        "pet supplies",
+        "pet food",
+        "nourriture pour animaux",
+        "animalerie",
+        "pet toys"
+      ],
+      "drawHint": "A shallow round pet bowl with a paw print on its side, half filled with kibble."
+    },
+    {
+      "key": "dog_food",
+      "label": "Dog food",
+      "category": "pet",
+      "aliases": [
+        "dog kibble",
+        "nourriture pour chiens",
+        "moulée pour chiens",
+        "puppy food",
+        "wet dog food",
+        "croquettes pour chien"
+      ],
+      "drawHint": "A big upright kibble bag with a dog silhouette on its blank front and a few brown kibble pieces in front."
+    },
+    {
+      "key": "cat_food",
+      "label": "Cat food",
+      "category": "pet",
+      "aliases": [
+        "nourriture pour chats",
+        "wet cat food",
+        "cat kibble",
+        "cat food cans",
+        "croquettes pour chat",
+        "kitten food",
+        "pâtée pour chat"
+      ],
+      "drawHint": "A short round tin of wet cat food with its pull-tab lid peeled back and a fish-shaped decal."
+    },
+    {
+      "key": "cat_litter",
+      "label": "Cat litter",
+      "category": "pet",
+      "aliases": [
+        "kitty litter",
+        "litière",
+        "litière pour chats",
+        "clumping litter",
+        "litter",
+        "cat sand"
+      ],
+      "drawHint": "A tall plastic jug of cat litter with a handle and a cat-ear silhouette on its blank label, a few grey granules beside it."
+    },
+    {
+      "key": "pet_treats",
+      "label": "Pet treats",
+      "category": "pet",
+      "aliases": [
+        "dog treats",
+        "cat treats",
+        "gâteries pour chiens",
+        "dog biscuits",
+        "rawhide",
+        "dental chews",
+        "gâteries",
+        "dog bones"
+      ],
+      "drawHint": "A light brown bone-shaped dog biscuit with a little heart stamped in the middle."
+    },
+    {
+      "key": "household_generic",
+      "label": "Household",
+      "category": "household",
+      "aliases": [
+        "household",
+        "household items",
+        "cleaning supplies",
+        "produits ménagers",
+        "entretien ménager",
+        "cleaning",
+        "nettoyage",
+        "light bulbs"
+      ],
+      "drawHint": "A small plastic cleaning caddy with a handle holding a spray bottle, a scrub brush and a yellow sponge."
+    },
+    {
+      "key": "paper_towels",
+      "label": "Paper towels",
+      "category": "household",
+      "aliases": [
+        "paper towel",
+        "essuie-tout",
+        "papier essuie-tout",
+        "kitchen roll",
+        "paper towel rolls",
+        "shop towels"
+      ],
+      "drawHint": "A tall white roll of paper towels with a quilted sheet unrolling from the front."
+    },
+    {
+      "key": "toilet_paper",
+      "label": "Toilet paper",
+      "category": "household",
+      "aliases": [
+        "tp",
+        "bathroom tissue",
+        "papier hygiénique",
+        "papier de toilette",
+        "toilet rolls",
+        "toilet tissue"
+      ],
+      "drawHint": "A short fluffy white roll of toilet paper with a dimpled pattern and the end sheet hanging loose."
+    },
+    {
+      "key": "tissues",
+      "label": "Tissues",
+      "category": "household",
+      "aliases": [
+        "facial tissue",
+        "kleenex",
+        "mouchoirs",
+        "papiers-mouchoirs",
+        "tissue box",
+        "boîte de mouchoirs"
+      ],
+      "drawHint": "A rectangular tissue box with a soft white tissue puffing up out of the oval opening."
+    },
+    {
+      "key": "napkins",
+      "label": "Napkins",
+      "category": "household",
+      "aliases": [
+        "serviettes",
+        "paper napkins",
+        "serviettes de table",
+        "serviettes de papier",
+        "dinner napkins",
+        "cocktail napkins"
+      ],
+      "drawHint": "A small stack of folded square paper napkins with a gingham picnic print."
+    },
+    {
+      "key": "dish_soap",
+      "label": "Dish soap",
+      "category": "household",
+      "aliases": [
+        "dishwashing liquid",
+        "savon à vaisselle",
+        "dish detergent",
+        "liquide vaisselle",
+        "dish liquid",
+        "hand dish soap"
+      ],
+      "drawHint": "A tall green squeeze bottle of dish soap with a pull-up cap and soap bubbles around it."
+    },
+    {
+      "key": "dishwasher_tabs",
+      "label": "Dishwasher detergent",
+      "category": "household",
+      "aliases": [
+        "dishwasher pods",
+        "dishwasher tablets",
+        "dishwasher detergent",
+        "détergent pour lave-vaisselle",
+        "rinse aid",
+        "pastilles pour lave-vaisselle"
+      ],
+      "drawHint": "A small tub of dishwasher pods with one square blue-and-white tablet in front of it."
+    },
+    {
+      "key": "laundry_detergent",
+      "label": "Laundry detergent",
+      "category": "household",
+      "aliases": [
+        "laundry soap",
+        "détergent à lessive",
+        "savon à lessive",
+        "laundry pods",
+        "fabric softener",
+        "dryer sheets",
+        "assouplissant",
+        "detergent"
+      ],
+      "drawHint": "A chunky blue jug of laundry detergent with a handle and a measuring cap on top."
+    },
+    {
+      "key": "sponge",
+      "label": "Sponges & cloths",
+      "category": "household",
+      "aliases": [
+        "sponges",
+        "éponges",
+        "scrubbers",
+        "scouring pads",
+        "dish cloths",
+        "linges à vaisselle",
+        "steel wool",
+        "magic eraser"
+      ],
+      "drawHint": "A yellow kitchen sponge with a green scrub layer on top and a few soap bubbles beside it."
+    },
+    {
+      "key": "spray_cleaner",
+      "label": "Cleaners & bleach",
+      "category": "household",
+      "aliases": [
+        "all-purpose cleaner",
+        "nettoyant tout usage",
+        "glass cleaner",
+        "bathroom cleaner",
+        "bleach",
+        "eau de javel",
+        "javel",
+        "disinfectant"
+      ],
+      "drawHint": "A trigger spray bottle of bright turquoise cleaner with a few droplets misting from the nozzle."
+    },
+    {
+      "key": "garbage_bags",
+      "label": "Garbage bags",
+      "category": "household",
+      "aliases": [
+        "trash bags",
+        "sacs à ordures",
+        "sacs poubelle",
+        "compost bags",
+        "kitchen catchers",
+        "recycling bags",
+        "bin liners",
+        "sacs verts"
+      ],
+      "drawHint": "A roll of black garbage bags with one bag pulled off and its red drawstring tie showing."
+    },
+    {
+      "key": "aluminum_foil",
+      "label": "Foil & food wrap",
+      "category": "household",
+      "aliases": [
+        "foil",
+        "tin foil",
+        "papier d'aluminium",
+        "papier alu",
+        "plastic wrap",
+        "saran wrap",
+        "cling wrap",
+        "parchment paper"
+      ],
+      "drawHint": "A long box of aluminum foil with a shiny silver sheet unrolling from it, crinkled at the edge."
+    },
+    {
+      "key": "zip_bags",
+      "label": "Sandwich & freezer bags",
+      "category": "household",
+      "aliases": [
+        "ziploc bags",
+        "ziplock bags",
+        "sandwich bags",
+        "freezer bags",
+        "sacs à congélation",
+        "sacs refermables",
+        "snack bags",
+        "storage bags"
+      ],
+      "drawHint": "A clear resealable plastic bag with a coloured zip seal along its top edge, slightly puffed with air."
+    },
+    {
+      "key": "batteries",
+      "label": "Batteries",
+      "category": "household",
+      "aliases": [
+        "battery",
+        "piles",
+        "aa batteries",
+        "aaa batteries",
+        "9v battery",
+        "piles aa",
+        "coin batteries"
+      ],
+      "drawHint": "Two cylindrical batteries with copper-coloured ends and a small lightning bolt on the side."
+    },
+    {
+      "key": "paper_bag",
+      "label": "Shopping bag",
+      "category": "household",
+      "aliases": [
+        "grocery bag",
+        "grocery bags",
+        "reusable bags",
+        "sac réutilisable",
+        "sac d'épicerie",
+        "shopping bags",
+        "lunch bags",
+        "sac en papier"
+      ],
+      "drawHint": "A plain brown kraft-paper grocery bag standing open with its top edge neatly folded down."
+    },
+    {
+      "key": "health_generic",
+      "label": "Health & personal care",
+      "category": "health",
+      "aliases": [
+        "health",
+        "santé",
+        "personal care",
+        "soins personnels",
+        "pharmacy",
+        "pharmacie",
+        "beauty",
+        "beauté"
+      ],
+      "drawHint": "A small pastel toiletry bag with a zipper, a toothbrush and a little lotion tube poking out of the top."
+    },
+    {
+      "key": "toothpaste",
+      "label": "Toothpaste",
+      "category": "health",
+      "aliases": [
+        "dentifrice",
+        "pâte dentifrice",
+        "toothpaste tube",
+        "kids toothpaste",
+        "whitening toothpaste",
+        "mouthwash",
+        "rince-bouche"
+      ],
+      "drawHint": "A white toothpaste tube with a pastel cap squeezing out a striped swirl of paste."
+    },
+    {
+      "key": "toothbrush",
+      "label": "Toothbrushes & floss",
+      "category": "health",
+      "aliases": [
+        "toothbrushes",
+        "brosse à dents",
+        "brosses à dents",
+        "toothbrush heads",
+        "dental floss",
+        "soie dentaire",
+        "floss picks"
+      ],
+      "drawHint": "A pastel plastic toothbrush seen from the side with tufted white and blue bristles."
+    },
+    {
+      "key": "shampoo",
+      "label": "Shampoo & body wash",
+      "category": "health",
+      "aliases": [
+        "shampooing",
+        "conditioner",
+        "revitalisant",
+        "après-shampooing",
+        "body wash",
+        "gel douche",
+        "hair care",
+        "2-in-1 shampoo"
+      ],
+      "drawHint": "A curvy pastel pink shampoo bottle with a flip cap and a few bubbles."
+    },
+    {
+      "key": "hand_soap",
+      "label": "Soap",
+      "category": "health",
+      "aliases": [
+        "liquid soap",
+        "savon",
+        "bar soap",
+        "savon à mains",
+        "hand wash",
+        "pain de savon",
+        "hand sanitizer",
+        "désinfectant pour les mains"
+      ],
+      "drawHint": "A pump bottle of pale pink hand soap beside a small round bar of soap with bubbles."
+    },
+    {
+      "key": "deodorant",
+      "label": "Deodorant",
+      "category": "health",
+      "aliases": [
+        "roll-on",
+        "antiperspirant",
+        "antisudorifique",
+        "deo",
+        "stick deodorant",
+        "body spray"
+      ],
+      "drawHint": "An upright oval stick of deodorant with a pastel cap and a blank label."
+    },
+    {
+      "key": "razor",
+      "label": "Razors & shaving",
+      "category": "health",
+      "aliases": [
+        "razors",
+        "rasoir",
+        "rasoirs",
+        "shaving cream",
+        "crème à raser",
+        "razor blades",
+        "disposable razors"
+      ],
+      "drawHint": "A pastel disposable razor with a curved handle and a small puff of white shaving foam beside it."
+    },
+    {
+      "key": "lotion",
+      "label": "Lotion & lip balm",
+      "category": "health",
+      "aliases": [
+        "moisturizer",
+        "body lotion",
+        "hand cream",
+        "crème hydratante",
+        "crème pour les mains",
+        "lip balm",
+        "baume à lèvres",
+        "face cream"
+      ],
+      "drawHint": "A squat pump bottle of creamy lotion with a small dollop of white cream beside it."
+    },
+    {
+      "key": "sunscreen",
+      "label": "Sunscreen",
+      "category": "health",
+      "aliases": [
+        "sunblock",
+        "écran solaire",
+        "crème solaire",
+        "spf 30",
+        "spf 50",
+        "after-sun",
+        "sun lotion",
+        "protection solaire"
+      ],
+      "drawHint": "A squeeze tube of sunscreen in sunny yellow and white with a small sun symbol on it."
+    },
+    {
+      "key": "feminine_care",
+      "label": "Pads & tampons",
+      "category": "health",
+      "aliases": [
+        "pads",
+        "tampons",
+        "serviettes hygiéniques",
+        "menstrual pads",
+        "pantyliners",
+        "protège-dessous",
+        "period products",
+        "menstrual cup"
+      ],
+      "drawHint": "A small square pastel box with a flower motif and two individually wrapped pads in front of it."
+    },
+    {
+      "key": "pills",
+      "label": "Pain & allergy medicine",
+      "category": "health",
+      "aliases": [
+        "pain reliever",
+        "acetaminophen",
+        "ibuprofen",
+        "tylenol",
+        "advil",
+        "aspirin",
+        "allergy pills",
+        "antacids"
+      ],
+      "drawHint": "An amber pill bottle with a white child-proof cap and a couple of round white tablets beside it."
+    },
+    {
+      "key": "vitamins",
+      "label": "Vitamins",
+      "category": "health",
+      "aliases": [
+        "multivitamins",
+        "vitamines",
+        "vitamin d",
+        "gummy vitamins",
+        "supplements",
+        "vitamin c",
+        "fish oil",
+        "omega-3"
+      ],
+      "drawHint": "A white wide-mouth vitamin bottle with a pastel cap and a few colourful round gummy vitamins in front."
+    },
+    {
+      "key": "bandages",
+      "label": "Bandages & first aid",
+      "category": "health",
+      "aliases": [
+        "band-aids",
+        "bandaids",
+        "pansements",
+        "plasters",
+        "first aid",
+        "premiers soins",
+        "gauze",
+        "antibiotic ointment"
+      ],
+      "drawHint": "Two crossed beige adhesive bandages, each with a pale pad in the middle."
+    },
+    {
+      "key": "cough_syrup",
+      "label": "Cold & flu medicine",
+      "category": "health",
+      "aliases": [
+        "cough medicine",
+        "sirop contre la toux",
+        "cold medicine",
+        "throat lozenges",
+        "cough drops",
+        "pastilles pour la gorge",
+        "flu medicine",
+        "decongestant"
+      ],
+      "drawHint": "A small bottle of red cough syrup with a clear dosing cup turned upside down over the cap."
+    },
+    {
+      "key": "bug_spray",
+      "label": "Bug spray",
+      "category": "health",
+      "aliases": [
+        "insect repellent",
+        "chasse-moustiques",
+        "mosquito repellent",
+        "insectifuge",
+        "deet",
+        "anti-moustiques",
+        "bug repellent"
+      ],
+      "drawHint": "A small green aerosol can of bug spray with a crossed-out mosquito symbol on its side."
+    },
+    {
+      "key": "garden_generic",
+      "label": "Garden",
+      "category": "garden",
+      "aliases": [
+        "garden",
+        "jardin",
+        "gardening",
+        "jardinage",
+        "garden centre",
+        "outdoor",
+        "seasonal",
+        "saisonnier"
+      ],
+      "drawHint": "A small metal watering can sprinkling droplets over a tiny daisy sprouting from the ground."
+    },
+    {
+      "key": "bouquet",
+      "label": "Flowers",
+      "category": "garden",
+      "aliases": [
+        "flowers",
+        "fleurs",
+        "cut flowers",
+        "bouquet of flowers",
+        "roses",
+        "tulips",
+        "tulipes",
+        "sunflowers"
+      ],
+      "drawHint": "A small bouquet of pink and yellow flowers wrapped in a paper cone and tied with a ribbon bow."
+    },
+    {
+      "key": "potted_plant",
+      "label": "Potted plant",
+      "category": "garden",
+      "aliases": [
+        "plant",
+        "plante",
+        "houseplant",
+        "plante d'intérieur",
+        "succulent",
+        "herb plant",
+        "potted herbs",
+        "mums"
+      ],
+      "drawHint": "A terracotta flowerpot holding a leafy green plant with a single blooming flower."
+    },
+    {
+      "key": "seed_packet",
+      "label": "Seeds",
+      "category": "garden",
+      "aliases": [
+        "seeds",
+        "graines de fleurs",
+        "semences",
+        "graines",
+        "flower seeds",
+        "vegetable seeds",
+        "sachet de graines"
+      ],
+      "drawHint": "A small paper seed packet with a picture of a flower on its front and a few seeds tumbling out of the torn top."
+    },
+    {
+      "key": "charcoal",
+      "label": "Charcoal",
+      "category": "garden",
+      "aliases": [
+        "charcoal briquettes",
+        "charbon de bois",
+        "briquettes",
+        "bbq charcoal",
+        "lump charcoal",
+        "lighter fluid",
+        "wood chips"
+      ],
+      "drawHint": "A small paper sack of charcoal with a few black pillow-shaped briquettes spilling out."
+    },
+    {
+      "key": "matches",
+      "label": "Matches & lighters",
+      "category": "garden",
+      "aliases": [
+        "allumettes",
+        "lighter",
+        "briquet",
+        "bbq lighter",
+        "long matches",
+        "matchbox",
+        "firestarter"
+      ],
+      "drawHint": "A small open matchbox with one lit wooden match leaning against it."
+    },
+    {
+      "key": "candle",
+      "label": "Candles",
+      "category": "garden",
+      "aliases": [
+        "candles",
+        "chandelles",
+        "bougies",
+        "citronella candle",
+        "birthday candles",
+        "tealights",
+        "scented candle"
+      ],
+      "drawHint": "A short cream pillar candle in a little glass jar with a softly glowing flame."
+    },
+    {
+      "key": "picnic_blanket",
+      "label": "Picnic blanket",
+      "category": "garden",
+      "aliases": [
+        "picnic",
+        "pique-nique",
+        "couverture de pique-nique",
+        "blanket",
+        "tablecloth",
+        "nappe",
+        "gingham blanket"
+      ],
+      "drawHint": "A folded red-and-white gingham picnic blanket with fringed edges, rolled up and tied with a leather strap."
+    },
+    {
+      "key": "paper_plates",
+      "label": "Paper plates",
+      "category": "garden",
+      "aliases": [
+        "disposable plates",
+        "assiettes en carton",
+        "assiettes jetables",
+        "paper bowls",
+        "picnic plates",
+        "plates",
+        "party plates"
+      ],
+      "drawHint": "A small stack of round white paper plates with fluted rims and a pastel border."
+    },
+    {
+      "key": "paper_cups",
+      "label": "Paper & plastic cups",
+      "category": "garden",
+      "aliases": [
+        "plastic cups",
+        "disposable cups",
+        "verres en plastique",
+        "gobelets",
+        "party cups",
+        "red party cups",
+        "verres jetables",
+        "coffee cups"
+      ],
+      "drawHint": "A stack of two red-and-white striped paper cups, the top one slightly offset."
+    },
+    {
+      "key": "plastic_cutlery",
+      "label": "Disposable cutlery",
+      "category": "garden",
+      "aliases": [
+        "plastic forks",
+        "disposable cutlery",
+        "ustensiles jetables",
+        "plastic spoons",
+        "plastic knives",
+        "wooden cutlery",
+        "ustensiles en plastique",
+        "straws"
+      ],
+      "drawHint": "A plastic fork, knife and spoon crossed together and tied with a small ribbon."
+    }
+  ],
+  "baskets": [
+    {
+      "key": "wicker_picnic",
+      "label": "Wicker picnic hamper",
+      "drawHint": "A classic woven wicker picnic hamper with two hinged lids propped open, a red gingham cloth peeking out and a looped carry handle.",
+      "keywords": [
+        "picnic",
+        "pique-nique",
+        "seasonal",
+        "saisonnier",
+        "summer",
+        "été",
+        "bbq",
+        "barbecue",
+        "misc",
+        "miscellaneous",
+        "divers",
+        "other",
+        "autres",
+        "unsorted",
+        "non classé",
+        "front of store",
+        "checkout",
+        "caisses",
+        "party",
+        "fête"
+      ]
+    },
+    {
+      "key": "bread_basket",
+      "label": "Bread basket",
+      "drawHint": "A shallow oval woven bread basket lined with a cream linen napkin whose corners drape over the rim.",
+      "keywords": [
+        "bakery",
+        "boulangerie",
+        "bread",
+        "breads",
+        "pâtisserie",
+        "pastry",
+        "pastries",
+        "bagels",
+        "buns",
+        "cakes",
+        "gâteaux",
+        "viennoiseries",
+        "in-store bakery",
+        "tortillas",
+        "baked goods"
+      ]
+    },
+    {
+      "key": "fruit_crate",
+      "label": "Wooden produce crate",
+      "drawHint": "A slatted wooden farmers'-market crate with rope handles at each end and a stencilled leaf on the side.",
+      "keywords": [
+        "produce",
+        "fresh produce",
+        "vegetables",
+        "veggies",
+        "veg",
+        "légumes",
+        "fruits et légumes",
+        "fruits & légumes",
+        "fruits and vegetables",
+        "fruit & veg",
+        "salad",
+        "salads",
+        "salades",
+        "herbs",
+        "fines herbes",
+        "organic",
+        "biologique",
+        "bio",
+        "farmers market",
+        "marché"
+      ]
+    },
+    {
+      "key": "berry_punnet",
+      "label": "Berry basket",
+      "drawHint": "A small square chip-wood berry basket painted pastel green with a woven lattice side and a slim wire handle.",
+      "keywords": [
+        "fruit",
+        "fruits",
+        "berries",
+        "petits fruits",
+        "fresh fruit",
+        "fruits frais",
+        "cut fruit",
+        "fruits coupés",
+        "fruit stand",
+        "tropical fruit",
+        "melons"
+      ]
+    },
+    {
+      "key": "wire_basket",
+      "label": "Wire market basket",
+      "drawHint": "A rounded metal wire basket with a wooden-grip swing handle, its open grid showing what is inside.",
+      "keywords": [
+        "household",
+        "ménager",
+        "ménagers",
+        "entretien ménager",
+        "cleaning",
+        "nettoyage",
+        "laundry",
+        "lessive",
+        "paper",
+        "papier",
+        "paper goods",
+        "produits de papier",
+        "hardware",
+        "quincaillerie",
+        "housewares",
+        "kitchenware",
+        "pet",
+        "pets",
+        "pet food",
+        "animaux",
+        "pet supplies",
+        "nourriture pour animaux",
+        "animalerie",
+        "batteries"
+      ]
+    },
+    {
+      "key": "egg_basket",
+      "label": "Egg basket",
+      "drawHint": "A round wire-and-wicker egg basket with a tall arched handle, nestled with straw.",
+      "keywords": [
+        "eggs",
+        "egg",
+        "oeufs",
+        "breakfast",
+        "déjeuner",
+        "petit-déjeuner",
+        "cereal",
+        "cereals",
+        "céréales",
+        "spreads",
+        "tartinades",
+        "syrup",
+        "sirop",
+        "jam",
+        "confitures",
+        "honey",
+        "miel"
+      ]
+    },
+    {
+      "key": "milk_crate",
+      "label": "Milk crate",
+      "drawHint": "A sturdy square plastic milk crate in pastel blue with a lattice of square holes and cut-out hand grips.",
+      "keywords": [
+        "dairy",
+        "produits laitiers",
+        "laitiers",
+        "milk",
+        "lait",
+        "yogurt",
+        "yogourt",
+        "cheese",
+        "cheeses",
+        "fromage",
+        "fromages",
+        "butter",
+        "beurre",
+        "cream",
+        "crème",
+        "refrigerated",
+        "réfrigéré",
+        "plant-based",
+        "végétalien",
+        "tofu",
+        "chilled"
+      ]
+    },
+    {
+      "key": "cooler",
+      "label": "Picnic cooler",
+      "drawHint": "A retro two-tone picnic cooler with a white lid, a coloured body, a swing handle and a little drain spout.",
+      "keywords": [
+        "meat",
+        "meats",
+        "viande",
+        "viandes",
+        "butcher",
+        "boucherie",
+        "poultry",
+        "volaille",
+        "seafood",
+        "fish",
+        "poisson",
+        "poissons",
+        "poissonnerie",
+        "fruits de mer",
+        "deli",
+        "charcuterie",
+        "charcuteries",
+        "cold cuts",
+        "viandes froides"
+      ]
+    },
+    {
+      "key": "ice_bucket",
+      "label": "Ice bucket",
+      "drawHint": "A galvanized metal pail brimming with ice cubes, beaded with frost and cold droplets.",
+      "keywords": [
+        "frozen",
+        "frozen foods",
+        "frozen food",
+        "surgelés",
+        "produits surgelés",
+        "congelés",
+        "congelé",
+        "ice cream",
+        "crème glacée",
+        "freezer",
+        "congélateur",
+        "ice",
+        "glace"
+      ]
+    },
+    {
+      "key": "bento_box",
+      "label": "Bento box",
+      "drawHint": "A lacquered two-tier bento box with its lid tilted open, tied with a pastel furoshiki cloth knot.",
+      "keywords": [
+        "international",
+        "world foods",
+        "world food",
+        "cuisine du monde",
+        "cuisines du monde",
+        "asian",
+        "asiatique",
+        "ethnic",
+        "ethnique",
+        "sushi",
+        "prepared foods",
+        "prepared meals",
+        "ready to eat",
+        "mets préparés",
+        "plats préparés",
+        "prêt-à-manger",
+        "traiteur",
+        "hot food",
+        "noodles",
+        "mexican",
+        "indian",
+        "kosher",
+        "halal"
+      ]
+    },
+    {
+      "key": "jar_shelf",
+      "label": "Jar shelf",
+      "drawHint": "A little wooden wall shelf lined with three glass mason jars of different heights with gingham cloth lids.",
+      "keywords": [
+        "canned",
+        "canned goods",
+        "cans",
+        "conserves",
+        "jarred",
+        "condiments",
+        "sauces",
+        "spices",
+        "épices",
+        "oils",
+        "oil",
+        "huiles",
+        "vinegar",
+        "vinaigre",
+        "pickles",
+        "marinades",
+        "soup",
+        "soups",
+        "soupes",
+        "dressings",
+        "vinaigrettes",
+        "seasonings",
+        "assaisonnements",
+        "ketchup"
+      ]
+    },
+    {
+      "key": "canvas_tote",
+      "label": "Canvas tote",
+      "drawHint": "A sturdy cream canvas tote bag with two long handles and a small embroidered strawberry patch.",
+      "keywords": [
+        "pasta",
+        "pâtes",
+        "rice",
+        "riz",
+        "grains",
+        "baking",
+        "cuisson",
+        "flour",
+        "farine",
+        "sugar",
+        "sucre",
+        "bulk",
+        "bulk foods",
+        "vrac",
+        "dry goods",
+        "pantry",
+        "garde-manger",
+        "beans",
+        "lentils",
+        "lentilles",
+        "nuts",
+        "noix"
+      ]
+    },
+    {
+      "key": "flower_bucket",
+      "label": "Flower bucket",
+      "drawHint": "A galvanized florist's bucket holding a loose bunch of tall stems topped with blooms.",
+      "keywords": [
+        "flowers",
+        "fleurs",
+        "floral",
+        "florist",
+        "fleuriste",
+        "plants",
+        "plantes",
+        "garden",
+        "jardin",
+        "garden centre",
+        "garden center",
+        "centre de jardin",
+        "bouquets",
+        "greenhouse",
+        "serre"
+      ]
+    },
+    {
+      "key": "bottle_carrier",
+      "label": "Bottle carrier",
+      "drawHint": "A wooden six-bottle carrier crate with a centre handle and dividers, glass bottle necks standing up.",
+      "keywords": [
+        "beverages",
+        "beverage",
+        "drinks",
+        "boissons",
+        "breuvages",
+        "juice",
+        "juices",
+        "jus",
+        "water",
+        "eau",
+        "pop",
+        "soda",
+        "soft drinks",
+        "boissons gazeuses",
+        "coffee",
+        "café",
+        "tea",
+        "teas",
+        "thés",
+        "tisanes",
+        "beer",
+        "bière",
+        "bières",
+        "wine",
+        "wines",
+        "vin",
+        "vins",
+        "liquor",
+        "alcohol"
+      ]
+    },
+    {
+      "key": "candy_jar",
+      "label": "Candy jar",
+      "drawHint": "A round glass apothecary candy jar with a knobbed lid, its belly showing colourful sweets.",
+      "keywords": [
+        "snacks",
+        "snack",
+        "collations",
+        "grignotines",
+        "chips",
+        "croustilles",
+        "candy",
+        "bonbons",
+        "confiserie",
+        "confiseries",
+        "chocolate",
+        "chocolat",
+        "cookies",
+        "biscuits",
+        "crackers",
+        "craquelins",
+        "sweets",
+        "treats"
+      ]
+    },
+    {
+      "key": "vanity_case",
+      "label": "Vanity case",
+      "drawHint": "A small retro hard-shell vanity case with a clasp and a handle, its lid open to show a round mirror.",
+      "keywords": [
+        "health",
+        "santé",
+        "beauty",
+        "beauté",
+        "health and beauty",
+        "health & beauty",
+        "santé et beauté",
+        "personal care",
+        "soins personnels",
+        "pharmacy",
+        "pharmacie",
+        "cosmetics",
+        "cosmétiques",
+        "hygiene",
+        "baby",
+        "bébé",
+        "babies",
+        "medicine",
+        "médicaments",
+        "pain relief",
+        "cold & flu",
+        "vitamins",
+        "vitamines",
+        "first aid"
+      ]
+    }
+  ]
+}

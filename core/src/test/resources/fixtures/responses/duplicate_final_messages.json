@@ -1,0 +1,104 @@
+{
+ "id": "resp_0237019ef8772821016abe796f528887d291981d06989e276b",
+ "object": "response",
+ "created_at": 1790867823,
+ "status": "completed",
+ "error": null,
+ "incomplete_details": null,
+ "max_output_tokens": 12000,
+ "model": "gpt-5.4-mini-2026-03-17",
+ "output": [
+  {
+   "id": "msg_0237019ef8772821016abe796fce9887d28590d5ea695b6610",
+   "type": "message",
+   "status": "completed",
+   "content": [
+    {
+     "type": "output_text",
+     "annotations": [],
+     "text": "{\"items\":[{\"name\":\"All-purpose flour\",\"quantity\":\"2 cups\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"flour\",\"icon_fit\":\"exact\"},{\"name\":\"Baking powder\",\"quantity\":\"2 tbsp\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"baking_powder\",\"icon_fit\":\"exact\"},{\"name\":\"Salt\",\"quantity\":\"1 tsp\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"salt\",\"icon_fit\":\"exact\"},{\"name\":\"Sugar\",\"quantity\":\"2 tbsp\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"sugar\",\"icon_fit\":\"exact\"},{\"name\":\"Milk\",\"quantity\":\"1 1/2 cups\",\"note\":null,\"aisle_id\":\"dairy-eggs\",\"icon\":\"milk_carton\",\"icon_fit\":\"exact\"},{\"name\":\"Eggs\",\"quantity\":\"2\",\"note\":null,\"aisle_id\":\"dairy-eggs\",\"icon\":\"eggs\",\"icon_fit\":\"exact\"},{\"name\":\"Butter\",\"quantity\":\"2 tbsp\",\"note\":\"already on list\",\"aisle_id\":\"dairy-eggs\",\"icon\":\"butter\",\"icon_fit\":\"exact\"}],\"message\":\"Added pancake basics; skipped Butter since it’s already on your list.\"}"
+    }
+   ],
+   "phase": "commentary",
+   "role": "assistant"
+  },
+  {
+   "id": "msg_0237019ef8772821016abe7970f29487d290038db697f81790",
+   "type": "message",
+   "status": "completed",
+   "content": [
+    {
+     "type": "output_text",
+     "annotations": [],
+     "text": "{\"items\":[{\"name\":\"All-purpose flour\",\"quantity\":\"2 cups\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"flour\",\"icon_fit\":\"exact\"},{\"name\":\"Baking powder\",\"quantity\":\"2 tbsp\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"baking_powder\",\"icon_fit\":\"exact\"},{\"name\":\"Salt\",\"quantity\":\"1 tsp\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"salt\",\"icon_fit\":\"exact\"},{\"name\":\"Sugar\",\"quantity\":\"2 tbsp\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"sugar\",\"icon_fit\":\"exact\"},{\"name\":\"Milk\",\"quantity\":\"1 1/2 cups\",\"note\":null,\"aisle_id\":\"dairy-eggs\",\"icon\":\"milk_carton\",\"icon_fit\":\"exact\"},{\"name\":\"Eggs\",\"quantity\":\"2\",\"note\":null,\"aisle_id\":\"dairy-eggs\",\"icon\":\"eggs\",\"icon_fit\":\"exact\"}],\"message\":\"Added pancake basics; skipped Butter since it’s already on your list.\"}"
+    }
+   ],
+   "phase": "final_answer",
+   "role": "assistant"
+  },
+  {
+   "id": "ws_0237019ef8772821016abe7971b8b487d2b61b2fafe2896d26",
+   "type": "web_search_call",
+   "status": "completed",
+   "action": {
+    "type": "search",
+    "queries": [
+     "calculator: 1+1"
+    ],
+    "query": "calculator: 1+1"
+   }
+  },
+  {
+   "id": "msg_0237019ef8772821016abe79724a4887d298f533c28cb0e7d4",
+   "type": "message",
+   "status": "completed",
+   "content": [
+    {
+     "type": "output_text",
+     "annotations": [],
+     "text": "{\"items\":[{\"name\":\"All-purpose flour\",\"quantity\":\"2 cups\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"flour\",\"icon_fit\":\"exact\"},{\"name\":\"Baking powder\",\"quantity\":\"2 tbsp\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"baking_powder\",\"icon_fit\":\"exact\"},{\"name\":\"Salt\",\"quantity\":\"1 tsp\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"salt\",\"icon_fit\":\"exact\"},{\"name\":\"Sugar\",\"quantity\":\"2 tbsp\",\"note\":null,\"aisle_id\":\"aisle-2-baking-spices\",\"icon\":\"sugar\",\"icon_fit\":\"exact\"},{\"name\":\"Milk\",\"quantity\":\"1 1/2 cups\",\"note\":null,\"aisle_id\":\"dairy-eggs\",\"icon\":\"milk_carton\",\"icon_fit\":\"exact\"},{\"name\":\"Eggs\",\"quantity\":\"2\",\"note\":null,\"aisle_id\":\"dairy-eggs\",\"icon\":\"eggs\",\"icon_fit\":\"exact\"}],\"message\":\"Added pancake basics; skipped Butter since it’s already on your list.\"}"
+    }
+   ],
+   "phase": "final_answer",
+   "role": "assistant"
+  }
+ ],
+ "reasoning": {
+  "context": "current_turn",
+  "effort": "none",
+  "mode": "standard",
+  "summary": null
+ },
+ "service_tier": "default",
+ "store": false,
+ "usage": {
+  "input_tokens": 6483,
+  "input_tokens_details": {
+   "cache_write_tokens": 0,
+   "cached_tokens": 6483
+  },
+  "output_tokens": 824,
+  "output_tokens_details": {
+   "reasoning_tokens": 33
+  },
+  "total_tokens": 7307
+ },
+ "tool_usage": {
+  "image_gen": {
+   "input_tokens": 0,
+   "input_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "output_tokens": 0,
+   "output_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "total_tokens": 0
+  },
+  "web_search": {
+   "num_requests": 1
+  }
+ }
+}

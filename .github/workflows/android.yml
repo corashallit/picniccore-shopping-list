@@ -1,0 +1,125 @@
+name: Android
+
+# Builds the sideloadable APK (the non-debuggable "sideload" build type, signed with the committed
+# debug key) on every push, PR and manual run; a v* tag also attaches it to a GitHub Release.
+# Getting and installing the APK: docs/BUILDING.md.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: Build, test, APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      apk: ${{ steps.ver.outputs.apk }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # ubuntu-24.04 already ships these packages; this pins them and accepts licenses.
+      # compileSdk 37 -> platforms;android-37.0; AGP 9.4.1's default build-tools is 36.0.0.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # MIT-licensed actions/cache wrapper (the default "enhanced" provider is proprietary).
+          cache-provider: basic
+          # Let feature branches write caches too (default is read-only off the default branch).
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      - name: Version info
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            name="${GITHUB_REF_NAME#v}"
+          else
+            name="0.1.0-${GITHUB_SHA::7}"
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "apk=picnic-list-${name}.apk" >> "$GITHUB_OUTPUT"
+
+      # core is tested as the standalone build it is (keeps the -p core contract honest).
+      - name: Core tests (standalone core build)
+        run: ./gradlew -p core test
+
+      # compareRoborazziDebug runs every app unit test plus the screenshot comparisons (it never
+      # fails on a pixel diff; switch to verifyRoborazziDebug once the art settles).
+      # assembleDebug keeps the developer build compiling; the APK people install is the
+      # non-debuggable sideload build (same code and signing key, so it updates debug installs too).
+      - name: App unit + screenshot tests, lint, APKs
+        run: >
+          ./gradlew
+          :app:compareRoborazziDebug
+          :app:lintDebug
+          :app:assembleDebug
+          :app:assembleSideload
+          -Ppicnic.versionCode=${{ github.run_number }}
+          -Ppicnic.versionName=${{ steps.ver.outputs.name }}
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/sideload/picnic-list-sideload.apk "${{ steps.ver.outputs.apk }}"
+
+      # archive: false uploads the bare .apk, so it downloads straight to a phone.
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.ver.outputs.apk }}
+          archive: false
+          if-no-files-found: error
+
+      - name: Upload reports and screenshot diffs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports-${{ github.run_number }}
+          path: |
+            core/build/reports/
+            app/build/reports/
+            app/build/outputs/roborazzi/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  release:
+    name: GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.apk }}
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ needs.build.outputs.apk }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true

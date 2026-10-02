@@ -1,0 +1,24 @@
+Store aisles in walking order (id: name):
+- produce: Produce
+- bakery: Bakery
+- deli-cheese: Deli & cheese
+- meat-seafood: Meat & seafood
+- aisle-1-breakfast-coffee-tea: Aisle 1 - Breakfast, coffee & tea
+- aisle-2-baking-spices: Aisle 2 - Baking & spices
+- aisle-3-pasta-rice-international: Aisle 3 - Pasta, rice & international
+- aisle-4-canned-goods-soups: Aisle 4 - Canned goods & soups
+- aisle-5-snacks-drinks: Aisle 5 - Snacks & drinks
+- aisle-6-household-cleaning: Aisle 6 - Household & cleaning
+- aisle-7-health-beauty-baby: Aisle 7 - Health, beauty & baby
+- dairy-eggs: Dairy & eggs
+- frozen: Frozen
+- bulk-natural-foods: Bulk & natural foods
+- unsorted: (no matching aisle)
+
+Learned corrections (item -> aisle id):
+- tortillas -> aisle-3-pasta-rice-international
+- maple syrup -> aisle-1-breakfast-coffee-tea
+- oat milk -> dairy-eggs
+- nutritional yeast -> bulk-natural-foods
+
+Already on the list: Butter, Bananas, Paper towels

@@ -1,0 +1,6 @@
+{
+ "id": "gpt-5.6-terra",
+ "object": "model",
+ "created": 1780000000,
+ "owned_by": "system"
+}

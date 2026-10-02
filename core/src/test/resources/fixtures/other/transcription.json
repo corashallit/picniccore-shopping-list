@@ -1,0 +1,12 @@
+{
+ "text": "Okay so for groceries... um, we need a four litre bag of milk, two lemons, a dozen eggs.",
+ "languages": [
+  {
+   "code": "en"
+  }
+ ],
+ "usage": {
+  "type": "duration",
+  "seconds": 23
+ }
+}

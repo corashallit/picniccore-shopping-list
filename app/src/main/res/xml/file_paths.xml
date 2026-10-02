@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Camera captures go to cacheDir/captures/ and are deleted after ingest. -->
+    <cache-path name="captures" path="captures/" />
+</paths>
