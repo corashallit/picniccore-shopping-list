@@ -52,10 +52,15 @@ data class SectionUi(
     val collapsed: Boolean,
     /** Every item of this aisle is checked. */
     val cleared: Boolean,
-    /** Items listed in the section (unchecked ones; every checked item for CHECKED). */
+    /** Items listed in the section: still to get (unchecked); every checked item for CHECKED. The basket's badge. */
     val count: Int,
-    /** displayRefs of the first five items, for the collapsed basket. */
-    val miniIcons: List<IconRef>,
+    /** Items of this aisle already gotten (checked, listed under CHECKED); 0 for CHECKED itself. */
+    val gotten: Int,
+    /**
+     * What the collapsed basket holds: displayRefs of the first five GOTTEN items (AisleSection.checkedItems;
+     * CHECKED: its own items, all gotten). Never an item still to get; empty = an empty basket.
+     */
+    val inBasket: List<IconRef>,
     val items: List<ItemRowUi>,
 )
 
@@ -141,6 +146,8 @@ internal fun buildListUiState(
 
     val sections = grouped.sections.map { section ->
         val rows = section.items.map(::row)
+        // The basket holds what has been gotten: the aisle's checked items (CHECKED's own items are all checked).
+        val basketItems = if (section.kind == SectionKind.CHECKED) section.items else section.checkedItems
         SectionUi(
             id = section.id,
             kind = section.kind,
@@ -151,7 +158,8 @@ internal fun buildListUiState(
             collapsed = section.collapsed,
             cleared = section.cleared,
             count = rows.size,
-            miniIcons = rows.take(MINI_ICONS).map { it.icon },
+            gotten = section.checkedCount,
+            inBasket = basketItems.take(BASKET_ICONS).map { catalog.displayRef(it, normalizeName(it.name) in busy) },
             items = rows,
         )
     }
@@ -185,5 +193,5 @@ internal fun buildListUiState(
     )
 }
 
-/** Mini icons peeking out of a collapsed aisle's basket (AisleBasket shows 2..5). */
-private const val MINI_ICONS = 5
+/** Gotten items peeking out of a collapsed aisle's basket (AisleBasket shows up to 5). */
+private const val BASKET_ICONS = 5

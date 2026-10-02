@@ -381,8 +381,10 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                     number = section.number,
                     aisleIndex = section.aisleIndex,
                     basket = section.basket,
-                    miniIcons = section.miniIcons,
+                    inBasket = section.inBasket,
                     count = section.count,
+                    // The checked section lists the gotten items itself: it is announced as "<n> items".
+                    gotten = section.gotten.takeIf { section.kind != SectionKind.CHECKED },
                     collapsed = section.collapsed,
                     cleared = section.cleared,
                     onToggle = { actions.onToggleSection(section.id) },

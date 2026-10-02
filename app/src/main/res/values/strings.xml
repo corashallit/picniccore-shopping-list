@@ -7,6 +7,8 @@
         <item quantity="one">%1$s, %2$d item</item>
         <item quantity="other">%1$s, %2$d items</item>
     </plurals>
+    <!-- Aisle header: "<aisle>, <still to get> to get, <already gotten> in the basket". -->
+    <string name="theme_aisle_header_progress">%1$s, %2$d to get, %3$d in the basket</string>
     <string name="theme_state_collapsed">collapsed</string>
     <string name="theme_state_expanded">expanded</string>
     <string name="theme_aisle_cleared">All picked up!</string>

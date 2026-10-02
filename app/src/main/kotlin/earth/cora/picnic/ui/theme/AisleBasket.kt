@@ -23,22 +23,28 @@ import kotlin.math.abs
 /**
  * A collapsed aisle drawn as a little basket. CONTRACT (docs/ARCHITECTURE.md §11.4):
  * - [kind] picks the container art (placeholder vector art now; final art later).
- * - The first 2..5 of [miniIcons] peek out of the basket, overlapping (fewer if fewer given):
- *   drawn between the basket's back layer (handle, open lid) and its front layer (body, rim).
- * - [count] > 0 shows a count badge; 0 shows an empty basket (empty state, cleared aisle).
- * - Decorative: the enclosing header carries the accessible text ("Bakery, 4 items, collapsed").
+ * - The basket holds what has ALREADY BEEN GOTTEN: the first (up to 5) of [inBasket], the icons of
+ *   the aisle's checked items, peek out of it, overlapping. They are drawn between the basket's back
+ *   layer (handle, open lid) and its front layer (body, rim). Never pass items still to get.
+ * - Empty [inBasket] (nothing gotten yet, or the list's empty state) = the bare basket of that kind:
+ *   the same back and front art with nothing in between.
+ * - [count] > 0 shows a count badge: how many are still to get. 0 shows no badge.
+ * - Decorative: the enclosing header carries the accessible text
+ *   ("Produce, 2 to get, 3 in the basket", state "collapsed").
  */
 @Composable
 fun AisleBasket(
     kind: BasketKind,
-    miniIcons: List<IconRef>,
+    /** Icons of the items already gotten (in the basket), first shown first. */
+    inBasket: List<IconRef>,
+    /** Items still to get: the badge. */
     count: Int,
     modifier: Modifier = Modifier,
     size: Dp = PicnicTheme.dimens.basket,
 ) {
     val c = PicnicTheme.colors
     val d = PicnicTheme.dimens
-    val shown = miniIcons.take(MAX_MINI)
+    val shown = inBasket.take(MAX_MINI)
     val unit = size / 64f
     val mini = d.miniIcon * (size / d.basket)
     val measurer = rememberTextMeasurer()

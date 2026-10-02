@@ -56,13 +56,49 @@ class GroupingTest {
         assertTrue(bakery.items.isEmpty())
         assertTrue(bakery.cleared)
         assertEquals(2, bakery.checkedCount)
+        assertEquals(listOf("bagel", "bread"), bakery.checkedItems.map { it.id }, "a cleared aisle's basket is full")
         assertFalse(g.sections.single { it.id == "produce" }.cleared)
         // Unsorted has no unchecked items, so it is absent; its checked item still shows under CHECKED (first).
         assertTrue(g.sections.none { it.id == SectionIds.UNSORTED })
         val checked = g.sections.last()
         assertEquals(SectionKind.CHECKED, checked.kind)
         assertEquals(listOf("loose", "bagel", "bread", "ice cream"), checked.items.map { it.id })
+        assertTrue(checked.checkedItems.isEmpty(), "CHECKED lists the gotten items as its items")
+        assertEquals(0, checked.checkedCount)
         assertFalse(checked.cleared)
+    }
+
+    @Test
+    fun checkedItemsAreWhatHasBeenGottenFromEachSectionNeverWhatIsLeftToGet() {
+        val g = group(
+            listOf(
+                item("lemon", "produce", 4),
+                item("apple", "produce", 2, checked = true),
+                item("spinach", "produce", 1),
+                item("kale", "produce", 3, checked = true),
+                item("milk", "dairy-eggs", 5),
+                item("loose", null, 6),
+                item("tape", null, 7, checked = true),
+            ),
+        )
+        val produce = g.sections.single { it.id == "produce" }
+        assertEquals(listOf("spinach", "lemon"), produce.items.map { it.id }, "still to get")
+        assertEquals(listOf("apple", "kale"), produce.checkedItems.map { it.id }, "gotten, oldest first")
+        assertEquals(2, produce.checkedCount)
+        assertTrue(produce.checkedItems.all { it.checked })
+        assertTrue(produce.items.none { it.checked })
+        assertFalse(produce.cleared)
+
+        val dairy = g.sections.single { it.id == "dairy-eggs" }
+        assertTrue(dairy.checkedItems.isEmpty(), "nothing gotten yet: an empty basket")
+        assertEquals(0, dairy.checkedCount)
+
+        val unsorted = g.sections.first()
+        assertEquals(SectionKind.UNSORTED, unsorted.kind)
+        assertEquals(listOf("tape"), unsorted.checkedItems.map { it.id })
+
+        // The CHECKED section is unchanged: every gotten item, in walking order (Unsorted first).
+        assertEquals(listOf("tape", "apple", "kale"), g.sections.last().items.map { it.id })
     }
 
     @Test

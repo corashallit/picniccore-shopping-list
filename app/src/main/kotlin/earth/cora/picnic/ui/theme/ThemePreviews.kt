@@ -175,7 +175,7 @@ private fun ItemIconsDuskPreview() = PreviewFrame(dark = true) { ItemIconsSample
 @Composable
 private fun BasketsSample() {
     val icons = listOf("lemon", "sliced_bread", "cheese_curds", "chicken_drumstick", "salmon_fillet").map(::IconRef)
-    Caption("AisleBasket, every kind (0-5 mini icons, count badge)")
+    Caption("AisleBasket, every kind (0-5 gotten items in the basket, to-get badge)")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BasketKind.entries.forEachIndexed { i, kind ->
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -185,15 +185,19 @@ private fun BasketsSample() {
             }
         }
     }
+    Caption("Nothing gotten yet: every kind empty (badge = still to get)")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        BasketKind.entries.forEachIndexed { i, kind -> AisleBasket(kind, inBasket = emptyList(), count = i % 3, size = 40.dp) }
+    }
     Caption("Empty-state size (120 dp)")
     AisleBasket(BasketKind.DEFAULT, icons, count = 12, size = 120.dp)
 }
 
-@Preview(name = "Baskets - day", widthDp = 411, heightDp = 640)
+@Preview(name = "Baskets - day", widthDp = 411, heightDp = 760)
 @Composable
 private fun BasketsDayPreview() = PreviewFrame(dark = false) { BasketsSample() }
 
-@Preview(name = "Baskets - dusk", widthDp = 411, heightDp = 640)
+@Preview(name = "Baskets - dusk", widthDp = 411, heightDp = 760)
 @Composable
 private fun BasketsDuskPreview() = PreviewFrame(dark = true) { BasketsSample() }
 
@@ -203,11 +207,12 @@ private fun BasketsDuskPreview() = PreviewFrame(dark = true) { BasketsSample() }
 private fun ListPiecesSample() {
     // Sections as the list draws them: header band + AisleSectionRows touching (no spacing), one
     // container per aisle; collapsed and cleared aisles are just the band. The Gochujang row shows
-    // the pressed tint.
+    // the pressed tint. A collapsed basket holds what has been gotten: some (Produce), nothing yet
+    // (Dairy: an empty basket), everything (Bakery, cleared: a full basket).
     Column {
         AisleHeader(
             title = "Unsorted", number = null, aisleIndex = -1, basket = BasketKind.DEFAULT,
-            miniIcons = emptyList(), count = 1, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
+            inBasket = emptyList(), count = 1, gotten = 0, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
         )
         AisleSectionRow(aisleIndex = -1, first = true, last = true) {
             ItemRowCard(name = "Dish rack", detail = null, icon = IconRef(IconCatalog.DEFAULT_ICON), checked = false, drawing = true)
@@ -215,13 +220,13 @@ private fun ListPiecesSample() {
     }
     AisleHeader(
         title = "Produce", number = 1, aisleIndex = 0, basket = BasketKind.FRUIT_CRATE,
-        miniIcons = listOf("lemon", "apple", "carrot", "spinach").map(::IconRef), count = 4,
+        inBasket = listOf("lemon", "apple", "carrot").map(::IconRef), count = 2, gotten = 3,
         collapsed = true, cleared = false, onToggle = {},
     )
     Column {
         AisleHeader(
             title = "Aisle 3 - Baking & spices", number = 3, aisleIndex = 2, basket = BasketKind.JAR_SHELF,
-            miniIcons = emptyList(), count = 2, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
+            inBasket = listOf(IconRef("milk_bag")), count = 2, gotten = 1, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
         )
         AisleSectionRow(aisleIndex = 2, first = true, last = false) {
             ItemRowCard(name = "All-purpose flour", detail = "2 kg", icon = IconRef("flour"), checked = false)
@@ -234,16 +239,20 @@ private fun ListPiecesSample() {
         }
     }
     AisleHeader(
+        title = "Dairy & eggs", number = 4, aisleIndex = 3, basket = BasketKind.MILK_CRATE,
+        inBasket = emptyList(), count = 3, gotten = 0, collapsed = true, cleared = false, onToggle = {},
+    )
+    AisleHeader(
         title = "Bakery", number = 2, aisleIndex = 1, basket = BasketKind.BREAD_BASKET,
-        miniIcons = emptyList(), count = 0, collapsed = true, cleared = true, onToggle = {},
+        inBasket = listOf("baguette", "bagel").map(::IconRef), count = 0, gotten = 2, collapsed = true, cleared = true, onToggle = {},
     )
 }
 
-@Preview(name = "List pieces - day", widthDp = 411, heightDp = 720)
+@Preview(name = "List pieces - day", widthDp = 411, heightDp = 820)
 @Composable
 private fun ListPiecesDayPreview() = PreviewFrame(dark = false) { ListPiecesSample() }
 
-@Preview(name = "List pieces - dusk", widthDp = 411, heightDp = 720)
+@Preview(name = "List pieces - dusk", widthDp = 411, heightDp = 820)
 @Composable
 private fun ListPiecesDuskPreview() = PreviewFrame(dark = true) { ListPiecesSample() }
 

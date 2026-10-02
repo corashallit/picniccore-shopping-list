@@ -22,13 +22,13 @@ internal fun ThemeSampler() {
             PicnicTopBar(title = "Picnic List", subtitle = "3 of 7 in the basket", bottom = { TripProgress(3, 7) })
             AisleHeader(
                 title = "Produce", number = 1, aisleIndex = 0, basket = BasketKind.FRUIT_CRATE,
-                miniIcons = listOf(IconRef("lemon"), IconRef("apple"), IconRef("carrot")), count = 3,
+                inBasket = listOf(IconRef("lemon"), IconRef("apple")), count = 3, gotten = 2,
                 collapsed = true, cleared = false, onToggle = {},
             )
             Column {
                 AisleHeader(
                     title = "Bakery", number = 2, aisleIndex = 1, basket = BasketKind.BREAD_BASKET,
-                    miniIcons = emptyList(), count = 3, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
+                    inBasket = listOf(IconRef("milk_bag")), count = 2, gotten = 1, collapsed = false, cleared = false, onToggle = {}, rowsBelow = true,
                 )
                 AisleSectionRow(aisleIndex = 1, first = true, last = false) {
                     ItemRowCard(name = "Baguette", detail = "1 · crusty", icon = IconRef("baguette"), checked = false)

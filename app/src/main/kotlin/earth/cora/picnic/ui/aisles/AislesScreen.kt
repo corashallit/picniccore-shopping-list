@@ -187,7 +187,7 @@ private fun AislesPreview(state: AislesUiState) {
         if (state.parsed.isEmpty()) HintText(stringResource(R.string.aisles_preview_empty))
         state.parsed.forEach { p ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(d.s)) {
-                AisleBasket(kind = p.basket, miniIcons = emptyList(), count = 0, size = 44.dp)
+                AisleBasket(kind = p.basket, inBasket = emptyList(), count = 0, size = 44.dp)
                 AisleMedallion(number = storeAisleNumber(p.aisle.name), aisleIndex = p.aisle.position - 1, size = 28.dp)
                 Column(Modifier.weight(1f)) {
                     Text(p.aisle.name, style = PicnicTheme.type.label, color = c.ink)

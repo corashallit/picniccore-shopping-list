@@ -16,14 +16,21 @@ data class AisleSection(
     val position: Int,
     val basket: BasketKind,
     /**
-     * UNSORTED/AISLE: the section's UNCHECKED items, oldest first (addedAt, then list order).
+     * UNSORTED/AISLE: the section's UNCHECKED items (still to get), oldest first (addedAt, then list order).
      * CHECKED: every checked item of the list, in aisle walking order, then oldest first.
      */
     val items: List<GroceryItem>,
-    /** AISLE/UNSORTED: how many of this aisle's items are checked (they are listed under CHECKED). 0 for CHECKED. */
-    val checkedCount: Int,
+    /**
+     * UNSORTED/AISLE: the section's CHECKED items (already gotten), in the order CHECKED lists them
+     * (oldest first: check time is not tracked). This is what the section's basket holds; items still
+     * to get are never in it. They are listed under CHECKED too. Empty for CHECKED itself.
+     */
+    val checkedItems: List<GroceryItem>,
     val collapsed: Boolean,
 ) {
+    /** UNSORTED/AISLE: how many of the section's items are checked ([checkedItems]). 0 for CHECKED. */
+    val checkedCount: Int get() = checkedItems.size
+
     /** True for an aisle whose items are all checked (UI shows a "cleared" header). */
     val cleared: Boolean get() = kind != SectionKind.CHECKED && items.isEmpty() && checkedCount > 0
 }
@@ -45,6 +52,8 @@ object ListGrouping {
      *   then CHECKED last (only if any item is checked).
      * - An aisle section is present iff it has at least one item (checked or not); an aisle with only
      *   checked items is present with empty [AisleSection.items] and [AisleSection.cleared] = true.
+     * - UNSORTED/AISLE: [AisleSection.items] = unchecked (to get), [AisleSection.checkedItems] = checked
+     *   (gotten, the basket's contents); both oldest first. CHECKED: items = every checked item.
      * - basket: [basketFor] for aisles; BasketKind.DEFAULT for UNSORTED and CHECKED.
      * - collapsed: section id in list.collapsedAisles.
      */
@@ -58,8 +67,8 @@ object ListGrouping {
         val checkedInWalkingOrder = mutableListOf<GroceryItem>()
 
         val unsorted = bySection[SectionIds.UNSORTED].orEmpty()
-        val unsortedOpen = unsorted.filterNot { it.checked }
-        checkedInWalkingOrder += unsorted.filter { it.checked }
+        val (unsortedGotten, unsortedOpen) = unsorted.partition { it.checked }
+        checkedInWalkingOrder += unsortedGotten
         if (unsortedOpen.isNotEmpty()) {
             sections += AisleSection(
                 id = SectionIds.UNSORTED,
@@ -69,15 +78,15 @@ object ListGrouping {
                 position = 0,
                 basket = BasketKind.DEFAULT,
                 items = unsortedOpen,
-                checkedCount = unsorted.size - unsortedOpen.size,
+                checkedItems = unsortedGotten,
                 collapsed = SectionIds.UNSORTED in list.collapsedAisles,
             )
         }
 
         for (aisle in aisles) {
             val items = bySection[aisle.id] ?: continue
-            val open = items.filterNot { it.checked }
-            checkedInWalkingOrder += items.filter { it.checked }
+            val (gotten, open) = items.partition { it.checked }
+            checkedInWalkingOrder += gotten
             sections += AisleSection(
                 id = aisle.id,
                 kind = SectionKind.AISLE,
@@ -86,7 +95,7 @@ object ListGrouping {
                 position = aisle.position,
                 basket = basketFor(aisle),
                 items = open,
-                checkedCount = items.size - open.size,
+                checkedItems = gotten,
                 collapsed = aisle.id in list.collapsedAisles,
             )
         }
@@ -100,7 +109,7 @@ object ListGrouping {
                 position = 0,
                 basket = BasketKind.DEFAULT,
                 items = checkedInWalkingOrder,
-                checkedCount = 0,
+                checkedItems = emptyList(),
                 collapsed = SectionIds.CHECKED in list.collapsedAisles,
             )
         }

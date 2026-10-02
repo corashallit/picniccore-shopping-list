@@ -85,6 +85,8 @@ class ListViewModelTest {
         val bakery = s.sections.first { it.id == "bakery" }
         assertTrue("all bakery items are checked", bakery.cleared)
         assertEquals(0, bakery.count)
+        assertEquals(2, bakery.gotten)
+        assertEquals("a cleared aisle's basket is full", listOf(IconRef("baguette"), IconRef("bagel")), bakery.inBasket)
         assertNull("no store number in \"Bakery\": the medallion shows a star", bakery.number)
         assertEquals(1, bakery.aisleIndex)
         assertEquals("the store's own number, not the walking position", 2, s.sections.first { it.id == "aisle-2-baking-spices" }.number)
@@ -92,10 +94,13 @@ class ListViewModelTest {
         val dairy = s.sections.first { it.id == "dairy-eggs" }
         assertTrue(dairy.collapsed)
         assertEquals(4, dairy.count)
-        assertEquals(listOf(IconRef("milk_bag"), IconRef("eggs"), IconRef("yogurt"), IconRef("butter")), dairy.miniIcons)
+        assertEquals(0, dairy.gotten)
+        assertTrue("nothing gotten yet: the basket is empty, never the items still to get", dairy.inBasket.isEmpty())
 
         val checked = s.sections.last()
         assertEquals(listOf("Baguette", "Bagels", "Coffee beans"), checked.items.map { it.name })
+        assertEquals(0, checked.gotten)
+        assertEquals(listOf(IconRef("baguette"), IconRef("bagel"), IconRef("coffee")), checked.inBasket)
 
         val avocado = s.sections.first { it.id == "produce" }.items.first { it.name == "Avocados" }
         assertEquals("3 · ripe ones", avocado.detail)
@@ -110,6 +115,34 @@ class ListViewModelTest {
 
         assertEquals(listOf("Groceries" to true, "Saturday party" to false), s.lists.map { it.title to it.current })
         assertEquals(12, s.lists.first().remaining)
+    }
+
+    @Test
+    fun aCollapsedBasketFillsWithWhatIsGottenAndEmptiesWhenUnticked() = runTest {
+        val f = fixture(busy = setOf("milk"))
+        f.vm.toggle("i-eggs")
+        f.vm.toggle("i-butter")
+        advanceUntilIdle()
+        var dairy = f.vm.loaded().sections.first { it.id == "dairy-eggs" }
+        assertTrue(dairy.collapsed)
+        assertEquals("the badge still counts what is left to get", 2, dairy.count)
+        assertEquals(2, dairy.gotten)
+        assertEquals("gotten items only, oldest first", listOf(IconRef("eggs"), IconRef("butter")), dairy.inBasket)
+        assertEquals(listOf("Milk", "Greek yogurt"), dairy.items.map { it.name })
+
+        // A busy (drawing) item in the basket shows its display ref, like its row.
+        f.vm.toggle("i-milk")
+        advanceUntilIdle()
+        dairy = f.vm.loaded().sections.first { it.id == "dairy-eggs" }
+        assertEquals(catalog.displayRef(f.store.current().findItem("i-milk")!!, busy = true), dairy.inBasket.first())
+
+        f.vm.toggle("i-eggs")
+        f.vm.toggle("i-butter")
+        f.vm.toggle("i-milk")
+        advanceUntilIdle()
+        dairy = f.vm.loaded().sections.first { it.id == "dairy-eggs" }
+        assertTrue(dairy.inBasket.isEmpty())
+        assertEquals(4, dairy.count)
     }
 
     @Test

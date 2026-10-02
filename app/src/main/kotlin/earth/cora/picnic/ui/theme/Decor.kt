@@ -22,25 +22,37 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.GlobalPositionAwareModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.invalidateDraw
+import androidx.compose.ui.node.requireLayoutCoordinates
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -55,6 +67,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
 import earth.cora.picnic.R
 import earth.cora.picnic.core.model.BasketKind
 import kotlin.math.PI
@@ -69,32 +82,108 @@ import kotlin.math.sin
  * parameter says otherwise. Decorative loops respect PicnicTheme.motion.reduced (static frames).
  */
 
-/** Full-bleed screen ground: gingham at noon, gingham plus a few stars at dusk. Draws under the system bars. */
+/**
+ * Full-bleed screen ground: gingham at noon, gingham plus a few stars at dusk. Draws under the system bars.
+ * Pieces inside it can repaint the ground in line with it (a pinned list band's backing: groundBacking).
+ */
 @Composable
 fun PicnicBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val c = PicnicTheme.colors
+    val anchor = remember { GroundAnchor() }
     Box(
-        modifier.drawWithCache {
-            val cell = 14.dp.toPx()
-            onDrawBehind {
-                drawRect(c.background)
-                drawGingham(c.backgroundPattern, cell)
-                if (c.isDark) drawDuskStars(c.highlight.copy(alpha = 0.35f))
-            }
-        },
-        content = content,
-    )
+        modifier
+            .onPlaced { anchor.coordinates = it }
+            .drawBehind { drawGround(c, size) },
+    ) {
+        CompositionLocalProvider(LocalGround provides anchor) { content() }
+    }
 }
 
-/** Deterministic scatter of small twinkles (same layout every frame and every screenshot). */
-private fun DrawScope.drawDuskStars(color: Color) {
+/** Where the nearest PicnicBackground lies, so a piece can repaint its ground in line with it. */
+internal class GroundAnchor {
+    var coordinates: LayoutCoordinates? = null
+}
+
+/** The nearest PicnicBackground's anchor, or null outside one. */
+internal val LocalGround = staticCompositionLocalOf<GroundAnchor?> { null }
+
+/**
+ * The ground of a PicnicBackground of size [ground], in that ground's own coordinates, over [area]
+ * only. The bands and stars keep the ground's own grid, so any area lines up with the whole.
+ */
+private fun DrawScope.drawGround(c: PicnicColors, ground: Size, area: Rect = Rect(Offset.Zero, ground)) {
+    val cell = GROUND_CELL.dp.toPx()
+    val repeat = cell * 2
+    clipRect(area.left, area.top, area.right, area.bottom) {
+        drawRect(c.background, area.topLeft, area.size)
+        drawGingham(
+            c.backgroundPattern,
+            cell,
+            Rect(floor(area.left / repeat) * repeat, floor(area.top / repeat) * repeat, area.right, area.bottom),
+        )
+        if (c.isDark) drawDuskStars(c.highlight.copy(alpha = 0.35f), ground)
+    }
+}
+
+private const val GROUND_CELL = 14
+
+/**
+ * Backs an element that floats over scrolling content (a pinned list band) with the screen ground of
+ * [anchor], in line with it: from the ground's top edge down to the element's bottom edge, across the
+ * ground's whole width, behind the element. The scrolling container's clip (a LazyColumn's viewport)
+ * trims it to the viewport, so nothing scrolling under the element shows above or beside it, while
+ * the element's own drawing (outline, rounded corners, hard shadow below it) stays as it is. No-op
+ * outside a PicnicBackground.
+ */
+internal fun Modifier.groundBacking(anchor: GroundAnchor?, colors: PicnicColors): Modifier =
+    if (anchor == null) this else this then GroundBackingElement(anchor, colors)
+
+private data class GroundBackingElement(val anchor: GroundAnchor, val colors: PicnicColors) :
+    ModifierNodeElement<GroundBackingNode>() {
+    override fun create() = GroundBackingNode(anchor, colors)
+
+    override fun update(node: GroundBackingNode) {
+        node.anchor = anchor
+        node.colors = colors
+        node.invalidateDraw()
+    }
+}
+
+private class GroundBackingNode(var anchor: GroundAnchor, var colors: PicnicColors) :
+    Modifier.Node(), DrawModifierNode, GlobalPositionAwareModifierNode {
+    /** Where the element sat on the ground when last drawn: moving (being pushed off) redraws it in line. */
+    private var drawnAt: Offset? = null
+
+    private fun positionOnGround(element: LayoutCoordinates): Offset? =
+        anchor.coordinates?.takeIf { it.isAttached && element.isAttached }?.localPositionOf(element, Offset.Zero)
+
+    override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
+        if (positionOnGround(coordinates) != drawnAt) invalidateDraw()
+    }
+
+    override fun ContentDrawScope.draw() {
+        val ground = anchor.coordinates
+        val at = positionOnGround(requireLayoutCoordinates())
+        drawnAt = at
+        if (ground != null && at != null) {
+            val groundSize = ground.size.toSize()
+            translate(-at.x, -at.y) {
+                drawGround(colors, groundSize, Rect(0f, 0f, groundSize.width, at.y + size.height))
+            }
+        }
+        drawContent()
+    }
+}
+
+/** Deterministic scatter of small twinkles over a ground of size [ground] (same layout every frame and every screenshot). */
+private fun DrawScope.drawDuskStars(color: Color, ground: Size) {
     val step = 96.dp.toPx()
     var row = 0
     var y = step * 0.4f
-    while (y < size.height) {
+    while (y < ground.height) {
         var x = if (row % 2 == 0) step * 0.3f else step * 0.8f
         var i = 0
-        while (x < size.width) {
+        while (x < ground.width) {
             val r = (if ((row + i) % 3 == 0) 4.dp else 2.5.dp).toPx()
             drawPath(sparklePath(Offset(x, y + ((i * 37) % 23).dp.toPx()), r), color)
             x += step
@@ -341,7 +430,7 @@ fun EmptyState(title: String, body: String, modifier: Modifier = Modifier, actio
         verticalArrangement = Arrangement.spacedBy(d.m),
     ) {
         Box(Modifier.size(132.dp), contentAlignment = Alignment.BottomCenter) {
-            AisleBasket(kind = BasketKind.DEFAULT, miniIcons = emptyList(), count = 0, size = 120.dp)
+            AisleBasket(kind = BasketKind.DEFAULT, inBasket = emptyList(), count = 0, size = 120.dp)
             SleepyBee(Modifier.align(Alignment.TopEnd).size(44.dp))
         }
         Text(title, style = PicnicTheme.type.screenTitle, color = c.ink, textAlign = TextAlign.Center)

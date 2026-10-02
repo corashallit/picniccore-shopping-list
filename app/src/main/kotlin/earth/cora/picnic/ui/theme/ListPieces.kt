@@ -77,9 +77,11 @@ import earth.cora.picnic.core.model.IconRef
 
 /**
  * Aisle section header (one toggle target). Expanded: patterned medallion + title. Collapsed: the
- * AisleBasket with [miniIcons] peeking out and its count badge. Cleared: a "CLEAR!" star stamp in the
- * trailing slot, in place of the count and chevron (nothing is left to show or hide).
- * Exposes "<title>, <count> items" with state "collapsed"/"expanded" to accessibility.
+ * AisleBasket holding what has been gotten ([inBasket] peeking out; empty basket if nothing yet) with
+ * the to-get count as its badge. Cleared: a "CLEAR!" star stamp in the trailing slot, in place of the
+ * count and chevron (nothing is left to show or hide); its basket is full.
+ * Exposes "<title>, <count> to get, <gotten> in the basket" (the checked section, [gotten] = null:
+ * "<title>, <count> items") with state "collapsed"/"expanded" to accessibility.
  * [rowsBelow] = this section's AisleSectionRows follow (expanded, not empty): the header is drawn as
  * the open top band of the section container; otherwise it is a closed card on its own.
  * The medallion is centred on the rows' icon column and the title starts on their name column.
@@ -92,9 +94,12 @@ fun AisleHeader(
     /** position - 1 for aisles; -1 for special sections. */
     aisleIndex: Int,
     basket: BasketKind,
-    miniIcons: List<IconRef>,
-    /** Unchecked items in the section (checked count for the checked section). */
+    /** Icons of the section's items already gotten (checked): the collapsed basket's contents. Never items to get. */
+    inBasket: List<IconRef>,
+    /** Unchecked items in the section, still to get (checked count for the checked section). */
     count: Int,
+    /** How many of the section's items are already gotten (in the basket); null for the checked section itself. */
+    gotten: Int?,
     collapsed: Boolean,
     /** Every item in this aisle is checked. */
     cleared: Boolean,
@@ -105,7 +110,11 @@ fun AisleHeader(
     val c = PicnicTheme.colors
     val d = PicnicTheme.dimens
     val family = c.aisle(aisleIndex)
-    val description = pluralStringResource(R.plurals.theme_aisle_header, count, title, count)
+    val description = if (gotten == null) {
+        pluralStringResource(R.plurals.theme_aisle_header, count, title, count)
+    } else {
+        stringResource(R.string.theme_aisle_header_progress, title, count, gotten)
+    }
     val state = stringResource(if (collapsed) R.string.theme_state_collapsed else R.string.theme_state_expanded)
     val clearedText = stringResource(R.string.theme_aisle_cleared)
     // Line the medallion up with the item icons below and the title with the item names (the rows'
@@ -131,7 +140,7 @@ fun AisleHeader(
             horizontalArrangement = Arrangement.spacedBy(gap),
         ) {
             if (collapsed) {
-                AisleBasket(basket, miniIcons, count)
+                AisleBasket(basket, inBasket, count)
             } else {
                 AisleMedallion(number, aisleIndex)
             }
