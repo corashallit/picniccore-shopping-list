@@ -24,13 +24,13 @@ import earth.cora.picnic.icons.AssetIconImages
 import earth.cora.picnic.icons.BundledIcons
 import earth.cora.picnic.icons.IconImages
 import earth.cora.picnic.icons.IconRepository
+import earth.cora.picnic.platform.AndroidAnnouncer
+import earth.cora.picnic.platform.AndroidFeedback
+import earth.cora.picnic.platform.AndroidTimeouts
 import earth.cora.picnic.platform.Announcer
 import earth.cora.picnic.platform.AudioRecorder
 import earth.cora.picnic.platform.CapturePhotoPreparer
-import earth.cora.picnic.platform.DefaultTimeouts
 import earth.cora.picnic.platform.Feedback
-import earth.cora.picnic.platform.NoOpAnnouncer
-import earth.cora.picnic.platform.NoOpFeedback
 import earth.cora.picnic.platform.PhotoPreparer
 import earth.cora.picnic.platform.Timeouts
 import earth.cora.picnic.platform.VoiceRecorder
@@ -128,14 +128,18 @@ class AppContainer(private val app: Application) {
      */
     val album: AlbumStore by lazy { JsonFileAlbumStore(File(app.filesDir, "album.json")) }
 
-    /** Sounds + haptics (§14). Phase 0: plays nothing until WP10's SoundPool implementation lands. */
-    val feedback: Feedback get() = NoOpFeedback
+    /**
+     * Sounds + haptics (§14): SoundPool sonification gated by Surprises → Sounds and the ringer, View haptics
+     * gated by Surprises → Haptics. Built in [startOnce], before MainActivity resumes, so its window tracker
+     * sees the activity.
+     */
+    val feedback: Feedback by lazy { AndroidFeedback.create(app, settings.settings, appScope) }
 
-    /** Polite TalkBack announcements (§15). Phase 0: no-op until WP10's lands. */
-    val announcer: Announcer get() = NoOpAnnouncer
+    /** Polite TalkBack announcements (§15), de-duplicated within 1 s. */
+    val announcer: Announcer by lazy { AndroidAnnouncer(app) }
 
-    /** "Time to take action" and "Touch & hold delay" (§9, §15). Phase 0: the defaults until WP10's lands. */
-    val timeouts: Timeouts get() = DefaultTimeouts
+    /** "Time to take action" and "Touch & hold delay" (§9, §15), read live from the phone's settings. */
+    val timeouts: Timeouts by lazy { AndroidTimeouts(app) }
 
     /** Where sunset and the forecast are computed (§0.4 Q6). Phase 0: Toronto until "Use my area" lands (WP8 · WP9). */
     val places: PlaceSource get() = PlaceSource.Toronto
@@ -195,6 +199,7 @@ class AppContainer(private val app: Application) {
      */
     fun startOnce() {
         if (!started.compareAndSet(false, true)) return
+        feedback // registers its resumed-window tracker (haptics) before the first onResume
         appScope.launch {
             withContext(Dispatchers.IO) {
                 catalog.match("milk") // parses the catalog and builds its match index
