@@ -34,3 +34,6 @@ picnic-play-*.json
 # Python
 __pycache__/
 *.pyc
+
+# Agent worktrees (local only)
+.claude/worktrees/
