@@ -1,8 +1,15 @@
 name: Android
 
-# Builds the sideloadable APK (the non-debuggable "sideload" build type, signed with the committed
-# debug key) on every push, PR and manual run; a v* tag also attaches it to a GitHub Release.
-# Getting and installing the APK: docs/BUILDING.md.
+# Every push, PR and manual run: the core and app tests, screenshots and lint (job `build`, no secrets),
+# then the APK testers install (job `apk`): the non-debuggable "sideload" build type, signed with the
+# private key registered for earth.cora.picnic in Android Developer Console. A v* tag also attaches
+# that APK to a GitHub Release. Getting and installing the APK: docs/BUILDING.md. The key, its
+# registration and its secrets: docs/RELEASING.md.
+#
+# The signing key never meets the repository's test code: each job gets its own fresh runner, and only
+# `apk` reads the key's secrets. Every action is pinned to a full commit SHA (the comment names its
+# release), so a moved tag can't change what runs next to the key; Dependabot keeps them current
+# (.github/dependabot.yml).
 
 on:
   push:
@@ -18,19 +25,28 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
+env:
+  # The certificate registered for earth.cora.picnic in Android Developer Console (docs/RELEASING.md §2).
+  # `apk` refuses a key or an APK with any other certificate.
+  REGISTERED_CERT_SHA256: 'A4:B1:24:97:04:CB:2C:77:3F:D7:36:19:08:B8:47:BD:27:0B:AD:B8:50:D8:0A:E0:F7:82:79:17:35:16:09:A5'
+
+defaults:
+  run:
+    shell: bash # -eo pipefail
+
 jobs:
   build:
-    name: Build, test, APK
+    name: Build and test
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    outputs:
-      apk: ${{ steps.ver.outputs.apk }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: '21'
@@ -38,30 +54,18 @@ jobs:
       # ubuntu-24.04 already ships these packages; this pins them and accepts licenses.
       # compileSdk 37 -> platforms;android-37.0; AGP 9.4.1's default build-tools is 36.0.0.
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
           log-accepted-android-sdk-licenses: false
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           # MIT-licensed actions/cache wrapper (the default "enhanced" provider is proprietary).
           cache-provider: basic
           # Let feature branches write caches too (default is read-only off the default branch).
           cache-read-only: ${{ github.event_name == 'pull_request' }}
-
-      - name: Version info
-        id: ver
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            name="${GITHUB_REF_NAME#v}"
-          else
-            name="0.1.0-${GITHUB_SHA::7}"
-          fi
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "apk=picnic-list-${name}.apk" >> "$GITHUB_OUTPUT"
 
       # core is tested as the standalone build it is (keeps the -p core contract honest).
       - name: Core tests (standalone core build)
@@ -69,32 +73,13 @@ jobs:
 
       # compareRoborazziDebug runs every app unit test plus the screenshot comparisons (it never
       # fails on a pixel diff; switch to verifyRoborazziDebug once the art settles).
-      # assembleDebug keeps the developer build compiling; the APK people install is the
-      # non-debuggable sideload build (same code and signing key, so it updates debug installs too).
-      - name: App unit + screenshot tests, lint, APKs
-        run: >
-          ./gradlew
-          :app:compareRoborazziDebug
-          :app:lintDebug
-          :app:assembleDebug
-          :app:assembleSideload
-          -Ppicnic.versionCode=${{ github.run_number }}
-          -Ppicnic.versionName=${{ steps.ver.outputs.name }}
-
-      - name: Rename APK
-        run: cp app/build/outputs/apk/sideload/picnic-list-sideload.apk "${{ steps.ver.outputs.apk }}"
-
-      # archive: false uploads the bare .apk, so it downloads straight to a phone.
-      - name: Upload APK
-        uses: actions/upload-artifact@v7
-        with:
-          path: ${{ steps.ver.outputs.apk }}
-          archive: false
-          if-no-files-found: error
+      # assembleDebug keeps the developer build compiling; the APK testers install comes from `apk`.
+      - name: App unit + screenshot tests, lint, debug APK
+        run: ./gradlew :app:compareRoborazziDebug :app:lintDebug :app:assembleDebug
 
       - name: Upload reports and screenshot diffs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: reports-${{ github.run_number }}
           path: |
@@ -104,22 +89,162 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  apk:
+    name: Signed APK
+    needs: build
+    # Dependabot's runs don't get the repository's Actions secrets, so they stop after the tests.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      apk: ${{ steps.ver.outputs.apk }}
+    env:
+      # Not a secret: GitHub masks a secret's value everywhere in the log, so a common word like
+      # `upload` would become *** all through it. Set the variable only for a key with another alias.
+      PICNIC_SIGNING_KEY_ALIAS: ${{ vars.PICNIC_SIGNING_KEY_ALIAS || 'upload' }}
+    steps:
+      # Only "is it set" reaches the shell, never a value.
+      - name: Check signing secrets
+        env:
+          HAS_KEYSTORE: ${{ secrets.PICNIC_SIGNING_KEYSTORE_BASE64 != '' }}
+          HAS_STORE_PASSWORD: ${{ secrets.PICNIC_SIGNING_STORE_PASSWORD != '' }}
+        run: |
+          missing=()
+          [[ "$HAS_KEYSTORE" == true ]] || missing+=(PICNIC_SIGNING_KEYSTORE_BASE64)
+          [[ "$HAS_STORE_PASSWORD" == true ]] || missing+=(PICNIC_SIGNING_STORE_PASSWORD)
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error title=Signing is not set up::Missing repository secrets: ${missing[*]} (see docs/RELEASING.md §3)."
+            exit 1
+          fi
+
+      - name: Version info
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            name="${GITHUB_REF_NAME#v}"
+          else
+            name="0.1.0-${GITHUB_SHA::7}"
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "apk=picnic-list-${name}.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: 'platform-tools platforms;android-37.0 build-tools;36.0.0'
+          log-accepted-android-sdk-licenses: false
+
+      # Read-only: the job that holds the key may use the caches `build` wrote, but never writes them.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: basic
+          cache-read-only: true
+
+      - name: Decode signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PICNIC_SIGNING_KEYSTORE_BASE64 }}
+          PICNIC_SIGNING_STORE_PASSWORD: ${{ secrets.PICNIC_SIGNING_STORE_PASSWORD }}
+        run: |
+          umask 077
+          keystore="$RUNNER_TEMP/picnic-signing.p12"
+          if ! printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$keystore"; then
+            echo "::error::PICNIC_SIGNING_KEYSTORE_BASE64 is not valid base64 (see docs/RELEASING.md §3)."
+            exit 1
+          fi
+          # A wrong password or alias fails here, with keytool's own message (it never echoes the password).
+          if ! listing=$(keytool -list -v -keystore "$keystore" -storepass:env PICNIC_SIGNING_STORE_PASSWORD \
+              -alias "$PICNIC_SIGNING_KEY_ALIAS" 2>&1); then
+            echo "::error::Couldn't open the signing key ($(grep -m1 'keytool error' <<< "$listing")). Check PICNIC_SIGNING_KEYSTORE_BASE64, PICNIC_SIGNING_STORE_PASSWORD and the key alias (variable PICNIC_SIGNING_KEY_ALIAS, default upload)."
+            exit 1
+          fi
+          fingerprint=$(awk '/SHA256:/ { print $2; exit }' <<< "$listing")
+          if [[ "$fingerprint" != "$REGISTERED_CERT_SHA256" ]]; then
+            echo "::error::The signing key's certificate is '$fingerprint', not the registered $REGISTERED_CERT_SHA256 (see docs/RELEASING.md)."
+            exit 1
+          fi
+          echo "PICNIC_SIGNING_STORE_FILE=$keystore" >> "$GITHUB_ENV"
+          echo "Signing certificate SHA-256: $fingerprint (the registered one)"
+
+      # No process outlives this step with the password in its environment: --no-daemon makes Gradle's
+      # daemon single-use, and the Kotlin compiler runs inside it instead of in its own daemon.
+      # --no-configuration-cache: the password is a configuration input, and no cache entry should hold
+      # it, even encrypted.
+      - name: Signed sideload APK
+        env:
+          PICNIC_SIGNING_STORE_PASSWORD: ${{ secrets.PICNIC_SIGNING_STORE_PASSWORD }}
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+        run: >
+          ./gradlew --no-daemon --no-configuration-cache
+          -Pkotlin.compiler.execution.strategy=in-process
+          :app:assembleSideload
+          -Ppicnic.versionCode=${{ github.run_number }}
+          -Ppicnic.versionName="$VERSION_NAME"
+
+      - name: Remove signing key, stop Gradle
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/picnic-signing.p12"
+          if [[ -x ./gradlew ]]; then ./gradlew --stop || true; fi
+
+      # The APK must carry exactly the registered certificate: never the debug key, never unsigned.
+      - name: Verify APK signature
+        run: |
+          apk=app/build/outputs/apk/sideload/picnic-list-sideload.apk
+          if ! report=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" 2>&1); then
+            echo "$report"
+            echo "::error::The APK is unsigned or its signature doesn't verify."
+            exit 1
+          fi
+          signers=$(grep -c '^Signer #[0-9]* certificate SHA-256 digest:' <<< "$report" || true)
+          actual=$(awk -F': ' '/^Signer #1 certificate SHA-256 digest:/ { print $2; exit }' <<< "$report")
+          expected="${REGISTERED_CERT_SHA256//:/}"
+          echo "APK certificate SHA-256: $actual ($signers signer(s))"
+          if [[ "$signers" != 1 || "$actual" != "${expected,,}" ]]; then
+            echo "::error::The APK is not signed with exactly the registered key."
+            exit 1
+          fi
+
+      - name: Rename APK
+        env:
+          APK: ${{ steps.ver.outputs.apk }}
+        run: cp app/build/outputs/apk/sideload/picnic-list-sideload.apk "$APK"
+
+      # archive: false uploads the bare .apk, so it downloads straight to a phone.
+      - name: Upload APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ steps.ver.outputs.apk }}
+          archive: false
+          if-no-files-found: error
+
   release:
     name: GitHub Release
-    needs: build
+    needs: apk
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - name: Download APK
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ needs.build.outputs.apk }}
+          name: ${{ needs.apk.outputs.apk }}
 
       - name: Publish release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          files: ${{ needs.build.outputs.apk }}
+          files: ${{ needs.apk.outputs.apk }}
           generate_release_notes: true
           fail_on_unmatched_files: true

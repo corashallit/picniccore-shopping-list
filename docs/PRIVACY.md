@@ -1,6 +1,6 @@
 # Picnic List privacy policy
 
-> **Draft for Cora.** Host it as a plain public web page, for example `https://cora.earth/picnic/privacy`. Put that URL in Play Console and link it from the app's Settings (docs/RELEASING.md §8).
+> **Draft for Cora.** Host it as a plain public web page, for example `https://cora.earth/picnic/privacy`. It is written for a Google Play listing, which the app doesn't have yet (docs/RELEASING.md §6): put the URL in Play Console then, and link it from the app's Settings.
 >
 > Before publishing:
 > - Replace every **[FILL IN: …]**.
