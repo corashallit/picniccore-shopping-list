@@ -10,6 +10,7 @@ python3 design/stickers/build_android.py            # regenerate the app's art (
 python3 design/stickers/build_android.py --check    # what CI runs: exit 1 on drift or a validator error
 ./gradlew :app:checkStickers                        # the same check as a Gradle task
 python3 design/stickers/tools/roundtrip.py [keys]   # render emitted vs DSL side by side (needs Node + Playwright)
+python3 design/stickers/tools/contact.py [--ref k,k] keys  # review sheets: 52 / 30 / 22 dp on Day, Glow, Dusk + 120 dp detail
 python3 design/stickers/tools/missing.py            # rewrite MISSING.md (the keys still to author, in 4 batches)
 ```
 
@@ -19,7 +20,7 @@ python3 design/stickers/tools/missing.py            # rewrite MISSING.md (the ke
 |---|---|---|
 | `engine.py` | WP1 | palette (`C`, `deep`), parts (`F`, `TUBE`, `LINE`, `G`, `DOT`), `Art` (die-cut, fills, clipped puffy band, trace), path helpers |
 | `gloss.py` | WP1 | the procedural bonbon gloss (`autogloss`) and its report |
-| `icons.py`, `icons_b1..b4.py`, `icons_r3.py` | WP1 | the 121 r9 stickers; new keys go in `icons_batch1..4.py` (MISSING.md) |
+| `icons.py`, `icons_b1..b4.py`, `icons_r3.py` | WP1 | the 121 r9 stickers; new keys go in `icons_batch1..4.py` or `icons_c<N>.py` (MISSING.md), both loaded after the r9 files |
 | `catalog_map.py` | WP1 | DSL key → catalog key, orphans, the `peameal_bacon` addition, hop personalities |
 | `variants.py` | WP1 | kawaii faces (album only) and the mockup's holo demo parts |
 | `baskets.py` | WP2 | the 17 basket kinds: back, front, open and closed lids, rim, hanko point, decoration slice |
@@ -29,7 +30,7 @@ python3 design/stickers/tools/missing.py            # rewrite MISSING.md (the ke
 | `build_android.py` | WP1 | what is emitted where; the Kotlin manifests; `--check` |
 | `validate.py`, `lintcol.py` | WP1 | build-time validators (below); `lintcol` is the mockup's part-level colour lint |
 | `checkStickers.gradle.kts` | WP1 | `:app:checkStickers`, applied by `app/build.gradle.kts` |
-| `tools/` | WP1 | `roundtrip.py` + `roundtrip.mjs` + `vd2svg.py` (round-trip render check), `missing.py` |
+| `tools/` | WP1 | `roundtrip.py` + `roundtrip.mjs` + `vd2svg.py` (round-trip render check), `contact.py` + `contact.mjs` (review contact sheets), `missing.py` |
 
 ## What is generated
 
