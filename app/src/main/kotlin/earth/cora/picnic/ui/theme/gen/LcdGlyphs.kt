@@ -63,7 +63,36 @@ object LcdGlyphs {
         '?' to LcdGlyph(5, intArrayOf(0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b00000, 0b00100)),
         '+' to LcdGlyph(5, intArrayOf(0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000)),
         '♪' to LcdGlyph(5, intArrayOf(0b00110, 0b00101, 0b00100, 0b00100, 0b01100, 0b11100, 0b11000)),
+        '#' to LcdGlyph(5, intArrayOf(0b01010, 0b01010, 0b11111, 0b01010, 0b11111, 0b01010, 0b01010)),
+        '%' to LcdGlyph(5, intArrayOf(0b11000, 0b11001, 0b00010, 0b00100, 0b01000, 0b10011, 0b00011)),
+        '&' to LcdGlyph(5, intArrayOf(0b01100, 0b10010, 0b10100, 0b01000, 0b10101, 0b10010, 0b01101)),
+        '\'' to LcdGlyph(1, intArrayOf(0b1, 0b1, 0b0, 0b0, 0b0, 0b0, 0b0)),
+        '(' to LcdGlyph(3, intArrayOf(0b001, 0b010, 0b100, 0b100, 0b100, 0b010, 0b001)),
+        ')' to LcdGlyph(3, intArrayOf(0b100, 0b010, 0b001, 0b001, 0b001, 0b010, 0b100)),
+        ',' to LcdGlyph(2, intArrayOf(0b00, 0b00, 0b00, 0b00, 0b00, 0b01, 0b10)),
+        '·' to LcdGlyph(1, intArrayOf(0b0, 0b0, 0b0, 0b1, 0b0, 0b0, 0b0)),
+        '★' to LcdGlyph(5, intArrayOf(0b00100, 0b00100, 0b11111, 0b01110, 0b01010, 0b10001, 0b00000)),
+        '●' to LcdGlyph(5, intArrayOf(0b00000, 0b01110, 0b11111, 0b11111, 0b11111, 0b01110, 0b00000)),
+        '♡' to LcdGlyph(5, intArrayOf(0b00000, 0b01010, 0b10101, 0b10001, 0b01010, 0b00100, 0b00000)),
     )
 
     fun glyph(c: Char): LcdGlyph? = glyphs[c]
+
+    /**
+     * The vector extras (§13.1), drawn as shapes instead of dots: ★ (the LCD star; Dusk and Glow show the full moon ●
+     * instead, never a crescent), ♪ and ♡. Each also has a dot fallback in [glyphs].
+     */
+    val extras: Map<Char, LcdExtra> = mapOf(
+        '★' to LcdExtra(7.4f, 0.5f, "M3-.2L3.94 2.11L6.42 2.29L4.52 3.89L5.12 6.31L3 5L.88 6.31L1.48 3.89L-.42 2.29L2.06 2.11Z"),
+        '●' to LcdExtra(7.4f, 0f, "M3 .2C3.48 .2 3.96 .31 4.39 .52C4.82 .73 5.2 1.03 5.5 1.4C5.8 1.78 6.01 2.22 6.12 2.69C6.23 3.16 6.23 3.64 6.12 4.11C6.01 4.58 5.8 5.02 5.5 5.4C5.2 5.77 4.82 6.07 4.39 6.28C3.96 6.49 3.48 6.6 3 6.6C2.52 6.6 2.04 6.49 1.61 6.28C1.18 6.07 .8 5.77 .5 5.4C.2 5.02-.01 4.58-.12 4.11C-.23 3.64-.23 3.16-.12 2.69C-.01 2.22 .2 1.78 .5 1.4C.8 1.03 1.18 .73 1.61 .52C2.04 .31 2.52 .2 3 .2Z"),
+        '♡' to LcdExtra(7f, 0f, "M3 6.14C1.92 5.21-.1 3.82-.1 2.27C-.1 .57 2.23 .26 3 1.81C3.77 .26 6.1 .57 6.1 2.27C6.1 3.82 4.08 5.21 3 6.14ZM3 5.2C4.6 4 5.4 3.2 5.4 2.2C5.4 1.4 4.8 .9 4.2 .9C3.7 .9 3.3 1.2 3 1.7C2.7 1.2 2.3 .9 1.8 .9C1.2 .9 .6 1.4 .6 2.2C.6 3.2 1.4 4 3 5.2Z"),
+        '♪' to LcdExtra(6f, 0f, "M2.2 .2L4.8 .2L4.8 1.4L3.2 1.9L3.2 5.3C3.22 5.54 3.17 5.78 3.05 6C2.93 6.22 2.75 6.41 2.52 6.55C2.29 6.69 2.03 6.77 1.75 6.79C1.48 6.82 1.2 6.77 .95 6.68C.69 6.58 .47 6.42 .31 6.22C.15 6.03 .05 5.8 .01 5.56C-.02 5.32 .02 5.07 .13 4.85C.24 4.63 .41 4.43 .63 4.29C.85 4.14 1.11 4.04 1.39 4.01C1.66 3.98 1.94 4.01 2.2 4.1Z"),
+    )
 }
+
+/**
+ * A vector LCD extra: [pathData] in units of the dot pitch p (x from the glyph's left edge, y from the top of the
+ * 7-row cell; even-odd fill, so ♡ is hollow), outlined by [stroke] p with round joins in the same colour, and
+ * [advance] p wide including its gap.
+ */
+class LcdExtra(val advance: Float, val stroke: Float, val pathData: String)

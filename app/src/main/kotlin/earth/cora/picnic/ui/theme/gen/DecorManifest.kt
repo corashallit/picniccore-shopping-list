@@ -18,6 +18,7 @@ object DecorManifest {
         "ladybug" to R.drawable.sk_d_ladybug,
         "ladybugfly" to R.drawable.sk_d_ladybugfly,
         "ant" to R.drawable.sk_d_ant,
+        "antcrumb" to R.drawable.sk_d_antcrumb,
         "blanket" to R.drawable.sk_d_blanket,
         "sun" to R.drawable.sk_d_sun,
         "glowstar" to R.drawable.sk_d_glowstar,
@@ -39,6 +40,9 @@ object DecorManifest {
         "redenvelope" to R.drawable.sk_d_redenvelope,
         "kira" to R.drawable.sk_d_kira,
         "petal" to R.drawable.sk_d_petal,
+        "umbrella" to R.drawable.sk_d_umbrella,
+        "dustbunny" to R.drawable.sk_d_dustbunny,
+        "hamper" to R.drawable.sk_d_hamper,
     )
 
     /**
@@ -61,11 +65,14 @@ object DecorManifest {
         "ghost" to R.drawable.sk_p_ghost,
         "snowflake" to R.drawable.sk_p_snowflake,
         "envelope" to R.drawable.sk_p_envelope,
+        "capsule" to R.drawable.sk_p_capsule,
     )
 
     /**
      * Toolbar glyphs (§3.4), by the spec's names: `sk_g_<name>`, 24 dp, 2u ballpoint lines with round caps, no border,
-     * no gloss (tint as a whole). Not drawn yet: gallery, send, aisles, lists, delete, scissors, album, trip, cassette, envelope, polaroid.
+     * no gloss (tint as a whole). Not drawn yet: none (the whole §3.4 set is drawn). Also here: `jar` (My pantry), `basket` (the store-aisle chip),
+     * `torn` (a field error), `paste` (the key field), and the inline copy glyphs `heart` (♡), `star` (★),
+     * `star_outline` (☆) and `note` (♪), which text shows as inline vectors, never as font glyphs (§2.7).
      */
     val glyphs: Map<String, Int> = mapOf(
         "add" to R.drawable.sk_g_add,
@@ -74,10 +81,15 @@ object DecorManifest {
         "back" to R.drawable.sk_g_back,
         "more" to R.drawable.sk_g_more,
         "camera" to R.drawable.sk_g_camera,
+        "gallery" to R.drawable.sk_g_gallery,
         "mic" to R.drawable.sk_g_mic,
         "stop" to R.drawable.sk_g_stop,
+        "send" to R.drawable.sk_g_send,
         "settings" to R.drawable.sk_g_settings,
+        "aisles" to R.drawable.sk_g_aisles,
+        "lists" to R.drawable.sk_g_lists,
         "edit" to R.drawable.sk_g_edit,
+        "delete" to R.drawable.sk_g_delete,
         "undo" to R.drawable.sk_g_undo,
         "refresh" to R.drawable.sk_g_refresh,
         "sparkle" to R.drawable.sk_g_sparkle,
@@ -90,6 +102,20 @@ object DecorManifest {
         "web" to R.drawable.sk_g_web,
         "search" to R.drawable.sk_g_search,
         "sort" to R.drawable.sk_g_sort,
+        "scissors" to R.drawable.sk_g_scissors,
+        "album" to R.drawable.sk_g_album,
+        "trip" to R.drawable.sk_g_trip,
+        "cassette" to R.drawable.sk_g_cassette,
+        "envelope" to R.drawable.sk_g_envelope,
+        "polaroid" to R.drawable.sk_g_polaroid,
+        "jar" to R.drawable.sk_g_jar,
+        "basket" to R.drawable.sk_g_basket,
+        "torn" to R.drawable.sk_g_torn,
+        "paste" to R.drawable.sk_g_paste,
+        "heart" to R.drawable.sk_g_heart,
+        "star" to R.drawable.sk_g_star,
+        "star_outline" to R.drawable.sk_g_star_outline,
+        "note" to R.drawable.sk_g_note,
     )
 
     /** Adaptive launcher layers (108 dp canvas, art inside the 66 dp safe zone). */

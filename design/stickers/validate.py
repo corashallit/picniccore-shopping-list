@@ -13,9 +13,9 @@ run(report) -> (errors, warnings, measurements). Errors fail `build_android.py` 
   geometry  the union cut is present; the base sits on y 42 (41.4-42.6); the art stays in the live area 6-42 (the 2u
             trace may overhang by 1u, so 5-43); every die-cut fill part fits a 2u disc; die-cut rectangles have
             corners r >= 2u; no die-cut line is thinner than 1.2u; no <text> or <image> anywhere.
-  baskets   all 17 kinds; back, front and closed lid present; exactly the decorated kinds carry a decoration slice;
-            the hanko point lies on the closed lid; the rim sits inside the art; a kind that stands its lid open has
-            a lid_open layer; palette as above.
+  baskets   all 17 kinds; back, front, open and closed lid present; exactly the decorated kinds carry a decoration
+            slice; the hanko point lies on the closed lid; the rim sits inside the art; every layer's die-cut (4u
+            border included) stays inside the 80 x 64 viewport; palette as above.
 
 GRANDFATHERED lists the approved r9 stickers (§18.2: "the 121 approved stickers ship as they are") that miss a
 geometry or gloss rule as drawn. They are reported, not failed; any other sticker, including every new key, must pass.
@@ -43,10 +43,12 @@ EXTRAS = {
     'launcher': {'#E6F6EE': 'binder', '#CDEEDD': 'binderStripe', engine.SHADOW: 'stickerShadow', engine.BP: 'ballpoint (mono)',
                  'HOLO': 'holo star'},
     'tile': {},
+    'washi': {'#FFFAD6': 'lemon-dots tape cream (§2.12)', '#EAF6FF': 'raindrop tape paper (egg 16)'},
 }
 
 # critter heads (centre x, centre y, radius) in DSL units: no gloss inside (§3.1, §20.3 item 30)
-HEADS = {'cat': (15.8, 31.4, 9.6), 'bee': (14.6, 28.2, 7), 'ladybug': (24, 13.4, 6.4), 'ladybugfly': (24, 15.4, 6), 'ant': (12.4, 32, 3.6)}
+HEADS = {'cat': (15.8, 31.4, 9.6), 'bee': (14.6, 28.2, 7), 'ladybug': (24, 13.4, 6.4), 'ladybugfly': (24, 15.4, 6), 'ant': (12.4, 32, 3.6),
+         'antcrumb': (12.4, 32, 3.6), 'dustbunny': (22.4, 29.6, 6.4)}   # the dust bunny's face; its gloss is on the fluff
 BASKET_KINDS = {'wicker_picnic', 'bread_basket', 'fruit_crate', 'berry_punnet', 'wire_basket', 'egg_basket', 'milk_crate',
                 'cooler', 'ice_bucket', 'bento_box', 'jar_shelf', 'canvas_tote', 'flower_bucket', 'bottle_carrier',
                 'candy_jar', 'vanity_case', 'mixing_bowl'}
@@ -217,12 +219,20 @@ def check_no_text(lint, icons):
 
 
 def check_baskets(lint, baskets):
+    from shapely.geometry import box
+    viewport = box(0, 0, 80, 64).buffer(.05)
     seen = set()
     for b, kind, layers, lsil in baskets:
         seen.add(kind)
-        for need in ('back', 'front', 'lid_closed'):
+        for need in ('back', 'front', 'lid_open', 'lid_closed'):
             if need not in layers:
                 lint.errors.append(f'basket: {kind} has no {need} layer')
+        for name, sil in lsil.items():
+            # a VectorDrawable clips to its viewport: the 4u white border must not be cut off
+            if not viewport.contains(sil.buffer(E.CUT_W / 2)):
+                x0, y0, x1, y1 = sil.buffer(E.CUT_W / 2).bounds
+                lint.errors.append(f'basket: sk_b_{kind}_{name} die-cut leaves the 80 x 64 viewport '
+                                   f'({x0:.1f},{y0:.1f}..{x1:.1f},{y1:.1f})')
         if (kind in DECORATED) != ('deco' in layers):
             lint.errors.append(f'basket: {kind} decoration slice {"missing" if kind in DECORATED else "on an undecorated kind"}')
         if 'lid_closed' in lsil and not lsil['lid_closed'].buffer(4).contains(Point(b.hk[0] + 8, b.hk[1] + 9)):
@@ -258,6 +268,8 @@ def run(report):
     check_geometry(lint, stickers)
     check_no_text(lint, ICONS + DECO)
     check_baskets(lint, report['baskets'])
+    import launcher
+    lint.errors += launcher.safe_zone_errors()
     for path, xml in report['out'].items():
         if '<text' in xml:
             lint.errors.append(f'{path}: contains text')

@@ -5,7 +5,7 @@ package earth.cora.picnic.ui.theme.gen
 import androidx.annotation.DrawableRes
 import earth.cora.picnic.R
 
-/** A tab pattern mask tile (§2.12): white on transparent, printed in the aisle mid; tile size in dp. */
+/** A pattern tile (§2.12): a tab pattern's white-on-transparent mask (printed in the aisle mid) or a washi tile; size in dp. */
 data class PatternTile(val name: String, @DrawableRes val drawable: Int, val widthDp: Float, val heightDp: Float)
 
 object PatternTiles {
@@ -21,5 +21,34 @@ object PatternTiles {
         "waves" to PatternTile("waves", R.drawable.sk_t_waves, 12f, 8f),
         "flowers" to PatternTile("flowers", R.drawable.sk_t_flowers, 12f, 12f),
         "plain" to PatternTile("plain", R.drawable.sk_t_plain, 4f, 4f),
+    )
+
+    /**
+     * Washi tape tiles (§2.12): full-colour (not masks), repeated along the 18 dp tape, whose torn ends, rotation and
+     * overall opacity the theme draws. `sakura` is the everyday tape; `gingham` (toasts, sheet handles), `dots` and
+     * `mint` the others; then the seasonal tapes and the rainy-day `raindrop` (egg 16).
+     */
+    val washi: Map<String, PatternTile> = mapOf(
+        "sakura" to PatternTile("sakura", R.drawable.sk_t_washi_sakura, 17f, 17f),
+        "gingham" to PatternTile("gingham", R.drawable.sk_t_washi_gingham, 10f, 10f),
+        "dots" to PatternTile("dots", R.drawable.sk_t_washi_dots, 10f, 10f),
+        "mint" to PatternTile("mint", R.drawable.sk_t_washi_mint, 10f, 10f),
+        "pumpkin" to PatternTile("pumpkin", R.drawable.sk_t_washi_pumpkin, 24f, 20f),
+        "maple" to PatternTile("maple", R.drawable.sk_t_washi_maple, 24f, 20f),
+        "snow" to PatternTile("snow", R.drawable.sk_t_washi_snow, 24f, 20f),
+        "hearts" to PatternTile("hearts", R.drawable.sk_t_washi_hearts, 24f, 20f),
+        "redenvelope" to PatternTile("redenvelope", R.drawable.sk_t_washi_redenvelope, 24f, 20f),
+        "ghost" to PatternTile("ghost", R.drawable.sk_t_washi_ghost, 24f, 20f),
+        "raindrop" to PatternTile("raindrop", R.drawable.sk_t_washi_raindrop, 24f, 20f),
+    )
+
+    /** The tape each season wears (`Season.name` -> [washi] key, egg 11). */
+    val seasonWashi: Map<String, String> = mapOf(
+        "CANADA_DAY" to "maple",
+        "THANKSGIVING" to "pumpkin",
+        "HALLOWEEN" to "ghost",
+        "FIRST_SNOW" to "snow",
+        "VALENTINES" to "hearts",
+        "LUNAR_NEW_YEAR" to "redenvelope",
     )
 }

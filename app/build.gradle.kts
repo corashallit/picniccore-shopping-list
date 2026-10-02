@@ -203,3 +203,5 @@ dependencies {
 
 // :app:checkStickers: the generated sticker art matches the DSL (design/stickers/, docs/DESIGN_STICKER.md §18.3).
 apply(from = rootProject.file("design/stickers/checkStickers.gradle.kts"))
+// :app:checkSounds: the sound clips match their recipes (design/sounds/make_sounds.py, §14.2).
+apply(from = rootProject.file("design/sounds/checkSounds.gradle.kts"))

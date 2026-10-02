@@ -12,11 +12,15 @@ import earth.cora.picnic.R
 data class MiniSlot(val centreX: Float, val raise: Float, val tilt: Float)
 
 /**
- * One basket kind's layers (§5.1). Draw order: [lidOpen] (only while [lidOpenStandsBehind] and the aisle is not done),
- * [back] (carries the whole die-cut in its `cut` group, the shadow tint, and the decoration of decorated kinds in its
- * `deco` group), the gotten minis, [front], then [lidClosed] when the aisle is done. [deco] repeats the decoration
- * alone (already inside [back]; never draw both). Every coordinate is in viewport units (80 x 64 = the DSL's
- * 64 x 48 grid, viewBox -8 -9 80 64, shifted by (+8, +9)).
+ * One basket kind's layers (§5.1, §5.3). Every kind has all four of [back], [front], [lidOpen] and [lidClosed]; the
+ * four decorated kinds also have [deco]. Draw order: [lidOpen] (behind everything: while [lidOpenStandsBehind] and
+ * the aisle is not done, and for every kind while the lid of a done basket is open: the peek, and the frame before it
+ * shuts or after it re-opens), [back] (carries the whole die-cut in its `cut` group, the shadow tint, and the decoration
+ * of decorated kinds in its `deco` group, so a decorated basket keeps it when empty, R4), the gotten minis, [front],
+ * then [lidClosed] when the aisle is done. [back], [lidOpen] and [lidClosed] each carry their own `cut` group (white
+ * border, tinted for the shadow); [front] draws inside the back's die-cut. [deco] repeats the decoration alone (already
+ * inside [back]; never draw both). Every coordinate is in viewport units (80 x 64 = the DSL's 64 x 48 grid, viewBox
+ * -8 -9 80 64, shifted by (+8, +9)); every layer's die-cut stays inside the viewport.
  */
 data class BasketArt(
     val kind: String,
@@ -24,8 +28,8 @@ data class BasketArt(
     val defaultAisle: String,
     @DrawableRes val back: Int,
     @DrawableRes val front: Int,
-    val lidOpen: Int?,
-    val lidClosed: Int?,
+    @DrawableRes val lidOpen: Int,
+    @DrawableRes val lidClosed: Int,
     val deco: Int?,
     val lidOpenStandsBehind: Boolean,
     /** The rim's top edge: minis sit at rimY - [BasketManifest.MINI_SIZE] x [BasketManifest.MINI_LIFT] + raise. */
@@ -49,9 +53,19 @@ object BasketManifest {
     const val HANKO_ROTATION: Float = -12f
     const val LANDING_SPOT_RADIUS: Float = 7f
 
-    /** The to-get badge's top-right flag slot (the mockup's CSS): its right edge and top, viewport units. */
-    const val BADGE_RIGHT: Float = 92f
-    const val BADGE_TOP: Float = 2f
+    /**
+     * The to-get badge (§4.12): a [BADGE_SIZE_DP] count sticker in the basket box's top-right flag slot, its right edge
+     * [BADGE_RIGHT_OUTSIDE_DP] outside the box's right edge, its top [BADGE_TOP_STRIP_DP] below the box's top on a
+     * folded strip and [BADGE_TOP_TRAY_DP] in a tray header. In dp, at every basket size; never part of the art.
+     */
+    const val BADGE_SIZE_DP: Float = 22f
+    const val BADGE_RIGHT_OUTSIDE_DP: Float = 12f
+    const val BADGE_TOP_STRIP_DP: Float = 8f
+    const val BADGE_TOP_TRAY_DP: Float = 2f
+
+    /** The "+n" tag (more than [MAX_MINIS] gotten, §4.12) sits on the basket's right shoulder: its centre, viewport units. */
+    const val PLUS_TAG_CENTRE_X: Float = 66f
+    const val PLUS_TAG_CENTRE_Y: Float = 45f
 
     /** Mini layouts for 1..[MAX_MINIS] gotten stickers (§5.3); more than five shows the newest five and a "+n" tag. */
     val MINI_SLOTS: Map<Int, List<MiniSlot>> = mapOf(
@@ -84,7 +98,7 @@ object BasketManifest {
             defaultAisle = "Bakery",
             back = R.drawable.sk_b_bread_basket_back,
             front = R.drawable.sk_b_bread_basket_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_bread_basket_lid_open,
             lidClosed = R.drawable.sk_b_bread_basket_lid_closed,
             deco = null,
             lidOpenStandsBehind = false,
@@ -112,7 +126,7 @@ object BasketManifest {
             defaultAisle = "Baking",
             back = R.drawable.sk_b_mixing_bowl_back,
             front = R.drawable.sk_b_mixing_bowl_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_mixing_bowl_lid_open,
             lidClosed = R.drawable.sk_b_mixing_bowl_lid_closed,
             deco = null,
             lidOpenStandsBehind = false,
@@ -126,7 +140,7 @@ object BasketManifest {
             defaultAisle = "Breakfast",
             back = R.drawable.sk_b_fruit_crate_back,
             front = R.drawable.sk_b_fruit_crate_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_fruit_crate_lid_open,
             lidClosed = R.drawable.sk_b_fruit_crate_lid_closed,
             deco = null,
             lidOpenStandsBehind = false,
@@ -140,7 +154,7 @@ object BasketManifest {
             defaultAisle = "Dairy & eggs",
             back = R.drawable.sk_b_egg_basket_back,
             front = R.drawable.sk_b_egg_basket_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_egg_basket_lid_open,
             lidClosed = R.drawable.sk_b_egg_basket_lid_closed,
             deco = null,
             lidOpenStandsBehind = false,
@@ -168,7 +182,7 @@ object BasketManifest {
             defaultAisle = "Household",
             back = R.drawable.sk_b_canvas_tote_back,
             front = R.drawable.sk_b_canvas_tote_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_canvas_tote_lid_open,
             lidClosed = R.drawable.sk_b_canvas_tote_lid_closed,
             deco = null,
             lidOpenStandsBehind = false,
@@ -182,7 +196,7 @@ object BasketManifest {
             defaultAisle = "Everything else",
             back = R.drawable.sk_b_wire_basket_back,
             front = R.drawable.sk_b_wire_basket_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_wire_basket_lid_open,
             lidClosed = R.drawable.sk_b_wire_basket_lid_closed,
             deco = null,
             lidOpenStandsBehind = false,
@@ -196,7 +210,7 @@ object BasketManifest {
             defaultAisle = "Farmers’ market",
             back = R.drawable.sk_b_berry_punnet_back,
             front = R.drawable.sk_b_berry_punnet_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_berry_punnet_lid_open,
             lidClosed = R.drawable.sk_b_berry_punnet_lid_closed,
             deco = null,
             lidOpenStandsBehind = false,
@@ -210,7 +224,7 @@ object BasketManifest {
             defaultAisle = "Dairy",
             back = R.drawable.sk_b_milk_crate_back,
             front = R.drawable.sk_b_milk_crate_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_milk_crate_lid_open,
             lidClosed = R.drawable.sk_b_milk_crate_lid_closed,
             deco = null,
             lidOpenStandsBehind = false,
@@ -224,7 +238,7 @@ object BasketManifest {
             defaultAisle = "Drinks",
             back = R.drawable.sk_b_ice_bucket_back,
             front = R.drawable.sk_b_ice_bucket_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_ice_bucket_lid_open,
             lidClosed = R.drawable.sk_b_ice_bucket_lid_closed,
             deco = R.drawable.sk_b_ice_bucket_deco,
             lidOpenStandsBehind = false,
@@ -238,7 +252,7 @@ object BasketManifest {
             defaultAisle = "Florist",
             back = R.drawable.sk_b_flower_bucket_back,
             front = R.drawable.sk_b_flower_bucket_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_flower_bucket_lid_open,
             lidClosed = R.drawable.sk_b_flower_bucket_lid_closed,
             deco = R.drawable.sk_b_flower_bucket_deco,
             lidOpenStandsBehind = false,
@@ -252,7 +266,7 @@ object BasketManifest {
             defaultAisle = "Drinks",
             back = R.drawable.sk_b_bottle_carrier_back,
             front = R.drawable.sk_b_bottle_carrier_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_bottle_carrier_lid_open,
             lidClosed = R.drawable.sk_b_bottle_carrier_lid_closed,
             deco = R.drawable.sk_b_bottle_carrier_deco,
             lidOpenStandsBehind = false,
@@ -266,7 +280,7 @@ object BasketManifest {
             defaultAisle = "Snacks",
             back = R.drawable.sk_b_candy_jar_back,
             front = R.drawable.sk_b_candy_jar_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_candy_jar_lid_open,
             lidClosed = R.drawable.sk_b_candy_jar_lid_closed,
             deco = R.drawable.sk_b_candy_jar_deco,
             lidOpenStandsBehind = false,
@@ -280,7 +294,7 @@ object BasketManifest {
             defaultAisle = "Pantry",
             back = R.drawable.sk_b_jar_shelf_back,
             front = R.drawable.sk_b_jar_shelf_front,
-            lidOpen = null,
+            lidOpen = R.drawable.sk_b_jar_shelf_lid_open,
             lidClosed = R.drawable.sk_b_jar_shelf_lid_closed,
             deco = null,
             lidOpenStandsBehind = false,

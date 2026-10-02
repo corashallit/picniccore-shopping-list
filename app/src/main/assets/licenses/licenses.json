@@ -1,0 +1,37 @@
+[
+  {
+    "family": "DynaPuff",
+    "file": "DynaPuff.txt",
+    "licence": "SIL Open Font License 1.1",
+    "use": "Titles, the wordmark, tab labels and buttons",
+    "source": "https://fonts.google.com/specimen/DynaPuff"
+  },
+  {
+    "family": "Zen Maru Gothic",
+    "file": "ZenMaruGothic.txt",
+    "licence": "SIL Open Font License 1.1",
+    "use": "Item names, body text and the hanko",
+    "source": "https://fonts.google.com/specimen/Zen+Maru+Gothic"
+  },
+  {
+    "family": "Klee One",
+    "file": "KleeOne.txt",
+    "licence": "SIL Open Font License 1.1",
+    "use": "Handwritten notes, transcripts and the aisles text",
+    "source": "https://fonts.google.com/specimen/Klee+One"
+  },
+  {
+    "family": "Hachi Maru Pop",
+    "file": "HachiMaruPop.txt",
+    "licence": "SIL Open Font License 1.1",
+    "use": "Doodles",
+    "source": "https://fonts.google.com/specimen/Hachi+Maru+Pop"
+  },
+  {
+    "family": "DotGothic16",
+    "file": "DotGothic16.txt",
+    "licence": "SIL Open Font License 1.1",
+    "use": "The LCD dot-matrix glyphs are derived from its shapes (drawn as vectors; the font is not bundled)",
+    "source": "https://fonts.google.com/specimen/DotGothic16"
+  }
+]

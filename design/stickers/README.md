@@ -22,9 +22,10 @@ python3 design/stickers/tools/missing.py            # rewrite MISSING.md (the ke
 | `icons.py`, `icons_b1..b4.py`, `icons_r3.py` | WP1 | the 121 r9 stickers; new keys go in `icons_batch1..4.py` (MISSING.md) |
 | `catalog_map.py` | WP1 | DSL key → catalog key, orphans, the `peameal_bacon` addition, hop personalities |
 | `variants.py` | WP1 | kawaii faces (album only) and the mockup's holo demo parts |
-| `baskets.py` | WP2 | the 17 basket kinds: back, front, open and closed lids, rim, hanko point, decoration slice |
-| `deco.py` | WP2 | decor stickers, stamp pictograms, toolbar glyphs, hanko, LCD glyph table `G57` |
-| `patterns.py`, `launcher.py` | WP2 | the 10 tab-pattern tiles; the launcher hamper and holo star |
+| `baskets.py` | WP2 | the 17 basket kinds, each with back, front, open and closed lid (`swung` derives most open poses from the closed lid), rim, hanko point, decoration slice |
+| `deco.py` | WP2 | decor stickers, stamp pictograms, toolbar and inline glyphs (`GLYPH_NAMES`), hanko, LCD glyph table `G57` + vector extras `LCD_EXTRAS` |
+| `patterns.py`, `launcher.py` | WP2 | the 10 tab-pattern tiles and the washi tape tiles; the launcher hamper, holo star, safe-zone check and themed mono (it also registers the hamper as the decor sticker `sk_d_hamper`) |
+| `tools/baskets_contact.py`, `tools/decor_contact.py`, `tools/shoot_pages.mjs`, `sheets/` | WP2 | the review contact sheets, rendered from the emitted drawables (sheets/README.md) |
 | `emit_android.py` | WP1 | the emitter (below) |
 | `build_android.py` | WP1 | what is emitted where; the Kotlin manifests; `--check` |
 | `validate.py`, `lintcol.py` | WP1 | build-time validators (below); `lintcol` is the mockup's part-level colour lint |
@@ -37,21 +38,21 @@ python3 design/stickers/tools/missing.py            # rewrite MISSING.md (the ke
 |---|---|---|
 | `res/drawable/sk_i_<key>.xml` | one per catalog key with art (`_capsule` → `sk_i_capsule`) | 52 × 52 |
 | `res/drawable/sk_f_<key>.xml` | kawaii face overlay (album, achievements, empty states; never list rows) | 52 × 52 |
-| `res/drawable/sk_b_<kind>_{back,front,lid_open,lid_closed,deco}.xml` | each basket kind (`BasketKind.key`); lids and deco only where drawn | 80 × 64 |
+| `res/drawable/sk_b_<kind>_{back,front,lid_open,lid_closed,deco}.xml` | each basket kind (`BasketKind.key`): all four layers for every kind, `deco` for the four decorated kinds | 80 × 64 |
 | `res/drawable/sk_d_<name>.xml` | decor stickers (bee, ladybug, ant, stars, hearts, sun, moon, seasonal, cat…) | 52 × 52 |
 | `res/drawable/sk_p_<name>.xml` | stamp pictograms; paths named `ink` (aisle trace) and `paper` (white) | 24 × 24 |
 | `res/drawable/sk_g_<name>.xml` | toolbar glyphs by the spec's names (§3.4) | 24 × 24 |
 | `res/drawable/sk_t_<name>.xml` | tab-pattern mask tiles (white on transparent) | tile size |
+| `res/drawable/sk_t_washi_<name>.xml` | washi tape tiles (full colour: sakura, gingham, dots, mint, the six seasons, raindrop) | tile size |
 | `res/drawable/sk_l_launcher_{background,foreground,monochrome}.xml` | adaptive launcher layers (shadow baked in; mono as alpha cut-outs) | 108 × 108 |
 | `ui/theme/gen/StickerManifest.kt` | key → drawable, two families, `core.catalog.Personality`, face, source; the keys still missing | |
 | `ui/theme/gen/BasketManifest.kt` | per kind: layers, rim, hanko point, lid behaviour; mini slots, badge slot, landing spot | |
 | `ui/theme/gen/DecorManifest.kt` | decor stickers, pictograms, glyphs, launcher layers | |
-| `ui/theme/gen/LcdGlyphs.kt` | the 5 × 7 glyph table from `deco.G57` | |
-| `ui/theme/gen/PatternTiles.kt` | pattern tiles with their dp size | |
+| `ui/theme/gen/LcdGlyphs.kt` | the 5 × 7 glyph table from `deco.G57`, and the vector extras ★ ● ♪ ♡ from `deco.LCD_EXTRAS` | |
+| `ui/theme/gen/PatternTiles.kt` | tab-pattern and washi tiles with their dp size; the tape each season wears | |
 
-Only files matching `sk_[a-z]_*.xml` and those five Kotlin files are ever written or deleted. The launcher layers are
-not wired into `mipmap-anydpi/ic_launcher.xml` yet (WP2 / the lead: point its background, foreground and monochrome at
-the `sk_l_` layers).
+Only files matching `sk_[a-z]_*.xml` and those five Kotlin files are ever written or deleted. `mipmap-anydpi/ic_launcher.xml`
+and `ic_launcher_round.xml` point at the `sk_l_` layers, and the splash theme shows `sk_l_launcher_foreground`.
 
 ## The emitter
 
@@ -93,8 +94,10 @@ Run on every build and in `--check`; errors fail the task.
   the art; none in a critter's head.
 - **Geometry**: the union cut is present; base on y 42 (41.4–42.6); art inside 5–43 (live area 6–42 plus the 1u
   trace); every die-cut fill fits a 2u disc; die-cut rect corners r ≥2u; die-cut lines ≥1.2u; no text or images.
-- **Baskets**: all 17 kinds; back, front, closed lid; decoration slice on exactly the four decorated kinds; hanko point
-  on the closed lid; rim inside the art; open-standing lids drawn.
+- **Baskets**: all 17 kinds; back, front, open and closed lid; decoration slice on exactly the four decorated kinds;
+  hanko point on the closed lid; rim inside the art; every layer's die-cut inside the 80 × 64 viewport (a VectorDrawable
+  clips to it).
+- **Launcher**: the hamper and the star, die-cut and shadow included, inside the 66 dp safe zone.
 
 `validate.GRANDFATHERED` lists the approved r9 stickers that miss a geometry or gloss rule as drawn (they ship as the
 friend approved them, §18.2); they are reported, not failed, and the list can only shrink (a stale entry warns). New

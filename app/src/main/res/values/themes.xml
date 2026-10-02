@@ -6,11 +6,17 @@
         <item name="android:windowBackground">@color/picnic_ground</item>
     </style>
 
+    <!-- Splash (WP2, docs/DESIGN_STICKER.md §2.5, §20.3 item 50): the Day binder and the picnic hamper sticker
+         (the launcher's foreground layer: hamper, three strawberries, holo star, all inside the safe zone). The night
+         splash (values-night) is the Glow binder. The splash cannot know the clock rule, so a midnight-forced Glow on a
+         light system starts from this Day splash (accepted, §2.5). -->
+    <color name="splash_binder">#FFE6F6EE</color>
+
     <!-- Launch theme (androidx core-splashscreen, consistent on API 26+). installSplashScreen()
          switches to postSplashScreenTheme before the first frame. -->
     <style name="Theme.Picnic.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/picnic_ground</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenBackground">@color/splash_binder</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/sk_l_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/Theme.Picnic</item>
     </style>
 </resources>
