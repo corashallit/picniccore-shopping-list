@@ -3,6 +3,7 @@ package earth.cora.picnic.core.model
 import earth.cora.picnic.core.assistant.IngestContext
 import earth.cora.picnic.core.assistant.NamedItem
 import earth.cora.picnic.core.catalog.IconCatalog
+import earth.cora.picnic.core.store.BookSticker
 import earth.cora.picnic.core.store.TripBook
 
 /*
@@ -12,10 +13,9 @@ import earth.cora.picnic.core.store.TripBook
  * can skip the write).
  *
  * Trips (amendment A5, docs/DESIGN_STICKER.md §7.1, §19.1): every op that touches items takes `now`
- * and ends with TripRules.reconcile, so trip completion is an invariant of the state. Owner: WP3.
- * PHASE 0 (§21.3): the signatures below are the contract. Ops that existed in v1 keep their v1
- * behaviour until WP3 fills in the trip parts (marked TODO(WP3)); ops that are new and not trivial
- * are TODO("WP3: ...") stubs. Nothing the current app calls throws.
+ * and ends with TripRules.reconcile, so trip completion is an invariant of the state: a trip exists
+ * exactly while its list has a sticker, and it is complete exactly while every item is checked.
+ * Owner: WP3 (TripOpsTest, StateOpsTest, BookSlotsTest, RenameAisleTest, MoveAisleTest, AislesTextCommitTest).
  */
 
 object StateOps {
@@ -86,13 +86,13 @@ private fun GroceryList.updateItem(itemId: String, transform: (GroceryItem) -> G
 private fun AppState.updateListReconciled(listId: String, now: Long, transform: (GroceryList) -> GroceryList): AppState =
     updateList(listId) { list ->
         val after = transform(list)
-        if (after === list) list else TripRules.reconcile(after, now)
+        if (after === list) list else TripRules.reconcile(after, now, store.name)
     }
 
 /** Reconciles every list's trip (after an op that may touch items on any list). Keeps instances when nothing changed. */
 private fun AppState.reconcileAll(now: Long): AppState {
     var changed = false
-    val reconciled = lists.map { list -> TripRules.reconcile(list, now).also { if (it !== list) changed = true } }
+    val reconciled = lists.map { list -> TripRules.reconcile(list, now, store.name).also { if (it !== list) changed = true } }
     return if (changed) copy(lists = reconciled) else this
 }
 
@@ -115,67 +115,170 @@ data class AddOutcome(val added: List<String>, val alreadyThere: List<String>, v
 }
 
 /**
- * Appends [items] to the list. Items whose normalizeName matches an UNCHECKED item already on the
- * list (-> [AddOutcome.alreadyThere]), or an earlier item in [items], are dropped. Aisle ids are kept
- * as given (callers already applied corrections; unknown ids render as Unsorted). Ends with
- * TripRules.reconcile (adding re-opens a complete trip).
- *
- * TODO(WP3): §6.2 rule 7 / Q8: match incoming names against ALL items; a CHECKED match is un-checked
- *  (revived, its book spot freed) instead of adding a second row. Phase 0 keeps v1: a checked match
- *  does not count, so the item is added as a new row and [AddOutcome.revived] is always empty.
+ * Adds [items] to the list (§6.2 rules 4 and 7, Q8). Every incoming name is matched by normalizeName against
+ * EVERY item already on the list:
+ * - an UNCHECKED match drops the incoming item ([AddOutcome.alreadyThere]: its sticker pops, "Milk is already
+ *   on your list");
+ * - otherwise a CHECKED match is un-checked instead of adding a second row ([AddOutcome.revived]: "Milk is back
+ *   on your list"; its twin peels out of the book and the trip's lastActivityAt moves to [now]); quantities are
+ *   never rewritten;
+ * - otherwise the item is appended ([AddOutcome.added]), unless an earlier item of [items] had the same name, its
+ *   name is blank, or its id is already used anywhere.
+ * Aisle ids are kept as given (callers already applied corrections; unknown ids render as Unsorted). Ends with
+ * TripRules.reconcile: adding re-opens a complete trip, and reviving the last sticker closes the trip.
  */
 fun AppState.addItems(listId: String, items: List<GroceryItem>, now: Long): Pair<AppState, AddOutcome> {
     val list = list(listId) ?: return this to AddOutcome.NONE
     if (items.isEmpty()) return this to AddOutcome.NONE
     val allIds = lists.flatMapTo(HashSet()) { l -> l.items.map { it.id } }
-    val uncheckedByName = LinkedHashMap<String, String>()
-    list.items.filterNot { it.checked }.forEach { uncheckedByName.putIfAbsent(normalizeName(it.name), it.id) }
-    val seen = HashSet(uncheckedByName.keys)
-    val alreadyThere = LinkedHashSet<String>()
-    val toAdd = items.filter { item ->
+    val uncheckedByName = HashMap<String, String>()
+    val checkedByName = HashMap<String, String>()
+    for (item in list.items) {
         val key = normalizeName(item.name)
-        uncheckedByName[key]?.let { alreadyThere += it }
-        key.isNotEmpty() && item.id !in allIds && seen.add(key) && allIds.add(item.id)
+        if (item.checked) checkedByName.putIfAbsent(key, item.id) else uncheckedByName.putIfAbsent(key, item.id)
     }
-    val outcome = AddOutcome(added = toAdd.map { it.id }, alreadyThere = alreadyThere.toList(), revived = emptyList())
-    if (toAdd.isEmpty()) return this to outcome
-    return updateListReconciled(listId, now) { it.copy(items = it.items + toAdd) } to outcome
+    val seen = HashSet<String>()
+    val alreadyThere = LinkedHashSet<String>()
+    val revived = LinkedHashSet<String>()
+    val toAdd = mutableListOf<GroceryItem>()
+    for (item in items) {
+        val key = normalizeName(item.name)
+        if (key.isEmpty()) continue
+        val unchecked = uncheckedByName[key]
+        if (unchecked != null) {
+            alreadyThere += unchecked
+            continue
+        }
+        val checked = checkedByName[key]
+        if (checked != null) {
+            revived += checked
+            continue
+        }
+        if (seen.add(key) && allIds.add(item.id)) toAdd += item
+    }
+    val outcome = AddOutcome(added = toAdd.map { it.id }, alreadyThere = alreadyThere.toList(), revived = revived.toList())
+    if (toAdd.isEmpty() && revived.isEmpty()) return this to outcome
+    val next = updateListReconciled(listId, now) { l ->
+        val kept = if (revived.isEmpty()) {
+            l.items
+        } else {
+            l.items.map { if (it.id in revived) it.copy(checked = false, checkedAt = null, bookSlot = null) else it }
+        }
+        val trip = if (revived.isEmpty()) l.trip else l.trip?.copy(lastActivityAt = now)
+        l.copy(items = kept + toAdd, trip = trip)
+    }
+    return next to outcome
 }
 
 /**
- * Check or un-check one item: ONE atomic transition (§19.1). Checking sets checkedAt = [now]; un-checking
- * clears checkedAt and bookSlot. Ends with TripRules.reconcile. An idle trip (TripRules.startsNewBook,
- * §0.4 Q9) is the caller's: it files the old book with newTrip first, then calls this; nothing asks.
- *
- * TODO(WP3): also take the lowest free book spot (BookSlots.assign), open the trip when the list has
- *  none (Trip(id = "t-<listId>-<now>", startedAt = now, storeName = store.name)) and set
- *  trip.lastActivityAt = now on check and un-check (TripOpsTest.atomicToggle).
+ * Check or un-check one item: ONE atomic transition (§19.1, TripOpsTest.atomicToggle).
+ * - Checking sets checkedAt = [now] and takes the lowest free book spot (BookSlots.assign); on a list without
+ *   a trip it opens one: Trip(id = "t-<listId>-<now>", startedAt = now, storeName = store.name, lastActivityAt = now).
+ * - Un-checking clears checkedAt and bookSlot (the spot becomes a hole the next check fills).
+ * - Either way the trip's lastActivityAt becomes [now]; then TripRules.reconcile (completion; un-checking the
+ *   last sticker closes the trip without filing).
+ * This is the plain toggle. A check-off tap goes through [toggleCheckedStartingNewBook], which files an idle
+ * trip's book first (§0.4 Q9); nothing ever asks.
  */
-fun AppState.toggleChecked(listId: String, itemId: String, now: Long): AppState =
-    updateListReconciled(listId, now) { list ->
-        list.updateItem(itemId) { item ->
-            if (item.checked) item.copy(checked = false, checkedAt = null, bookSlot = null) else item.copy(checked = true, checkedAt = now)
-        }
+fun AppState.toggleChecked(listId: String, itemId: String, now: Long): AppState = updateList(listId) { list ->
+    val item = list.items.firstOrNull { it.id == itemId } ?: return@updateList list
+    val toggled = if (item.checked) {
+        item.copy(checked = false, checkedAt = null, bookSlot = null)
+    } else {
+        item.copy(checked = true, checkedAt = now, bookSlot = BookSlots.assign(list.items, itemId))
     }
+    val items = list.items.map { if (it.id == itemId) toggled else it }
+    val trip = list.trip?.copy(lastActivityAt = now)
+        ?: if (toggled.checked) Trip(id = TripRules.tripId(listId, now), startedAt = now, storeName = store.name, lastActivityAt = now) else null
+    TripRules.reconcile(list.copy(items = items, trip = trip), now, store.name)
+}
+
+/** A check-off that started a new book on its own (§0.4 Q9): file [book] in the album, show the toast, keep [undo]. */
+data class AutoNewBook(val book: TripBook, val undo: NewBookUndo)
+
+/**
+ * What [undoNewBook] needs to take an automatic new book back: the old [trip], the items "Clear what I got"
+ * removed (with their indices) and the list's previous [lastClosedAt] and [openAisle].
+ */
+data class NewBookUndo(
+    val listId: String,
+    val itemId: String,
+    val trip: Trip,
+    val cleared: List<IndexedValue<GroceryItem>>,
+    val lastClosedAt: Long?,
+    val openAisle: String?,
+)
+
+/**
+ * The check-off tap (§0.4 Q9, TripRulesTest.autoNewBookAfterIdle). When it CHECKS an item on a trip whose last
+ * activity is more than 12 h old (TripRules.startsNewBook), the old book is filed and what was got last time is
+ * cleared (newTrip(CLEAR_GOTTEN)), and the item is checked onto a fresh trip: the result carries the filed book
+ * (write it to the album BEFORE this state, §7.2; TripFiling.toggle does both) and the [NewBookUndo] for the
+ * toast's Undo. Every other tap is [toggleChecked] with no [AutoNewBook].
+ */
+fun AppState.toggleCheckedStartingNewBook(listId: String, itemId: String, now: Long): Pair<AppState, AutoNewBook?> {
+    val list = list(listId) ?: return this to null
+    val item = list.items.firstOrNull { it.id == itemId } ?: return this to null
+    val oldTrip = list.trip
+    if (item.checked || oldTrip == null || !TripRules.startsNewBook(list, now)) return toggleChecked(listId, itemId, now) to null
+    val cleared = list.items.withIndex().filter { it.value.checked }
+    val (fresh, book) = newTrip(listId, NewTripMode.CLEAR_GOTTEN, now)
+    val checked = fresh.toggleChecked(listId, itemId, now)
+    if (book == null) return checked to null
+    return checked to AutoNewBook(book, NewBookUndo(listId, itemId, oldTrip, cleared, list.lastClosedAt, list.openAisle))
+}
+
+/**
+ * Undo of an automatic new book (§0.4 Q9, TripRulesTest.autoNewBookUndo): the old trip comes back with the
+ * items that were cleared (at their old indices and book spots), and everything checked since (the tapped item
+ * first among them) is checked into the OLD book instead, taking its lowest free spots in check-off order. Items
+ * added meanwhile stay. The caller also takes the book back out of the album (Album.unfile) after this state is
+ * saved (TripFiling.undoNewBook). Unknown list -> this.
+ */
+fun AppState.undoNewBook(undo: NewBookUndo, now: Long): AppState {
+    val present = lists.flatMapTo(HashSet()) { l -> l.items.map { it.id } }
+    val oldStickers = undo.cleared.mapTo(HashSet()) { it.value.id }
+    return updateList(undo.listId) { list ->
+        // Stickers of the fresh book give up their spots; they take the old book's lowest free ones (reconcile).
+        val items = list.items.map { if (it.checked && it.id !in oldStickers) it.copy(bookSlot = null) else it }.toMutableList()
+        for ((index, item) in undo.cleared.sortedBy { it.index }) {
+            if (item.id !in present) items.add(index.coerceIn(0, items.size), item)
+        }
+        val restored = list.copy(
+            items = items,
+            trip = undo.trip.copy(lastActivityAt = now),
+            lastClosedAt = undo.lastClosedAt,
+            openAisle = undo.openAisle,
+        )
+        TripRules.reconcile(restored, now, store.name)
+    }
+}
 
 /**
  * Removes one item. For undo, the caller remembers the item and its index first, then calls [restoreItem].
- * Ends with TripRules.reconcile (deleting the last unchecked item completes the trip).
- * TODO(WP3): free a checked item's book spot / drop a free spot from the end (BookSlots.compact).
+ * Ends with TripRules.reconcile: deleting the last unchecked item completes the trip, deleting the last sticker
+ * closes it, and the book stays valid (a checked item's spot is freed; a spot past the new count moves into the
+ * lowest hole, BookSlots.compact).
  */
 fun AppState.removeItem(listId: String, itemId: String, now: Long): AppState = updateListReconciled(listId, now) { list ->
     if (list.items.none { it.id == itemId }) list else list.copy(items = list.items.filterNot { it.id == itemId })
 }
 
 /**
- * Re-inserts a removed item at [index] (clamped). No-op if an item with that id exists. Ends with
- * TripRules.reconcile. TODO(WP3): a checked item reclaims its spot, or the lowest free one (BookSlotsTest.deleteRestore).
+ * Re-inserts a removed item at [index] (clamped). No-op if an item with that id exists anywhere. A checked item
+ * reclaims its book spot when it is still free, else takes the lowest free one (BookSlotsTest.deleteRestore); on a
+ * list whose trip closed meanwhile it re-opens one (TripRules.reconcile). Ends with TripRules.reconcile.
  */
 fun AppState.restoreItem(listId: String, item: GroceryItem, index: Int, now: Long): AppState {
     if (findItem(item.id) != null) return this
     return updateListReconciled(listId, now) { list ->
         val at = index.coerceIn(0, list.items.size)
-        list.copy(items = list.items.toMutableList().also { it.add(at, item) })
+        val restored = if (item.checked) {
+            item.copy(bookSlot = BookSlots.reclaimable(list.items, item.bookSlot, list.items.size + 1))
+        } else {
+            item.copy(checkedAt = null, bookSlot = null)
+        }
+        list.copy(items = list.items.toMutableList().also { it.add(at, restored) })
     }
 }
 
@@ -268,10 +371,17 @@ fun AppState.setItemIcon(
     return updated.copy(iconOverrides = overrides)
 }
 
-/** Removes all checked items from the list. */
+/**
+ * Removes all checked items from the list. The trip closes WITHOUT filing its book (TripRules: no stickers left),
+ * so this is only the v1 screen's "Clear checked"; New trip ([newTrip]) files the book.
+ */
 @Deprecated("Replaced by newTrip(listId, mode, now) (§19.1, D1). The v1 list screen still calls it until WP5's New trip lands; then WP3 deletes it.")
 fun AppState.clearChecked(listId: String): AppState = updateList(listId) { list ->
-    if (list.items.none { it.checked }) list else list.copy(items = list.items.filterNot { it.checked })
+    if (list.items.none { it.checked }) {
+        list
+    } else {
+        TripRules.reconcile(list.copy(items = list.items.filterNot { it.checked }), list.trip?.lastActivityAt ?: 0L, store.name)
+    }
 }
 
 @Deprecated("Replaced by setOpenAisle(listId, sectionId) (§19.1, D2). The v1 list screen still calls it until WP5 lands one open aisle; then WP3 deletes it.")
@@ -289,17 +399,30 @@ fun AppState.setOpenAisle(listId: String, sectionId: String?): AppState =
     updateList(listId) { list -> if (list.openAisle == sectionId) list else list.copy(openAisle = sectionId) }
 
 /**
- * New trip (§6.5, §7.1): files the list's book and starts afresh. Returns the filed book, which the
- * caller writes to the album FIRST, then commits this state (§7.2 write order). No-op (this, null)
- * without a trip. Afterwards: checked items cleared ([NewTripMode.CLEAR_GOTTEN]) or un-checked
- * ([NewTripMode.UNCHECK_ALL]), trip = null, lastClosedAt = [now], openAisle = null (automatic); a
- * printed receipt is filed as saved. Replaces clearChecked.
+ * New trip (§6.5, §7.1, §7.8): files the list's book and starts afresh. Returns the filed book (AppState.tripBook),
+ * which the caller writes to the album FIRST, then commits this state (§7.2 write order; TripFiling.newTrip does
+ * both). No-op (this, null) without a trip: New trip is disabled then. Afterwards: checked items removed
+ * ([NewTripMode.CLEAR_GOTTEN], the default) or un-checked ([NewTripMode.UNCHECK_ALL]), trip = null,
+ * lastClosedAt = [now] (the "new" star's anchor), openAisle = null (automatic). A printed receipt is filed as saved.
+ * Replaces clearChecked.
  */
 fun AppState.newTrip(listId: String, mode: NewTripMode, now: Long): Pair<AppState, TripBook?> {
     val list = list(listId) ?: return this to null
-    list.trip ?: return this to null
-    TODO("WP3: newTrip files the book (TripBook snapshot) and resets the list (§7.1, §7.8, TripOpsTest)")
+    if (list.trip == null) return this to null
+    val book = tripBook(listId, now)
+    val items = when (mode) {
+        NewTripMode.CLEAR_GOTTEN -> list.items.filterNot { it.checked }
+        NewTripMode.UNCHECK_ALL -> list.items.map { if (it.checked) it.copy(checked = false, checkedAt = null, bookSlot = null) else it }
+    }
+    val next = updateList(listId) {
+        TripRules.reconcile(it.copy(items = items, trip = null, lastClosedAt = now, openAisle = null), now, store.name)
+    }
+    return next to book
 }
+
+/** §11.2: the celebration's bonus sticker, saved to the trip when the scene starts (filed as TripBook.bonus). The first one stays. */
+fun AppState.setTripBonus(listId: String, bonus: BookSticker): AppState =
+    updateTrip(listId) { trip -> if (trip.bonus != null) trip else trip.copy(bonus = bonus) }
 
 /** Egg 8 / §7.1: the finale played for this trip (first time only; a re-completion does not replay it). No-op without a trip. */
 fun AppState.markFinaleShown(listId: String, now: Long): AppState =
@@ -363,14 +486,14 @@ fun AppState.renameList(listId: String, title: String): AppState {
 
 /**
  * Deletes a list. Never deletes the last one. If it was current, the neighbouring list becomes current.
- * A list with a trip (>= 1 sticker) has its book filed first: the returned book goes to the album before
- * this state is committed (§6.4, §7.2). Replaces the v1 deleteList(listId).
+ * A list with a trip (>= 1 sticker) has its book filed first: the returned book (a printed receipt filed as
+ * saved) goes to the album before this state is committed (§6.4, §7.2; TripFiling.deleteList). Replaces the
+ * v1 deleteList(listId).
  */
 fun AppState.deleteList(listId: String, now: Long): Pair<AppState, TripBook?> {
     val index = lists.indexOfFirst { it.id == listId }
     if (index < 0 || lists.size <= 1) return this to null
-    if (lists[index].trip != null) TODO("WP3: deleteList files the trip's book first (§6.4, §7.8)")
-    return deleteListNow(index, listId) to null
+    return deleteListNow(index, listId) to tripBook(listId, now)
 }
 
 private fun AppState.deleteListNow(index: Int, listId: String): AppState {
@@ -392,37 +515,127 @@ fun AppState.setStoreName(name: String): AppState {
 /**
  * Replaces the aisle text. Drops aisleBaskets entries for vanished aisle ids and fills missing
  * ones with [guessBasket] (so the UI shows baskets immediately). Item aisle ids are NOT touched
- * here: vanished ids render as Unsorted until AisleSync recategorizes them. Ends with TripRules.reconcile.
+ * here: vanished ids render as Unsorted until AisleSync recategorizes them (the aisle editor commits through
+ * [commitAislesText] instead, which keeps items with their aisles). Ends with TripRules.reconcile.
  */
 fun AppState.setAislesText(text: String, guessBasket: (Aisle) -> BasketKind, now: Long): AppState {
     val aisles = Aisles.parse(text)
     val baskets = aisles.associate { aisle -> aisle.id to (store.aisleBaskets[aisle.id] ?: guessBasket(aisle)) }
-    if (text == store.aislesText && baskets == store.aisleBaskets) return this
+    if (text == store.aislesText && baskets == store.aisleBaskets) return reconcileAll(now)
     return copy(store = store.copy(aislesText = text, aisleBaskets = baskets)).reconcileAll(now)
 }
 
 /**
- * The aisle editor's raw text on Done (§6.7): a line-level diff (LCS) against the current text; unchanged
- * lines keep their ids, a changed line in a removed one's place is a rename ([renameAisle]: its items,
- * baskets, styles, corrections and openAisle follow), and a removed line's items go to Everything else.
- * TODO(WP3): the LCS diff (AislesTextCommitTest). Phase 0 replaces the text like [setAislesText].
+ * The aisle editor's raw text on Done (§6.7, AislesTextCommitTest): a line-level diff against the current text
+ * (AisleDiff).
+ * - Lines in the longest common subsequence are unchanged and keep their aisles (their ids may still renumber,
+ *   e.g. "bakery-2" -> "bakery" when an earlier duplicate goes; everything follows).
+ * - A line that only moved (the same name elsewhere) keeps its aisle too.
+ * - Between two unchanged lines, changed lines in place of removed ones are renames, paired in order: items,
+ *   baskets, styles, corrections and openAisle follow (as [renameAisle]).
+ * - A removed line's items go to Everything else (aisleId = null, no longer "placed by hand", so a re-sort may
+ *   file them); its corrections, basket and style go, and an openAisle naming it becomes automatic.
+ * Baskets of new aisles are filled with [guessBasket]. Ends with TripRules.reconcile.
  */
-fun AppState.commitAislesText(text: String, guessBasket: (Aisle) -> BasketKind, now: Long): AppState =
-    setAislesText(text, guessBasket, now)
+fun AppState.commitAislesText(text: String, guessBasket: (Aisle) -> BasketKind, now: Long): AppState {
+    if (text == store.aislesText) return setAislesText(text, guessBasket, now)
+    val newAisles = Aisles.parse(text)
+    val idMap = AisleDiff.idMap(store.aisles(), newAisles)
+    val remapped = copy(store = store.copy(aislesText = text)).remapAisleIds(idMap)
+    val baskets = newAisles.associate { aisle -> aisle.id to (remapped.store.aisleBaskets[aisle.id] ?: guessBasket(aisle)) }
+    return remapped.copy(store = remapped.store.copy(aisleBaskets = baskets)).reconcileAll(now)
+}
 
 /**
- * Renames one aisle (§6.7): rewrites its line in aislesText and remaps item.aisleId, aisleBaskets,
- * aisleStyles, corrections and every list's openAisle from [oldId] to the new slug id.
+ * Renames one aisle (§6.7, RenameAisleTest): rewrites its line in aislesText (its bullet and indentation kept) and
+ * remaps item.aisleId (all lists), aisleBaskets, aisleStyles, corrections and every list's openAisle from [oldId]
+ * to the new slug id; when duplicate names renumber their "-2" ids, those follow too. The new id is
+ * store.aisles()[position - 1].id. A blank name, an unknown id or the same name -> this. Ends with TripRules.reconcile.
  */
-fun AppState.renameAisle(oldId: String, newName: String, now: Long): AppState =
-    TODO("WP3: renameAisle (§6.7, RenameAisleTest)")
+fun AppState.renameAisle(oldId: String, newName: String, now: Long): AppState {
+    val lines = Aisles.parseLines(store.aislesText)
+    val target = lines.firstOrNull { it.aisle.id == oldId } ?: return this
+    val name = Aisles.cleanName(newName)
+    if (name.isEmpty() || name == target.aisle.name) return this
+    val textLines = store.aislesText.lines().toMutableList()
+    val prefix = textLines[target.lineIndex].trimEnd().removeSuffix(target.aisle.name)
+    textLines[target.lineIndex] = prefix + name
+    val text = textLines.joinToString("\n")
+    val newAisles = Aisles.parse(text)
+    if (newAisles.size != lines.size) return this
+    val idMap = lines.indices.associate { lines[it].aisle.id to newAisles[it].id }
+    return copy(store = store.copy(aislesText = text)).remapAisleIds(idMap).reconcileAll(now)
+}
 
 /**
- * Drag-reorder in the aisle editor (§6.7): moves line [from] to [to] (0-based) in aislesText and remaps
- * every reference through the old -> new id map (duplicate names renumber their "-2" ids).
+ * Drag-reorder in the aisle editor (§6.7, MoveAisleTest): moves aisle [from] to [to] (0-based walking positions)
+ * by rewriting the order of the aisle lines in aislesText (comments and blank lines stay where they are), then
+ * remaps every reference (items, baskets, styles, corrections, every list's openAisle) through the old -> new id
+ * map, so everything follows its aisle even when duplicate names renumber their "-2" ids. Aisles without a basket
+ * get [guessBasket]. Out-of-range or equal positions -> this.
  */
-fun AppState.moveAisle(from: Int, to: Int, guessBasket: (Aisle) -> BasketKind): AppState =
-    TODO("WP3: moveAisle (§6.7, MoveAisleTest)")
+fun AppState.moveAisle(from: Int, to: Int, guessBasket: (Aisle) -> BasketKind): AppState {
+    val lines = Aisles.parseLines(store.aislesText)
+    if (from !in lines.indices || to !in lines.indices || from == to) return this
+    val textLines = store.aislesText.lines().toMutableList()
+    val contents = lines.map { textLines[it.lineIndex] }
+    val order = lines.indices.toMutableList().apply { add(to, removeAt(from)) }
+    lines.forEachIndexed { position, line -> textLines[line.lineIndex] = contents[order[position]] }
+    val text = textLines.joinToString("\n")
+    val newAisles = Aisles.parse(text)
+    if (newAisles.size != lines.size) return this
+    val idMap = order.withIndex().associate { (position, oldIndex) -> lines[oldIndex].aisle.id to newAisles[position].id }
+    val remapped = copy(store = store.copy(aislesText = text)).remapAisleIds(idMap)
+    val baskets = newAisles.associate { aisle -> aisle.id to (remapped.store.aisleBaskets[aisle.id] ?: guessBasket(aisle)) }
+    return remapped.copy(store = remapped.store.copy(aisleBaskets = baskets))
+}
+
+/**
+ * Rewrites every reference to an aisle id through [idMap] (old id -> new id, or null = the aisle is gone), all at
+ * once (a swap a <-> b works): item.aisleId in every list (a gone aisle's items go to Everything else and are no
+ * longer "placed by hand"), every list's openAisle (gone -> null, automatic) and collapsedAisles, aisleBaskets and
+ * aisleStyles (re-keyed; gone ones dropped; a remapped entry wins over a stale one under the same id), and
+ * corrections (gone ones dropped). Ids that are not keys of [idMap] are left alone.
+ */
+private fun AppState.remapAisleIds(idMap: Map<String, String?>): AppState {
+    val changes = idMap.filter { (old, new) -> old != new }
+    if (changes.isEmpty()) return this
+    val newLists = lists.map { list ->
+        var itemsChanged = false
+        val items = list.items.map { item ->
+            val old = item.aisleId
+            if (old == null || old !in changes) {
+                item
+            } else {
+                itemsChanged = true
+                val target = changes[old]
+                if (target == null) item.copy(aisleId = null, manuallyPlaced = false) else item.copy(aisleId = target)
+            }
+        }
+        val open = list.openAisle?.let { if (it in changes) changes[it] else it }
+        val collapsed = list.collapsedAisles.mapNotNullTo(LinkedHashSet()) { if (it in changes) changes[it] else it }
+        if (!itemsChanged && open == list.openAisle && collapsed == list.collapsedAisles) {
+            list
+        } else {
+            list.copy(items = if (itemsChanged) items else list.items, openAisle = open, collapsedAisles = collapsed)
+        }
+    }
+
+    fun <V> rekey(map: Map<String, V>): Map<String, V> {
+        val out = LinkedHashMap<String, V>()
+        map.forEach { (id, value) -> if (id in changes) changes[id]?.let { out[it] = value } }
+        map.forEach { (id, value) -> if (id !in changes) out.putIfAbsent(id, value) }
+        return out
+    }
+    val newCorrections = corrections.mapNotNull { c ->
+        if (c.aisleId !in changes) c else changes[c.aisleId]?.let { c.copy(aisleId = it) }
+    }
+    return copy(
+        lists = newLists,
+        store = store.copy(aisleBaskets = rekey(store.aisleBaskets), aisleStyles = rekey(store.aisleStyles)),
+        corrections = newCorrections,
+    )
+}
 
 /** Merges model-assigned baskets (ignores ids that are not current aisles). */
 fun AppState.setAisleBaskets(baskets: Map<String, BasketKind>): AppState {

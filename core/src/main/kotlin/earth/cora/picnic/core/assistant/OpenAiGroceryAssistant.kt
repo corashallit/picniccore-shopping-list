@@ -10,7 +10,9 @@ import earth.cora.picnic.core.model.Aisle
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.Correction
 import earth.cora.picnic.core.model.IconFit
+import earth.cora.picnic.core.model.PantryMatch
 import earth.cora.picnic.core.model.UNSORTED_WIRE_ID
+import earth.cora.picnic.core.model.normalizeMetric
 import earth.cora.picnic.core.model.normalizeName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -61,7 +63,7 @@ class OpenAiGroceryAssistant(
             schemaName = "grocery_items",
             schema = Schemas.ingest(context.aisles.map { it.id }, catalog.keys),
             stable = ingestStable,
-            context = Prompts.contextBlock(context.aisles, context.corrections, context.existingNames, context.appLanguage),
+            context = Prompts.contextBlock(context.aisles, context.corrections, context.existingNames, context.appLanguage, context.pantry),
             user = user,
             // Web search is for text (and transcripts); photos never get tools.
             webSearch = if (input is IngestInput.Image) null else models.webSearch,
@@ -81,40 +83,67 @@ class OpenAiGroceryAssistant(
                 webSearches = ResponsesOutput.webSearches(result.json),
                 usage = ResponsesOutput.usage(result.json),
             ),
+            lines = if (input is IngestInput.Image) photoLines(wire.lines, processed.indexOf) else emptyList(),
+            recipe = wire.recipe?.let(::recipeInfo),
         )
     }
 
-    internal class Processed(val items: List<ProposedItem>, val skipped: List<String>)
+    /**
+     * [items] after post-processing; [skipped] the names already on the list or repeated in the answer;
+     * [indexOf] maps the model's item index to the index in [items] (a repeat maps to the row it was merged into).
+     */
+    internal class Processed(val items: List<ProposedItem>, val skipped: List<String>, val indexOf: Map<Int, Int> = emptyMap())
+
+    /** Photos only (§4.19): the lines read off the paper, top to bottom; item_index re-pointed into the processed items. */
+    private fun photoLines(lines: List<WireLine>, indexOf: Map<Int, Int>): List<PhotoLine> = lines.take(MAX_ITEMS * 2).mapNotNull { line ->
+        val text = Prompts.oneLine(line.text, 200).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        PhotoLine(
+            text = text,
+            crossedOut = line.crossedOut,
+            correctionOf = line.correctionOf?.let { Prompts.oneLine(it, 120) }?.takeIf { it.isNotEmpty() },
+            itemIndex = line.itemIndex?.let(indexOf::get),
+        )
+    }
+
+    /** The recipe card's header facts (§4.17, D16): only real, positive numbers; a blank title means no recipe. */
+    private fun recipeInfo(recipe: WireRecipe): RecipeInfo? {
+        val title = Prompts.oneLine(recipe.title, 120).takeIf { it.isNotEmpty() } ?: return null
+        return RecipeInfo(title, recipe.recipesCompared?.takeIf { it > 0 }, recipe.servings?.takeIf { it > 0 })
+    }
 
     /**
-     * Client-side rules on top of the model's answer: trim; a learned correction overrides aisle_id;
-     * "unsorted"/unknown aisle -> null; a learned icon override replaces icon (EXACT); "exact" on a
-     * *_generic key holds only when the catalog lists the name for it; a model "approximate" becomes EXACT when
-     * IconCatalog.matchExact finds the name (curated term, no head-noun guess); an invalid icon ->
-     * DEFAULT_ICON + APPROXIMATE; dedupe by normalizeName against the list and within the answer.
+     * Client-side rules on top of the model's answer: trim; quantities in metric (normalizeMetric); a learned
+     * correction overrides aisle_id; "unsorted"/unknown aisle -> null; a learned icon override replaces icon (EXACT);
+     * "exact" on a *_generic key holds only when the catalog lists the name for it; a model "approximate" becomes
+     * EXACT when IconCatalog.matchExact finds the name (curated term, no head-noun guess); an invalid icon ->
+     * DEFAULT_ICON + APPROXIMATE. Rows: a name already on the list (unchecked) stays as a skipped row
+     * (SkipReason.ALREADY_ON_LIST, also named in skipped); a repeat within the answer is merged into its first
+     * copy; the model's skip_reason, named and pantry_entry are kept, then the pantry backstop runs (PantryMatch.apply:
+     * a named item is never skipped for the pantry, a worked-out item a pantry entry covers is).
      */
     internal fun postProcess(items: List<WireItem>, context: IngestContext): Processed {
         val aisleIds = context.aisles.mapTo(HashSet()) { it.id }
         val corrections = correctionMap(context.corrections, aisleIds)
         val existing = context.existingNames.mapTo(HashSet()) { normalizeName(it) }
         val kept = LinkedHashMap<String, ProposedItem>()
+        val position = HashMap<String, Int>()
+        val indexOf = HashMap<Int, Int>()
         val skipped = mutableListOf<String>()
-        for (raw in items.take(MAX_ITEMS)) {
+        for ((wireIndex, raw) in items.take(MAX_ITEMS).withIndex()) {
             val name = Prompts.oneLine(raw.name, 120)
             val key = normalizeName(name)
             if (key.isEmpty()) continue
-            val quantity = raw.quantity.cleanOptional()
+            val quantity = raw.quantity.cleanOptional()?.let(::normalizeMetric)
             val note = raw.note.cleanOptional()
-            if (key in existing) {
-                skipped += name
-                continue
-            }
             kept[key]?.let { first ->
                 // Duplicate within the answer: keep the first, borrow a quantity/note it lacks.
                 kept[key] = first.copy(quantity = first.quantity ?: quantity, note = first.note ?: note)
+                indexOf[wireIndex] = position.getValue(key)
                 skipped += name
                 continue
             }
+            val onList = key in existing
+            if (onList) skipped += name
             val corrected = corrections[key]
             val aisleId = corrected ?: raw.aisleId?.takeIf { it != UNSORTED_WIRE_ID && it in aisleIds }
             val override = context.iconOverrides[key]?.takeIf { it in catalog }
@@ -131,6 +160,13 @@ class OpenAiGroceryAssistant(
                 else -> catalog.matchExact(name)?.key?.let { it to IconFit.EXACT }
                     ?: ((modelIcon ?: IconCatalog.DEFAULT_ICON) to IconFit.APPROXIMATE)
             }
+            val modelReason = skipReasonOf(raw.skipReason)
+            val reason = when {
+                onList -> SkipReason.ALREADY_ON_LIST
+                // The model cannot know better than the list: a name that is not on it is not "already on your list".
+                modelReason == SkipReason.ALREADY_ON_LIST -> SkipReason.NONE
+                else -> modelReason
+            }
             kept[key] = ProposedItem(
                 name = name,
                 quantity = quantity,
@@ -139,9 +175,21 @@ class OpenAiGroceryAssistant(
                 icon = icon,
                 iconFit = fit,
                 aisleFromCorrection = corrected != null,
+                skipReason = reason,
+                named = raw.named ?: true,
+                pantryEntry = raw.pantryEntry?.let { Prompts.oneLine(it, 80) }?.takeIf { it.isNotEmpty() && reason == SkipReason.IN_PANTRY },
             )
+            position[key] = kept.size - 1
+            indexOf[wireIndex] = kept.size - 1
         }
-        return Processed(kept.values.toList(), skipped)
+        return Processed(PantryMatch.apply(kept.values.toList(), context.pantry), skipped, indexOf)
+    }
+
+    private fun skipReasonOf(wire: String?): SkipReason = when (wire) {
+        "already_on_list" -> SkipReason.ALREADY_ON_LIST
+        "optional" -> SkipReason.OPTIONAL
+        "in_pantry" -> SkipReason.IN_PANTRY
+        else -> SkipReason.NONE
     }
 
     override suspend fun transcribe(clip: AudioClip, keywords: List<String>): Transcript {
@@ -257,7 +305,12 @@ class OpenAiGroceryAssistant(
 }
 
 @Serializable
-internal data class WireIngest(val items: List<WireItem>, val message: String = "")
+internal data class WireIngest(
+    val items: List<WireItem>,
+    val message: String = "",
+    val lines: List<WireLine> = emptyList(),
+    val recipe: WireRecipe? = null,
+)
 
 @Serializable
 internal data class WireItem(
@@ -267,6 +320,25 @@ internal data class WireItem(
     @SerialName("aisle_id") val aisleId: String? = null,
     val icon: String? = null,
     @SerialName("icon_fit") val iconFit: String? = null,
+    @SerialName("skip_reason") val skipReason: String? = null,
+    /** She named it (typed, photographed, spoken); missing (an older answer) counts as named. */
+    val named: Boolean? = null,
+    @SerialName("pantry_entry") val pantryEntry: String? = null,
+)
+
+@Serializable
+internal data class WireLine(
+    val text: String = "",
+    @SerialName("crossed_out") val crossedOut: Boolean = false,
+    @SerialName("correction_of") val correctionOf: String? = null,
+    @SerialName("item_index") val itemIndex: Int? = null,
+)
+
+@Serializable
+internal data class WireRecipe(
+    val title: String = "",
+    @SerialName("recipes_compared") val recipesCompared: Int? = null,
+    val servings: Int? = null,
 )
 
 @Serializable

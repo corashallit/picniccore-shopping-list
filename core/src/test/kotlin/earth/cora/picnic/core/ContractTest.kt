@@ -1,11 +1,14 @@
 package earth.cora.picnic.core
 
 import earth.cora.picnic.core.assistant.IconDecision
+import earth.cora.picnic.core.assistant.Prompts
+import earth.cora.picnic.core.assistant.Schemas
 import earth.cora.picnic.core.assistant.resolve
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.llm.LlmConfig
 import earth.cora.picnic.core.llm.ModelDefaults
 import earth.cora.picnic.core.llm.ReasoningEffort
+import earth.cora.picnic.core.model.AisleStyle
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.Aisles
 import earth.cora.picnic.core.model.BasketKind
@@ -13,9 +16,17 @@ import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.GroceryList
 import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.IconOverride
+import earth.cora.picnic.core.model.IconRef
+import earth.cora.picnic.core.model.PantryEntry
+import earth.cora.picnic.core.model.Rarity
+import earth.cora.picnic.core.model.Receipt
 import earth.cora.picnic.core.model.ResolvedIcon
+import earth.cora.picnic.core.model.STATE_SCHEMA_VERSION
+import earth.cora.picnic.core.model.StoreProfile
+import earth.cora.picnic.core.model.Trip
 import earth.cora.picnic.core.model.normalizeName
 import earth.cora.picnic.core.model.slugify
+import earth.cora.picnic.core.store.BookSticker
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -28,6 +39,17 @@ class ContractTest {
     @Test
     fun basketEnumMatchesCatalog() {
         assertEquals(catalog.file.baskets.map { it.key }.toSet(), BasketKind.entries.map { it.key }.toSet())
+        assertEquals(17, BasketKind.entries.size, "D8: MIXING_BOWL is the 17th kind")
+        assertTrue(BasketKind.MIXING_BOWL in BasketKind.entries)
+    }
+
+    @Test
+    fun theBasketLlmEnumOffersEveryKind() {
+        val schema = Schemas.baskets(listOf("produce"), BasketKind.entries.map { it.key })
+        val kinds = schema.path("properties", "baskets", "items", "properties", "basket", "enum")!!.strings()
+        assertTrue("mixing_bowl" in kinds)
+        assertEquals(BasketKind.entries.map { it.key }, kinds)
+        assertTrue("- mixing_bowl: Mixing bowl" in Prompts.basketsStable(catalog.baskets))
     }
 
     @Test
@@ -110,11 +132,45 @@ class ContractTest {
     }
 
     @Test
+    fun v2FieldsDefaultWhenAbsentAndRoundTrip() {
+        val minimal = """{"lists":[{"id":"l","title":"T","createdAt":0,"items":[{"id":"i","name":"Milk","icon":"milk_bag","addedAt":1}]}],"currentListId":"l"}"""
+        val s = CoreJson.json.decodeFromString(AppState.serializer(), minimal)
+        val milk = s.lists.single().items.single()
+        assertNull(milk.checkedAt)
+        assertNull(milk.bookSlot)
+        assertEquals(Rarity.NONE, milk.rarity)
+        assertNull(s.lists.single().openAisle)
+        assertNull(s.lists.single().trip)
+        assertNull(s.lists.single().lastClosedAt)
+        assertTrue(s.favourites.isEmpty())
+        assertTrue(s.pantry.isEmpty())
+        assertTrue(s.store.aisleStyles.isEmpty())
+
+        val trip = Trip(
+            id = "t-l-5", startedAt = 5, storeName = "Hillcrest Market", lastActivityAt = 6, completedAt = 7, finaleShownAt = 8,
+            shopMinutes = 41, pet = true, receipt = Receipt(9, "SAT 3 OCT", "HILLCREST", 24, 8, 41, 1), receiptSaved = true,
+            napDismissed = true, bonus = BookSticker(-1, "Croissants", IconRef("croissant"), Rarity.SHINY, 7),
+        )
+        val full = s.copy(
+            lists = listOf(s.lists.single().copy(items = listOf(milk.copy(checked = true, checkedAt = 6, bookSlot = 0, rarity = Rarity.JACKPOT)), trip = trip, openAisle = "", lastClosedAt = 1)),
+            favourites = setOf("milk"),
+            pantry = listOf(PantryEntry("Flour", IconRef("flour"), 3)),
+            store = StoreProfile(aisleStyles = mapOf("produce" to AisleStyle(family = "melon", storeAisle = 3))),
+        )
+        val text = CoreJson.json.encodeToString(AppState.serializer(), full)
+        assertEquals(full, CoreJson.json.decodeFromString(AppState.serializer(), text))
+        assertTrue("\"rarity\":\"JACKPOT\"" in text, "rarity is persisted by name")
+        assertEquals("\"mixing_bowl\"", CoreJson.json.encodeToString(BasketKind.serializer(), BasketKind.MIXING_BOWL))
+    }
+
+    @Test
     fun minimalStateFileDecodes() {
-        // Fields added later (iconOverrides, collapsedAisles, ...) must default when absent.
+        // Fields added later (iconOverrides, collapsedAisles, ...) must default when absent. (The store reads a file
+        // without "version" as version 1 and migrates it first: StateMigrationV2Test.)
         val text = """{"lists":[{"id":"l","title":"Groceries","createdAt":0,"items":[{"id":"a","name":"Milk","icon":"milk_bag","addedAt":1}]}],"currentListId":"l"}"""
         val state = CoreJson.json.decodeFromString(AppState.serializer(), text)
-        assertEquals(1, state.version)
+        assertEquals(STATE_SCHEMA_VERSION, state.version)
+        assertEquals(2, STATE_SCHEMA_VERSION)
         assertTrue(state.iconOverrides.isEmpty())
         assertEquals(IconFit.EXACT, state.lists.single().items.single().iconFit)
     }

@@ -63,6 +63,10 @@ data class Produced(
     val aisleId: String? = null,
     val icon: String,
     val fit: IconFit,
+    /** The row's skip_reason wire value ("none" = kept). */
+    val skip: String = "none",
+    /** She named it (versus worked out). */
+    val named: Boolean = true,
 )
 
 @Serializable
@@ -184,6 +188,9 @@ object EvalScoring {
                     val text = Phrase.loose(listOfNotNull(item.name, item.note, item.quantity).joinToString(" | "))
                     val ok = Regex(re, RegexOption.IGNORE_CASE).containsMatchIn(text)
                     checks += Check("detail ${item.name}", ok, "got \"$text\", want /$re/")
+                }
+                expect.skip?.let { want ->
+                    checks += Check("skip ${item.name}", item.skip == want, "got ${item.skip}, want $want")
                 }
             }
         }

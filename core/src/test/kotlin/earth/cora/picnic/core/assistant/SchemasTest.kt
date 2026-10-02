@@ -51,12 +51,15 @@ class SchemasTest {
         assertStrict(schema)
         assertEnumBudget(schema)
         val item = schema.path("properties", "items", "items")!!.jsonObject
-        assertEquals(listOf("name", "quantity", "note", "aisle_id", "icon", "icon_fit"), item["required"]!!.strings())
+        assertEquals(
+            listOf("name", "quantity", "note", "aisle_id", "icon", "icon_fit", "skip_reason", "named", "pantry_entry"),
+            item["required"]!!.strings(),
+        )
         assertEquals(aisleIds + "unsorted", item.path("properties", "aisle_id", "enum")!!.strings())
         assertEquals(catalog.keys, item.path("properties", "icon", "enum")!!.strings())
         assertEquals(listOf("exact", "approximate"), item.path("properties", "icon_fit", "enum")!!.strings())
         assertEquals(listOf("string", "null"), item.path("properties", "quantity", "type")!!.strings())
-        assertEquals(listOf("items", "message"), schema["required"]!!.strings())
+        assertEquals(listOf("items", "message", "lines", "recipe"), schema["required"]!!.strings())
     }
 
     @Test

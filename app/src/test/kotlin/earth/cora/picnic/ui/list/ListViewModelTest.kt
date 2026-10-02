@@ -104,13 +104,13 @@ class ListViewModelTest {
         val avocado = s.sections.first { it.id == "produce" }.items.first { it.name == "Avocados" }
         assertEquals("3 · ripe ones", avocado.detail)
 
-        // Busy names show the category fallback with the sparkle; PENDING items show the paper bag.
+        // Busy names and PENDING items show the gashapon capsule (D5); busy ones add the sparkle.
         val gochujang = s.sections.first { it.id == "aisle-3-pasta-rice-international" }.items.single()
         assertTrue(gochujang.drawing)
-        assertEquals(IconRef("condiments_generic"), gochujang.icon)
+        assertEquals(IconRef(IconCatalog.CAPSULE), gochujang.icon)
         val rack = unsorted.items.first { it.name == "Dish rack" }
         assertFalse(rack.drawing)
-        assertEquals(IconRef(IconCatalog.DEFAULT_ICON), rack.icon)
+        assertEquals(IconRef(IconCatalog.CAPSULE), rack.icon)
 
         assertEquals(listOf("Groceries" to true, "Saturday party" to false), s.lists.map { it.title to it.current })
         assertEquals(12, s.lists.first().remaining)

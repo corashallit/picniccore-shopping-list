@@ -31,10 +31,16 @@ object Aisles {
      * - Duplicate ids get "-2", "-3", ... in order of appearance.
      * - position is 1-based over the kept lines.
      */
-    fun parse(text: String): List<Aisle> {
+    fun parse(text: String): List<Aisle> = parseLines(text).map { it.aisle }
+
+    /** One aisle line of the text: [lineIndex] is its index in text.lines() (comments and blank lines count). */
+    internal data class AisleLine(val lineIndex: Int, val aisle: Aisle)
+
+    /** [parse], keeping where each aisle sits in the text (renameAisle, moveAisle and commitAislesText rewrite lines). */
+    internal fun parseLines(text: String): List<AisleLine> {
         val used = mutableSetOf<String>()
-        val out = mutableListOf<Aisle>()
-        for (raw in text.lineSequence()) {
+        val out = mutableListOf<AisleLine>()
+        for ((index, raw) in text.lines().withIndex()) {
             val line = raw.trim()
             if (line.isEmpty() || line.startsWith("#")) continue
             val name = line.replaceFirst(BULLET, "").trim()
@@ -46,10 +52,16 @@ object Aisles {
             var n = 2
             while (id in used) id = "$base-${n++}"
             used += id
-            out += Aisle(id = id, name = name, position = position)
+            out += AisleLine(index, Aisle(id = id, name = name, position = position))
         }
         return out
     }
+
+    /** One aisle name as a line of aisle text: trimmed, on one line, without a leading bullet. Blank -> "". */
+    internal fun cleanName(name: String): String =
+        name.replace(LINE_BREAKS, " ").trim().replaceFirst(BULLET, "").trim().removePrefix("#").trim()
+
+    private val LINE_BREAKS = Regex("[\\r\\n]+")
 }
 
 fun StoreProfile.aisles(): List<Aisle> = Aisles.parse(aislesText)

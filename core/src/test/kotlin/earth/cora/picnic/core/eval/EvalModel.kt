@@ -90,6 +90,8 @@ data class EvalCase(
     val newStore: String? = null,
     /** Unchecked names already on the list. */
     val existing: List<String> = emptyList(),
+    /** Pantry entries as she wrote them (§6.13): the model leaves out worked-out items they cover. */
+    val pantry: List<String> = emptyList(),
     /** Learned corrections: item name -> aisle alias (in the case's current store; newStore for AISLE_EDIT). */
     val corrections: Map<String, String> = emptyMap(),
     val search: SearchExpectation = SearchExpectation.ANY,
@@ -130,6 +132,8 @@ data class ItemExpect(
     val optional: Boolean = false,
     /** Optional only: may absorb any number of produced items (e.g. several spices). */
     val many: Boolean = false,
+    /** The skip_reason the matched row must carry ("none", "in_pantry", "optional"); null = not scored. */
+    val skip: String? = null,
 ) {
     val scoresIcon: Boolean get() = icons.isNotEmpty() || approx
 }
