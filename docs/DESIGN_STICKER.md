@@ -9,7 +9,7 @@ Working app name: **Kirakira Basket**. The launcher label is an open question (Q
 | Source | What it is |
 |---|---|
 | `research/directions.md` §C | The written direction the friend chose |
-| Mockup `mockups/sticker.section.html` (round r9), generator `sk/` (`python3 build.py`; it moves into the repo as `design/mockup/` with a real assertion suite, §18.4) | The approved look and every interaction, live. Screens: phone 1 (List, live), 2 (Add sheet), 3 (Snap and speak), 4 (My store and settings), 5 (Album), 6 (Glow-in-the-dark list), plus the flourish kit, basket family, motion tiles, 18 egg tiles and the celebration. |
+| Mockup `mockups/sticker.section.html` (round r9), generator `sk/` (`python3 build.py`; it moves into the repo as `design/mockup/` frozen as a reference, §18.4) | The approved look and every interaction, live. Screens: phone 1 (List, live), 2 (Add sheet), 3 (Snap and speak), 4 (My store and settings), 5 (Album), 6 (Glow-in-the-dark list), plus the flourish kit, basket family, motion tiles, 18 egg tiles and the celebration. |
 | `c_spec/inv_spec.json` (396 items), `c_spec/inv_mockup.json` (312 items) | Inventories of the written spec and the mockup. They were taken **before** r9, so their "broken" and "illustration-only" statuses are out of date: r9 made all 18 eggs, the receipt, single-open aisles, the peel and squash, the reduced-motion Next card and the post-finale PERFECT book work. Appendix B maps their ids to the sections and checklist items that cover them. |
 | `c_spec/app_gap.md` | Gap analysis of the app at `7be9b87` against both inventories, decisions D1 to D25, the art-route options |
 | `docs/ARCHITECTURE.md` | The app's contract (amendments A1 to A3) |
@@ -58,7 +58,7 @@ Working app name: **Kirakira Basket**. The launcher label is an open question (Q
 | D12 | `PicnicTheme(variant = Day / Glow / Dusk / Golden, reducedMotion)`. MainActivity resolves the variant (§2.5) and sets the system bar icon styles from it. The celebration is always Day, and the bars switch to dark icons for the scene's duration. |
 | D13 | **Amendment A5 (trips).** A trip opens at the first check-off on a list with no open trip and closes on "New trip" or when its list is deleted (the book is filed first). Completion is an invariant that every operation touching items recomputes. Book, stamps, pet, receipt, stats and perfect weeks belong to it (§7). |
 | D14 | The celebration's ribbon ride (every sticker rides a ribbon into the hamper) stays: it happens inside its own full-screen scene, not across the list. Q4 asks Cora to confirm. |
-| D15 | No pantry in v1: recipe rows say "already on your list" or "optional · skipped" only. Q5. |
+| D15 | **Replaced by §0.4 Q5.** There is a pantry (§6.13). Recipe rows say "already on your list", "in your pantry" or "optional · skipped". |
 | D16 | No streaming in v1. The thinking steps and the photo's lines are revealed **after** the answer, from real fields in it, 250 ms apart (§6.2). Nothing claims progress that did not happen. |
 | D17 | Favourites: `AppState.favourites` (normalized names), toggled by a heart in the Edit sheet; drives the sakura heart flag and the "Favourites" chip. |
 | D18 | Pull to refresh re-syncs **icons and aisles**: `icons.resumePending()` and `aisleSync.sortItems` for items still in "Everything else". There are no prices; the copy never mentions them. |
@@ -93,6 +93,23 @@ Smaller conflicts between the written spec, the mockup and the app, and how this
 | Thinking box headline | "Looking up a recipe…" from the start | "Reading your note…" while waiting; the recipe wording only when the answer has a recipe (D16) |
 
 ---
+
+### 0.4 Cora's answers (2 October 2026). These override every other section, the §22 defaults included
+
+| Topic | Answer | What changes |
+|---|---|---|
+| Q1 name | **Kirakira Basket** | Display name, wordmark, receipt header. applicationId stays `earth.cora.picnic`. |
+| Q2 New trip | Both, as specified | "Clear what I got" stays primary; "Keep everything, uncheck it all" secondary. |
+| Q3 weather | Opt-in, as specified | **Weather surprises** switch, off by default. |
+| Q6 city | **Approximate location instead of a fixed city** | A **Use my area** switch in Surprises (off by default). Turning it on requests `ACCESS_COARSE_LOCATION` only; never fine location, and no background location. With it on, sunset (egg 12) and the forecast (eggs 11 and 16) use the device's approximate position, rounded to 0.1° (about 10 km) before any use and refreshed at most every 6 h. The forecast uses the nearest Environment Canada city feed from a bundled list. Only the rounded point and the chosen city code are stored. When the switch is off or permission is denied, everything uses Toronto (43.65 N, 79.38 W), exactly as before. The rationale before the permission prompt reads: "Kirakira Basket can use your approximate area to find tonight's sunset and the local forecast for its weather surprises. Your area stays on this phone; only the forecast request names the nearest city." PRIVACY.md says the same. `SunClock` takes the point from a `PlaceSource` (approximate or Toronto). |
+| Q5 pantry (changed later the same day) | **A pantry, and the AI leaves out what's in it** | A **My pantry** screen (§6.13) holds what she keeps at home: written as free text, shown as stickers on pantry shelves, one pantry for the whole app. Every AI request carries the pantry. When the AI works out what to buy for a dish, meal or request, it leaves out what the pantry covers and lists each one as a skipped row, "in your pantry", that she can switch back on for this time. Things she names herself (typed, photographed or spoken) are always added, pantry or not: writing "flour" means she ran out. The Edit sheet gets an "In my pantry" toggle. Replaces D15 and §22 Q5. Items 319–332. |
+| Q7 celebration close | **Closes by itself, with a clear progress bar** | The summary shows a visible progress bar while it waits to close: a washi-tape strip along the bottom edge of the summary card that fills from left to right over the summary hold, labelled "Closing… tap to keep it", and stepped under reduced motion. Tapping the summary keeps it open: the bar disappears and a "Done" button closes it. Tapping anywhere else, or Back, closes it at once. With TalkBack on (Android's screen reader), there is no countdown: it waits for a tap, as specified. |
+| Q8 re-add | Un-check the existing row | As specified ("Milk is back on your list", with Undo). |
+| Q9 idle trip | **Never ask** | No question at the first check-off. Instead, the **first check-off more than 12 h after the trip's last activity starts a new book on its own**: the old book is filed in the album, what was got last time is cleared (as with "Clear what I got"), and the tapped item lands in the fresh book. A sticky-note toast then says "New sticker book for today ✦ your last shop is in the album", with **Undo**. Undo restores the old book and its checked items, and checks the tapped item into the old book instead. This fits her week (build the list over the week, shop once): she is never interrupted and last week's book never swallows this week's shop. The New trip sheet stays available from the overflow menu. |
+| Q4 ribbon ride | Keep | As specified. |
+| The mockup | **Reference only from now on** | Cora reviews the real app, not the mockup. The mockup in `design/mockup/` is frozen at r9 as a visual reference: no sync pass, no control manifest, no assertion suite, no further fixes. Where it disagrees with this spec (the pinned ring, the clipped title stroke, the produce spin, the Speak line, the pantry, everything in this table) **the spec wins**. Items 311, 312 and 318 are retired; 332, 334 and 335 cover the app only. |
+| Copy: the Speak prompt | **"Anything the paper forgot? Say it." is cut** | It reads as filler: paper doesn't remember or forget. The prompt after a photo is now **"Anything else? Say it out loud."** Rule for all copy (§16): say plain true things; objects don't remember, forget, want or feel. Item 333. |
+| Pinned current aisle (bug in mockup r9) | **The lemon ring never breaks** | When the current aisle's tray is pinned while its rows scroll, the pinned plate carries the tray's 3 dp lemon ring (top and sides) and its offset shadow, so the yellow border runs unbroken from the plate down the tray. The plate's solid backing (R6) still hides the rows. This holds in Day, Glow and the other variants, and in the mockup too. |
 
 ## 1. Concept
 
@@ -280,6 +297,8 @@ The status and navigation bar icon styles follow the resolved variant (dark icon
 **13 sp floor.** No text is smaller than 13 sp except two numerals that repeat a number shown at ≥13 sp elsewhere: the stamp numerals and the aisle chip's number circle (11 sp). `MinTextSizeTest` walks every screen fixture.
 
 **Three families per surface.** DynaPuff + Zen Maru + **one** of Klee One / Hachi Maru Pop. LCD text is vector, so it never counts. A bottom sheet is its own surface. The list uses Hachi Maru (doodles); the Add sheet uses Klee One (transcripts) and no doodles. `FontFamilyBudgetTest` walks every screen's text nodes and fails on a fourth family.
+
+**Puffy text never clips** (Cora, 2 October: in mockup r9 the white stroke of "Saturday shop" was cut off at its right edge). Every stroked or shadowed title (screen titles, the wordmark, NEXT, the celebration title, tab labels with a stroke) measures and lays out its box from the **stroke pass**, not the fill: it reserves half the stroke width on every side plus the hard-shadow offset on the right and bottom, and nothing that draws it clips to the fill's bounds (no `clipToBounds`, no `graphicsLayer { clip = true }`, no parent `clipRect` tighter than that box). The last glyph's overhang (DynaPuff's rounded terminals and italic-like tails) is included through the text layout's `getBoundingBox`, not the advance width. An ellipsized title clips to that padded box, never to the fill's box (the r9 cause: `overflow: hidden` for the ellipsis on a box only 4 px wider than the fill, so a 6 px stroke lost its right side). `PuffyText` owns this, so every caller gets it.
 
 **Never**: Unicode circled digits (numbers sit in drawn circles), glyph stars or hearts, DynaPuff / Klee One / Hachi Maru for item names, monospace anywhere.
 
@@ -491,7 +510,7 @@ Semantics: the row is the toggle (`Role.Checkbox`, `toggleableState` on/off); Sp
 | Source chip (web results) | kiss-cut label with a link glyph; opens the URL |
 | Filter chips (Album: Groceries · Picnic · Seasonal; List switcher) | as label; selected as above |
 
-There is no "On sale" chip (no prices) and no "Pantry" chip (no pantry, D15).
+There is no "On sale" chip (no prices) and no "Pantry" filter chip (the pantry has its own screen, §6.13).
 
 ### 4.8 Text fields
 
@@ -576,12 +595,12 @@ TalkBack: "Strawberries, 1 litre basket" + state ("not checked" / "got it"); cus
 
 - Postage-edged card (§2.12): DynaPuff 20 sp title ("Pancakes from scratch"), Klee One 15 sp "from the kitchen of ♡ the web" (vector heart), a meta row (ramune "web search" chip when the answer used web search + "3 recipes · 5 of 10 kept"), then one compact aisle tray per aisle ("Baking · 3 of 6 kept") with ingredient rows (40 dp stickers, 16 sp names; detail "2.5 kg bag · 2 cups": pack size, then the recipe amount). Pack sizes are always metric. The recipe amount after the "·" may keep the cooking measures recipes print (cup, tbsp, tsp, pinch), as Canadian recipes do; every other unit is converted (`normalizeMetric`). This is the one place the metric-only checks whitelist.
 - **Keep switch**: 48 dp target on a dashed spot; kept = a 30 dp lemon star sticker pressed onto the spot (the book's magic-appear poses, 320 ms). `Role.Switch`.
-- **Skipped rows** stay readable: name ballpointSoft (no strike), icon at 45 % with 60 % desaturation, the reason in the detail line: "already on your list", "optional · skipped".
+- **Skipped rows** stay readable: name ballpointSoft (no strike), icon at 45 % with 60 % desaturation, the reason in the detail line: "already on your list", "in your pantry", "optional · skipped". A pantry row keeps the recipe amount after the reason ("in your pantry · ½ tsp"). Its keep switch starts off; switching it on adds the item this time only and never changes the pantry. When any pantry row shows, a text button **"Edit my pantry"** (jar glyph) sits under the last tray; it opens My pantry (§6.13) and Back returns to the same card with every keep switch as she left it.
 - Footer: primary "★ Stick all 5 on my list" (the count of kept rows, live).
 
 ### 4.18 Thinking box (gashapon)
 
-Backing box, 3 dp white border, radius 12: a 52 dp capsule in the target aisle's mid wobbling ±8° in 3 poses (on threes) and a headline (Zen Maru 700 15 sp), then the step lines. While waiting for the answer the headline is the neutral **"Reading your note…"** (it claims nothing). When the answer arrives it becomes "Looking up a recipe…" only if the answer carries a `recipe` block; otherwise it stays. Steps are revealed from the real answer (D16): "Searched the web: “pancakes from scratch”" only if the answer used web search; "Compared 3 recipes · makes 12" only if the answer carries `recipe.recipes_compared` / `servings`; "Checked your list, sorted into 8 aisles" always. Each step's tick lands at 1.3 scale in 2 frames, 250 ms apart, and the line darkens to ballpoint. Then the capsule pops ("pon!") and the item stickers fan out one by one, 80 ms apart, into the card's rows.
+Backing box, 3 dp white border, radius 12: a 52 dp capsule in the target aisle's mid wobbling ±8° in 3 poses (on threes) and a headline (Zen Maru 700 15 sp), then the step lines. While waiting for the answer the headline is the neutral **"Reading your note…"** (it claims nothing). When the answer arrives it becomes "Looking up a recipe…" only if the answer carries a `recipe` block; otherwise it stays. Steps are revealed from the real answer (D16): "Searched the web: “pancakes from scratch”" only if the answer used web search; "Compared 3 recipes · makes 12" only if the answer carries `recipe.recipes_compared` / `servings`; "Checked your pantry · left out 3" only if the answer has rows skipped as `in_pantry` (the count is theirs); "Checked your list, sorted into 8 aisles" always. Each step's tick lands at 1.3 scale in 2 frames, 250 ms apart, and the line darkens to ballpoint. Then the capsule pops ("pon!") and the item stickers fan out one by one, 80 ms apart, into the card's rows.
 
 ### 4.19 Polaroid (Snap)
 
@@ -592,7 +611,7 @@ Backing box, 3 dp white border, radius 12: a 52 dp capsule in the target aisle's
 - A generic pink cassette 130 × 86 dp: sakura pastel body, white 4u border, sakura trace, a white label window with a lemon tape window, two pink reels with white spokes turning in 8 steps per second; no brand. A 48 dp hanko-red stop sticker sits on its bottom-right corner (TalkBack "Stop recording").
 - Equaliser: 7 columns × 6 stacked 10 dp puffy dots (1.6 dp white border, small hard shadow): lemon mid (dots 1–2), peach mid (3–4), sakura mid (5–6). Whole dots switch on and off from the bottom up in 3 stepped poses, driven by the mic level (~10 Hz), never squashed.
 - An LCD chip timer "0:12" and a 10 dp hanko REC dot blinking 1.2 s per cycle (0.83 Hz).
-- Prompt "Anything the paper forgot? Say it." when Speak follows Snap; the transcript in Klee One 16 sp in quotes, keywords on a highlighter band; found items in a "Heard · 2 more stickers" tray.
+- Prompt "Anything else? Say it out loud." when Speak follows Snap (§0.4); the transcript in Klee One 16 sp in quotes, keywords on a highlighter band; found items in a "Heard · 2 more stickers" tray.
 
 ### 4.21 Empty state ("A brand-new sticker sheet!")
 
@@ -721,6 +740,7 @@ Z order: list < add bar < overlay (hops, toasts, Next card, peek, eggs) < sheets
 5. **Review**: anything else opens the letter-set sheet on the Write tab with the thinking box (steps revealed, §4.18), then the recipe card (§4.17); "Stick all n on my list" commits.
 6. Failure: the friendly message in the sheet's error state with "Try again" and "Add as plain lines".
 7. **Duplicates are never added twice.** A duplicate of an **unchecked** item: the existing row's sticker pops (scale .9 → 1.1 → 1, 400 ms) with a highlighter flash on its text band, and the toast says "Milk is already on your list". A duplicate of a **checked** item means she needs it again: the existing row is **un-checked** (the un-check chain plays, §8.4, and its twin peels out of the book) and the toast says "Milk is back on your list" with Undo (Undo checks it again). No second row is ever created (Q8). `addItems` matches incoming names against every item on the list (§19.1); `ingestContext` keeps sending only unchecked names, so the model may return a checked one, which then revives it.
+8. **The pantry** (§0.4, §6.13). `ingestContext` carries the pantry entries as she wrote them. Every item in the answer says whether she **named** it (typed, photographed or spoken) or the model **worked it out** from a dish, meal or request. A worked-out item the pantry covers comes back skipped with `skip_reason: in_pantry` and the covering entry ("spices" covers ground cinnamon; "flour" covers all-purpose flour, not almond flour). Two client rules back the model up (`PantryMatch`, core): a named item is never skipped for the pantry (it is switched back on), and a worked-out item whose name equals a pantry entry after `normalizeName` and singular/plural folding is skipped even if the model kept it. Pantry rows make the answer a review (rule 4: they are skipped rows), so she always sees what was left out.
 
 **Snap** (camera button → camera): the sheet opens on Snap with the polaroid (§4.19), reading, then the lines and stickers; "Stick all m on my list". Speak can follow (D19). To use a saved photo: a visible **"Choose a photo"** chip in the Snap tab, the camera button's TalkBack custom action "Choose a photo", or a long-press on the camera button (a shortcut only, never the only way).
 
@@ -734,7 +754,7 @@ Z order: list < add bar < overlay (hops, toasts, Next card, peek, eggs) < sheets
 
 ### 6.3 Edit item sheet
 
-Letter-set sheet: the 120 dp hero sticker (lifted, hs2), a favourite heart toggle (sakura heart sticker, `Role.Switch`, "Favourite"), ruled fields Name / Amount / Note, "Move to aisle" (aisle chips with number circles, current one selected), "Change sticker" (a grid of 40 dp stickers starting with the item's category, kiss-cut cells, selected = lemon ring), "Draw a new sticker" (secondary, with the ladybug ring while drawing; shown when a key is set), Save (primary), Delete (text button, hanko colour). States: default, renamed (dirty), drawing, no key.
+Letter-set sheet: the 120 dp hero sticker (lifted, hs2), a favourite heart toggle (sakura heart sticker, `Role.Switch`, "Favourite"), an **"In my pantry"** toggle beside it (a jar sticker, `Role.Switch`; on adds the item's name to the pantry, off removes the matching entry; toast "Flour is in your pantry · recipes will leave it out" / "Flour is off your pantry shelf"), ruled fields Name / Amount / Note, "Move to aisle" (aisle chips with number circles, current one selected), "Change sticker" (a grid of 40 dp stickers starting with the item's category, kiss-cut cells, selected = lemon ring), "Draw a new sticker" (secondary, with the ladybug ring while drawing; shown when a key is set), Save (primary), Delete (text button, hanko colour). States: default, renamed (dirty), drawing, no key.
 
 ### 6.4 List switcher sheet
 
@@ -809,6 +829,22 @@ Binder background, puffy title "Settings", pad cards with punch holes:
 - Album empty: the fresh sticker sheet art with "Your album is waiting · check something off to collect your first sticker".
 
 ---
+
+### 6.13 My pantry (new, §0.4)
+
+What she keeps at home. One pantry for the whole app (it is her kitchen, not a list's). It never adds or removes list items; it only tells the AI what to leave out of the things it works out.
+
+- **Ways in**: the overflow menu ("My pantry", jar glyph, between "My store & aisles" and "Sticker album"); "Edit my pantry" on the recipe card (§4.17); the Edit sheet's toggle adds from a list row (§6.3).
+- **App bar**: Back, title "My pantry", subtitle "things you keep at home · recipes leave them out" (on a pad patch, §2), text button "Done".
+- **Add field**: an inline ruled field "Add to pantry:" with the hint "flour, salt, spices…" and a 48 dp strawberry Add sticker button; Enter adds. Commas, new lines and " and " split entries (`OfflineParser` splitting, no AI); quantities are dropped ("2 kg flour" → "Flour"); each entry is capitalised like an item name. A name already there (after `normalizeName`) is not added twice: its sticker pops on the shelf (the §6.2 pop) and the toast says "Salt is already in your pantry".
+- **The shelves**: the `JAR_SHELF` basket's language at full width: a gingham curtain valance across the top, then wooden shelves (peach-brown mid with a light top edge and a 3 dp hard shadow under each board), stickers standing on them at 52 dp with the name under each (Zen Maru 700 13 sp, two lines, centred). Four per shelf at 360 dp wide, five at 412 dp and up; shelves are added as needed and scroll with the page. Order = the order of the text (below). A new entry lands with the book's magic-appear (§8), never a flight.
+- **Tapping a sticker** opens a small kiss-cut pop card (as the overflow menu): "Take off the shelf" (removes it; toast "Salt is off your pantry shelf" with Undo) and "Change sticker" (the Edit sheet's sticker grid). TalkBack: each sticker is a button "Salt, in your pantry", with custom actions "Take off the shelf" and "Change sticker".
+- **"Pantry as text:"** the raw multi-line ruled field under the shelves (Klee One 16 / 24 sp), one entry per line. It is the source of the order. Editing it previews the shelves live (debounced 400 ms) and commits on Done or when the field loses focus (`setPantryText`); a line with commas becomes several entries on commit.
+- **Pantry stickers**: the learned icon override for that name if there is one (`iconOverrideMap()`), else the local alias match (`localIcon`), else, with a key set, the IconDecider's answer (one batched call when the screen commits, the capsule while it waits), else the category generic or the capsule (D5). Pantry entries **never** start a live drawing and never call the network without a key.
+- **Empty state**: an empty shelf with a dust-bunny doodle and the line "Nothing on the shelves yet. Write what you always keep at home, and recipes will leave it out." plus four suggestion chips ("Salt", "Pepper", "Oil", "Flour") that each add their entry.
+- **No key**: the pantry still edits; nothing about it changes (without a key there is no AI to tell).
+- **States (goldens)**: empty, a few entries (6), full (24, scrolled), text field focused, the pop card open, after "Take off the shelf" (Undo toast), Glow variant, font scale 2.0.
+- **Limits**: up to 200 entries are sent with a request (the first 200 in shelf order); the screen shows a quiet note "Recipes check the first 200" past that.
 
 ## 7. The trip and its sticker book
 
@@ -1244,7 +1280,7 @@ No flash, iris, shake, ride, confetti, curl or glints. At L + 1350 the **summary
 |---|---|---|---|---|---|
 | 1 | **Dusk binder** | Tap the sun sticker beside the title 7 times, each within 1.5 s of the last (Day or Golden variant; the Glow moon is static) | Each tap bounces the sun. On the 7th, over 1.2 s: the sun sinks behind the title in 3 poses (600 ms), a full moon rises in 3 poses (600 ms) with a 6-star sparkle burst; the Dusk variant washes in (bands, gutter sparkles); the LCD star becomes a moon. **Tap the moon to undo.** | DataStore `dusk_binder` until the moon is tapped | `EggDuskTest`, golden `list_dusk_day` |
 | 2 | **Ladybug stroll** | Press and hold a folded basket for the hold threshold + 560 ms (**1 s** by default; a hold of just the threshold, 440 ms by default, only peeks; §4.3) | A 15 dp ladybug appears at the strip's bottom edge, walks it in 18 dp stepped hops with a 2-frame waddle (5 s: 10 % per hop, pauses at 40–60 %), never crossing item text, then opens its wings and flies off the edge; it keeps walking after release | — | `EggLadybugTest` |
-| 3 | **Rolling produce** | A commit adds an item whose icon key is tagged `roll` (apple, orange, clementine, lemon, lime, peach, pear, tomato, kiwi, mango, watermelon) or `hop` (strawberry, blueberries, raspberries, cherries), in any language ("fraises", "pommes" match by key) | The list scrolls to that item's aisle; its sticker (44 dp) rolls down the page from the add bar to the aisle's basket (−360° per 120 dp, 3 s) and **bumps** it: the basket wobbles hello + rim heart ("pff"); then the sticker settles **on its new line** (it is still to get, so it never enters the basket). Berries hop in three arcs instead of rolling. One per commit. | — | `EggRollingTest` |
+| 3 | **Rolling produce** | A commit adds an item whose icon key is tagged `roll` (apple, orange, clementine, lemon, lime, peach, pear, tomato, kiwi, mango, watermelon) or `hop` (strawberry, blueberries, raspberries, cherries), in any language ("fraises", "pommes" match by key) | The list scrolls to that item's aisle; its sticker (44 dp) rolls down the page from the add bar to the aisle's basket (3 s) and **spins the way a rolling thing spins**: its turn follows its sideways travel without slipping, θ = Δx ⁄ r (r = 22 dp, so one full turn per 138 dp), **clockwise while it moves right, anticlockwise while it moves left** (Compose `rotationZ` and CSS `rotate()` are both clockwise-positive on screen), and it keeps its angle while it only drops (Cora, 2 October: mockup r9 rolled right but spun anticlockwise; the app must not) and **bumps** it: the basket wobbles hello + rim heart ("pff"); then the sticker settles **on its new line** (it is still to get, so it never enters the basket). Berries hop in three arcs instead of rolling. One per commit. | — | `EggRollingTest` (incl. `spinMatchesTravel`: sampled frames satisfy θ = Δx ⁄ r within 5°, both directions) |
 | 4 | **Petal shake** | Shake the phone: two acceleration peaks over 2.7 g within 500 ms; list screen in the foreground; reduced motion off; at most once per 5.2 s | 14 sakura petals (14 × 10 dp, sakura mid, white border) scatter over the binder gutters, settle as tiny stickers for 3 s, then blow away (stepped, 8 fps); one soft tick (CLOCK_TICK) and "kira" | — | `ShakeDetectorTest`, `EggPetalTest` |
 | 5 | **Midnight snack** | Local time in [23:00, 04:00) on open, on resume, or crossing 23:00 while open | The Glow variant (forced, even if the system is light), glow stars, the moon by the title; the LCD reads "SNACK?" for 2.6 s on entering the list, then the count; a snack-time star sticker and a "snack?" doodle beside the frozen aisle's tab (basket COOLER or ICE_BUCKET, or a name containing "frozen" / "surgelé"). Walking order unchanged. | — | `EggMidnightTest`, `ThemeVariantTest`, golden `list_midnight_glow` |
 | 6 | **Shiny sticker** | Each committed item rolls **1 in 200** (injected `Random`) | The row arrives in holo foil clipped to its body, with a glint every 4 s, a lemon star and the "shiny!" chip, a 8-sticker burst and "kira"; it stays holo in its basket, in the book and in the album (holo pocket); the toast adds "★ shiny!" | `GroceryItem.rarity = SHINY`; album `holo` | `EggShinyTest` (seeded Random) |
@@ -1433,25 +1469,28 @@ Canadian spelling (colour, favourite), metric only (g, kg, mL, L) in detail line
 | Add bar | placeholder "Write a note…", example "“pancakes from scratch”", doodle "♡ picnic day ☆" |
 | Sheet tabs | "Write" · "Snap" · "Speak"; "Note:"; "As typed" |
 | Thinking | "Reading your note…" (while waiting), "Looking up a recipe…" (only when the answer has a recipe), "Searched the web: “<query>”", "Compared 3 recipes · makes 12", "Checked your list, sorted into 8 aisles" |
-| Recipe card | "<Title>", "from the kitchen of ♡ the web", "web search", "3 recipes · 5 of 10 kept", tray "Baking · 3 of 6 kept", reasons "already on your list" / "optional · skipped", button "★ Stick all 5 on my list" |
+| Recipe card | "<Title>", "from the kitchen of ♡ the web", "web search", "3 recipes · 5 of 10 kept", tray "Baking · 3 of 6 kept", reasons "already on your list" / "in your pantry" / "optional · skipped", "Edit my pantry", button "★ Stick all 5 on my list" |
 | Snap | "Reading your list…", caption "fridge list · Sat", "Popped into stickers · 4 of 7", "Reading… 6 of 9" → "Stick all 9 on my list", chip and action "Choose a photo" |
-| Speak | "Anything the paper forgot? Say it.", "Heard · 2 more stickers", "Stop recording" |
+| Speak | "Anything else? Say it out loud.", "Heard · 2 more stickers", "Stop recording" |
 | Toasts | "Added 5 items to Saturday shop ♡" · "Added Milk to Dairy & eggs ♡" · "Milk is already on your list" · "Milk is back on your list" · "Oat cereal torn out" · "2 items torn out" · "Added as typed · add your OpenAI key for smart sorting" · "New trip · a fresh sticker book ♡" · "New shop? Start a fresh sticker book" · "Receipt saved to your sticker book ♡" · "Rain on the way · bring the tote!" · "BONUS STAGE! ♪" · "Sorted 6 items · 2 left in Everything else" · "Couldn't save. Try again." · "Surprise lab unlocked ★" · "Your album's back pocket opened!" ; action chips "Undo", "New trip", "Look" |
 | Empty state | "A brand-new sticker sheet!" / "Nothing on <list> yet. Type it, snap your paper list, or just say it out loud." / "♡ let's go shopping ♡" / "Start my list" / sheet caption "sticker sheet 1 of 2" |
-| Overflow menu | "New trip" (state "No trip yet" when disabled), "Switch list…", "Refresh", "My store & aisles", "Sticker album", "Settings"; list action "Refresh stickers and aisles" |
+| Overflow menu | "New trip" (state "No trip yet" when disabled), "Switch list…", "Refresh", "My store & aisles", "My pantry", "Sticker album", "Settings"; list action "Refresh stickers and aisles" |
 | Next card | "NEXT" + tab |
 | Celebration | "List complete!", "♡ <list name>", "24/24", "PER-FECT!", "24 stickers · 41 min", "bonus sticker!", "tap to skip" |
 | Hanko texts | "GOT / IT!", "PER- / FECT!", "HAPPY / B-DAY!", "JACK / POT!" |
 | Book | date "Sat 3 Oct"; name tag "4 · Baking · 1 left" / "3 · Deli & meat · stamped" |
 | New trip sheet | "Start a new trip?", "Today's sticker book goes into your album.", "Clear what I got", "Keep everything, uncheck it all", "Not yet" |
 | Delete list sheet | "Delete <list>?", "Its sticker book goes into your album." (only when it has stickers), "Delete", "Not yet" |
+| My pantry | "My pantry", "things you keep at home · recipes leave them out", "Done", "Add to pantry:", "flour, salt, spices…", "Pantry as text:", "Take off the shelf", "Change sticker", "Nothing on the shelves yet. Write what you always keep at home, and recipes will leave it out.", "Recipes check the first 200"; toasts "Salt is already in your pantry", "Salt is off your pantry shelf", "Flour is in your pantry · recipes will leave it out"; Edit sheet "In my pantry"; thinking step "Checked your pantry · left out 3" |
 | My store | "My store", "walking order · colours · baskets", "Done", "Store:", "Add aisle", "Aisles as text:", "Re-sort my list", "store aisle 2" |
 | Settings | "Your OpenAI key", "Test connection", "Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.", "Stickers", "Draw new stickers with AI", "Surprises", the six switch labels and hints (§6.8), "About & licences" |
 | Errors | "That key didn't work. Check it?", "Couldn't reach OpenAI. Check your connection?", the friendly messages of ARCHITECTURE §12 |
 | Album | "Sticker album", "★ 64 of 216 collected · 3 holo", "Groceries · Picnic · Seasonal", "Trip sticker books", "Perfect weeks", "week 4 of 4 · sakura sheet unlocked", "Autumn sheet", "next! · Thanksgiving Oct 12", "Drawn for you", "sticker sheet 2 of 2" |
 | Surprise lab | "Surprise lab", "Surprise lab · practice list", one "Try it" line per egg (egg 10: "Tap the first four stamps: 1st, 1st, 2nd, 2nd, 3rd, 4th, 3rd, 4th"), "needs animations on" |
 
-No copy mentions a proxy, model names, prices, a pantry, or any brand.
+No copy mentions a proxy, model names, prices or any brand.
+
+**Say plain true things** (§0.4). Copy never gives objects a mind: paper, lists, baskets and stickers don't remember, forget, want, miss or feel. Cute lives in the art, the hanko texts and the eggs; instructions and prompts say what to do in ordinary words ("Anything else? Say it out loud.").
 
 ---
 
@@ -1498,13 +1537,9 @@ Since the gap analysis, r9 also drew the **seven missing basket kinds** and exte
 7. **Sounds**: §14.2.
 
 
-### 18.4 The mockup stays truthful and tested
+### 18.4 The mockup is a frozen reference (§0.4)
 
-The mockup is the friend's reference: it must let her try everything it shows, and must not offer what will not ship.
-
-- **Assertion suite**: `design/mockup/test/*.spec.mjs` on `@playwright/test` (browser from `npx playwright install`, no machine paths). Each egg and flow has an **expected end state** asserted, not just printed: egg 18's stage has `has-receipt` and the receipt slip appears in the book after the tap; under reduced motion the Next card is visible for ≥2.6 s; exactly one aisle is open at a time; every egg tile reaches its end class; the celebration's text beats keep their §11.2 holds; zero console errors. It runs in CI as a gate (WP10) and before sign-off.
-- **Sync pass before sign-off** (WP10): remove the "Web search for recipes" switch and the "Smart · sort" model pills (A1), the tappable "On sale" chip (no prices) and the "in your pantry · ½ tsp" recipe rows (D15: "already on your list" / "optional · skipped"); add the **Weather surprises** switch (§6.8) and the **New trip sheet** with Clear / Keep / Not yet (§6.5); remove the Next card glint (§10) and retime the Next card and the celebration to §10–§11. Anything kept for illustration only is labelled "not in v1" on the page.
-- **Control manifest**: `design/mockup/controls.json` lists every control the page offers and either the app feature (section) it maps to or `"not in v1"`; `controls.spec.mjs` fails on any control missing from the manifest.
+`design/mockup/` holds the r9 generator and its built page, frozen as the visual reference for the look and the motion. It is not maintained, tested or synced: Cora reviews the real app. Where the mockup and this spec disagree, the spec wins (§0.4 lists the known differences: the pinned ring, the title stroke clipped by its ellipsis box, egg 3's spin, the Speak line, the pantry, the web-search switch and model pills, the On sale chip, the Next card glint and the r9 timings). Agents read it for looks; they never copy a behaviour from it that this spec does not state.
 
 ---
 
@@ -1570,7 +1605,20 @@ fun AppState.setRarity(listId: String, itemId: String, rarity: Rarity): AppState
 fun AppState.setFavourite(normalizedName: String, on: Boolean): AppState
 fun AppState.setAisleStyle(aisleId: String, style: AisleStyle?): AppState
 fun AppState.setAisleBasket(aisleId: String, kind: BasketKind): AppState
-fun AppState.ingestContext(listId: String): IngestContext   // unchanged: existingNames = unchecked names only (§6.2 rule 7)
+fun AppState.ingestContext(listId: String): IngestContext   // existingNames = unchecked names only (§6.2 rule 7); (+) pantry = entry names as written, first 200
+
+// Pantry (§0.4, §6.13)
+// AppState (+) pantry: List<PantryEntry> = emptyList()       // one per app; a v2 state without it loads empty (no schema bump)
+@Serializable data class PantryEntry(val name: String, val icon: IconRef? = null, val addedAt: Long)
+fun AppState.pantryText(): String                                                // one entry per line, shelf order
+fun AppState.setPantryText(text: String, now: Long): AppState                    // split, normalise, dedupe by normalizeName; keeps icon and addedAt of unchanged names
+fun AppState.addToPantry(names: List<String>, now: Long): AppState               // returns the same state for names already there
+fun AppState.removeFromPantry(normalizedName: String): AppState
+fun AppState.setPantryIcon(normalizedName: String, icon: IconRef?): AppState
+fun AppState.inPantry(name: String): Boolean
+// model/PantryMatch.kt (new, pure)
+object PantryMatch { fun covers(entry: String, itemName: String): Boolean        // normalizeName equality with singular/plural folding only
+    fun apply(items: List<ProposedItem>, pantry: List<String>): List<ProposedItem> } // named → never in_pantry; worked-out + covers → in_pantry
 
 // model/BookSlots.kt (new, pure)
 object BookSlots { fun assign(items: List<GroceryItem>, checkingId: String): Int; fun compact(items: List<GroceryItem>): List<GroceryItem> }
@@ -1607,7 +1655,7 @@ class EnvironmentCanadaWeather(http: OkHttpClient, cityCode: String = "on-143") 
 ```
 
 - **Catalog** (`icon_catalog.json`): per icon optional `"tags"` (`roll`, `hop`, `picnic`, `birthday`, `frozen`) and `"personality"` (`berry`, `egg`, `bread`, `can`, `frozen`); a new `peameal_bacon` key (aliases "peameal", "back bacon", "bacon de dos"); `MIXING_BOWL` in `baskets` (keywords: baking, bake, flour, cuisson, pâtisserie, farine). `IconCatalog.displayRef` returns `IconRef("_capsule")` for PENDING and busy items (D5).
-- **Assistant**: ingest schema gains per item `skip_reason` (`none` / `already_on_list` / `optional`), top-level `lines` (`[{text, crossed_out, correction_of, item_index}]`, photos only, else empty) and `recipe` (`{title, recipes_compared, servings}` or null); `CallMeta.webSearches` already says whether web search ran. `ingest_rules.txt` adds arrow corrections ("bread → sourdough") and bare paper numbers ("tomatoes 796" → "796 mL can"). `AisleSync.resortAll()` re-files every item not placed by hand.
+- **Assistant**: ingest schema gains per item `skip_reason` (`none` / `already_on_list` / `optional` / `in_pantry`), `named` (boolean: she named it, versus worked out from a dish, meal or request) and `pantry_entry` (the covering entry, "" unless `in_pantry`), top-level `lines` (`[{text, crossed_out, correction_of, item_index}]`, photos only, else empty) and `recipe` (`{title, recipes_compared, servings}` or null); `CallMeta.webSearches` already says whether web search ran. `ingest_rules.txt` adds arrow corrections ("bread → sourdough"), bare paper numbers ("tomatoes 796" → "796 mL can") and the pantry rule (§6.2 rule 8: leave out worked-out items the pantry covers, never named ones; broad entries cover their members). The context block gains the line "In the pantry (she keeps these at home): …" ("nothing yet" when empty), so the byte-identical context example in `research/openai/examples/` is regenerated and the pantry eval cases (item 322) are run and recorded in PROMPTS.md. `AisleSync.resortAll()` re-files every item not placed by hand.
 - **Live icons** (owner WP1): `OpenAiClient.imageEdit(model, prompt, images: List<Part>, mask: Part?)` **replaces** `imageEdit(…, reference, …)`; `IconDrawRequest(itemName, sheet: ByteArray, mask: ByteArray, subject: String, families: List<String>)` **replaces** `IconDrawRequest(itemName, styleReference)` (consumers: `AppIconRepository`, the new `LiveIconDrawer`); `IconDecision(icon, category, look: String? = null, families: List<String> = emptyList())` (additive).
 
 ### 19.2 App contracts
@@ -1760,7 +1808,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 20. **[WP2]** DotGothic16 and Nanum Pen Script are not bundled. — *Test:* `FontFilesTest.noExtraFonts` (unit)
 21. **[WP2 · WP8]** The five OFL licence texts (DynaPuff, Zen Maru Gothic, Klee One, Hachi Maru Pop, and DotGothic16 as the source of the LCD glyphs) are in `assets/licenses/` and shown on the About page. — *Test:* `AboutScreenTest.licencesListed` (Robolectric), golden `about_licences_day`
 22. **[WP4]** `PicnicTypography` roles match §2.7 (family, weight, size, colour). — *Test:* `TypographyTest.rolesMatchSpec` (unit)
-23. **[WP4]** Puffy lettering draws the stroke pass, then the fill, then sits on a hard shadow; the Glow stroke is `#3A438A`. — *Test:* goldens `puffy_title_day`, `puffy_title_glow`, `wordmark_day`
+23. **[WP4]** Puffy lettering draws the stroke pass, then the fill, then sits on a hard shadow; the Glow stroke is `#3A438A`; the stroke and shadow are never cut off at any edge (§2.7 "Puffy text never clips"). — *Test:* goldens `puffy_title_day`, `puffy_title_glow`, `wordmark_day`
 24. **[WP4]** A long screen title shrinks from 24 to 20 sp to stay on one line, then ellipsizes. — *Test:* `AppBarTest.titleShrinksThenEllipsizes` (Robolectric)
 25. **[WP4]** Item names are Zen Maru 700 at ≥16 sp everywhere, never DynaPuff, Klee One or Hachi Maru. — *Test:* `TextColourUsageTest.itemNamesUseBodyFace` (Robolectric walker)
 26. **[WP10]** No surface uses more than three font families (vector LCD text excluded; a sheet is its own surface). — *Test:* `FontFamilyBudgetTest` (Robolectric walker over every screen fixture)
@@ -1873,7 +1921,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 118. **[WP5]** The tear-off plays (perforation 120 ms, halves 600 ms, slot 380 ms) and Undo restores the row exactly (checked state, slot, icon) with the toast held 4 s. — *Test:* `TearOffTest.undoRestoresExactly` (Robolectric), strip `tearoff_strip`
 119. **[WP5]** Pull to refresh sags the bunting, spins the sun, shows SYNC for 1500 ms, runs `resumePending` and `sortItems`, and never mentions prices; the overflow item "Refresh" and the list's custom action do the same without the gesture. — *Test:* `PullToRefreshTest.resyncsIconsAndAisles`, `PullToRefreshTest.refreshAction` (Robolectric)
 120. **[WP5]** An open trip idle for more than 12 h gets the nudge toast with "New trip"; nothing is cleared automatically. — *Test:* `TripNudgeTest` (Robolectric, fake clock)
-121. **[WP5]** The overflow menu offers New trip (disabled without a trip), Switch list, Refresh, My store & aisles, Sticker album and Settings, and each works. — *Test:* `ListInteractionTest.overflowMenuActions` (Robolectric)
+121. **[WP5]** The overflow menu offers New trip (disabled without a trip), Switch list, Refresh, My store & aisles, My pantry, Sticker album and Settings, and each works. — *Test:* `ListInteractionTest.overflowMenuActions` (Robolectric)
 
 ### 20.8 The check-off chain (R5)
 
@@ -2079,7 +2127,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 ### 20.18 Copy, IP and units
 
 293. **[WP10]** None of the IP reference words (Sanrio, Bonbon, Q-Lia, Sun-Star, Bandai, Amada, Carddass, Sailor, Moon Prism, HBC, …) appears in `res/`, `assets/` or generated sources. — *Test:* `IpWordsTest` (unit scan)
-294. **[WP10]** No user-visible string mentions a proxy, a model name, prices or a pantry, and none uses an emoji as an icon. — *Test:* `CopyRulesTest` (unit scan)
+294. **[WP10]** No user-visible string mentions a proxy, a model name or prices, none uses an emoji as an icon, and none gives an object a mind (the §16 plain-things rule; the review list is in `CopyRulesTest`, e.g. no "forgot", "remembers", "wants" on paper, lists, baskets or stickers). — *Test:* `CopyRulesTest` (unit scan)
 295. **[WP10]** Strings use Canadian spelling and metric units only (cooking measures only in a recipe amount, §4.17). — *Test:* `CopyRulesTest.canadianAndMetric` (unit scan)
 296. **[WP5 · WP7]** Every detail line shown is metric after normalisation, except a recipe amount after the "·", which may be cup, tbsp, tsp or pinch. — *Test:* `ListUiStateTest.detailMetric` (unit)
 297. **[WP1 · WP2]** The critters (nap cat without forehead mark or bow, ants carrying food, bee, ladybug) and every sticker pass the IP review sheet. — *Test:* golden `critters_contact` (reviewed by Cora, against the §20 criteria)
@@ -2102,10 +2150,40 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 308. **[WP10 · POLISH]** Scrolling the fixture list and the check-off chain hold 60 fps on a mid-range phone (P90 frame ≤16 ms, no frame over 32 ms). — *Test:* `ListScrollBenchmark`, `CheckOffBenchmark` (Macrobenchmark on device, results in the PR)
 309. **[WP10 · POLISH]** The sideload APK grows by at most 4 MB over `7be9b87`. — *Test:* `apkSizeCheck` (CI step)
 310. **[WP10 · POLISH · WORKS]** A recorded on-device walkthrough fires every egg from the Surprise lab and runs a full trip to the receipt. — *Test:* manual run, video attached to the PR
-311. **[WP10 · WORKS]** The mockup generator and its assertion suite live in `design/mockup/`; the suite asserts each egg's and flow's expected end state (§18.4: receipt `has-receipt` and its slip, reduced-motion Next card visible ≥2.6 s, one open aisle at a time, the celebration holds) with zero console errors, and gates CI and sign-off. — *Test:* `design/mockup/test/*.spec.mjs` (Playwright, CI)
-312. **[WP10 · WORKS]** Every control the mockup offers exists in the app or is labelled "not in v1" on the page: no web-search switch, model pills, On sale chip or pantry rows; the Weather switch and the New trip sheet are there. — *Test:* `design/mockup/test/controls.spec.mjs` against `controls.json` (CI)
+311. **[Retired]** ~~**[WP10 · WORKS]** The mockup generator and its assertion suite live in `design/mockup/`; the suite asserts each egg's and flow's expected end state (§18.4: receipt `has-receipt` and its slip, reduced-motion Next card visible ≥2.6 s, one open aisle at a time, the celebration holds) with zero console errors, and gates CI and sign-off.~~ Retired on 2 October: the mockup is reference only (§0.4).
+312. **[Retired]** ~~**[WP10 · WORKS]** Every control the mockup offers exists in the app or is labelled "not in v1" on the page: no web-search switch, model pills or On sale chip; the pantry rows follow §4.17, My pantry is a phone on the page, and the Weather switch and the New trip sheet are there.~~ Retired on 2 October: the mockup is reference only (§0.4).
 
 ---
+
+
+### 20.21 Cora's answers (§0.4)
+
+313. **[WP5]** A pinned current-aisle plate carries the lemon ring and offset shadow, unbroken into the tray below, in Day and Glow; no row shows above or beside it. — *Test:* golden `tray_current_pinned_day`, `tray_current_pinned_glow` (rows mid-scroll under the plate)
+314. **[WP6]** The celebration summary shows a progress bar that fills over the summary hold, labelled "Closing… tap to keep it"; tapping the summary keeps it open (with a Done button), tapping elsewhere or Back closes it; under TalkBack there is no countdown. — *Test:* `CelebrationTest.progressBarAndKeep` (Robolectric, fake clock), golden `celebration_summary_closing`
+315. **[WP3 · WP5]** The first check-off more than 12 h after the trip's last activity files the old book, clears what was got, starts a new book with the tapped item and shows the "New sticker book for today" toast with Undo; Undo restores everything and checks the item into the old book; nothing asks a question. — *Test:* `TripRulesTest.autoNewBookAfterIdle`, `TripRulesTest.autoNewBookUndo` (unit), `ListInteractionTest.autoNewBookToast` (Robolectric)
+316. **[WP8 · WP9]** "Use my area" (off by default) asks only for approximate location after the rationale. With it on, sunset and forecast use the rounded point and the nearest city feed. With it off or denied, they use Toronto. The manifest has `ACCESS_COARSE_LOCATION` and no fine or background location. — *Test:* `PlaceSourceTest` (unit: rounding, fallback, 6 h refresh), `SettingsUseMyAreaTest` (Robolectric: rationale, permission denied → Toronto), `ManifestPermissionsTest`
+317. **[WP10]** PRIVACY.md describes the approximate-area option exactly as §0.4 says. — *Test:* review gate
+318. **[Retired]** ~~**[WP10]** The mockup carries the §0.4 changes: the unbroken pinned ring, the celebration progress bar and Keep, no idle-trip question with the auto new book toast instead, and the Use my area switch.~~ Retired on 2 October: the mockup is reference only (§0.4).
+
+### 20.22 Pantry, copy and puffy text (§0.4, later on 2 October)
+
+319. **[WP3]** `PantryEntry` and the pantry ops: `setPantryText` splits on new lines, commas and " and ", drops quantities, dedupes by `normalizeName`, keeps the shelf order of the text and the icon and `addedAt` of unchanged names; `addToPantry` ignores names already there; `removeFromPantry`, `setPantryIcon`, `inPantry`; a v2 state file without `pantry` loads with an empty pantry and round-trips. — *Test:* `PantryOpsTest` (core), `StateMigrationV2Test.pantryDefaultsEmpty` (core)
+320. **[WP3]** `ingestContext` carries the first 200 pantry entries as written; the context block prints "In the pantry (she keeps these at home): …" ("nothing yet" when empty) and the byte-identical context example is regenerated. — *Test:* `PromptsContractTest` (core), `IngestContextTest.pantry` (core)
+321. **[WP3]** The ingest schema carries `skip_reason: in_pantry`, `named` and `pantry_entry`; post-processing never skips a named item for the pantry, and skips a worked-out item whose name equals a pantry entry after `normalizeName` and singular/plural folding even when the model kept it; `PantryMatch.covers` folds plurals ("eggs"/"egg", "tomatoes"/"tomato", "berries"/"berry") and nothing more ("flour" does not cover "almond flour"). — *Test:* `IngestSchemaTest.pantry*` (core, MockWebServer fixtures), `PantryMatchTest` (core)
+322. **[WP3 · LIVE]** The pantry eval cases pass over 3 runs, recorded in PROMPTS.md: pancakes from scratch with the pantry {flour, sugar, salt, baking powder} → those four skipped `in_pantry`, milk and eggs kept; banana bread with "spices" in the pantry → cinnamon skipped, covered by "spices"; a recipe needing almond flour with "flour" in the pantry → almond flour kept; the plain list "flour, milk" with flour in the pantry → both kept; a photographed list with salt on it and salt in the pantry → salt kept. Gate: ≥95 % of pantry-covered worked-out items skipped, 0 named items skipped. — *Test:* `research/openai` bench `pantry` (live, manual, results in PROMPTS.md)
+323. **[WP7]** Pantry rows on the recipe card: skipped styling, "in your pantry · ½ tsp", keep switch off; switching one on adds it this time and leaves the pantry unchanged; the CTA count follows; "Edit my pantry" shows only with a pantry row, opens My pantry, and Back restores the card with its keep switches. — *Test:* `RecipeCardTest.pantryRows`, `AddSheetTest.editPantryRoundTrip` (Robolectric), golden `recipe_card_pantry`
+324. **[WP7]** The thinking box shows "Checked your pantry · left out n" only when the answer has `in_pantry` rows (n is their count), and an answer with a pantry row is never a quick add. — *Test:* `ThinkingStepsTest.pantry`, `AddViewModelTest.pantryRowForcesReview` (Robolectric)
+325. **[WP8]** My pantry: app bar and subtitle on a pad patch, the add field (comma splitting, quantities dropped, duplicate pops with "Salt is already in your pantry"), shelves in text order at 4 per shelf (360 dp) and 5 (412 dp), "Pantry as text" previewing live at 400 ms and committing on Done or blur, new entries magic-appear. — *Test:* `PantryScreenTest` (Robolectric), goldens `pantry_{empty,few,full,text_focused,glow,fs200}`
+326. **[WP8]** Tapping a pantry sticker opens the pop card; "Take off the shelf" removes it with an Undo toast and Undo restores it in place; "Change sticker" opens the sticker grid; TalkBack names each sticker "<Name>, in your pantry" with both custom actions. — *Test:* `PantryScreenTest.takeOffAndUndo`, `PantryScreenTest.talkBackActions`, golden `pantry_popcard`
+327. **[WP8]** The empty pantry shows the dust-bunny shelf, the line and the four suggestion chips, and each chip adds its entry. — *Test:* golden `pantry_empty`, `PantryScreenTest.suggestionChips`
+328. **[WP8]** Pantry stickers resolve override → local alias → IconDecider (key set, one batched call on commit) → generic or capsule; no live drawing; no network call without a key. — *Test:* `PantryIconsTest` (Robolectric, fake assistant counting calls)
+329. **[WP8]** The Edit sheet's "In my pantry" toggle adds and removes the item's name, with its toasts. — *Test:* `EditSheetTest.pantryToggle`, golden `edit_sheet_pantry_on`
+330. **[WP8 · WP10]** PRIVACY.md says the pantry is stored on the phone, is sent to OpenAI with each AI request, and is never sent without a key. — *Test:* `PrivacyDocTest`, review gate
+331. **[WP5]** The overflow menu's "My pantry" opens the screen (item 121). — *Test:* `ListInteractionTest.overflowMenuActions`
+332. **[WP10]** The audits cover My pantry (touch targets, font scale 1.3 and 2.0, TalkBack copy, text on pattern). — *Test:* audit walkers
+333. **[WP10]** Copy says plain true things (§16): the Speak prompt after a photo is "Anything else? Say it out loud."; no string gives paper, lists, baskets or stickers a mind. — *Test:* `CopyRulesTest.noMindedObjects` (word list over every string file), review gate on the copy deck
+334. **[WP4 · WP10]** Puffy text never clips: for every stroked title at its longest real text ("Saturday shop", "Kirakira Basket", "Everything else", "List complete!", the celebration and NEXT), in Day and Glow and at font scale 1.0 and 2.0, the white (Glow: `#3A438A`) stroke and the hard shadow are whole on all four sides, including when the title is ellipsized. — *Test:* `PuffyTextBoundsTest` (Robolectric: drawn stroke bounds ⊆ the composable's bounds and every ancestor's clip, for a fitting and an ellipsized title), goldens `puffy_title_{day,glow}_long`, `puffy_title_ellipsized`
+335. **[WP9]** Egg 3's produce spins with its travel: clockwise moving right, anticlockwise moving left, one turn per 138 dp (θ = Δx ⁄ r). — *Test:* `EggRollingTest.spinMatchesTravel`
 
 ## 21. Work packages
 
@@ -2147,8 +2225,9 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Owns**: `core/src/main/kotlin/…/model/**` (Model, StateOps, Grouping, Aisles incl. `displayName` and `storeAisleNumber` moved from the app's `ui/common`, new TripRules, BookSlots, TripStats, Metric), `…/store/**` (StateMigrations v2, new JsonFileStore, AlbumStore, AlbumReconciler), `…/catalog/**` and `icon_catalog.json`, new `…/calendar/**` (Seasons, SunClock), `…/assistant/OpenAiGroceryAssistant.kt` (ingest hunks), `…/assistant/AisleSync.kt` (`resortAll`), `…/assistant/OfflineParser.kt` (metric), `prompts/ingest_rules.txt`, `prompts/baskets_rules.txt`, `docs/PROMPTS.md`; all core tests for these.
 - **Provides**: §19.1 (the phase-0 stubs first).
 - **Consumes**: nothing (it starts first).
-- **Tests**: `TripOpsTest`, `BookSlotsTest`, `TripStatsTest`, `AlbumStoreTest`, `StateMigrationV2Test`, `GroupingInPlaceTest`, `CatalogTagsTest`, `ContractTest`, `BasketCatalogTest`, `SeasonsTest`, `SunClockTest`, `MetricNormaliserTest`, `IngestSchemaTest`, `PromptsContractTest`, `AisleSyncTest`, `FavouritesTest`, `MoveAisleTest`, `RenameAisleTest`, `AislesTextCommitTest`, `AislesTest`, `StateOpsTest`, `DisplayRefTest`.
-- **Acceptance**: 39, 77, 82, 88–89, 102–103, 131–144, 209, 213–214, 218, 220–221, 223–224, 232, 249, 251, 298–302
+- **Tests**: `TripOpsTest`, `BookSlotsTest`, `TripStatsTest`, `AlbumStoreTest`, `StateMigrationV2Test`, `GroupingInPlaceTest`, `CatalogTagsTest`, `ContractTest`, `BasketCatalogTest`, `SeasonsTest`, `SunClockTest`, `MetricNormaliserTest`, `IngestSchemaTest`, `PromptsContractTest`, `AisleSyncTest`, `FavouritesTest`, `MoveAisleTest`, `RenameAisleTest`, `AislesTextCommitTest`, `AislesTest`, `StateOpsTest`, `DisplayRefTest`, `PantryOpsTest`, `PantryMatchTest`, `IngestContextTest`.
+- **Pantry (§0.4)**: the pantry model and ops, `PantryMatch`, the `in_pantry` / `named` / `pantry_entry` schema fields, the pantry rule in `ingest_rules.txt`, the context line, and the eval cases (items 319–322).
+- **Acceptance**: 39, 77, 82, 88–89, 102–103, 131–144, 209, 213–214, 218, 220–221, 223–224, 232, 249, 251, 298–302, 315, 319–322
 
 #### WP4 · theme-tokens-components
 *The C theme: tokens and variants, typography, shapes, shadows, holo, patterns, every component in §4 except the list pieces, the sticker render path and the LCD.*
@@ -2157,7 +2236,7 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Provides**: `PicnicTheme(variant, reducedMotion)`, the tokens, `MotionSpec` (to WP6 and every package with a toast, sheet, button, LCD or switch timing), every component signature in §19.2, `ItemIcon` variants, `CheckMark(seed, stampText)`, `LcdChip`, `LcdText`, `LcdPetSprite` (to WP6 and WP9), `DashSpec`, `Modifier.groundBacking()`, `Modifier.hardShadow()`, the pad patch.
 - **Consumes**: WP1 and WP2 manifests (falls back to a neutral capsule until they land), WP9 `ThemeVariantSource` (stubbed to system dark until then).
 - **Tests**: `TokensTest`, `TokensContrastTest`, `TextColourUsageTest`, `TypographyTest`, `DashSpecTest`, `HankoTest`, `ButtonGlossTest`, `ButtonTest`, `ToastTest`, `SheetTest`, `LcdGlyphsTest`, `LcdChipTest`, `GroundTest`, `HoloTest`, `ShaderCacheTest`, `ReducedMotionTest`, `MotionSpecTest`, `ReadHoldTest`, `MainActivityBarsTest`, component goldens.
-- **Acceptance**: 1–17, 22–25, 27, 36–41, 51–57, 59–74, 81, 166, 192, 195, 262–264, 306
+- **Acceptance**: 1–17, 22–25, 27, 36–41, 51–57, 59–74, 81, 166, 192, 195, 262–264, 306, 334
 
 #### WP5 · list-screen + sticker book + baskets
 *The List screen in C: the top stack and the trip sticker book, folded strips and the open tray, rows in place, baskets with their states, peek, swipes, pull to refresh, the docked add bar's placement and the FAB, the New trip and Trip book sheets.*
@@ -2166,7 +2245,7 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Provides**: `ListUiState` with `BookUi`, `LcdState`, sections; `ToggleEvent`s and `ListChange`s (from comparing successive `GroupedList`s) to WP6; the idle-trip prompt; anchors via `AnchorRegistry`; slots where WP7's `AddBar` and WP9's overlays mount.
 - **Consumes**: WP3 grouping and trips; WP4 components; WP2 `BasketManifest`; WP6 `ListPresentation`; WP7 `AddBar` / `AddFab`; WP9 `SurpriseEngine` hooks (sun, stamps, basket hold, LCD hold); WP10 `Announcer`.
 - **Tests**: `ListInteractionTest`, `ListScreenTest`, `ListUiStateTest`, `TrayContainmentTest`, `PinnedBackingProbeTest`, `TabLayoutTest`, `BasketStateTest`, `BasketLayoutTest`, `PeekTest`, `SwipeTest`, `TearOffTest`, `PullToRefreshTest`, `FabTest`, `TripNudgeTest`, `BookLayoutTest`, `BookUiTest`, `BookInteractionTest`, `BookA11yTest`, `NewTripTest`, `ListChangeTest` (with WP6), goldens including every basket golden (`baskets_all_states_*`, `basket_*`).
-- **Acceptance**: 58, 71, 75–100, 104–114, 116–121, 142, 145–147, 156–164, 176, 296
+- **Acceptance**: 58, 71, 75–100, 104–114, 116–121, 142, 145–147, 156–164, 176, 296, 313, 315, 331
 
 #### WP6 · motion + celebration + interstitial
 *The choreography engine and overlay, the check-off chain and its reverse, the book's magic appear and peel, the aisle-done chain, the Next card, the celebration, the reading rule, reduced motion.*
@@ -2184,7 +2263,7 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Provides**: `AddBar(state, onSend, onSnap, onSpeak, …)` and `AddFab` composables placed by WP5; commit events to WP9.
 - **Consumes**: WP3 ingest schema and `OfflineParser`; WP4 components; WP9 `interceptText`, `rollRarity`, `onCommitted`; WP10 `Feedback`.
 - **Tests**: `AddBarTest`, `AddSheetTest` (incl. the "Choose a photo" chip), `AddViewModelTest`, `ThinkingStepsTest`, `RecipeCardTest`, `SnapFlowTest`, `SpeakFlowTest`, goldens.
-- **Acceptance**: 115–116, 199–208, 210–213, 215–216, 296
+- **Acceptance**: 115–116, 199–208, 210–213, 215–216, 296, 323–324
 
 #### WP8 · settings, aisles, album and other screens
 *Settings with Surprises (A4), About & licences and the Surprise lab entry, My store (the sticker-sheet aisle editor), the Sticker album, the Edit sheet, the list switcher, navigation.*
@@ -2193,7 +2272,8 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Provides**: the Surprises flags (`AppSettings`), routes (`AlbumRoute`, `AboutRoute`, `SurpriseLabRoute` shell), the album UI over WP3's `AlbumStore`.
 - **Consumes**: WP3 (album, aisle styles, favourites, resortAll); WP4; WP5 `TripBookSheet` (reused read-only); WP9 the Surprise lab content.
 - **Tests**: `SettingsScreenTest`, `SettingsRepositoryTest`, `SurprisesGatingTest`, `AboutScreenTest`, `AisleEditorTest`, `AlbumTest`, `EditSheetTest`, `ListSwitcherTest`, `NavTest`, `NoModelNamesTest`, `NoMaterialDefaultsTest`, `PrivacyDocTest`, `AppNameTest`, goldens.
-- **Acceptance**: 8, 21, 138, 144, 165, 217, 219–231, 233–236
+- **Pantry (§6.13)**: new `ui/pantry/**` (PantryScreen, PantryViewModel, PantryRoute), the Edit sheet toggle, the PRIVACY.md paragraph.
+- **Acceptance**: 8, 21, 138, 144, 165, 217, 219–231, 233–236, 316, 325–330
 
 #### WP9 · eggs
 *All 18 easter eggs, the LCD pet and receipt, theme-variant resolution, shake and weather sources, the Surprise lab content.*
@@ -2202,15 +2282,15 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Provides**: §19.2 `SurpriseEngine`, `ThemeVariantSource`, overlay composables mounted in WP6's overlay host.
 - **Consumes**: WP3 trip ops, rarity, seasons, sun clock; WP4 variants and LCD; WP5 hooks; WP6 overlay host and events; WP8 switches; WP10 `Feedback`, `Announcer`.
 - **Tests**: `SurpriseEngineTest`, `Egg*Test` (incl. `EggReducedMotionTest`), `MagicWordTest`, `PerfectWeekTest`, `LcdHoldTest`, `LcdPetTest`, `ReceiptTest`, `TripEndToEndTest`, `ShakeDetectorTest`, `WeatherSourceTest`, `WeatherCacheTest`, `ThemeVariantTest`, `EggOverlayBoundsTest`, `SurpriseLabTest`, goldens.
-- **Acceptance**: 16, 73, 237–248, 250, 252–261, 265–274
+- **Acceptance**: 16, 73, 237–248, 250, 252–261, 265–274, 316, 335
 
 #### WP10 · a11y-sound-haptics (and the release gates)
 *Feedback (sounds + haptics) and announcements as services, the accessibility audits, copy and IP scans, the CI workflow, the golden coverage and performance gates.*
 
-- **Owns**: `platform/Feedback.kt` (SoundPool, haptics, gating), `platform/Announcer.kt`, `platform/Timeouts.kt` (recommended timeouts, hold threshold), new `ui/a11y/**` (`spokenDetail`, semantics helpers, the `TextOverflowed` key), `.github/workflows/android.yml`, `res/values/strings_a11y.xml`; `design/mockup/**` (the generator moved from the scratchpad, the Playwright suite, `controls.json`) and the mockup sync pass (§18.4); cross-cutting tests under `app/src/test/…/a11y/**` and `…/release/**` (TouchTargetAuditTest, FontFamilyBudgetTest, TalkBackCopyTest, ReducedMotionAuditTest, NoFlashTest, KeyboardNavTest, FocusTest, DecorSemanticsTest, TimeoutsTest, TextOnPatternTest, MinTextSizeTest, NoClippedTextTest, IpWordsTest, CopyRulesTest, NoBlurLintTest, NoPlaceholderTest, GoldenCoverageTest); the Macrobenchmark module `benchmark/`.
+- **Owns**: `platform/Feedback.kt` (SoundPool, haptics, gating), `platform/Announcer.kt`, `platform/Timeouts.kt` (recommended timeouts, hold threshold), new `ui/a11y/**` (`spokenDetail`, semantics helpers, the `TextOverflowed` key), `.github/workflows/android.yml`, `res/values/strings_a11y.xml`; `design/mockup/**` (frozen reference, §18.4: only its README note); cross-cutting tests under `app/src/test/…/a11y/**` and `…/release/**` (TouchTargetAuditTest, FontFamilyBudgetTest, TalkBackCopyTest, ReducedMotionAuditTest, NoFlashTest, KeyboardNavTest, FocusTest, DecorSemanticsTest, TimeoutsTest, TextOnPatternTest, MinTextSizeTest, NoClippedTextTest, IpWordsTest, CopyRulesTest, NoBlurLintTest, NoPlaceholderTest, GoldenCoverageTest); the Macrobenchmark module `benchmark/`.
 - **Provides**: `Feedback`, `Cue`, `Announcer`, `Timeouts`, `FakeFeedback`, `FakeAnnouncer`, `FakeTimeouts`, the screen-fixture walker used by the audits.
 - **Consumes**: WP2 sounds; WP8 switches; every screen (for the audits, which run last).
-- **Acceptance**: 26, 197–198, 276–295, 303–305, 307–312
+- **Acceptance**: 26, 197–198, 276–295, 303–305, 307–310, 317, 330, 332–334
 
 ### 21.2 Dependency graph
 
@@ -2265,11 +2345,13 @@ Hard dependencies (cannot finish without) versus soft ones (can build against a 
 2. **Phase 1, parallel**: WP1 (authoring + v4), WP2, WP3, WP4, WP7 and WP8 (both against WP4's API), WP10 services.
 3. **Phase 2**: WP5 (needs WP3 + WP4), then WP6 on WP5's anchors (WP6 can build its engine and strips against a harness screen during phase 1).
 4. **Phase 3**: WP9 (needs the trip, the list hooks and the overlay host).
-5. **Phase 4, gates**: WP10 audits, all goldens re-recorded and reviewed by Cora, CI to `verifyRoborazziDebug`, the on-device walkthrough with the Surprise lab, the mockup sync pass and the `design/mockup` suite (§18.4), sign-off.
+5. **Phase 4, gates**: WP10 audits, all goldens re-recorded and reviewed by Cora, CI to `verifyRoborazziDebug`, the on-device walkthrough with the Surprise lab, sign-off. (The mockup is not re-checked, §18.4.)
 
 ---
 
 ## 22. Open questions for Cora (each has a default, so nothing waits)
+
+**Answered on 2 October 2026: see §0.4, which overrides this table.**
 
 | # | Question | Default (built unless Cora says otherwise) | Why it needs Cora |
 |---|---|---|---|
@@ -2277,7 +2359,7 @@ Hard dependencies (cannot finish without) versus soft ones (can build against a 
 | **Q2** | What should **New trip** do to the list: clear the items you got (a shop list), or un-check everything (a reusable staples list)? | The New trip sheet offers both; **"Clear what I got"** is the primary button. | It changes what she sees on her next trip; only she knows how she reuses lists. |
 | **Q3** | May the app ask **Environment Canada** for a forecast (one request per few hours, city only, no personal data) so the rainy-day and first-snow eggs can happen? | An opt-in **Weather surprises** switch, **off** by default; PRIVACY.md updated. With it off, eggs 16 and the first-snow sheet are dormant (still fireable from the Surprise lab). | It changes the privacy promise ("nothing else leaves the device"). |
 | **Q4** | The celebration's **ribbon ride** moves every sticker across its own full-screen scene into the hamper. Is that fine under rule 5 (only the check-off flies)? | Keep it: it is inside the celebration, never across the list; every keepsake (book, stamps, album pocket, receipt) still appears in place. | Rule 5 is hers. |
-| **Q5** | Should the app keep a small **pantry** (things she always has) so recipes can skip them ("in your pantry · ½ tsp")? | No pantry in v1; recipe rows say only "already on your list" or "optional · skipped". | A new feature and a new screen to maintain. |
+| **Q5** (changed: yes, §0.4 and §6.13) | Should the app keep a small **pantry** (things she always has) so recipes can skip them ("in your pantry · ½ tsp")? | No pantry in v1; recipe rows say only "already on your list" or "optional · skipped". | A new feature and a new screen to maintain. |
 | **Q6** | Which **city** should sunset (golden hour) and the forecast use? | Toronto (America/Toronto). A one-line change if her store is elsewhere in Ontario. | Only she knows where the friend shops. |
 | **Q7** | Should the celebration's summary **close by itself** at the end of its hold (about 17 s for the fixture, computed from the words on screen) or **stay until tapped**? | Closes at the end of the summary hold (or on a tap); with TalkBack on it waits for a tap; the summary stays in the book (tap the book). | Timing was the exact complaint; this is a taste call. |
 | **Q8** | When she adds something she has **already checked** this trip ("Milk" again), should the app **un-check** the existing row (she needs it again) or **add a second row**? | Un-check the existing row ("Milk is back on your list", with Undo); never a second row (§6.2 rule 7). | It changes what a re-add means mid-shop; only she knows whether she re-adds things she already got. |
