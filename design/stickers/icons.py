@@ -477,10 +477,10 @@ add('capsule', 'Something new', [
 import os as _os
 import glob as _glob
 _here = _os.path.dirname(_os.path.abspath(__file__))
-# the r9 batches, then the authoring batches of the art pass (icons_batch*.py, one file per batch so batches never
-# touch the same file; a new sticker's DSL key is its catalog key, see catalog_map.py)
+# the r9 batches, then the authoring batches of the art pass (icons_batch*.py and icons_c<N>.py, one file per batch so
+# batches never touch the same file; a new sticker's DSL key is its catalog key, see catalog_map.py)
 for _p in [_os.path.join(_here, _f) for _f in ('icons_b1.py', 'icons_b2.py', 'icons_b3.py', 'icons_b4.py', 'icons_r3.py')] + \
-        sorted(_glob.glob(_os.path.join(_here, 'icons_batch*.py'))):
+        sorted(_glob.glob(_os.path.join(_here, 'icons_batch*.py'))) + sorted(_glob.glob(_os.path.join(_here, 'icons_c[0-9]*.py'))):
     if _os.path.exists(_p):
         exec(open(_p).read())
 IBY = {i.key: i for i in ICONS}
