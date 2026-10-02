@@ -84,6 +84,10 @@ import earth.cora.picnic.core.model.IconRef
  * "<title>, <count> items") with state "collapsed"/"expanded" to accessibility.
  * [rowsBelow] = this section's AisleSectionRows follow (expanded, not empty): the header is drawn as
  * the open top band of the section container; otherwise it is a closed card on its own.
+ * [pinned] = the band is pinned at the top of a scrolling list (a sticky header) with rows scrolling
+ * under it: it backs itself with the screen ground, from the top of the list's viewport down to its
+ * own bottom edge and across the full width, so no part of a row shows above or beside it (its
+ * rounded corners included). The card itself looks the same.
  * The medallion is centred on the rows' icon column and the title starts on their name column.
  */
 @Composable
@@ -106,6 +110,7 @@ fun AisleHeader(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     rowsBelow: Boolean = false,
+    pinned: Boolean = false,
 ) {
     val c = PicnicTheme.colors
     val d = PicnicTheme.dimens
@@ -122,7 +127,7 @@ fun AisleHeader(
     val lead = (d.itemIcon - d.medallion) / 2
     val start = (d.sectionInset + d.rule + d.s + lead).coerceAtLeast(d.s)
     val gap = (d.m + lead).coerceAtLeast(d.s)
-    SectionBand(aisleIndex, open = rowsBelow, halftone = true, modifier = modifier) { bandShape ->
+    SectionBand(aisleIndex, open = rowsBelow, halftone = true, modifier = modifier, backed = pinned) { bandShape ->
         Row(
             Modifier
                 .fillMaxWidth()
@@ -306,8 +311,9 @@ fun ItemRowCard(
  * The section's top band: pastel fill (+ halftone accent), ink outline; [open] = rows follow, so the
  * bottom edge is left open for the tray; closed = a whole card with its hard shadow. Switching
  * between the two cross-fades the bottom closure (edge, corners, shadow) over the rows' fade
- * (instant with reduced motion), so the band never sits open over nothing. [content] gets the band's
- * shape (for clipping a ripple).
+ * (instant with reduced motion), so the band never sits open over nothing. [backed] = the ground is
+ * repainted behind it, from the top of the scroll viewport down to its bottom edge, full width (a
+ * pinned band over scrolling rows). [content] gets the band's shape (for clipping a ripple).
  */
 @Composable
 private fun SectionBand(
@@ -315,9 +321,11 @@ private fun SectionBand(
     open: Boolean,
     halftone: Boolean,
     modifier: Modifier = Modifier,
+    backed: Boolean = false,
     content: @Composable (bandShape: CornerBasedShape) -> Unit,
 ) {
     val c = PicnicTheme.colors
+    val ground = LocalGround.current
     val d = PicnicTheme.dimens
     val motion = PicnicTheme.motion
     val family = c.aisle(aisleIndex)
@@ -330,6 +338,8 @@ private fun SectionBand(
     Box(
         modifier
             .fillMaxWidth()
+            // Drawn first: behind the band, its shadow and its content.
+            .then(if (backed) Modifier.groundBacking(ground, c) else Modifier)
             .drawWithCache {
                 val stroke = d.outline.toPx()
                 val shadowDy = d.hardShadow.y.toPx()

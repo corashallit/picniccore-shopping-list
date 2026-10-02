@@ -360,8 +360,9 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
         // top band, every row its own keyed item inside, the last row the cap. Slices must touch, so
         // there is no list-wide spacing: a spacer item sits between sections instead.
         // Section bands are sticky headers: once an open section's rows scroll under the top, its band
-        // stays pinned (drawn closed, a card over its own rows), so a long aisle never becomes rows
-        // without a name. A one-pixel sticky marker closes every section and pushes its band off as
+        // stays pinned (drawn closed, a card over its own rows, backed by the ground from the viewport
+        // top across the full width), so a long aisle never becomes rows without a name and no row
+        // peeks out above or beside the pinned band. A one-pixel sticky marker closes every section and pushes its band off as
         // the section ends (a collapsed band, followed by its marker straight away, just scrolls).
         // Every header stays a sticky item, collapsed or not, so expanding or collapsing keeps the
         // same composable and the band's closure animates.
@@ -375,7 +376,7 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                 position++
             }
             val headerPosition = position
-            val header: @Composable LazyItemScope.(rowsBelow: Boolean) -> Unit = { rowsBelow ->
+            val header: @Composable LazyItemScope.(pinned: Boolean) -> Unit = { pinned ->
                 AisleHeader(
                     title = sectionTitle(section),
                     number = section.number,
@@ -388,7 +389,10 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                     collapsed = section.collapsed,
                     cleared = section.cleared,
                     onToggle = { actions.onToggleSection(section.id) },
-                    rowsBelow = rowsBelow,
+                    rowsBelow = open && !pinned,
+                    // Pinned over its rows: backed by the ground up to the viewport top, so no row
+                    // shows above or beside the band (its rounded corners included).
+                    pinned = pinned,
                     modifier = Modifier.itemMotion(this),
                 )
             }
@@ -399,7 +403,7 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                             (listState.firstVisibleItemIndex == headerPosition && listState.firstVisibleItemScrollOffset > 0)
                     }
                 }
-                header(open && !pinned)
+                header(pinned)
             }
             position++
             if (open) {
