@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Add flow strings: WP7 (add bar, Add sheet; docs/DESIGN_STICKER.md §21). -->
+
+    <string name="add_title">Add to your list</string>
+    <string name="add_title_preview">Here\'s what I found</string>
+    <string name="add_mode_write">Write</string>
+    <string name="add_mode_snap">Snap</string>
+    <string name="add_mode_speak">Speak</string>
+    <string name="add_write_placeholder">milk, 2 lemons, eggs…\nor \"ingredients for pancakes from scratch\"</string>
+    <string name="add_write_ai">Sort it out</string>
+    <string name="add_write_typed">Add as typed</string>
+    <string name="add_write_hint">\"Sort it out\" can look up recipes on the web and puts everything in your aisles. \"Add as typed\" adds each line as it is.</string>
+    <string name="add_snap_camera">Take a photo</string>
+    <string name="add_snap_gallery">Choose a photo</string>
+    <string name="add_snap_hint">A clear, well-lit photo of a handwritten list works best.</string>
+    <string name="add_speak_start">Tap to speak</string>
+    <string name="add_speak_again">Record again</string>
+    <string name="add_speak_hint">Say your list out loud, like \"milk, two lemons and stuff for tacos\".</string>
+    <string name="add_speak_listening">Listening…</string>
+    <string name="add_speak_done">Done</string>
+    <string name="add_speak_limit">Recordings stop by themselves after 5 minutes.</string>
+    <string name="add_busy_transcribing">Transcribing…</string>
+    <string name="add_busy_photo">Reading your handwriting…</string>
+    <string name="add_busy_recipe">Looking up a recipe…</string>
+    <string name="add_busy_voice">Turning that into a list…</string>
+    <string name="add_busy_list">Sorting your list into aisles…</string>
+    <string name="add_busy_slow">Still working. A recipe with a web search can take up to a minute.</string>
+    <string name="add_retry">Try again</string>
+    <string name="add_open_settings">Open Settings</string>
+    <string name="add_plain_lines">Add as plain lines</string>
+    <string name="add_transcript_label">You said</string>
+    <string name="add_transcript_quoted">\"%1$s\"</string>
+    <string name="add_transcript_edit">Fix the words</string>
+    <string name="add_preview_plain_note">Added line by line, without AI. Items without an aisle get sorted in the background.</string>
+    <string name="add_preview_empty">Nothing new to add.</string>
+    <string name="add_preview_keep">will be added</string>
+    <string name="add_preview_skip">left out</string>
+    <string name="add_preview_skipped">Already on your list: %1$s</string>
+    <string name="add_preview_sources">Sources</string>
+    <string name="add_start_over">Start over</string>
+    <plurals name="add_commit">
+        <item quantity="one">Add %1$d item</item>
+        <item quantity="other">Add %1$d items</item>
+    </plurals>
+</resources>

@@ -53,3 +53,33 @@ object Aisles {
 }
 
 fun StoreProfile.aisles(): List<Aisle> = Aisles.parse(aislesText)
+
+/**
+ * The store's own aisle number at the start of an aisle name (D9, the "A2" chip):
+ * "Aisle 2 - Baking & spices" -> 2, "12 Frozen" -> 12, "Allée 4 : conserves" -> 4, "Aisle 7" -> 7.
+ * Names without one ("Produce", "Dairy & eggs", "1% milk fridge") -> null.
+ * Moved here from the app's ui/common/AisleNumbers.kt (same regex); the app copy delegates here until
+ * WP8 deletes it. An [AisleStyle.storeAisle] set in the aisle editor wins over this.
+ */
+fun storeAisleNumber(name: String): Int? =
+    STORE_NUMBER.find(name.trim())?.groupValues?.get(1)?.toIntOrNull()
+
+/**
+ * The name a tab shows (D9, §4.10): the aisle name without its store prefix, so a tab never reads
+ * "5 Aisle 1 - Breakfast". "Aisle 3 - Pasta, rice & international" -> "Pasta, rice & international",
+ * "12 Frozen" -> "Frozen", "#3 Snacks" -> "Snacks". A name that is only a prefix ("Aisle 7") and names
+ * without one ("Produce") are returned trimmed, unchanged. TalkBack still reads the full [Aisle.name].
+ */
+fun Aisle.displayName(): String {
+    val trimmed = name.trim()
+    val match = STORE_NUMBER.find(trimmed) ?: return trimmed
+    val rest = trimmed.substring(match.range.last + 1).trimStart { it.isWhitespace() || it in PREFIX_SEPARATORS }
+    return rest.ifEmpty { trimmed }
+}
+
+private val STORE_NUMBER = Regex(
+    """^(?:(?:aisle|isle|allée|allee|rayon|row)\s*)?#?\s*(\d{1,3})(?=\s*[-–—:.)]|\s|$)""",
+    RegexOption.IGNORE_CASE,
+)
+
+private const val PREFIX_SEPARATORS = "-–—:.)"

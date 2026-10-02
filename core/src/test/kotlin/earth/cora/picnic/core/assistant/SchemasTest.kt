@@ -74,7 +74,7 @@ class SchemasTest {
 
         val baskets = Schemas.baskets(aisleIds, BasketKind.entries.map { it.key })
         assertStrict(baskets)
-        assertEquals(16, baskets.path("properties", "baskets", "items", "properties", "basket", "enum")!!.strings().size)
+        assertEquals(17, baskets.path("properties", "baskets", "items", "properties", "basket", "enum")!!.strings().size)
 
         val decisions = Schemas.iconDecisions(ids, catalog.decidableKeys, catalog.categories.map { it.key })
         assertStrict(decisions)

@@ -369,9 +369,9 @@ class EvalRunner(private val options: EvalOptions) {
             Correction(normalizeName(name), requireNotNull(new.resolve(alias)), at = i + 1L)
         }
         val initial = StateOps.initialState(listId, 0).copy(store = StoreProfile(aislesText = old.aislesText), corrections = corrections)
-            .addItems(listId, items)
+            .addItems(listId, items, 0L).first
         val store = InMemoryStateStore(initial)
-        store.update { it.setAislesText(new.aislesText, catalog.baskets::guess) }
+        store.update { it.setAislesText(new.aislesText, catalog.baskets::guess, 0L) }
         val report = AisleSync(store, assistant, catalog.baskets).sync()
         val state = store.current()
         val finalAisles = requireNotNull(state.list(listId)).items.associate { it.name to it.aisleId }

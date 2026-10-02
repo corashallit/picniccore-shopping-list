@@ -12,7 +12,11 @@ import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.llm.ConfigSource
 import earth.cora.picnic.core.llm.OpenAiClient
 import earth.cora.picnic.core.llm.TokenSource
+import earth.cora.picnic.core.calendar.PlaceSource
+import earth.cora.picnic.core.calendar.SunClock
 import earth.cora.picnic.core.model.StateOps
+import earth.cora.picnic.core.store.AlbumStore
+import earth.cora.picnic.core.store.JsonFileAlbumStore
 import earth.cora.picnic.core.store.JsonFileStateStore
 import earth.cora.picnic.core.store.StateStore
 import earth.cora.picnic.icons.AppIconRepository
@@ -20,13 +24,22 @@ import earth.cora.picnic.icons.AssetIconImages
 import earth.cora.picnic.icons.BundledIcons
 import earth.cora.picnic.icons.IconImages
 import earth.cora.picnic.icons.IconRepository
+import earth.cora.picnic.platform.Announcer
 import earth.cora.picnic.platform.AudioRecorder
 import earth.cora.picnic.platform.CapturePhotoPreparer
+import earth.cora.picnic.platform.DefaultTimeouts
+import earth.cora.picnic.platform.Feedback
+import earth.cora.picnic.platform.NoOpAnnouncer
+import earth.cora.picnic.platform.NoOpFeedback
 import earth.cora.picnic.platform.PhotoPreparer
+import earth.cora.picnic.platform.Timeouts
 import earth.cora.picnic.platform.VoiceRecorder
 import earth.cora.picnic.settings.DataStoreSettingsRepository
 import earth.cora.picnic.settings.KeystoreTokenStore
 import earth.cora.picnic.settings.SettingsRepository
+import earth.cora.picnic.ui.eggs.NoOpSurpriseEngine
+import earth.cora.picnic.ui.eggs.SurpriseEngine
+import earth.cora.picnic.ui.eggs.ThemeVariantSource
 import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.core.model.itemsNeedingAisle
 import earth.cora.picnic.platform.Captures
@@ -55,6 +68,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * everything is lazy and touching a property never blocks the main thread on I/O.
  * ViewModels take the individual dependencies (not the container) so tests can pass fakes.
  * Models are NOT configured here: core's ModelDefaults is the one place (amendment A1).
+ * The art pass (docs/DESIGN_STICKER.md §21): this file belongs to the lead; packages send their hunks
+ * (a new service's construction) and the lead merges them. Phase 0 wires the C services with their stubs.
  */
 class AppContainer(private val app: Application) {
     /**
@@ -105,7 +120,31 @@ class AppContainer(private val app: Application) {
      */
     val iconDecider: IconDecider by lazy { ResponsesIconDecider(client, catalog) }
 
-    val aisleSync: AisleSync by lazy { AisleSync(store, assistant, baskets) }
+    val aisleSync: AisleSync by lazy { AisleSync(store, assistant, baskets, clock) }
+
+    /**
+     * The sticker album: filesDir/album.json, next to state.json on the backup allow-list (§7.2, amendment A5).
+     * Phase 0: WP3's stub keeps it in memory; New trip writes it BEFORE state.json once trips exist.
+     */
+    val album: AlbumStore by lazy { JsonFileAlbumStore(File(app.filesDir, "album.json")) }
+
+    /** Sounds + haptics (§14). Phase 0: plays nothing until WP10's SoundPool implementation lands. */
+    val feedback: Feedback get() = NoOpFeedback
+
+    /** Polite TalkBack announcements (§15). Phase 0: no-op until WP10's lands. */
+    val announcer: Announcer get() = NoOpAnnouncer
+
+    /** "Time to take action" and "Touch & hold delay" (§9, §15). Phase 0: the defaults until WP10's lands. */
+    val timeouts: Timeouts get() = DefaultTimeouts
+
+    /** Where sunset and the forecast are computed (§0.4 Q6). Phase 0: Toronto until "Use my area" lands (WP8 · WP9). */
+    val places: PlaceSource get() = PlaceSource.Toronto
+
+    /** Every Easter-egg trigger (§12). Phase 0: no eggs until WP9's engine lands. */
+    val surprises: SurpriseEngine get() = NoOpSurpriseEngine
+
+    /** Day / Glow / Dusk / Golden (§2.5); MainActivity feeds it the system dark mode (WP4). */
+    val themeVariants: ThemeVariantSource by lazy { ThemeVariantSource(settings, clock, SunClock, places) }
 
     private val bundledIcons: BundledIcons by lazy { BundledIcons(app) }
 

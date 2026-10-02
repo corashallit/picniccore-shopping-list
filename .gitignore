@@ -30,3 +30,7 @@ picnic-play-*.json
 
 # Local-only Gradle init scripts / scratch
 *.init.gradle
+
+# Python
+__pycache__/
+*.pyc

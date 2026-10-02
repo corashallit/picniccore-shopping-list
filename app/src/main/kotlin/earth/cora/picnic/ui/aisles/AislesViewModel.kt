@@ -75,6 +75,8 @@ class AislesViewModel(
     private val aisleSync: AisleSync,
     private val baskets: BasketCatalog,
     private val appScope: CoroutineScope,
+    /** Epoch millis for the trip reconcile at the end of setAislesText (§19.1). */
+    private val clock: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
     private data class Draft(val storeName: String, val text: String)
 
@@ -108,7 +110,7 @@ class AislesViewModel(
         }
         appScope.launch {
             try {
-                store.update { it.setStoreName(d.storeName).setAislesText(d.text, baskets::guess) }
+                store.update { it.setStoreName(d.storeName).setAislesText(d.text, baskets::guess, clock()) }
             } catch (e: IOException) {
                 _events.send(AislesEvent.SaveFailed)
                 return@launch
@@ -162,7 +164,7 @@ class AislesViewModel(
 
     companion object {
         fun factory(c: AppContainer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { AislesViewModel(c.store, c.aisleSync, c.baskets, c.appScope) }
+            initializer { AislesViewModel(c.store, c.aisleSync, c.baskets, c.appScope, c.clock) }
         }
     }
 }

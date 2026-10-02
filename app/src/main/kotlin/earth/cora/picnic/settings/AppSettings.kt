@@ -7,10 +7,14 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Device-local settings (NOT in state.json, not backed up). CONTRACT (docs/ARCHITECTURE.md §9).
- * Amendment A1: the ONLY user settings are the user's OpenAI key (with "Test connection") and
- * "Draw new icons with AI". Requests always go to LlmConfig.DEFAULT_BASE_URL (api.openai.com); models
- * are fixed in core's ModelDefaults; theme and motion follow the system. The key itself is never part
- * of this class: only whether one is set and a masked hint.
+ * Amendment A1: the user's OpenAI key (with "Test connection") and "Draw new icons with AI".
+ * Amendment A4 (docs/DESIGN_STICKER.md §6.8, §19.2, §0.4): the Surprises switches below. Requests always go
+ * to LlmConfig.DEFAULT_BASE_URL (api.openai.com; the opt-in weather feed is the one exception); models are
+ * fixed in core's ModelDefaults; reduced motion follows the system. The key itself is never part of this
+ * class: only whether one is set and a masked hint.
+ * PHASE 0: the A4 fields exist with their defaults so packages compile against them; WP8 adds the DataStore
+ * keys (eggs, sounds, haptics, next_stop_card, celebration, weather, use_my_area, dusk_binder, surprise_lab)
+ * and the setters.
  */
 data class AppSettings(
     /** "Draw new icons with AI" (icon cascade step 3; about 10 s and 1.5 US cents per icon). */
@@ -19,6 +23,24 @@ data class AppSettings(
     val hasToken: Boolean = false,
     /** Read-only for UI: masked key, e.g. "sk-…a1b2" (see [maskToken]). */
     val tokenHint: String? = null,
+    /** Surprises → Easter eggs ("all 18 secrets"). */
+    val eggs: Boolean = true,
+    /** Surprises → Sounds (off by default; never in silent or vibrate, §14.1). */
+    val sounds: Boolean = false,
+    /** Surprises → Haptics. */
+    val haptics: Boolean = true,
+    /** Surprises → "Next stop" card (§10). */
+    val nextStopCard: Boolean = true,
+    /** Surprises → Celebration (§11). */
+    val celebration: Boolean = true,
+    /** Surprises → Weather surprises (off by default; the Environment Canada feed, §12.4, Q3). */
+    val weather: Boolean = false,
+    /** Surprises → Use my area (off by default; coarse location only, rounded to 0.1°, §0.4 Q6). */
+    val useMyArea: Boolean = false,
+    /** Egg 1: the Dusk binder is saved (kept while eggs are off). */
+    val duskBinder: Boolean = false,
+    /** The Surprise lab is unlocked (7 taps on the version line, §6.9). */
+    val surpriseLab: Boolean = false,
 )
 
 interface SettingsRepository {

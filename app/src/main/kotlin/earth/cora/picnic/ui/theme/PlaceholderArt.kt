@@ -298,6 +298,8 @@ private fun lookOf(kind: BasketKind): BasketLook = when (kind) {
     BasketKind.BOTTLE_CARRIER -> BasketLook(Body.CRATE, Weave.SLATS, Handle.CENTER_BAR, Art.wood, Art.woodShade)
     BasketKind.CANDY_JAR -> BasketLook(Body.JAR, Weave.PLAIN, Handle.NONE, Art.ice.copy(alpha = 0.55f), Art.skyShade, glass = true)
     BasketKind.VANITY_CASE -> BasketLook(Body.BOX, Weave.PLAIN, Handle.NONE, Art.pink, Art.pinkShade)
+    // Phase-0 stand-in for the 17th kind (D8) until WP2's baskets replace this placeholder art.
+    BasketKind.MIXING_BOWL -> BasketLook(Body.BOWL, Weave.PLAIN, Handle.NONE, Color(0xFFFFD6E8), Art.pinkShade)
 }
 
 /** Where the mini icons' centres sit (y, in the 64-unit grid) for a basket kind. */

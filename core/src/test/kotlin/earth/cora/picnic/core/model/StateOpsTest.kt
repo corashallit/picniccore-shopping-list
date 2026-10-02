@@ -14,6 +14,10 @@ import kotlin.test.assertTrue
 class StateOpsTest {
     private val catalog = TestSupport.catalog
 
+    private companion object {
+        const val NOW = 1_759_500_000_000L
+    }
+
     private fun item(
         id: String,
         name: String,
@@ -47,37 +51,42 @@ class StateOpsTest {
     @Test
     fun addItemsDedupesAgainstUncheckedItemsAndWithinTheBatch() {
         val s = state(item("a", "Lemons"), item("b", "Milk", checked = true))
-        val after = s.addItems("l1", listOf(item("c", "lemon"), item("d", "milk"), item("e", "Eggs"), item("f", "EGGS"), item("g", " ★ ")))
+        val (after, outcome) = s.addItems("l1", listOf(item("c", "lemon"), item("d", "milk"), item("e", "Eggs"), item("f", "EGGS"), item("g", " ★ ")), NOW)
+        // Phase 0 keeps v1 here; WP3 makes a checked match revive the existing row instead (§6.2 rule 7, Q8).
         assertEquals(listOf("a", "b", "d", "e"), after.items().map { it.id }, "checked Milk does not block a new milk")
         assertNull(after.findItem("c"))
-        assertSame(s, s.addItems("l1", emptyList()))
-        assertSame(s, s.addItems("l1", listOf(item("z", "Lemon"))))
-        assertSame(s, s.addItems("nope", listOf(item("y", "Kiwi"))))
+        assertEquals(AddOutcome(added = listOf("d", "e"), alreadyThere = listOf("a"), revived = emptyList()), outcome)
+        assertSame(s, s.addItems("l1", emptyList(), NOW).first)
+        assertEquals(s to AddOutcome(emptyList(), listOf("a"), emptyList()), s.addItems("l1", listOf(item("z", "Lemon")), NOW))
+        assertEquals(s to AddOutcome.NONE, s.addItems("nope", listOf(item("y", "Kiwi")), NOW))
     }
 
     @Test
     fun addItemsNeverDuplicatesAnId() {
         val s = state(item("a", "Lemons"), other = listOf(item("p", "Plates")))
-        val after = s.addItems("l1", listOf(item("p", "Pears")))
+        val after = s.addItems("l1", listOf(item("p", "Pears")), NOW).first
         assertSame(s, after)
     }
 
     @Test
     fun toggleRemoveRestore() {
         val s = state(item("a", "A"), item("b", "B"), item("c", "C"))
-        val toggled = s.toggleChecked("l1", "b")
+        val toggled = s.toggleChecked("l1", "b", NOW)
         assertTrue(toggled.findItem("b")!!.checked)
-        assertFalse(toggled.toggleChecked("l1", "b").findItem("b")!!.checked)
-        assertSame(s, s.toggleChecked("l1", "nope"))
+        assertEquals(NOW, toggled.findItem("b")!!.checkedAt, "checking records the check-off time")
+        val unchecked = toggled.toggleChecked("l1", "b", NOW + 1).findItem("b")!!
+        assertFalse(unchecked.checked)
+        assertNull(unchecked.checkedAt)
+        assertSame(s, s.toggleChecked("l1", "nope", NOW))
 
-        val removed = s.removeItem("l1", "b")
+        val removed = s.removeItem("l1", "b", NOW)
         assertEquals(listOf("a", "c"), removed.items().map { it.id })
-        assertSame(s, s.removeItem("l1", "nope"))
-        val restored = removed.restoreItem("l1", s.findItem("b")!!, 1)
+        assertSame(s, s.removeItem("l1", "nope", NOW))
+        val restored = removed.restoreItem("l1", s.findItem("b")!!, 1, NOW)
         assertEquals(listOf("a", "b", "c"), restored.items().map { it.id })
-        assertSame(restored, restored.restoreItem("l1", s.findItem("b")!!, 0), "already present")
-        assertEquals(listOf("a", "c", "b"), removed.restoreItem("l1", s.findItem("b")!!, 99).items().map { it.id })
-        assertEquals(listOf("b", "a", "c"), removed.restoreItem("l1", s.findItem("b")!!, -3).items().map { it.id })
+        assertSame(restored, restored.restoreItem("l1", s.findItem("b")!!, 0, NOW), "already present")
+        assertEquals(listOf("a", "c", "b"), removed.restoreItem("l1", s.findItem("b")!!, 99, NOW).items().map { it.id })
+        assertEquals(listOf("b", "a", "c"), removed.restoreItem("l1", s.findItem("b")!!, -3, NOW).items().map { it.id })
     }
 
     @Test
@@ -154,6 +163,7 @@ class StateOpsTest {
     }
 
     @Test
+    @Suppress("DEPRECATION") // clearChecked and setSectionCollapsed stay until WP5's New trip and open aisle land.
     fun clearCheckedAndCollapse() {
         val s = state(item("a", "A", checked = true), item("b", "B"))
         assertEquals(listOf("b"), s.clearChecked("l1").items().map { it.id })
@@ -180,14 +190,15 @@ class StateOpsTest {
         assertSame(created, created.renameList("l3", "   "))
 
         // Deleting the current list makes the neighbour current; the last list is never deleted.
-        val deleted = created.deleteList("l3")
+        val (deleted, book) = created.deleteList("l3", NOW)
+        assertNull(book, "no trip, nothing to file")
         assertEquals(listOf("l1", "l2"), deleted.lists.map { it.id })
         assertEquals("l2", deleted.currentListId)
-        val first = created.switchList("l1").deleteList("l1")
+        val first = created.switchList("l1").deleteList("l1", NOW).first
         assertEquals("l2", first.currentListId)
         val single = AppState(lists = listOf(GroceryList("only", "Only", 0)), currentListId = "only")
-        assertSame(single, single.deleteList("only"))
-        assertEquals("l3", created.deleteList("l2").currentListId, "deleting another list keeps the current one")
+        assertSame(single, single.deleteList("only", NOW).first)
+        assertEquals("l3", created.deleteList("l2", NOW).first.currentListId, "deleting another list keeps the current one")
     }
 
     @Test
@@ -197,12 +208,12 @@ class StateOpsTest {
         assertSame(s, s.setStoreName("  "))
 
         val withBaskets = s.copy(store = s.store.copy(aisleBaskets = mapOf("produce" to BasketKind.BERRY_PUNNET, "frozen" to BasketKind.COOLER)))
-        val after = withBaskets.setAislesText("Produce\nFleurs\nBoulangerie") { BasketKind.WIRE_BASKET }
+        val after = withBaskets.setAislesText("Produce\nFleurs\nBoulangerie", { BasketKind.WIRE_BASKET }, NOW)
         assertEquals(
             mapOf("produce" to BasketKind.BERRY_PUNNET, "fleurs" to BasketKind.WIRE_BASKET, "boulangerie" to BasketKind.WIRE_BASKET),
             after.store.aisleBaskets,
         )
-        assertSame(after, after.setAislesText("Produce\nFleurs\nBoulangerie") { BasketKind.COOLER })
+        assertSame(after, after.setAislesText("Produce\nFleurs\nBoulangerie", { BasketKind.COOLER }, NOW))
 
         val merged = after.setAisleBaskets(mapOf("fleurs" to BasketKind.FLOWER_BUCKET, "ghost" to BasketKind.COOLER))
         assertEquals(BasketKind.FLOWER_BUCKET, merged.store.aisleBaskets["fleurs"])
@@ -221,6 +232,7 @@ class StateOpsTest {
         )
         val after = s.applyAisleAssignments(
             mapOf("a" to "deli-cheese", "b" to "aisle-7-health-beauty-baby", "c" to "produce", "d" to "produce", "e" to "not-an-aisle"),
+            NOW,
         )
         assertEquals("deli-cheese", after.findItem("a")!!.aisleId)
         assertEquals("dairy-eggs", after.findItem("b")!!.aisleId, "manual placement into an existing aisle wins")
@@ -228,7 +240,7 @@ class StateOpsTest {
         assertFalse(after.findItem("c")!!.manuallyPlaced)
         assertNull(after.findItem("d")!!.aisleId, "deliberately Unsorted stays Unsorted")
         assertNull(after.findItem("e")!!.aisleId, "unknown ids become Unsorted")
-        assertSame(s, s.applyAisleAssignments(emptyMap()))
+        assertSame(s, s.applyAisleAssignments(emptyMap(), NOW))
     }
 
     @Test

@@ -160,8 +160,13 @@ data class PicnicDimens(
     val hardShadow: DpOffset = DpOffset(0.dp, 3.dp),
 )
 
+/**
+ * The v1 motion settings read through PicnicTheme.motion. The §8.2 tokens moved to MotionSpec.kt
+ * (`object PicnicMotion`, phase 0); this keeps the v1 screens' `PicnicTheme.motion.reduced/shortMillis/
+ * mediumMillis/stepFps` working until WP4 moves them to MotionSpec and LocalReducedMotion.
+ */
 @Immutable
-data class PicnicMotion(
+data class ThemeMotion(
     /** System "Remove animations" (animator duration scale 0): no decorative loops, fades <= 150 ms. */
     val reduced: Boolean,
     /** Decorative loops animate "on threes": stepped frames at this rate. */

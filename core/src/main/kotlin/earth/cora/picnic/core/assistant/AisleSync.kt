@@ -34,6 +34,8 @@ class AisleSync(
     private val store: StateStore,
     private val assistant: GroceryAssistant,
     private val baskets: BasketCatalog,
+    /** Epoch millis for the trip reconcile at the end of applyAisleAssignments (§19.1). */
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val mutex = Mutex()
 
@@ -65,6 +67,12 @@ class AisleSync(
     }
 
     /**
+     * "Re-sort my list" (§6.7) and pull to refresh (D18): re-files EVERY item not placed by hand (not only
+     * Unsorted ones) with the fast model. Owner: WP3. PHASE-0 STUB.
+     */
+    suspend fun resortAll(): AisleSyncReport = TODO("WP3: AisleSync.resortAll (§6.7, AisleSyncTest)")
+
+    /**
      * After typed / raw-lines items were committed with aisleId == null: recategorize just those
      * (ids whose item still needs an aisle; others are skipped) -> applyAisleAssignments. No baskets.
      */
@@ -86,7 +94,7 @@ class AisleSync(
         // Only ids we asked about; anything the assistant skipped stays Unsorted.
         val applied = needing.associate { it.id to assignments[it.id] }
         return try {
-            store.update { it.applyAisleAssignments(applied) }
+            store.update { it.applyAisleAssignments(applied, clock()) }
             val placed = applied.values.count { it != null }
             AisleSyncReport(false, placed, needing.size - placed, null)
         } catch (e: IOException) {

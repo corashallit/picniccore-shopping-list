@@ -1,0 +1,94 @@
+"""Which DSL sticker draws which catalog key (core/src/main/resources/icon_catalog.json), §18.3 step 4.
+
+One drawable per catalog key: `sk_i_<catalog key>.xml`. A DSL sticker listed in ORPHANS is kept in the DSL (the mockup
+still shows it) but has no catalog key, so it is not emitted.
+"""
+
+# DSL key -> catalog key
+CATALOG = {
+    # fruit
+    'strawberries': 'strawberry', 'blueberries': 'blueberries', 'banana': 'banana', 'lemon': 'lemon', 'apple': 'apple',
+    'avocado': 'avocado', 'peachbasket': 'peach', 'grapes': 'grapes', 'oranges': 'orange', 'pear': 'pear',
+    'cherries': 'cherries', 'watermelon': 'watermelon', 'limes': 'lime',
+    # vegetables
+    'carrots': 'carrot', 'broccoli': 'broccoli', 'tomatoes': 'tomato', 'onion': 'onion', 'garlic': 'garlic',
+    'lettuce': 'lettuce', 'cucumber': 'cucumber', 'pepper': 'bell_pepper', 'potatoes': 'potato', 'corn': 'corn',
+    'mushrooms': 'mushrooms', 'celery': 'celery', 'sweetpotato': 'sweet_potato',
+    # bakery: the sourdough boule is exactly the catalog's bakery_generic ("a round rustic loaf ... scored cross",
+    # aliases sourdough / artisan bread); the sandwich loaf becomes sliced_bread (§18.3 step 4)
+    'baguette': 'baguette', 'croissant': 'croissant', 'sourdough': 'bakery_generic', 'loaf': 'sliced_bread',
+    'buttertart': 'butter_tart', 'muffins': 'muffin', 'tortillas': 'tortillas', 'donuts': 'donut', 'pumpkinpie': 'pie',
+    # deli
+    'cheese': 'cheddar', 'curds': 'cheese_curds', 'ham': 'deli_meat', 'roastchicken': 'rotisserie_chicken',
+    # meat: drumsticks keep chicken_drumstick; the chicken-thighs tray is the calibration set's "chicken tray" and
+    # draws chicken_breast (pale pieces on a tray); peameal gets its own key (catalog addition, WP3)
+    'drumstick': 'chicken_drumstick', 'chickentray': 'chicken_breast', 'peameal': 'peameal_bacon',
+    'groundbeef': 'ground_beef', 'sausages': 'sausages', 'bacon': 'bacon', 'steak': 'steak',
+    # seafood
+    'salmon': 'salmon_fillet',
+    # dairy
+    'milkbag': 'milk_bag', 'eggs': 'eggs', 'butter': 'butter', 'yogurt': 'yogurt', 'cream': 'cream',
+    'sourcream': 'sour_cream',
+    # breakfast
+    'maple': 'maple_syrup', 'coffee': 'coffee', 'tea': 'tea', 'jam': 'jam', 'cereal': 'cereal', 'honey': 'honey',
+    'peanutbutter': 'peanut_butter', 'oatmeal': 'oatmeal', 'granola': 'granola', 'waffles': 'pancake_mix',
+    # baking
+    'flour': 'flour', 'sugar': 'sugar', 'bakingpowder': 'baking_soda', 'vanilla': 'vanilla',
+    # condiments
+    'salt': 'salt', 'ketchup': 'ketchup', 'mustard': 'mustard', 'oliveoil': 'olive_oil', 'soysauce': 'soy_sauce',
+    'mayo': 'mayonnaise', 'hotsauce': 'hot_sauce',
+    # pantry
+    'tomatocan': 'canned_tomatoes', 'pasta': 'pasta', 'rice': 'rice', 'beans': 'canned_beans', 'soup': 'soup_can',
+    'tuna': 'canned_tuna', 'spaghetti': 'spaghetti', 'pastasauce': 'pasta_sauce',
+    # snacks
+    'chips': 'potato_chips', 'crackers': 'crackers', 'cookies': 'cookies', 'popcorn': 'popcorn',
+    'granolabar': 'granola_bar', 'chocolate': 'chocolate_bar',
+    # beverages
+    'lemonade': 'lemonade', 'sparkling': 'sparkling_water', 'orangejuice': 'orange_juice', 'water': 'bottled_water',
+    # frozen
+    'peas': 'frozen_vegetables', 'icecream': 'ice_cream', 'pizza': 'frozen_pizza', 'fries': 'french_fries',
+    'icepops': 'popsicle',
+    # household
+    'dishsoap': 'dish_soap', 'toiletpaper': 'toilet_paper', 'laundry': 'laundry_detergent', 'papertowel': 'paper_towels',
+    'garbagebags': 'garbage_bags', 'sponge': 'sponge', 'batteries': 'batteries',
+    # health
+    'toothpaste': 'toothpaste', 'vitamins': 'vitamins', 'bandages': 'bandages', 'tissues': 'tissues',
+    'shampoo': 'shampoo', 'soap': 'hand_soap', 'sunscreen': 'sunscreen',
+    # baby
+    'diapers': 'diapers', 'babyfood': 'baby_food', 'wipes': 'baby_wipes',
+    # pet
+    'catfood': 'cat_food', 'litter': 'cat_litter', 'dogtreats': 'pet_treats',
+}
+
+# The gashapon capsule is the display-only sentinel IconRef("_capsule") (D5), not a catalog key.
+SENTINELS = {'capsule': '_capsule'}
+
+# DSL stickers with no catalog key (kept in the DSL, not emitted), with the reason.
+ORPHANS = {
+    'kibble': 'duplicates cat_food (§18.3 step 4): dropped',
+    'lightbulb': 'no catalog key (§18.3 step 4): dropped',
+    'pretzel': 'crackers already draws the "Crackers & pretzels" key; kept in the DSL as a part donor for snacks_generic',
+}
+
+# Keys the catalog does not have yet but the spec adds (§19.1, owner WP3).
+CATALOG_ADDITIONS = {
+    'peameal_bacon': dict(label='Peameal bacon', category='meat',
+                          drawHint='Two round slices of cornmeal-rolled back bacon on edge, pink centres in a lemon rim.'),
+}
+
+# Hop personality (§8.3) until icon_catalog.json carries "personality" (§19.1); the catalog field wins once it exists.
+# berry: strawberries, blueberries, raspberries, cherries; egg; bread: the bakery category; can: tins (and the maple
+# tin); frozen: the frozen category.
+PERSONALITY = {
+    'strawberry': 'berry', 'blueberries': 'berry', 'raspberries': 'berry', 'cherries': 'berry',
+    'eggs': 'egg',
+    'canned_tomatoes': 'can', 'canned_beans': 'can', 'soup_can': 'can', 'canned_tuna': 'can', 'maple_syrup': 'can',
+    'cat_food': 'can', 'coconut_milk': 'can', 'broth': 'can',
+}
+PERSONALITY_BY_CATEGORY = {'bakery': 'bread', 'frozen': 'frozen'}
+
+
+def personality(key, category, catalog_value=None):
+    if catalog_value:
+        return catalog_value
+    return PERSONALITY.get(key) or PERSONALITY_BY_CATEGORY.get(category) or 'none'

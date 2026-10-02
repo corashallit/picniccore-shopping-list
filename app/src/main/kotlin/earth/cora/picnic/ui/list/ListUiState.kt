@@ -7,6 +7,7 @@ import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.core.model.ListGrouping
+import earth.cora.picnic.core.model.SectionIds
 import earth.cora.picnic.core.model.SectionKind
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.currentList
@@ -35,10 +36,17 @@ data class ListUiState(
 
 data class ListSummary(val id: String, val title: String, val remaining: Int, val current: Boolean)
 
+/**
+ * PHASE-0 BRIDGE (docs/DESIGN_STICKER.md §19.1, §21.3): core's grouping no longer has a CHECKED section
+ * (D1, rows stay in place), so this v1 screen derives its "In the basket" section here, from each aisle's
+ * gotten items, to look exactly as before. WP5 replaces SectionUi with the C shape (§19.2) and drops this.
+ */
+enum class SectionUiKind { UNSORTED, AISLE, CHECKED }
+
 data class SectionUi(
     /** Aisle id or SectionIds.UNSORTED / SectionIds.CHECKED (also the collapse key). */
     val id: String,
-    val kind: SectionKind,
+    val kind: SectionUiKind,
     /** Aisle name; the screen shows its own strings for the special sections. */
     val title: String,
     /**
@@ -128,9 +136,12 @@ internal fun buildListUiState(
 ): ListUiState {
     val list = state.currentList()
     val aisles = state.store.aisles()
-    val grouped = ListGrouping.group(list, aisles) { aisle ->
-        state.store.aisleBaskets[aisle.id] ?: catalog.baskets.guess(aisle)
-    }
+    val grouped = ListGrouping.group(
+        list = list,
+        aisles = aisles,
+        basketFor = { aisle -> state.store.aisleBaskets[aisle.id] ?: catalog.baskets.guess(aisle) },
+        styleFor = { aisle -> state.store.aisleStyles[aisle.id] },
+    )
 
     fun row(item: GroceryItem): ItemRowUi {
         val isBusy = normalizeName(item.name) in busy
@@ -144,23 +155,44 @@ internal fun buildListUiState(
         )
     }
 
-    val sections = grouped.sections.map { section ->
-        val rows = section.items.map(::row)
-        // The basket holds what has been gotten: the aisle's checked items (CHECKED's own items are all checked).
-        val basketItems = if (section.kind == SectionKind.CHECKED) section.items else section.checkedItems
+    fun basketRefs(items: List<GroceryItem>) = items.take(BASKET_ICONS).map { catalog.displayRef(it, normalizeName(it.name) in busy) }
+
+    // v1 look (phase-0 bridge): sections list what is still to get, Unsorted only while it has some, and every
+    // checked item moves to a trailing "In the basket" section, in walking order, then oldest first.
+    val sections = grouped.sections.mapNotNull { section ->
+        val toGet = section.rows.filterNot { it.checked }
+        if (section.kind == SectionKind.UNSORTED && toGet.isEmpty()) return@mapNotNull null
         SectionUi(
             id = section.id,
-            kind = section.kind,
-            title = section.title,
+            kind = if (section.kind == SectionKind.UNSORTED) SectionUiKind.UNSORTED else SectionUiKind.AISLE,
+            title = section.aisle?.name ?: ListGrouping.UNSORTED_TITLE,
             number = section.aisle?.let { storeAisleNumber(it.name) },
             aisleIndex = section.aisle?.let { it.position - 1 } ?: -1,
             basket = section.basket,
-            collapsed = section.collapsed,
-            cleared = section.cleared,
-            count = rows.size,
-            gotten = section.checkedCount,
-            inBasket = basketItems.take(BASKET_ICONS).map { catalog.displayRef(it, normalizeName(it.name) in busy) },
-            items = rows,
+            collapsed = section.id in list.collapsedAisles,
+            cleared = section.complete,
+            count = toGet.size,
+            gotten = section.gotten.size,
+            // The basket holds what has been gotten (R4): the aisle's checked items, in check-off order.
+            inBasket = basketRefs(section.gotten),
+            items = toGet.map(::row),
+        )
+    }
+    val gottenInWalkingOrder = grouped.sections.flatMap { section -> section.rows.filter { it.checked } }
+    val checkedSection = gottenInWalkingOrder.takeIf { it.isNotEmpty() }?.let { gotten ->
+        SectionUi(
+            id = SectionIds.CHECKED,
+            kind = SectionUiKind.CHECKED,
+            title = CHECKED_TITLE,
+            number = null,
+            aisleIndex = -1,
+            basket = BasketKind.DEFAULT,
+            collapsed = SectionIds.CHECKED in list.collapsedAisles,
+            cleared = false,
+            count = gotten.size,
+            gotten = 0,
+            inBasket = basketRefs(gotten),
+            items = gotten.map(::row),
         )
     }
 
@@ -185,8 +217,8 @@ internal fun buildListUiState(
         lists = state.lists.map { l ->
             ListSummary(id = l.id, title = l.title, remaining = l.items.count { !it.checked }, current = l.id == list.id)
         },
-        sections = sections,
-        remaining = grouped.remaining,
+        sections = sections + listOfNotNull(checkedSection),
+        remaining = grouped.total - grouped.checked,
         total = grouped.total,
         editing = editing,
         storeName = state.store.name,
@@ -195,3 +227,6 @@ internal fun buildListUiState(
 
 /** Gotten items peeking out of a collapsed aisle's basket (AisleBasket shows up to 5). */
 private const val BASKET_ICONS = 5
+
+/** Title of the bridge's "In the basket" section (the screen shows its own string, list_section_checked). */
+private const val CHECKED_TITLE = "In the basket"

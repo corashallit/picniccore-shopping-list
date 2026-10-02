@@ -64,7 +64,7 @@ class JsonFileStateStoreTest {
     @Test
     fun roundTripThroughDisk() = runTest {
         val s = store()
-        val saved = s.update { it.addItems("fresh", listOf(milk)) }
+        val saved = s.update { it.addItems("fresh", listOf(milk), 0L).first }
         assertTrue(file.exists())
         assertFalse(File(dir, "state.json.tmp").exists(), "temp file was moved into place")
         val reloaded = store().current()

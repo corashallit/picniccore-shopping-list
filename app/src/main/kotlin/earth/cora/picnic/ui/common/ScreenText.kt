@@ -13,7 +13,7 @@ internal object ScreenText {
     const val NOTHING_HEARD = "Didn't catch that. Try again a little closer to the mic."
     const val TOO_SHORT = "That was a bit short. Tap the mic and say your list again."
     const val MIC_UNAVAILABLE = "Couldn't start the microphone. Is another app using it?"
-    const val MIC_DENIED = "Picnic List needs the microphone to hear your list. You can allow it in Android settings."
+    const val MIC_DENIED = "Kirakira Basket needs the microphone to hear your list. You can allow it in Android settings."
     const val CAMERA_UNAVAILABLE = "No camera app was found. Choose a photo from the gallery instead."
     const val SAVE_FAILED = "Couldn't save. Try again."
     const val NOTHING_NEW = "Everything there is already on your list."

@@ -375,6 +375,16 @@ fun CheckMark(checked: Boolean, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * The C checkbox (§4.4, §4.5; rule R2): unchecked = the dashed "place sticker here" spot, checked = the
+ * hanko reading [stampText] at an angle seeded from [seed] (the item id; `hankoAngle(id)`), stable across
+ * recompositions and restarts. PHASE-0 STUB (WP4): draws the v1 box until WP4's spot and hanko land.
+ */
+@Composable
+fun CheckMark(checked: Boolean, seed: String, stampText: HankoText = HankoText.GotIt, modifier: Modifier = Modifier) {
+    CheckMark(checked = checked, modifier = modifier)
+}
+
 /** Side of the CheckMark box (inside its 48 dp footprint). */
 private val CHECK_BOX: Dp = 26.dp
 

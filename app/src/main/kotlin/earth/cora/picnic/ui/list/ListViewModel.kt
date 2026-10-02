@@ -73,11 +73,15 @@ class ListViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), ListUiState())
 
     /** Tap on a row: checked <-> unchecked. */
-    fun toggle(itemId: String) = mutate { s -> s.listIdOf(itemId)?.let { s.toggleChecked(it, itemId) } ?: s }
+    fun toggle(itemId: String) {
+        val now = clock()
+        mutate { s -> s.listIdOf(itemId)?.let { s.toggleChecked(it, itemId, now) } ?: s }
+    }
 
     /** Swipe to delete. Emits [ListEvent.Deleted] so the screen can offer Undo. */
     fun delete(itemId: String) {
         if (editingId.value == itemId) editingId.value = null
+        val now = clock()
         appScope.launch {
             var removed: ListEvent.Deleted? = null
             val ok = save {
@@ -86,7 +90,7 @@ class ListViewModel(
                     val items = s.list(listId)?.items.orEmpty()
                     val index = items.indexOfFirst { it.id == itemId }
                     removed = ListEvent.Deleted(items[index], index, listId)
-                    s.removeItem(listId, itemId)
+                    s.removeItem(listId, itemId, now)
                 }
             }
             if (ok) removed?.let { _events.send(it) }
@@ -94,17 +98,20 @@ class ListViewModel(
     }
 
     /** Undo of a swipe-to-delete: re-inserts the item at its old position. */
-    fun undoDelete(item: GroceryItem, index: Int, listId: String? = null) = mutate { s ->
-        s.restoreItem(listId?.takeIf { s.list(it) != null } ?: s.currentList().id, item, index)
+    fun undoDelete(item: GroceryItem, index: Int, listId: String? = null) {
+        val now = clock()
+        mutate { s -> s.restoreItem(listId?.takeIf { s.list(it) != null } ?: s.currentList().id, item, index, now) }
     }
 
     /** Header tap: collapse/expand a section of the current list (persisted per list). */
+    @Suppress("DEPRECATION") // v1 collapse until WP5 lands one open aisle (setOpenAisle, D2).
     fun toggleSection(sectionId: String) = mutate { s ->
         val list = s.currentList()
         s.setSectionCollapsed(list.id, sectionId, sectionId !in list.collapsedAisles)
     }
 
     /** Removes the checked items of the current list. Emits [ListEvent.Cleared] for Undo. */
+    @Suppress("DEPRECATION") // v1 "Clear checked" until WP5's New trip (newTrip, D1).
     fun clearChecked() {
         appScope.launch {
             var cleared: ListEvent.Cleared? = null
@@ -122,8 +129,9 @@ class ListViewModel(
     }
 
     /** Undo of [clearChecked]: puts the items back where they were (ascending index order). */
-    fun undoClear(removed: List<IndexedValue<GroceryItem>>, listId: String) = mutate { s ->
-        removed.sortedBy { it.index }.fold(s) { acc, (index, item) -> acc.restoreItem(listId, item, index) }
+    fun undoClear(removed: List<IndexedValue<GroceryItem>>, listId: String) {
+        val now = clock()
+        mutate { s -> removed.sortedBy { it.index }.fold(s) { acc, (index, item) -> acc.restoreItem(listId, item, index, now) } }
     }
 
     fun newList(title: String) {
@@ -139,7 +147,14 @@ class ListViewModel(
 
     fun renameList(id: String, title: String) = mutate { it.renameList(id, title) }
 
-    fun deleteList(id: String) = mutate { it.deleteList(id) }
+    /**
+     * Deletes a list. TODO(WP5): a list with a trip returns its book, which goes to the album first
+     * (§6.4, §7.2); there are no trips before WP3, so phase 0 drops the (always null) book.
+     */
+    fun deleteList(id: String) {
+        val now = clock()
+        mutate { it.deleteList(id, now).first }
+    }
 
     fun openEdit(itemId: String) {
         editingId.value = itemId

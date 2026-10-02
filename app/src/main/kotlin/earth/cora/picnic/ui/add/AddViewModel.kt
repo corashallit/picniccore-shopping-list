@@ -428,7 +428,8 @@ class AddViewModel(
         val now = clock()
         val items = proposed.map { it.toGroceryItem(newId(), now, source) }
         val after = try {
-            store.update { it.addItems(listId, items) }
+            // TODO(WP7): use the AddOutcome (alreadyThere pops, revived un-checks; §6.2 rule 7).
+            store.update { it.addItems(listId, items, now).first }
         } catch (e: IOException) {
             retryAction = {
                 _state.update { it.copy(committing = true) }

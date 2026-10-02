@@ -4039,6 +4039,19 @@
         "vitamines",
         "first aid"
       ]
+    },
+    {
+      "key": "mixing_bowl",
+      "label": "Mixing bowl",
+      "drawHint": "A round polka-dot mixing bowl with a wire whisk leaning out of it.",
+      "keywords": [
+        "baking",
+        "bake",
+        "flour",
+        "cuisson",
+        "pâtisserie",
+        "farine"
+      ]
     }
   ]
 }

@@ -21,7 +21,22 @@ val LocalPicnicColors = staticCompositionLocalOf { PlaceholderLightColors }
 val LocalPicnicTypography = staticCompositionLocalOf { PlaceholderTypography }
 val LocalPicnicShapes = staticCompositionLocalOf { PlaceholderShapes }
 val LocalPicnicDimens = staticCompositionLocalOf { PicnicDimens() }
-val LocalPicnicMotion = staticCompositionLocalOf { PicnicMotion(reduced = false) }
+val LocalPicnicMotion = staticCompositionLocalOf { ThemeMotion(reduced = false) }
+
+/**
+ * Reduced motion (§8.8): on when the animator OR the transition scale is 0, read from Settings.Global at
+ * start and on every resume (MainActivity, WP4). Every movement then becomes a 120 ms fade at the same beat.
+ */
+val LocalReducedMotion = staticCompositionLocalOf { false }
+
+/** The resolved theme variant (§2.5). */
+val LocalThemeVariant = staticCompositionLocalOf { ThemeVariant.Day }
+
+/**
+ * The four looks (§2.1, §2.4, §2.5): Day "Mint Binder", Glow "Glow-in-the-dark" (dark), Dusk (egg 1) and
+ * Golden (egg 12). Resolved by ThemeVariantSource (WP9); the celebration always composes in Day.
+ */
+enum class ThemeVariant { Day, Glow, Dusk, Golden }
 
 /** Bitmap loader for ItemIcon/AisleBasket. MainActivity provides AppContainer.iconImages; previews get placeholder art. */
 val LocalIconImages = staticCompositionLocalOf<IconImages> { IconImages.None }
@@ -35,13 +50,13 @@ object PicnicTheme {
     val type: PicnicTypography @Composable @ReadOnlyComposable get() = LocalPicnicTypography.current
     val shapes: PicnicShapes @Composable @ReadOnlyComposable get() = LocalPicnicShapes.current
     val dimens: PicnicDimens @Composable @ReadOnlyComposable get() = LocalPicnicDimens.current
-    val motion: PicnicMotion @Composable @ReadOnlyComposable get() = LocalPicnicMotion.current
+    val motion: ThemeMotion @Composable @ReadOnlyComposable get() = LocalPicnicMotion.current
+    val variant: ThemeVariant @Composable @ReadOnlyComposable get() = LocalThemeVariant.current
 }
 
 /**
- * Root theme. Provides the Picnic tokens AND a MaterialTheme mapped from them, so Material3
- * building blocks we still use (ModalBottomSheet, SwipeToDismissBox, SnackbarHost, Scaffold,
- * DropdownMenu) never show Material defaults.
+ * v1 root theme: dark = Glow, light = Day. Kept for the v1 call sites (MainActivity, previews, tests)
+ * until WP4 moves them to the variant form below.
  */
 @Composable
 fun PicnicTheme(
@@ -49,14 +64,33 @@ fun PicnicTheme(
     reducedMotion: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val colors = if (darkTheme) PlaceholderDarkColors else PlaceholderLightColors
+    PicnicTheme(variant = if (darkTheme) ThemeVariant.Glow else ThemeVariant.Day, reducedMotion = reducedMotion, content = content)
+}
+
+/**
+ * Root theme (D12, §19.2). Provides the Picnic tokens AND a MaterialTheme mapped from them, so Material3
+ * building blocks we still use (ModalBottomSheet, SwipeToDismissBox, SnackbarHost, Scaffold, DropdownMenu)
+ * never show Material defaults. A nested `PicnicTheme(variant = Day)` (the celebration, §2.5) keeps the
+ * outer reduced-motion setting.
+ * PHASE-0 STUB (WP4): Glow uses the v1 dusk palette and Day, Dusk and Golden the v1 noon palette until
+ * WP4's C tokens land.
+ */
+@Composable
+fun PicnicTheme(
+    variant: ThemeVariant,
+    reducedMotion: Boolean = LocalReducedMotion.current,
+    content: @Composable () -> Unit,
+) {
+    val colors = if (variant == ThemeVariant.Glow) PlaceholderDarkColors else PlaceholderLightColors
     val type = PlaceholderTypography
     val shapes = PlaceholderShapes
     CompositionLocalProvider(
         LocalPicnicColors provides colors,
         LocalPicnicTypography provides type,
         LocalPicnicShapes provides shapes,
-        LocalPicnicMotion provides PicnicMotion(reduced = reducedMotion),
+        LocalPicnicMotion provides ThemeMotion(reduced = reducedMotion),
+        LocalReducedMotion provides reducedMotion,
+        LocalThemeVariant provides variant,
     ) {
         MaterialTheme(
             colorScheme = colors.toMaterial(),

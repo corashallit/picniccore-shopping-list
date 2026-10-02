@@ -63,7 +63,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
-import earth.cora.picnic.core.model.SectionKind
 import earth.cora.picnic.ui.add.AddEvent
 import earth.cora.picnic.ui.add.AddSheetRoute
 import earth.cora.picnic.ui.add.AddViewModel
@@ -385,7 +384,7 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
                     inBasket = section.inBasket,
                     count = section.count,
                     // The checked section lists the gotten items itself: it is announced as "<n> items".
-                    gotten = section.gotten.takeIf { section.kind != SectionKind.CHECKED },
+                    gotten = section.gotten.takeIf { section.kind != SectionUiKind.CHECKED },
                     collapsed = section.collapsed,
                     cleared = section.cleared,
                     onToggle = { actions.onToggleSection(section.id) },
@@ -409,7 +408,7 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
             if (open) {
                 // Basket rows get their own keys: ticking or unticking fades a row out of one section and
                 // into the other (after the dwell) instead of sliding its slice across the sections between.
-                val keyOf: (ItemRowUi) -> String = if (section.kind == SectionKind.CHECKED) { row -> "basket:${row.id}" } else { row -> row.id }
+                val keyOf: (ItemRowUi) -> String = if (section.kind == SectionUiKind.CHECKED) { row -> "basket:${row.id}" } else { row -> row.id }
                 itemsIndexed(section.items, key = { _, row -> keyOf(row) }, contentType = { _, _ -> "row" }) { i, row ->
                     AisleSectionRow(
                         aisleIndex = section.aisleIndex,
@@ -425,7 +424,7 @@ private fun ListContent(state: ListUiState, actions: ListActions, padding: Paddi
             // One pixel tall: the list ignores zero-size items when choosing which header to pin.
             stickyHeader(key = "end:${section.id}", contentType = "end") { Spacer(Modifier.fillMaxWidth().height(onePixel)) }
             position++
-            if (section.kind == SectionKind.CHECKED && section.count > 0) {
+            if (section.kind == SectionUiKind.CHECKED && section.count > 0) {
                 item(key = "clear-checked", contentType = "button") {
                     Box(
                         Modifier
@@ -472,7 +471,7 @@ private fun rememberTickDwell(sections: List<SectionUi>): List<SectionUi> {
     // Unchecked rows of open sections as last shown (plain map: written after composition).
     val shown = remember { HashMap<String, TickDwell>() }
     val dwelling = remember { mutableStateMapOf<String, TickDwell>() }
-    val basket = sections.firstOrNull { it.kind == SectionKind.CHECKED }?.items.orEmpty()
+    val basket = sections.firstOrNull { it.kind == SectionUiKind.CHECKED }?.items.orEmpty()
     val fresh = basket.mapNotNull { row -> shown[row.id]?.takeIf { row.id !in dwelling }?.let { row.id to it } }.toMap()
     // Only while the row is still in the basket and its aisle is still listed (an emptied section
     // may vanish, Unsorted does): otherwise the row goes straight to where the state puts it.
@@ -482,7 +481,7 @@ private fun rememberTickDwell(sections: List<SectionUi>): List<SectionUi> {
         dwelling.keys.filter { it !in active }.forEach { dwelling.remove(it) }
         shown.clear()
         sections.forEach { s ->
-            if (s.kind != SectionKind.CHECKED && !s.collapsed) s.items.forEachIndexed { i, row -> if (!row.checked) shown[row.id] = TickDwell(s.id, i) }
+            if (s.kind != SectionUiKind.CHECKED && !s.collapsed) s.items.forEachIndexed { i, row -> if (!row.checked) shown[row.id] = TickDwell(s.id, i) }
         }
     }
     active.keys.forEach { id ->
@@ -496,7 +495,7 @@ private fun rememberTickDwell(sections: List<SectionUi>): List<SectionUi> {
     if (active.isEmpty()) return sections
     val rows = basket.associateBy { it.id }
     return sections.map { s ->
-        if (s.kind == SectionKind.CHECKED) {
+        if (s.kind == SectionUiKind.CHECKED) {
             s.copy(items = s.items.filterNot { it.id in active })
         } else {
             val mine = active.entries.filter { it.value.sectionId == s.id }.sortedBy { it.value.index }
@@ -524,9 +523,9 @@ private fun Modifier.itemMotion(scope: LazyItemScope): Modifier {
 
 @Composable
 private fun sectionTitle(section: SectionUi): String = when (section.kind) {
-    SectionKind.UNSORTED -> stringResource(R.string.list_section_unsorted)
-    SectionKind.CHECKED -> stringResource(R.string.list_section_checked)
-    SectionKind.AISLE -> section.title
+    SectionUiKind.UNSORTED -> stringResource(R.string.list_section_unsorted)
+    SectionUiKind.CHECKED -> stringResource(R.string.list_section_checked)
+    SectionUiKind.AISLE -> section.title
 }
 
 /**

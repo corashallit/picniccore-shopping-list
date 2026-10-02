@@ -7,11 +7,8 @@ package earth.cora.picnic.ui.common
  *
  * Why not the walking position: in the store people look for the aisle signs, and a "5" next to
  * "Aisle 1 - Breakfast" sends them to the wrong aisle. Walking order is already the list order.
+ *
+ * Moved to core (earth.cora.picnic.core.model.storeAisleNumber, same regex, §19.1); this delegates until
+ * WP8 deletes the file.
  */
-fun storeAisleNumber(name: String): Int? =
-    STORE_NUMBER.find(name.trim())?.groupValues?.get(1)?.toIntOrNull()
-
-private val STORE_NUMBER = Regex(
-    """^(?:(?:aisle|isle|allée|allee|rayon|row)\s*)?#?\s*(\d{1,3})(?=\s*[-–—:.)]|\s|$)""",
-    RegexOption.IGNORE_CASE,
-)
+fun storeAisleNumber(name: String): Int? = earth.cora.picnic.core.model.storeAisleNumber(name)

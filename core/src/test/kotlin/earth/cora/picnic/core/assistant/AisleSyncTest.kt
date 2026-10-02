@@ -86,7 +86,7 @@ class AisleSyncTest {
 
     @Test
     fun offlineSyncKeepsHeuristicBasketsAndReportsTheError() = runTest {
-        val store = InMemoryStateStore(state(item("a", "Lemons")).setAislesText("Produce\nFleurs") { BasketKind.WICKER_PICNIC })
+        val store = InMemoryStateStore(state(item("a", "Lemons")).setAislesText("Produce\nFleurs", { BasketKind.WICKER_PICNIC }, 0L))
         val offline = LlmError.Network(IOException("offline"))
         val report = AisleSync(store, FakeAssistant(recategorizeError = offline, basketsError = offline), catalog.baskets).sync()
         assertFalse(report.basketsFromModel)

@@ -30,6 +30,11 @@ import earth.cora.picnic.core.model.IconRef
  * - [contentDescription] null = decorative (rows already read the item name).
  * - [lifted] = the sticker floats on the ground (edit sheet hero): placeholder art adds its drop
  *   shadow. Default flat: rows, chips and pickers never put an offset shadow under a circle.
+ *
+ * C additions (§3.3, §19.2; phase-0 signature, WP4 draws them): [aisleIndex] tints the capsule sentinel
+ * (`IconRef("_capsule")`, D5; -1 = neutral); [ghost] = a checked row's peeled outline; [holo] = shiny /
+ * jackpot foil; [pixel] = the bonus-stage 8-bit sprite (egg 10); [flags] = the corner flags. The phase-0
+ * body ignores them. The default [size] is the PicnicDimens.itemIcon token, which WP4 sets to 52 dp.
  */
 @Composable
 fun ItemIcon(
@@ -37,6 +42,11 @@ fun ItemIcon(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     size: Dp = PicnicTheme.dimens.itemIcon,
+    aisleIndex: Int = -1,
+    ghost: Boolean = false,
+    holo: Boolean = false,
+    pixel: Boolean = false,
+    flags: Set<StickerFlag> = emptySet(),
     drawing: Boolean = false,
     lifted: Boolean = false,
 ) {
@@ -70,6 +80,18 @@ fun ItemIcon(
             )
         }
     }
+}
+
+/** The flags at a sticker's top-right (§3.3 step 4), each a 20 dp sticker with its own white border. */
+enum class StickerFlag {
+    /** Lemon 5-point star: added after the list's new-anchor (§7.1). */
+    New,
+
+    /** Sakura heart: a favourite (D17). */
+    Favourite,
+
+    /** Star for a shiny or jackpot sticker (the row adds the "shiny!" / "jackpot!" chip). */
+    Shiny,
 }
 
 /** Placeholder sticker for an icon key: its category's object; the paper bag for DEFAULT_ICON and unknown keys. */
