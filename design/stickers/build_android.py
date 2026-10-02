@@ -90,14 +90,18 @@ def item_outputs(out, catalog_icons, report):
     by_key = {i['key']: i for i in catalog_icons}
     entries = []
     stickers = []
+    drawn = {}
     for icon in ICONS:
-        key = catalog_map.CATALOG.get(icon.key) or catalog_map.SENTINELS.get(icon.key)
+        key = catalog_map.catalog_key(icon.key, by_key)
         if key is None:
             if icon.key not in catalog_map.ORPHANS:
                 raise SystemExit(f'DSL sticker {icon.key!r} has no catalog key and is not a listed orphan (catalog_map.py)')
             continue
         if key != '_capsule' and key not in by_key:
             raise SystemExit(f'catalog_map: {icon.key} -> {key!r} is not a catalog key')
+        if key in drawn:
+            raise SystemExit(f'two DSL stickers draw {key!r}: {drawn[key]} and {icon.key}')
+        drawn[key] = icon.key
         groups, dom, sil = E.icon_layers(icon, STICKER_BASE)
         name = 'sk_i_' + res_name(key)
         out[os.path.join(DRAWABLE, name + '.xml')] = E.vector_xml(groups, 52, 52, comment=HEADER_XML.format(src=f'sticker {icon.key!r}'))
@@ -315,8 +319,9 @@ object StickerManifest {{
     /**
      * Named groups in every `sk_i_` drawable: `cut` (union silhouette, white fill + 8u white stroke: border, shadow
      * tint, ghost), `fills` (art below the holo), `lines` (art above the holo: the dominant shape's trace and every part
-     * drawn after it), `gloss`, `dominant` (clip-only: the holo clip). The capsule's recolourable paths are named
-     * `cap` (top half), `cap_p` (light band, knob) and `cap_tr` (trace).
+     * drawn after it), `gloss`, `dominant` (clip-only: the holo clip). In Compose's ImageVector a `<clip-path>` becomes
+     * a child group carrying `clipPathData`, so the holo clip is the first child group of `dominant`. The capsule's
+     * recolourable paths are named `cap` (top half), `cap_p` (light band, knob) and `cap_tr` (trace).
      */
     val GROUPS: Set<String> = setOf("cut", "fills", "lines", "gloss", "dominant")
 

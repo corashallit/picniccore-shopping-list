@@ -475,8 +475,12 @@ add('capsule', 'Something new', [
 ], gloss=[G('M12.6 20.4Q14.4 14.2 20.2 12'), DOT(24.4, 11.2)], qty='mystery item', aisle='unknown')
 
 import os as _os
-for _f in ('icons_b1.py', 'icons_b2.py', 'icons_b3.py', 'icons_b4.py', 'icons_r3.py'):
-    _p = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), _f)
+import glob as _glob
+_here = _os.path.dirname(_os.path.abspath(__file__))
+# the r9 batches, then the authoring batches of the art pass (icons_batch*.py, one file per batch so batches never
+# touch the same file; a new sticker's DSL key is its catalog key, see catalog_map.py)
+for _p in [_os.path.join(_here, _f) for _f in ('icons_b1.py', 'icons_b2.py', 'icons_b3.py', 'icons_b4.py', 'icons_r3.py')] + \
+        sorted(_glob.glob(_os.path.join(_here, 'icons_batch*.py'))):
     if _os.path.exists(_p):
         exec(open(_p).read())
 IBY = {i.key: i for i in ICONS}

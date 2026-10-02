@@ -1,7 +1,8 @@
 """Which DSL sticker draws which catalog key (core/src/main/resources/icon_catalog.json), §18.3 step 4.
 
-One drawable per catalog key: `sk_i_<catalog key>.xml`. A DSL sticker listed in ORPHANS is kept in the DSL (the mockup
-still shows it) but has no catalog key, so it is not emitted.
+One drawable per catalog key: `sk_i_<catalog key>.xml`. The r9 stickers have short DSL keys and are mapped in CATALOG;
+a new sticker simply uses its catalog key as its DSL key and needs no entry here. A DSL sticker listed in ORPHANS is
+kept in the DSL (the mockup still shows it) but has no catalog key, so it is not emitted.
 """
 
 # DSL key -> catalog key
@@ -92,3 +93,14 @@ def personality(key, category, catalog_value=None):
     if catalog_value:
         return catalog_value
     return PERSONALITY.get(key) or PERSONALITY_BY_CATEGORY.get(category) or 'none'
+
+
+def catalog_key(dsl_key, catalog_keys):
+    """the catalog key a DSL sticker draws, or None (an orphan)."""
+    if dsl_key in CATALOG:
+        return CATALOG[dsl_key]
+    if dsl_key in SENTINELS:
+        return SENTINELS[dsl_key]
+    if dsl_key in catalog_keys:
+        return dsl_key
+    return None

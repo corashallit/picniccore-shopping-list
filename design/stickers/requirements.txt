@@ -1,0 +1,6 @@
+# Python 3.11+. The emitter and its validators (build_android.py, :app:checkStickers):
+shapely==2.1.2        # bundles GEOS 3.13.1: silhouettes, procedural gloss, lint geometry
+svgelements==1.9.6    # path parsing, transforms, arc-to-cubic
+numpy==2.4.6          # shapely's array backend
+# Only for tools/roundtrip.py (image diffs); Node + Playwright render the pages:
+Pillow==12.3.0

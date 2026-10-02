@@ -35,8 +35,9 @@ object StickerManifest {
     /**
      * Named groups in every `sk_i_` drawable: `cut` (union silhouette, white fill + 8u white stroke: border, shadow
      * tint, ghost), `fills` (art below the holo), `lines` (art above the holo: the dominant shape's trace and every part
-     * drawn after it), `gloss`, `dominant` (clip-only: the holo clip). The capsule's recolourable paths are named
-     * `cap` (top half), `cap_p` (light band, knob) and `cap_tr` (trace).
+     * drawn after it), `gloss`, `dominant` (clip-only: the holo clip). In Compose's ImageVector a `<clip-path>` becomes
+     * a child group carrying `clipPathData`, so the holo clip is the first child group of `dominant`. The capsule's
+     * recolourable paths are named `cap` (top half), `cap_p` (light band, knob) and `cap_tr` (trace).
      */
     val GROUPS: Set<String> = setOf("cut", "fills", "lines", "gloss", "dominant")
 

@@ -200,3 +200,6 @@ dependencies {
     testImplementation(libs.roborazzi.preview.scanner.support)
     testImplementation(libs.composable.preview.scanner)
 }
+
+// :app:checkStickers: the generated sticker art matches the DSL (design/stickers/, docs/DESIGN_STICKER.md §18.3).
+apply(from = rootProject.file("design/stickers/checkStickers.gradle.kts"))
