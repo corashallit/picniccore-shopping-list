@@ -1,7 +1,6 @@
 package earth.cora.picnic.ui.theme
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -15,12 +14,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
@@ -30,83 +32,366 @@ import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
-import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.toSize
 import earth.cora.picnic.R
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sin
 
 /*
- * THEME COMPONENT KIT: CONTRACT (signatures) between app-shell and app-screens (docs/ARCHITECTURE.md §11.2).
- * Placeholder picnic styling: ink outlines, flat fills, HARD offset shadows (never blur elevation),
- * stamped-toy buttons. The art pass changes the drawing, not the signatures.
+ * THEME COMPONENT KIT (docs/DESIGN_STICKER.md §4; ARCHITECTURE §11.2): kiss-cut cards, the candy-pill and secondary
+ * buttons with exactly one gloss crescent and one dot (rule R3), round sticker buttons, the FAB, chips, ruled text
+ * fields, the switch and the keep switch. Every shadow is hard (§2.10); every white on a button face is accounted for
+ * (ButtonGlossTest). Screens never hand-roll one.
  */
 
+/** The coloured face of every button (inside its white border): ButtonGlossTest measures the gloss against it. */
+const val FACE_TAG: String = "picnic_button_face"
+
+/** The FAB plus's half-length as a fraction of the face (its crimson-stroked bars stay ≥4 dp clear of the gloss). */
+const val FAB_PLUS_ARM: Float = 0.2f
+
+/** The FAB plus's bar width (px) for a face [d] px across, crimson stroke included. */
+fun fabPlusWidth(d: Float, density: Float): Float = d * 0.1f + 8f * density
+
+/** A pressed face's offset onto its shadow (ButtonTest reads it). */
+val FaceOffset: SemanticsPropertyKey<DpOffset> = SemanticsPropertyKey("FaceOffset")
+internal var SemanticsPropertyReceiver.faceOffset: DpOffset by FaceOffset
+
+/* ------------------------------------------------------------------------------------------------
+ * Surfaces.
+ * ------------------------------------------------------------------------------------------------ */
+
 /**
- * Card/row container: fill + ink outline + hard offset shadow (no blur elevation). The shadow is
- * drawn outside the bounds (below/right), so leave [PicnicDimens.hardShadow] of room under it.
- * Gesture modifiers passed in [modifier] sit outside the clip; for a ripple that follows the
- * shape, clip first: `Modifier.clip(PicnicTheme.shapes.row).clickable { … }`.
+ * A kiss-cut card (§2.8: 10 dp): [color] fill (the pad by default), a 3 dp white kiss-cut border when [outlined] (left
+ * off on a navy Glow page, where the shadow carries the edge), and a hard shadow (hs; [large] = hs2). The shadow is
+ * drawn outside the bounds (below / right): leave room for it.
  */
 @Composable
 fun PicnicSurface(
     modifier: Modifier = Modifier,
     shape: Shape = PicnicTheme.shapes.card,
-    color: Color = PicnicTheme.colors.surface,
+    color: Color = PicnicTheme.colors.pad,
     outlined: Boolean = true,
     shadow: Boolean = true,
+    large: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val c = PicnicTheme.colors
-    val d = PicnicTheme.dimens
+    val border = outlined && !(c.isDark && color == c.pad)
     Box(
         modifier
-            .then(if (shadow) Modifier.hardShadow(shape, c.hardShadow, d.hardShadow) else Modifier)
+            .then(if (shadow) Modifier.hardShadow(shape, PicnicTheme.shadows, large) else Modifier)
             .clip(shape)
             .background(color)
-            .then(if (outlined) Modifier.border(d.outline, c.outline, shape) else Modifier),
+            .then(if (border) Modifier.border(PicnicTheme.dimens.border, c.stickerWhite, shape) else Modifier),
         content = content,
     )
 }
 
+/**
+ * The pad patch (§4.1): information text on the binder never sits straight on the pinstripes. A white kiss-cut label
+ * (Glow: the page navy), radius 9, 3 × 8 dp padding, 2 dp white border, hs.
+ */
+@Composable
+fun PadPatch(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+    val c = PicnicTheme.colors
+    val shape = PicnicTheme.shapes.patch
+    Box(
+        modifier
+            .hardShadow(shape, PicnicTheme.shadows)
+            .clip(shape)
+            .background(c.stickerWhite)
+            .padding(2.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(7.dp))
+            .background(c.patch)
+            .padding(horizontal = 6.dp),
+        content = content,
+    )
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * Gloss (rule R3): exactly one crescent and one dot per face.
+ * ------------------------------------------------------------------------------------------------ */
+
+/** What a face is, for the gloss geometry. */
+enum class FaceKind { Pill, Circle }
+
+/**
+ * The gloss on one face (px, in the face's own coordinates): a tapered crescent [crescent] (polygon [outline] for the
+ * clearance checks) and one dot. [mirrored] = moved to the right cap because the label starts at the left edge.
+ */
+@Immutable
+class GlossGeometry(
+    val crescent: Path,
+    val outline: List<Offset>,
+    val dotCenter: Offset,
+    val dotRadius: Float,
+    val mirrored: Boolean,
+) {
+    /** Bounds of the crescent and the dot together. */
+    val bounds: Rect
+        get() {
+            val xs = outline.map { it.x } + listOf(dotCenter.x - dotRadius, dotCenter.x + dotRadius)
+            val ys = outline.map { it.y } + listOf(dotCenter.y - dotRadius, dotCenter.y + dotRadius)
+            return Rect(xs.min(), ys.min(), xs.max(), ys.max())
+        }
+
+    /** The smallest distance (px) from any gloss ink to [rect] (0 when they touch or overlap). */
+    fun distanceTo(rect: Rect): Float {
+        fun d(p: Offset): Float {
+            val dx = max(max(rect.left - p.x, 0f), p.x - rect.right)
+            val dy = max(max(rect.top - p.y, 0f), p.y - rect.bottom)
+            return hypot(dx, dy)
+        }
+        val crescent = outline.minOf { d(it) }
+        val dot = max(0f, d(dotCenter) - dotRadius)
+        return min(crescent, dot)
+    }
+}
+
+/** The R3 gloss geometry (ButtonGlossTest). */
+object ButtonGloss {
+    /** Gloss never comes within this of the label's (or glyph's) bounds. */
+    val CLEARANCE: Dp = 4.dp
+
+    /**
+     * The gloss for a [face] (px) of [kind]. Pills: a crescent hugging the inside of the LEFT cap (on a 52 dp pill, the
+     * top edge of a 36 dp ring at (5, 5), 3.5 dp thick, rotated −45°: an arc from the cap's left to its top) and a 3.6
+     * dp dot at (27, 5); scaled with the face height. If [label] starts at the left edge (closer than 4 dp to the
+     * crescent or the dot), it all moves to the right cap. Circles: a concentric crescent at the upper left and a dot
+     * just past its end.
+     */
+    fun of(kind: FaceKind, face: Size, label: Rect?, density: Density): GlossGeometry {
+        val clearance = with(density) { CLEARANCE.toPx() }
+        return when (kind) {
+            FaceKind.Pill -> {
+                val k = face.height / with(density) { 52.dp.toPx() }
+                val dp = with(density) { 1.dp.toPx() } * k
+                val center = Offset(23f * dp, 23f * dp)
+                val left = arcCrescent(center, outer = 18f * dp, thickness = 3.5f * dp, from = 180f, to = 270f)
+                val dot = Offset(28.8f * dp, 6.8f * dp)
+                val g = GlossGeometry(left.first, left.second, dot, 1.8f * dp, mirrored = false)
+                if (label != null && g.distanceTo(label) < clearance) mirror(g, face.width) else g
+            }
+            FaceKind.Circle -> {
+                val d = face.minDimension
+                val c = Offset(face.width / 2f, face.height / 2f)
+                val crescent = arcCrescent(c, outer = 0.46f * d, thickness = 0.06f * d, from = 195f, to = 255f)
+                // The dot sits just past the crescent's top end, clear of a glyph's top ink.
+                val a = Math.toRadians(262.0)
+                val r = 0.43f * d
+                GlossGeometry(crescent.first, crescent.second, Offset(c.x + (r * cos(a)).toFloat(), c.y + (r * sin(a)).toFloat()), 0.035f * d, mirrored = false)
+            }
+        }
+    }
+
+    private fun mirror(g: GlossGeometry, width: Float): GlossGeometry {
+        val pts = g.outline.map { Offset(width - it.x, it.y) }
+        return GlossGeometry(polygon(pts), pts, Offset(width - g.dotCenter.x, g.dotCenter.y), g.dotRadius, mirrored = true)
+    }
+
+    /** A crescent on a circle of radius [outer] about [center], from [from] to [to] degrees, tapering to points. */
+    private fun arcCrescent(center: Offset, outer: Float, thickness: Float, from: Float, to: Float): Pair<Path, List<Offset>> {
+        val n = 24
+        val outerPts = (0..n).map { i ->
+            val a = Math.toRadians((from + (to - from) * i / n).toDouble())
+            Offset(center.x + (outer * cos(a)).toFloat(), center.y + (outer * sin(a)).toFloat())
+        }
+        val innerPts = (n downTo 0).map { i ->
+            val s = i.toFloat() / n
+            val r = outer - thickness * sin(PI * s).toFloat()
+            val a = Math.toRadians((from + (to - from) * s).toDouble())
+            Offset(center.x + (r * cos(a)).toFloat(), center.y + (r * sin(a)).toFloat())
+        }
+        val pts = outerPts + innerPts
+        return polygon(pts) to pts
+    }
+
+    private fun polygon(pts: List<Offset>): Path = Path().apply {
+        pts.forEachIndexed { i, p -> if (i == 0) moveTo(p.x, p.y) else lineTo(p.x, p.y) }
+        close()
+    }
+}
+
+/**
+ * The label's inked bounds (R3's "label bounds"): the label row's full width, and vertically the band its glyphs ink —
+ * the font size around the row's centre (DynaPuff's caps and descenders sit inside 1 em), not the padded line box.
+ */
+fun labelInkBand(row: Rect, fontPx: Float): Rect {
+    val half = minOf(row.height, fontPx) / 2f
+    val cy = row.center.y
+    return Rect(row.left, cy - half, row.right, cy + half)
+}
+
+/** One thing drawn on a button face. [blur] is always 0: nothing is ever blurred (R3, item 63). */
+@Immutable
+sealed class FaceOp(val color: Color, val blur: Float = 0f) {
+    class Fill(color: Color) : FaceOp(color)
+    class Ring(color: Color) : FaceOp(color)
+    class Crescent(color: Color) : FaceOp(color)
+    class Dot(color: Color) : FaceOp(color)
+    class Label(color: Color) : FaceOp(color)
+    class GlyphInk(color: Color) : FaceOp(color)
+    class Star(color: Color) : FaceOp(color)
+}
+
+/** Every button kind the R3 audit covers. */
+enum class ButtonKind { Primary, Secondary, Round, AddBarSnap, AddBarSpeak, AddBarSend, Fab }
+
+/**
+ * What a face draws, in order (ButtonGlossTest.allowedWhiteOnly / opaqueWhite run on these; the buttons draw exactly
+ * these). The only white on a face: one crescent, one dot, and the face's own label or glyph (the primary's white
+ * label, the FAB's white plus).
+ */
+fun faceOps(kind: ButtonKind, enabled: Boolean, colors: PicnicColors, leadingStar: Boolean = false): List<FaceOp> {
+    val gloss = enabled
+    val ops = mutableListOf<FaceOp>()
+    when (kind) {
+        ButtonKind.Primary -> {
+            ops += FaceOp.Fill(if (enabled) Families.strawberry.mid else colors.backing)
+            if (leadingStar && enabled) ops += FaceOp.Star(Families.lemon.pastel)
+            ops += FaceOp.Label(if (enabled) Color.White else colors.ballpointSoft)
+        }
+        ButtonKind.Secondary -> {
+            ops += FaceOp.Fill(if (enabled) Color.White else colors.backing)
+            if (enabled) ops += FaceOp.Ring(Families.periwinkle.trace)
+            ops += FaceOp.Label(if (enabled) colors.ballpoint else colors.ballpointSoft)
+        }
+        ButtonKind.Round -> {
+            ops += FaceOp.Fill(colors.pad)
+            ops += FaceOp.GlyphInk(colors.ink)
+        }
+        ButtonKind.AddBarSnap -> { ops += FaceOp.Fill(Families.ramune.pastel); ops += FaceOp.GlyphInk(colors.ballpoint) }
+        ButtonKind.AddBarSpeak -> { ops += FaceOp.Fill(Families.sakura.pastel); ops += FaceOp.GlyphInk(colors.ballpoint) }
+        ButtonKind.AddBarSend -> { ops += FaceOp.Fill(Families.strawberry.pastel); ops += FaceOp.GlyphInk(colors.ballpoint) }
+        ButtonKind.Fab -> {
+            ops += FaceOp.Fill(Families.strawberry.mid)
+            ops += FaceOp.GlyphInk(Color.White)
+        }
+    }
+    if (gloss) {
+        // The gloss sits under the label (drawn after the fill, before the label).
+        ops.add(1, FaceOp.Crescent(Color.White))
+        ops.add(2, FaceOp.Dot(Color.White))
+    }
+    return ops
+}
+
+/** Draws the R3 gloss: one opaque white crescent and one opaque white dot, never blurred. */
+internal fun DrawScope.drawGloss(g: GlossGeometry) {
+    drawPath(g.crescent, Color.White)
+    drawCircle(Color.White, g.dotRadius, g.dotCenter)
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * Press steps and focus rings.
+ * ------------------------------------------------------------------------------------------------ */
+
+/**
+ * The press fraction 0 → 1 in 2 steps of 80 ms (§4.6), on the frame clock under the fixed motion scale; back in 2 steps
+ * on release. Instant under reduced motion.
+ */
+@Composable
+internal fun rememberPressFraction(pressed: Boolean): Float {
+    val reduced = LocalReducedMotion.current
+    var fraction by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(pressed) {
+        val target = if (pressed) 1f else 0f
+        if (reduced) {
+            fraction = target
+            return@LaunchedEffect
+        }
+        withContext(FixedMotionScale) {
+            val step = PicnicMotion.buttonPress.durationMillis / 2L
+            if (fraction != target) {
+                fraction = 0.5f
+                delay(step)
+                fraction = target
+            }
+        }
+    }
+    return fraction
+}
+
+/** A 2 dp ballpoint focus ring 3 dp outside [shape] (keyboard / switch access): flat, never a glow. */
+internal fun Modifier.focusRing(shape: Shape, color: Color, visible: Boolean): Modifier = if (!visible) this else drawBehind {
+    val gap = 3.dp.toPx()
+    val w = 2.dp.toPx()
+    val grow = gap + w / 2f
+    val outline = shape.createOutline(Size(size.width + grow * 2, size.height + grow * 2), layoutDirection, this)
+    translate(-grow, -grow) { drawOutline(outline, color, style = Stroke(w)) }
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * Buttons (§4.6).
+ * ------------------------------------------------------------------------------------------------ */
+
 enum class PicnicButtonStyle { Primary, Secondary, Text }
 
 /**
- * A stamped toy button, >= 48 dp tall. Primary: strawberry pill on a darker base, with the palette's
- * cel highlight ([PicnicColors.buttonGloss]: a tapered lens centred under the top outline, clear of
- * the outline and the label; none when null); at dusk a ground-coloured halo keeps its pale face
- * off pastel bands. Secondary: surface pill on the shadow base; Text: ink label on a highlighter bar.
- * Pressing pushes the face down onto its base (the press feedback; no ripple).
+ * A button (§4.6, rule R3), ≥48 dp tall.
+ * - Primary "candy pill": 52 dp, strawberry mid, 3 dp white border, hs2; DynaPuff 18 white label on a 4 dp #C3264F
+ *   stroke; optional flat lemon star ([leadingStar]). Pressed: the shadow goes and the face drops (+2.4, +3.4) in 2
+ *   steps of 80 ms. Disabled: backing fill, ballpointSoft label, no stroke, shadow or gloss; [busy] leads with a
+ *   4-point star spinner.
+ * - Secondary: 48 dp white pill, 3 dp white border, an inset 2 dp periwinkle-trace outline, hs; DynaPuff 16 ballpoint,
+ *   optional 18 dp [glyph]. Pressed (+1.6, +2.2), flat.
+ * - Text: no face; Zen Maru 700 15 sp with a wavy 2 dp sakura underline; pressed = a highlighter band behind the label.
+ * Focus: a 2 dp ballpoint ring 3 dp outside.
  */
 @Composable
 fun PicnicButton(
@@ -116,66 +401,219 @@ fun PicnicButton(
     style: PicnicButtonStyle = PicnicButtonStyle.Primary,
     enabled: Boolean = true,
     glyph: PicnicGlyph? = null,
+    leadingStar: Boolean = false,
+    busy: Boolean = false,
+    interactionSource: MutableInteractionSource? = null,
+) {
+    when (style) {
+        PicnicButtonStyle.Primary, PicnicButtonStyle.Secondary ->
+            PillButton(text, onClick, modifier, style == PicnicButtonStyle.Primary, enabled, glyph, leadingStar, busy, interactionSource)
+        PicnicButtonStyle.Text -> TextButton(text, onClick, modifier, enabled, glyph, interactionSource)
+    }
+}
+
+@Composable
+private fun PillButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    primary: Boolean,
+    enabled: Boolean,
+    glyph: PicnicGlyph?,
+    leadingStar: Boolean,
+    busy: Boolean,
+    interactionSource: MutableInteractionSource?,
 ) {
     val c = PicnicTheme.colors
-    val d = PicnicTheme.dimens
-    val shape = PicnicTheme.shapes.button
-    val interaction = remember { MutableInteractionSource() }
+    val t = PicnicTheme.type
+    val shadows = PicnicTheme.shadows
+    val density = LocalDensity.current
+    val interaction = interactionSource ?: remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val focused by interaction.collectIsFocusedAsState()
-    val raised = enabled && style != PicnicButtonStyle.Text
-    val depth = d.hardShadow.y + 1.dp
-    val shift = if (pressed && raised) depth - 1.dp else 0.dp
-
-    val fill = when {
-        !enabled && style != PicnicButtonStyle.Text -> c.surfaceSunken
-        style == PicnicButtonStyle.Primary -> c.primary
-        style == PicnicButtonStyle.Secondary -> c.surface
-        else -> Color.Transparent
+    val press = rememberPressFraction(pressed && enabled)
+    val shadowOffset = if (primary) shadows.hs2 else shadows.hs
+    val faceOffset = DpOffset(shadowOffset.x * press, shadowOffset.y * press)
+    val height = if (primary) 52.dp else 48.dp
+    val shape = PicnicTheme.shapes.pill
+    val kind = if (primary) ButtonKind.Primary else ButtonKind.Secondary
+    val ops = faceOps(kind, enabled, c, leadingStar)
+    // The label's bounds in the face's own coordinates (the gloss keeps 4 dp clear of them, R3).
+    var faceCoords by remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+    var labelCoords by remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+    val labelFontPx = with(density) { (if (primary) t.primaryButton else t.secondaryButton).fontSize.toPx() }
+    fun labelBox(): Rect? {
+        val f = faceCoords
+        val l = labelCoords
+        if (f == null || l == null || !f.isAttached || !l.isAttached) return null
+        return labelInkBand(f.localBoundingBoxOf(l, clipBounds = false), labelFontPx)
     }
-    val ink = when {
-        !enabled -> c.inkFaint
-        style == PicnicButtonStyle.Primary -> c.onPrimary
-        else -> c.ink
-    }
-    val base = if (style == PicnicButtonStyle.Primary) c.primaryShadow else c.hardShadow
-    val gloss = c.buttonGloss.takeIf { style == PicnicButtonStyle.Primary && enabled }
-    val halo = raised && style == PicnicButtonStyle.Primary && c.isDark
-
+    val border = PicnicTheme.dimens.border
     Box(
         modifier
-            .defaultMinSize(minHeight = d.touchTarget)
-            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(bottom = if (raised) depth else 0.dp),
+            .defaultMinSize(minHeight = 48.dp)
+            .semantics { this.faceOffset = faceOffset }
+            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
-        propagateMinConstraints = true,
+    ) {
+        Box(
+            Modifier
+                .height(height)
+                .focusRing(shape, c.ballpoint, focused)
+                .then(if (enabled) Modifier.hardShadow(shape, shadows.color, shadowOffset) else Modifier)
+                .offset(faceOffset.x, faceOffset.y)
+                .clip(shape)
+                .background(if (enabled) c.stickerWhite else c.backing)
+                .padding(border)
+                .clip(shape)
+                .testTag(FACE_TAG)
+                .onPlaced { faceCoords = it }
+                .drawBehind {
+                    for (op in ops) when (op) {
+                        is FaceOp.Fill -> drawRect(op.color)
+                        is FaceOp.Ring -> {
+                            val inset = 2.dp.toPx()
+                            val w = 2.dp.toPx()
+                            drawRoundRect(
+                                op.color, Offset(inset + w / 2, inset + w / 2), Size(size.width - inset * 2 - w, size.height - inset * 2 - w),
+                                CornerRadius((size.height - inset * 2 - w) / 2f), style = Stroke(w),
+                            )
+                        }
+                        is FaceOp.Crescent -> drawPath(ButtonGloss.of(FaceKind.Pill, size, labelBox(), this).crescent, op.color)
+                        is FaceOp.Dot -> ButtonGloss.of(FaceKind.Pill, size, labelBox(), this).let { drawCircle(op.color, it.dotRadius, it.dotCenter) }
+                        else -> Unit
+                    }
+                }
+                .padding(start = if (primary) 27.dp else 21.dp, end = if (primary) 21.dp else 19.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Row(
+                Modifier.onPlaced { labelCoords = it },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                when {
+                    busy && !enabled -> StarSpinner(Modifier.size(18.dp), c.ballpointSoft)
+                    leadingStar && primary -> FlatStar(Modifier.size(18.dp))
+                    glyph != null -> Glyph(glyph, null, tint = if (enabled) (if (primary) Color.White else c.ballpoint) else c.ballpointSoft, size = 18.dp)
+                }
+                val labelColor = ops.filterIsInstance<FaceOp.Label>().first().color
+                if (primary && enabled) {
+                    PuffyText(
+                        text, t.primaryButton, fill = labelColor, stroke = 4.dp,
+                        strokeColor = Families.strawberry.trace, shadow = null, minFontSize = 15.sp,
+                    )
+                } else {
+                    Text(
+                        text,
+                        style = if (primary) t.primaryButton else t.secondaryButton,
+                        color = labelColor,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun TextButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    enabled: Boolean,
+    glyph: PicnicGlyph?,
+    interactionSource: MutableInteractionSource?,
+) {
+    val c = PicnicTheme.colors
+    val interaction = interactionSource ?: remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val focused by interaction.collectIsFocusedAsState()
+    val shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+    Box(
+        modifier
+            .defaultMinSize(minHeight = 48.dp)
+            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+            .alpha(if (enabled) 1f else 0.5f),
+        contentAlignment = Alignment.Center,
     ) {
         Row(
             Modifier
-                .offset(y = shift)
-                .then(if (halo) Modifier.halo(shape, c.background, HALO, below = depth - shift) else Modifier)
-                .then(if (raised) Modifier.hardShadow(shape, base, DpOffset(0.dp, depth - shift)) else Modifier)
-                .then(if (focused) Modifier.focusRing(shape, c.highlight) else Modifier)
-                .clip(shape)
-                .background(fill)
-                .then(if (gloss != null) Modifier.celGloss(gloss, d.outline) else Modifier)
-                .then(if (style != PicnicButtonStyle.Text) Modifier.border(d.outline, if (enabled) c.outline else c.inkFaint, shape) else Modifier)
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .focusRing(shape, c.ink, focused)
+                .drawBehind {
+                    if (pressed) {
+                        drawRoundRect(c.pressedBand, Offset(-4.dp.toPx(), -2.dp.toPx()), Size(size.width + 6.dp.toPx(), size.height + 4.dp.toPx()), CornerRadius(4.dp.toPx()))
+                    }
+                }
+                .padding(horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (glyph != null) Glyph(glyph, contentDescription = null, tint = ink, size = 20.dp)
+            if (glyph != null) Glyph(glyph, null, tint = c.ink, size = 18.dp)
             Text(
                 text,
-                style = PicnicTheme.type.label,
-                color = ink,
-                modifier = if (style == PicnicButtonStyle.Text && enabled) Modifier.highlighter(c.highlight, underOnly = c.isDark) else Modifier,
+                style = PicnicTheme.type.textButton.copy(color = c.ink),
+                modifier = Modifier.wavyUnderline(Families.sakura.mid),
             )
         }
     }
 }
 
-/** 48 dp round glyph button: a 40 dp outlined sticker disc. [emphasized] = primary-filled (send, mic). */
+/**
+ * The hand-drawn wavy underline (§4.6): 2 dp in [color], a 12 × 5 dp wave tile, about 13 dp under the baseline for a
+ * 15 sp label (drawn just below the text box).
+ */
+fun Modifier.wavyUnderline(color: Color): Modifier = drawWithContent {
+    drawContent()
+    val tile = 12.dp.toPx()
+    val amp = 2.5.dp.toPx() / 2f
+    val y = size.height + 2.5.dp.toPx()
+    val p = Path().apply {
+        moveTo(0f, y)
+        var x = 0f
+        var up = true
+        while (x < size.width) {
+            val nx = min(x + tile / 2f, size.width)
+            quadraticTo((x + nx) / 2f, if (up) y - amp * 2 else y + amp * 2, nx, y)
+            x = nx
+            up = !up
+        }
+    }
+    drawPath(p, color, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+}
+
+/** The primary pill's flat lemon star (part of the label: no die-cut border, no gloss). */
+@Composable
+fun FlatStar(modifier: Modifier = Modifier, fill: Color = Families.lemon.pastel, trace: Color = Families.lemon.trace) {
+    Canvas(modifier.clearAndSetSemantics { }) {
+        val c = Offset(size.width / 2f, size.height / 2f + size.height * 0.04f)
+        val star = starPath(c, size.minDimension * 0.48f, size.minDimension * 0.24f)
+        drawPath(star, fill)
+        drawPath(star, trace, style = Stroke(size.minDimension * 0.07f, join = StrokeJoin.Round))
+    }
+}
+
+/** The disabled pill's 4-point star spinner (8 steps per 2 s; still under reduced motion). */
+@Composable
+fun StarSpinner(modifier: Modifier = Modifier, color: Color = PicnicTheme.colors.ballpointSoft) {
+    val reduced = LocalReducedMotion.current
+    val t by rememberLoopTime(enabled = !reduced)
+    val step = ((t % 2000L) / 250L).toInt()
+    Canvas(modifier.clearAndSetSemantics { }.rotate(step * 45f)) {
+        drawPath(sparklePath(Offset(size.width / 2f, size.height / 2f), size.minDimension / 2f, 0.3f), color)
+    }
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * Round sticker buttons, add-bar buttons and the FAB (§4.6).
+ * ------------------------------------------------------------------------------------------------ */
+
+/**
+ * A 40 dp round sticker button in a 48 dp target (More, Back): a pad circle, 3 dp white border, hs, a 24 dp line
+ * [glyph] (never sticker art, which would bring a second gloss), one gloss crescent and dot. Pressed: flat onto its
+ * shadow. Disabled: 50 %. [emphasized] is the v1 "primary-filled" flag and maps to the send button's look.
+ */
 @Composable
 fun PicnicIconButton(
     glyph: PicnicGlyph,
@@ -184,42 +622,181 @@ fun PicnicIconButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     emphasized: Boolean = false,
+    interactionSource: MutableInteractionSource? = null,
+) {
+    RoundStickerButton(
+        glyph = glyph,
+        contentDescription = contentDescription,
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        kind = if (emphasized) ButtonKind.AddBarSend else ButtonKind.Round,
+        faceSize = 40.dp,
+        interactionSource = interactionSource,
+    )
+}
+
+/** The three add-bar buttons (§4.6): 52 dp faces in their family pastel with a line glyph. */
+enum class AddBarButtonKind(val kind: ButtonKind, val glyph: PicnicGlyph) {
+    Snap(ButtonKind.AddBarSnap, PicnicGlyph.Polaroid),
+    Speak(ButtonKind.AddBarSpeak, PicnicGlyph.Cassette),
+    Send(ButtonKind.AddBarSend, PicnicGlyph.Envelope),
+}
+
+/** An add-bar button (§4.6): camera ramune, cassette sakura, send strawberry; line glyphs only. */
+@Composable
+fun AddBarButton(
+    kind: AddBarButtonKind,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
+) {
+    RoundStickerButton(kind.glyph, contentDescription, onClick, modifier, enabled, kind.kind, faceSize = 52.dp, interactionSource = interactionSource)
+}
+
+/** A round sticker face of [kind] and [faceSize] (≥48 dp target), with the R3 gloss. */
+@Composable
+fun RoundStickerButton(
+    glyph: PicnicGlyph,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    kind: ButtonKind = ButtonKind.Round,
+    faceSize: Dp = 40.dp,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     val c = PicnicTheme.colors
-    val d = PicnicTheme.dimens
-    val interaction = remember { MutableInteractionSource() }
+    val shadows = PicnicTheme.shadows
+    val interaction = interactionSource ?: remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val focused by interaction.collectIsFocusedAsState()
-    val shift = if (pressed && enabled) 2.dp else 0.dp
+    val press = rememberPressFraction(pressed && enabled)
+    val faceOffset = DpOffset(shadows.hs.x * press, shadows.hs.y * press)
+    val ops = faceOps(kind, enabled = true, colors = c)
+    val target = max(48f, faceSize.value + 8f).dp
     Box(
         modifier
-            .size(d.touchTarget)
-            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick),
+            .size(target)
+            .semantics { this.faceOffset = faceOffset }
+            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+            .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier)
+            .alpha(if (enabled) 1f else 0.5f),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
-                .offset(y = shift)
-                .size(40.dp)
-                .then(if (enabled) Modifier.hardShadow(CircleShape, if (emphasized) c.primaryShadow else c.hardShadow, DpOffset(0.dp, 3.dp - shift)) else Modifier)
-                .then(if (focused) Modifier.focusRing(CircleShape, c.highlight) else Modifier)
+                .size(faceSize)
+                .focusRing(CircleShape, c.ink, focused)
+                .hardShadow(CircleShape, shadows.color, shadows.hs)
+                .offset(faceOffset.x, faceOffset.y)
                 .clip(CircleShape)
-                .background(if (emphasized && enabled) c.primary else c.surface)
-                .border(d.outline, if (enabled) c.outline else c.inkFaint, CircleShape)
-                .alpha(if (enabled) 1f else 0.6f),
+                .background(c.stickerWhite)
+                .padding(PicnicTheme.dimens.border)
+                .clip(CircleShape)
+                .testTag(FACE_TAG)
+                .drawBehind {
+                    for (op in ops) when (op) {
+                        is FaceOp.Fill -> drawRect(op.color)
+                        is FaceOp.Crescent -> drawPath(ButtonGloss.of(FaceKind.Circle, size, null, this).crescent, op.color)
+                        is FaceOp.Dot -> ButtonGloss.of(FaceKind.Circle, size, null, this).let { drawCircle(op.color, it.dotRadius, it.dotCenter) }
+                        else -> Unit
+                    }
+                },
             contentAlignment = Alignment.Center,
         ) {
-            Glyph(
-                glyph,
-                contentDescription,
-                tint = if (!enabled) c.inkFaint else if (emphasized) c.onPrimary else c.ink,
-                size = 22.dp,
-            )
+            Glyph(glyph, contentDescription = null, tint = ops.filterIsInstance<FaceOp.GlyphInk>().first().color, size = 24.dp)
         }
     }
 }
 
-/** 32 dp pill with a 48 dp touch target. Selected: highlight fill and a leading tick (unless [leading] is given). */
+/**
+ * The FAB (§4.6): a 64 dp strawberry-mid circle sticker, white border, hs2, a white plus over a 4 dp #C3264F stroke, one
+ * gloss crescent and dot; a 22 dp lemon star BADGE sticker centred on the 45° point of the white border's outer edge,
+ * outside the face. Bobs −4 dp on a 2.4 s ease-in-out loop while visible (still under reduced motion). Pressed: flat.
+ */
+@Composable
+fun PicnicFab(
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    bob: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
+) {
+    val c = PicnicTheme.colors
+    val shadows = PicnicTheme.shadows
+    val reduced = LocalReducedMotion.current
+    val interaction = interactionSource ?: remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val press = rememberPressFraction(pressed)
+    val faceOffset = DpOffset(shadows.hs2.x * press, shadows.hs2.y * press)
+    val t by rememberLoopTime(enabled = bob && !reduced)
+    val phase = (t % PicnicMotion.fabBob.durationMillis).toFloat() / PicnicMotion.fabBob.durationMillis
+    val bobDy = if (bob && !reduced) (-4f * PicnicMotion.fabBob.easing.transform(if (phase < 0.5f) phase * 2 else (1 - phase) * 2)) else 0f
+    val ops = faceOps(ButtonKind.Fab, enabled = true, colors = c)
+    val face = 64.dp
+    val border = PicnicTheme.dimens.border
+    Box(
+        modifier
+            .size(face + border * 2 + 16.dp)
+            .offset(y = bobDy.dp)
+            .semantics { this.faceOffset = faceOffset }
+            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(face + border * 2)
+                .hardShadow(CircleShape, shadows.color, shadows.hs2)
+                .offset(faceOffset.x, faceOffset.y)
+                .clip(CircleShape)
+                .background(c.stickerWhite)
+                .padding(border)
+                .clip(CircleShape)
+                .testTag(FACE_TAG)
+                .drawBehind {
+                    for (op in ops) when (op) {
+                        is FaceOp.Fill -> drawRect(op.color)
+                        is FaceOp.Crescent -> drawPath(ButtonGloss.of(FaceKind.Circle, size, null, this).crescent, op.color)
+                        is FaceOp.Dot -> ButtonGloss.of(FaceKind.Circle, size, null, this).let { drawCircle(op.color, it.dotRadius, it.dotCenter) }
+                        is FaceOp.GlyphInk -> {
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f
+                            val arm = size.minDimension * FAB_PLUS_ARM
+                            val plus = Path().apply {
+                                moveTo(cx - arm, cy); lineTo(cx + arm, cy)
+                                moveTo(cx, cy - arm); lineTo(cx, cy + arm)
+                            }
+                            drawPath(plus, Families.strawberry.trace, style = Stroke(fabPlusWidth(size.minDimension, density), cap = StrokeCap.Round))
+                            drawPath(plus, op.color, style = Stroke(size.minDimension * 0.1f, cap = StrokeCap.Round))
+                        }
+                        else -> Unit
+                    }
+                },
+        )
+        // The badge: centred on the 45° point of the white border's outer edge, outside the face outline.
+        val r = face / 2 + border
+        val d = r * 0.7071f
+        DecorSticker(
+            "star",
+            Modifier
+                .offset(x = d + faceOffset.x, y = -d + faceOffset.y),
+            size = 22.dp,
+        )
+    }
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * Chips (§4.7).
+ * ------------------------------------------------------------------------------------------------ */
+
+/**
+ * A kiss-cut label chip (§4.7): 32 dp face in a 48 dp target, [family] pastel fill, 3 dp white border, hs, Zen Maru 700
+ * 13.5 sp ballpoint. Selected: the family's mid fill and a leading 13 dp puffy star (unless [leading] is given).
+ */
 @Composable
 fun PicnicChip(
     text: String,
@@ -227,10 +804,9 @@ fun PicnicChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     leading: (@Composable () -> Unit)? = null,
+    family: StickerFamily = Families.ramune,
 ) {
     val c = PicnicTheme.colors
-    val d = PicnicTheme.dimens
-    val shape = PicnicTheme.shapes.chip
     val on = stringResource(R.string.theme_switch_on)
     val off = stringResource(R.string.theme_switch_off)
     Box(
@@ -240,29 +816,164 @@ fun PicnicChip(
             .clickable(role = Role.Checkbox, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Row(
-            Modifier
-                .defaultMinSize(minHeight = 32.dp)
-                .hardShadow(shape, c.hardShadow, DpOffset(0.dp, 2.dp))
-                .clip(shape)
-                .background(if (selected) c.highlight else c.surface)
-                .border(d.outline, c.outline, shape)
-                .padding(horizontal = 12.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
+        ChipFace(fill = if (selected) family.mid else family.pastel) {
             when {
                 leading != null -> leading()
-                selected -> Glyph(PicnicGlyph.Check, contentDescription = null, tint = c.onHighlight, size = 16.dp)
+                selected -> DecorSticker("star", size = 15.dp, shadow = false)
             }
-            Text(text, style = PicnicTheme.type.label, color = if (selected) c.onHighlight else c.ink)
+            Text(text, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
         }
     }
 }
 
+/** A chip face: 32 dp kiss-cut pill (3 dp white border, hs) with [fill]. Decorative container. */
+@Composable
+fun ChipFace(
+    fill: Color,
+    modifier: Modifier = Modifier,
+    height: Dp = 32.dp,
+    border: Dp = PicnicTheme.dimens.border,
+    horizontal: Dp = 11.dp,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    val shape = PicnicTheme.shapes.pill
+    Row(
+        modifier
+            .height(height)
+            .hardShadow(shape, PicnicTheme.shadows)
+            .clip(shape)
+            .background(PicnicTheme.colors.stickerWhite)
+            .padding(border)
+            .clip(shape)
+            .background(fill)
+            .padding(horizontal = horizontal),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        content = content,
+    )
+}
+
 /**
- * All text input. Sunken fill, ink outline, a highlight focus ring outside the outline (no glow).
- * For the token field pass PasswordVisualTransformation and never pre-fill it.
+ * The aisle number circle (§2.7, §4.10): white, a 2 dp ring in the aisle trace, DynaPuff numeral in the trace; the
+ * capsule glyph for "Everything else" ([number] null). Decorative (the label repeats the number).
+ */
+@Composable
+fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, size: Dp = 24.dp, ring: Dp = 2.dp) {
+    val style = if (size <= 20.dp) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
+    Box(
+        modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Color.White)
+            .border(ring, look.family.trace, CircleShape)
+            .clearAndSetSemantics { },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (number != null) {
+            Text(number.toString(), style = style.copy(color = look.family.trace), maxLines = 1)
+        } else {
+            CapsuleMark(look.family, Modifier.size(size * 0.6f))
+        }
+    }
+}
+
+/** A tiny gashapon capsule mark (the "Everything else" number circle). */
+@Composable
+fun CapsuleMark(family: StickerFamily, modifier: Modifier = Modifier) {
+    Canvas(modifier.clearAndSetSemantics { }) {
+        val r = size.minDimension / 2f
+        val c = Offset(size.width / 2f, size.height / 2f)
+        drawArc(family.mid, 180f, 180f, true, Offset(c.x - r, c.y - r), Size(r * 2, r * 2))
+        drawArc(Color.White, 0f, 180f, true, Offset(c.x - r, c.y - r), Size(r * 2, r * 2))
+        drawCircle(family.trace, r - 0.6.dp.toPx(), c, style = Stroke(1.2.dp.toPx()))
+        drawLine(family.trace, Offset(c.x - r, c.y), Offset(c.x + r, c.y), 1.2.dp.toPx())
+    }
+}
+
+/** An aisle chip (§4.7): a kiss-cut label in the aisle pastel led by a 20 dp number circle (DynaPuff 11 sp). */
+@Composable
+fun AisleChip(
+    number: Int?,
+    name: String,
+    look: AisleLook,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    PicnicChip(
+        text = name,
+        selected = selected,
+        onClick = onClick,
+        modifier = modifier,
+        family = look.family,
+        leading = { NumberCircle(number, look, size = 20.dp) },
+    )
+}
+
+/** The store's own aisle number chip "A2" (§4.7): 22 dp lemon-pastel pill, 2 dp white border, hs, a basket glyph; TalkBack "store aisle 2". */
+@Composable
+fun StoreAisleChip(number: Int, modifier: Modifier = Modifier) {
+    val label = stringResource(R.string.theme_store_aisle, number)
+    ChipFace(
+        fill = Families.lemon.pastel,
+        modifier = modifier.clearAndSetSemantics { contentDescription = label },
+        height = 22.dp,
+        border = 2.dp,
+        horizontal = 7.dp,
+    ) {
+        Glyph(PicnicGlyph.Basket, null, tint = PicnicTheme.colors.ballpoint, size = 13.dp)
+        Text("A$number", style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp), maxLines = 1)
+    }
+}
+
+/** The "shiny!" / "jackpot!" chip (§4.7): DynaPuff 13 sp ballpoint on a holo pill with a 1.5 dp white border. Decorative. */
+@Composable
+fun RarityChip(jackpot: Boolean, modifier: Modifier = Modifier) {
+    val text = stringResource(if (jackpot) R.string.theme_chip_jackpot else R.string.theme_chip_shiny)
+    val shape = PicnicTheme.shapes.pill
+    Box(
+        modifier
+            .height(22.dp)
+            .clearAndSetSemantics { }
+            .clip(shape)
+            .background(Color.White)
+            .padding(1.5.dp)
+            .clip(shape)
+            .drawBehind { drawRect(holoBrush(Offset(size.width / 2f, size.height / 2f))) }
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = PicnicTheme.type.counter.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp), maxLines = 1)
+    }
+}
+
+/** A source chip (§4.7, web results): a kiss-cut label with a link glyph; opens the URL. */
+@Composable
+fun SourceChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .minimumInteractiveComponentSize()
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        ChipFace(fill = Families.ramune.pastel) {
+            Glyph(PicnicGlyph.Link, null, tint = PicnicTheme.colors.ballpoint, size = 15.dp)
+            Text(text, style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint), maxLines = 1)
+        }
+    }
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * Text fields (§4.8).
+ * ------------------------------------------------------------------------------------------------ */
+
+/**
+ * The ruled text field (§4.8): no box. A 2 dp ballpointSoft underline, the label above (Zen Maru 700 13 sp
+ * ballpointSoft), the value Zen Maru 700 16 sp ballpoint, 56 dp tall. Focus: a 3 dp strawberry-trace underline with a
+ * 13 dp puffy heart at its left end. Error: a hanko underline and helper text in hanko 13 sp with a 16 dp torn-paper
+ * glyph (key / network wording, never proxy wording). Disabled: a dotted underline, the value ballpointSoft.
+ * Multi-line: rule lines continue under every line (24 dp pitch). [example] is the add bar's example line under the
+ * placeholder. The visible label is announced by the editable node itself ("Note, pancakes, edit box").
  */
 @Composable
 fun PicnicTextField(
@@ -281,17 +992,21 @@ fun PicnicTextField(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailing: (@Composable () -> Unit)? = null,
+    textStyle: TextStyle? = null,
+    example: String? = null,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
-    val d = PicnicTheme.dimens
-    val shape = PicnicTheme.shapes.field
-    val interaction = remember { MutableInteractionSource() }
+    val interaction = interactionSource ?: remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(d.xs)) {
-        // The label is drawn above the box but announced by the field itself ("Amount, 2, edit box"),
-        // so it is cleared here and set as the field's content description below.
-        if (label != null) Text(label, style = t.label, color = c.ink, modifier = Modifier.clearAndSetSemantics { })
+    val valueStyle = (textStyle ?: t.fieldValue).let { if (enabled) it.copy(color = c.ink) else it.copy(color = c.inkSoft) }
+    val multi = !singleLine && (minLines > 1 || maxLines > 1)
+    val pitch = 24.dp
+    Column(modifier) {
+        if (label != null) {
+            Text(label, style = t.fieldLabel.copy(color = c.inkSoft), modifier = Modifier.clearAndSetSemantics { })
+        }
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -299,7 +1014,7 @@ fun PicnicTextField(
             singleLine = singleLine,
             minLines = minLines,
             maxLines = maxLines,
-            textStyle = t.body.copy(color = if (enabled) c.ink else c.inkFaint),
+            textStyle = if (multi) valueStyle.copy(lineHeight = (pitch.value).sp) else valueStyle,
             cursorBrush = SolidColor(c.ink),
             keyboardOptions = keyboardOptions,
             keyboardActions = keyboardActions,
@@ -309,93 +1024,123 @@ fun PicnicTextField(
                 .fillMaxWidth()
                 .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier),
             decorationBox = { inner ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = 52.dp)
-                        .then(if (focused) Modifier.focusRing(shape, c.highlight) else Modifier)
-                        .clip(shape)
-                        .background(c.surfaceSunken)
-                        .border(d.outline, if (isError) c.error else c.outline, shape)
-                        .padding(start = 14.dp, end = if (trailing != null) 4.dp else 14.dp, top = 12.dp, bottom = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.weight(1f)) {
-                        if (value.isEmpty() && placeholder != null) Text(placeholder, style = t.body, color = c.inkFaint)
-                        inner()
+                Column {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = if (multi) pitch * minLines else 36.dp)
+                            .then(if (multi) Modifier.ruledLines(pitch, c.rule) else Modifier),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.weight(1f).padding(vertical = if (multi) 0.dp else 4.dp)) {
+                            if (value.isEmpty() && placeholder != null) {
+                                Column {
+                                    Text(placeholder, style = (textStyle ?: t.body).copy(color = c.inkSoft), maxLines = if (multi) Int.MAX_VALUE else 1)
+                                    if (example != null) Text(example, style = t.itemDetail.copy(color = c.inkSoft))
+                                }
+                            }
+                            inner()
+                        }
+                        trailing?.invoke()
                     }
-                    trailing?.invoke()
+                    FieldUnderline(focused = focused && enabled, error = isError, enabled = enabled)
                 }
             },
         )
         if (supportingText != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(d.xs)) {
-                if (isError) Glyph(PicnicGlyph.Sparkle, contentDescription = null, tint = c.error, size = 12.dp)
-                Text(supportingText, style = t.caption, color = if (isError) c.error else c.inkSoft)
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (isError) Glyph(PicnicGlyph.TornPaper, contentDescription = null, tint = c.hanko, size = 16.dp)
+                Text(
+                    supportingText,
+                    style = t.fieldLabel.copy(color = if (isError) c.hanko else c.inkSoft),
+                )
             }
+        }
+    }
+}
+
+/** The field's underline: rest 2 dp ballpointSoft; focus 3 dp strawberry trace + a 13 dp puffy heart; error hanko; disabled dotted. */
+@Composable
+private fun FieldUnderline(focused: Boolean, error: Boolean, enabled: Boolean) {
+    val c = PicnicTheme.colors
+    val color = when {
+        error -> c.hanko
+        focused -> Families.strawberry.trace
+        else -> c.inkSoft
+    }
+    val thickness = if (focused || error) 3.dp else 2.dp
+    Box(Modifier.fillMaxWidth().height(13.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(13.dp)) {
+            val y = 3.dp.toPx() + thickness.toPx() / 2f
+            drawLine(
+                color, Offset(0f, y), Offset(size.width, y), thickness.toPx(),
+                cap = if (enabled) StrokeCap.Round else StrokeCap.Round,
+                pathEffect = if (!enabled) PathEffect.dashPathEffect(floatArrayOf(0.1f, 4.dp.toPx())) else null,
+            )
+        }
+        if (focused && !error) {
+            DecorSticker("heart", Modifier.offset(x = (-4).dp, y = (-3).dp), size = 13.dp, shadow = false)
         }
     }
 }
 
 /**
- * Screen title card: a floating card (gutter margins) with a faint sunburst and two sparkles.
- * [bottom] is a slot for TripProgress or tabs. Applies no window insets itself.
+ * The OpenAI key field (§4.8): masked, NEVER pre-filled (the typed [value] starts empty; a saved key shows only as the
+ * [savedMask] placeholder, "sk-•••••••••• 3f9a"), an eye round button to reveal while typing and a paste round button.
  */
 @Composable
-fun PicnicTopBar(
-    title: String,
+fun KeyField(
+    value: String,
+    onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    navigation: (@Composable () -> Unit)? = null,
-    actions: @Composable RowScope.() -> Unit = {},
-    bottom: (@Composable () -> Unit)? = null,
+    label: String? = null,
+    savedMask: String? = null,
+    revealed: Boolean = false,
+    onRevealChange: ((Boolean) -> Unit)? = null,
+    onPaste: (() -> Unit)? = null,
+    isError: Boolean = false,
+    supportingText: String? = null,
+    enabled: Boolean = true,
 ) {
-    val c = PicnicTheme.colors
-    val d = PicnicTheme.dimens
-    PicnicSurface(
-        modifier
-            .fillMaxWidth()
-            .padding(start = d.gutter, end = d.gutter, top = d.s, bottom = d.s + d.hardShadow.y),
-        color = c.surfaceRaised,
-    ) {
-        Canvas(Modifier.matchParentSize()) {
-            // Faint sunburst from the top-right corner, plus two decorative sparkles.
-            val origin = Offset(size.width * 0.86f, -size.height * 0.2f)
-            val rays = 14
-            for (i in 0 until rays step 2) {
-                val a0 = Math.toRadians(90.0 + i * (180.0 / rays))
-                val a1 = Math.toRadians(90.0 + (i + 1) * (180.0 / rays))
-                val r = size.width * 1.2f
-                drawPath(
-                    path {
-                        moveTo(origin.x, origin.y)
-                        lineTo(origin.x + (r * kotlin.math.cos(a0)).toFloat(), origin.y + (r * kotlin.math.sin(a0)).toFloat())
-                        lineTo(origin.x + (r * kotlin.math.cos(a1)).toFloat(), origin.y + (r * kotlin.math.sin(a1)).toFloat())
-                        close()
-                    },
-                    c.backgroundPattern,
-                )
-            }
-            drawPath(sparklePath(Offset(size.width - 18.dp.toPx(), 14.dp.toPx()), 6.dp.toPx()), c.highlight)
-            drawPath(sparklePath(Offset(size.width - 40.dp.toPx(), 26.dp.toPx()), 3.5.dp.toPx()), c.primary)
-        }
-        Column(Modifier.padding(horizontal = d.m, vertical = d.s)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(d.xs)) {
-                navigation?.invoke()
-                Column(Modifier.weight(1f).padding(start = if (navigation == null) d.xs else 0.dp, top = d.xs, bottom = d.xs)) {
-                    Text(title, style = PicnicTheme.type.screenTitle, color = c.ink)
-                    if (subtitle != null) Text(subtitle, style = PicnicTheme.type.caption, color = c.inkSoft)
+    PicnicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        label = label,
+        placeholder = savedMask,
+        singleLine = true,
+        isError = isError,
+        supportingText = supportingText,
+        enabled = enabled,
+        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, autoCorrectEnabled = false),
+        visualTransformation = if (revealed) VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation('•'),
+        trailing = {
+            Row {
+                if (onRevealChange != null) {
+                    PicnicIconButton(
+                        PicnicGlyph.Eye,
+                        stringResource(if (revealed) R.string.theme_key_hide else R.string.theme_key_show),
+                        onClick = { onRevealChange(!revealed) },
+                        enabled = enabled,
+                    )
                 }
-                actions()
+                if (onPaste != null) {
+                    PicnicIconButton(PicnicGlyph.Paste, stringResource(R.string.theme_key_paste), onClick = onPaste, enabled = enabled)
+                }
             }
-            if (bottom != null) {
-                Box(Modifier.padding(top = d.xs, bottom = d.xs)) { bottom() }
-            }
-        }
-    }
+        },
+    )
 }
 
-/** Settings toggle: a drawn pill switch (thumb carries a star when on), 48 dp touch target. */
+/* ------------------------------------------------------------------------------------------------
+ * Switches (§4.9, §4.17).
+ * ------------------------------------------------------------------------------------------------ */
+
+/**
+ * The toggle switch (§4.9): a 40 × 24 dp pill in a 48 dp target. On = melon mid with a 16 dp white knob at the right;
+ * off = backing with the knob at the left and a 1.5 dp periwinkle ring; 2 dp white border, hs; the knob moves in 2
+ * steps (120 ms). Disabled: 50 %. Role.Switch (the caller merges its label).
+ */
 @Composable
 fun PicnicSwitch(
     checked: Boolean,
@@ -403,14 +1148,23 @@ fun PicnicSwitch(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val reduced = LocalReducedMotion.current
+    var knob by remember { mutableFloatStateOf(if (checked) 1f else 0f) }
+    LaunchedEffect(checked) {
+        val target = if (checked) 1f else 0f
+        if (reduced || knob == target) {
+            knob = target
+        } else {
+            withContext(FixedMotionScale) {
+                knob = 0.5f
+                delay(PicnicMotion.switchKnob.durationMillis / 2L)
+                knob = target
+            }
+        }
+    }
+    val shape = PicnicTheme.shapes.pill
+    val shadows = PicnicTheme.shadows
     val c = PicnicTheme.colors
-    val d = PicnicTheme.dimens
-    val motion = PicnicTheme.motion
-    val thumbX by animateDpAsState(
-        targetValue = if (checked) 24.dp else 4.dp,
-        animationSpec = if (motion.reduced) snap() else tween(motion.shortMillis),
-        label = "switchThumb",
-    )
     Box(
         modifier
             .minimumInteractiveComponentSize()
@@ -420,165 +1174,124 @@ fun PicnicSwitch(
     ) {
         Box(
             Modifier
-                .size(width = 52.dp, height = 32.dp)
-                .hardShadow(PicnicTheme.shapes.chip, c.hardShadow, DpOffset(0.dp, 2.dp))
-                .clip(PicnicTheme.shapes.chip)
-                .background(if (checked) c.primary else c.surfaceSunken)
-                .border(d.outline, c.outline, PicnicTheme.shapes.chip),
-        ) {
-            Canvas(
-                Modifier
-                    .offset { IntOffset(thumbX.roundToPx(), 4.dp.roundToPx()) }
-                    .size(24.dp),
-            ) {
-                drawCircle(if (checked) c.onPrimary else c.surface)
-                drawCircle(c.outline, style = Stroke(d.outline.toPx() * 0.8f))
-                if (checked) drawPath(starPath(center, size.minDimension * 0.3f), c.highlight)
+                .size(width = 40.dp, height = 24.dp)
+                .hardShadow(shape, shadows)
+                .clip(shape)
+                .background(c.stickerWhite)
+                .padding(2.dp)
+                .clip(shape)
+                .background(if (checked) Families.melon.mid else c.backing)
+                .drawBehind {
+                    if (!checked) {
+                        val w = 1.5.dp.toPx()
+                        drawRoundRect(
+                            Families.periwinkle.mid, Offset(w / 2, w / 2), Size(size.width - w, size.height - w),
+                            CornerRadius((size.height - w) / 2), style = Stroke(w),
+                        )
+                    }
+                    val r = 8.dp.toPx()
+                    val pad = (size.height - r * 2) / 2f
+                    val x = pad + r + (size.width - pad * 2 - r * 2) * knob
+                    drawCircle(Color.White, r, Offset(x, size.height / 2f))
+                    if (!checked) drawCircle(Families.periwinkle.mid, r, Offset(x, size.height / 2f), style = Stroke(1.dp.toPx()))
+                },
+        )
+    }
+}
+
+/**
+ * The recipe card's keep switch (§4.17): a 48 dp target on a dashed spot; kept = a 30 dp lemon star sticker pressed onto
+ * the spot (the book's magic-appear poses, 320 ms; a fade under reduced motion). Role.Switch.
+ */
+@Composable
+fun KeepSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier, contentDescription: String? = null) {
+    val reduced = LocalReducedMotion.current
+    val pop = remember { Animatable(1f) }
+    LaunchedEffect(checked) {
+        if (checked) {
+            withContext(FixedMotionScale) {
+                if (reduced) {
+                    pop.snapTo(0f)
+                    pop.animateTo(1f, tween(PicnicMotion.rmFade.durationMillis))
+                } else {
+                    // 0 → 1.3 → 0.92 → 1 in stepped poses (320 ms).
+                    for (s in listOf(0.3f, 1.3f, 0.92f)) {
+                        pop.snapTo(s)
+                        delay(320L / 4)
+                    }
+                    pop.snapTo(1f)
+                }
             }
+        }
+    }
+    Box(
+        modifier
+            .size(48.dp)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        StickerSpot(size = 30.dp)
+        if (checked) {
+            DecorSticker(
+                "star",
+                Modifier.graphicsLayer {
+                    if (reduced) alpha = pop.value else { scaleX = pop.value; scaleY = pop.value }
+                },
+                size = 30.dp,
+            )
         }
     }
 }
 
-/** Use as SnackbarHost(hostState) { PicnicSnackbar(it) }: a speech bubble with a tail. */
+/* ------------------------------------------------------------------------------------------------
+ * The postage-edged card (§2.12, §4.17).
+ * ------------------------------------------------------------------------------------------------ */
+
+/** The postage edge: 6 dp semicircle bites every 10 dp on all four sides. */
+val PostageShape: BittenEdgeShape = BittenEdgeShape(bite = 6.dp, every = 10.dp, allSides = true)
+
+/**
+ * A postage-edged card (the recipe card, §4.17): a white card with 6 dp bites every 10 dp on all four sides, a 2 dp dashed
+ * `rule` frame inset 8 dp (exact dashes, DashSpec.forPath), and the hard shadow on the cut shape (hs2).
+ */
+@Composable
+fun PostageCard(modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    val c = PicnicTheme.colors
+    Column(
+        modifier
+            .hardShadow(PostageShape, PicnicTheme.shadows, large = true)
+            .clip(PostageShape)
+            .background(Color.White)
+            .drawBehind {
+                val inset = 8.dp.toPx()
+                val frame = Path().apply { addRect(Rect(inset, inset, size.width - inset, size.height - inset)) }
+                drawDashedPath(frame, c.rule, 2.dp.toPx(), 5.dp.toPx(), 3.dp.toPx(), join = StrokeJoin.Miter)
+            }
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        content = content,
+    )
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * v1 snackbar.
+ * ------------------------------------------------------------------------------------------------ */
+
+/** Use as SnackbarHost(hostState) { PicnicSnackbar(it) }: the sticky-note look (§4.15) with its Undo chip. */
 @Composable
 fun PicnicSnackbar(data: SnackbarData, modifier: Modifier = Modifier) {
-    val c = PicnicTheme.colors
-    val d = PicnicTheme.dimens
-    PicnicSurface(
-        modifier
-            .fillMaxWidth()
-            .padding(horizontal = d.gutter, vertical = d.s),
-        shape = SpeechBubbleShape,
-        color = c.surfaceRaised,
-    ) {
-        Row(
-            Modifier.padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp + SPEECH_TAIL),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(data.visuals.message, style = PicnicTheme.type.body, color = c.ink, modifier = Modifier.weight(1f))
-            val action = data.visuals.actionLabel
-            if (action != null) {
-                PicnicButton(action, onClick = { data.performAction() }, style = PicnicButtonStyle.Text)
-            }
-        }
-    }
+    StickyNote(
+        message = data.visuals.message,
+        actionLabel = data.visuals.actionLabel,
+        onAction = { data.performAction() },
+        modifier = modifier.padding(start = 14.dp, bottom = 20.dp),
+    )
 }
 
-/** Drag handle for ModalBottomSheet(dragHandle = { SheetHandle() }): a little ribbon bow. */
+/** A spacer as wide as a hard shadow, for rows of shadowed pieces. */
 @Composable
-fun SheetHandle(modifier: Modifier = Modifier) {
-    val c = PicnicTheme.colors
-    Canvas(
-        modifier
-            .padding(vertical = 10.dp)
-            .size(width = 36.dp, height = 16.dp),
-    ) {
-        val w = size.width
-        val h = size.height
-        val ink = c.outline
-        val line = 1.6.dp.toPx()
-        val left = path {
-            moveTo(w / 2, h / 2); quadraticTo(w * 0.18f, -h * 0.05f, w * 0.06f, h * 0.3f)
-            quadraticTo(w * 0.02f, h * 0.75f, w / 2, h / 2); close()
-        }
-        val right = path {
-            moveTo(w / 2, h / 2); quadraticTo(w * 0.82f, -h * 0.05f, w * 0.94f, h * 0.3f)
-            quadraticTo(w * 0.98f, h * 0.75f, w / 2, h / 2); close()
-        }
-        val tails = path {
-            moveTo(w * 0.47f, h * 0.55f); lineTo(w * 0.36f, h); lineTo(w * 0.44f, h * 0.92f); close()
-            moveTo(w * 0.53f, h * 0.55f); lineTo(w * 0.64f, h); lineTo(w * 0.56f, h * 0.92f); close()
-        }
-        fillAndInk(tails, c.primary, ink, line)
-        fillAndInk(left, c.primary, ink, line)
-        fillAndInk(right, c.primary, ink, line)
-        drawCircle(c.primaryShadow, h * 0.17f, Offset(w / 2, h / 2))
-        drawCircle(ink, h * 0.17f, Offset(w / 2, h / 2), style = Stroke(line))
-    }
-}
+fun ShadowRoom(modifier: Modifier = Modifier) = Spacer(modifier.width(4.dp))
 
-/* ---------------- internal helpers ---------------- */
-
-/** Height of the snackbar bubble's tail. */
-private val SPEECH_TAIL: Dp = 8.dp
-
-/** Rounded bubble with a small tail at the bottom-left (body and tail unioned: no seam). */
-private object SpeechBubbleShape : Shape {
-    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
-        val tail = with(density) { SPEECH_TAIL.toPx() }
-        val bodyBottom = (size.height - tail).coerceAtLeast(1f)
-        val r = with(density) { 18.dp.toPx() }.coerceAtMost(bodyBottom / 2f)
-        val body = Path().apply { addRoundRect(RoundRect(0f, 0f, size.width, bodyBottom, CornerRadius(r, r))) }
-        val tip = Path().apply {
-            moveTo(r + tail * 0.4f, bodyBottom - 2f)
-            lineTo(r + tail * 0.2f, size.height)
-            lineTo(r + tail * 2.2f, bodyBottom - 2f)
-            close()
-        }
-        return Outline.Generic(Path.combine(PathOperation.Union, body, tip))
-    }
-}
-
-/**
- * Cel highlight on a button face: one tapered lens under the top outline (thickest at the centre,
- * running out to points), a clear [GLOSS_GAP] below the [outline] ink line and well above the label,
- * about half the face wide (capped, so a long button gets a highlight, not a rule). A shape of its
- * own on the face: it never touches the outline, so it can't read as a second edge or a stray stroke.
- * Drawn under the label and the outline.
- */
-private fun Modifier.celGloss(color: Color, outline: Dp): Modifier = drawWithCache {
-    val top = outline.toPx() + GLOSS_GAP.toPx()
-    val t = GLOSS_THICKNESS.toPx()
-    val w = (size.width * 0.5f).coerceIn(GLOSS_MIN.toPx(), GLOSS_MAX.toPx()).coerceAtMost(size.width - size.height)
-    val left = (size.width - w) / 2f
-    val right = left + w
-    val cx = size.width / 2f
-    // Ends dip slightly below the crown, like light lying along the curve of a tube.
-    val end = top + t * 0.35f
-    val lens = Path().apply {
-        moveTo(left, end)
-        quadraticTo(cx, top - t * 0.35f, right, end)
-        quadraticTo(cx, top + t * 1.65f, left, end)
-        close()
-    }
-    onDrawWithContent {
-        if (w > t * 4) drawPath(lens, color)
-        drawContent()
-    }
-}
-
-private val GLOSS_GAP: Dp = 2.dp
-/** Thickness of the lens at its centre. */
-private val GLOSS_THICKNESS: Dp = 4.5.dp
-private val GLOSS_MIN: Dp = 24.dp
-private val GLOSS_MAX: Dp = 96.dp
-
-/**
- * A [width] ring of [color] round the face and its base ([below] = how far the base shows under the
- * face): a die-cut edge that separates a pale face from whatever pastel it floats over.
- */
-private fun Modifier.halo(shape: Shape, color: Color, width: Dp, below: Dp): Modifier = drawBehind {
-    val g = width.toPx()
-    val outline = shape.createOutline(Size(size.width + g * 2, size.height + below.toPx() + g * 2), layoutDirection, this)
-    translate(-g, -g) { drawOutline(outline, color) }
-}
-
-/** Width of the dusk halo round Primary buttons. */
-private val HALO: Dp = 2.5.dp
-
-/** A 3 dp ring outside the shape (keyboard focus): flat, never a glow. */
-private fun Modifier.focusRing(shape: Shape, color: Color): Modifier = drawBehind {
-    val grow = 3.dp.toPx()
-    val outline = shape.createOutline(Size(size.width + grow * 2, size.height + grow * 2), layoutDirection, this)
-    translate(-grow, -grow) { drawOutline(outline, color) }
-}
-
-/**
- * Highlighter bar behind the lower half of a text button's label (ink on lemon). [underOnly] draws
- * it as an underline below the glyphs instead (dusk: light text on lemon would be unreadable).
- */
-private fun Modifier.highlighter(color: Color, underOnly: Boolean): Modifier = drawBehind {
-    val h = if (underOnly) 3.dp.toPx() else size.height * 0.42f
-    val top = if (underOnly) size.height else size.height - h
-    drawRoundRect(color, Offset(-2.dp.toPx(), top), Size(size.width + 4.dp.toPx(), h), CornerRadius(2.dp.toPx()))
-}
+/** The size of an [IntSize] in dp. */
+internal fun IntSize.toDpSize(density: Density) = with(density) { androidx.compose.ui.unit.DpSize(width.toDp(), height.toDp()) }
