@@ -543,6 +543,7 @@ fun AppState.ingestContext(listId: String): IngestContext {
         corrections = corrections,
         existingNames = existing,
         iconOverrides = iconOverrideMap(),
+        pantry = pantry.take(PANTRY_IN_CONTEXT).map { it.name },
     )
 }
 

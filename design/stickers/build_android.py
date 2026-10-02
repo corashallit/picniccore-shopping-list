@@ -106,9 +106,9 @@ def item_outputs(out, catalog_icons, report):
             cx, cy, fam, sp = FACES[icon.key]
             fparts = face(cx, cy, fam, sp, .9)
             face_res = 'sk_f_' + res_name(key)
-            out[os.path.join(DRAWABLE, face_res + '.xml')] = E.vector_xml(
-                [E.Grp('face', children=E.art_prims(fparts, STICKER_BASE))], 52, 52,
-                comment=HEADER_XML.format(src=f'face of {icon.key!r}'))
+            fnodes = [E.Grp('face', children=E.art_prims(fparts, STICKER_BASE))]
+            out[os.path.join(DRAWABLE, face_res + '.xml')] = E.vector_xml(fnodes, 52, 52, comment=HEADER_XML.format(src=f'face of {icon.key!r}'))
+            report['plain'][face_res] = (fnodes, 'item')
         cat = by_key.get(key, {})
         entries.append(dict(key=key, dsl=icon.key, res=name, face=face_res,
                             families=E.families(icon.parts, STICKER_BASE),
@@ -132,7 +132,7 @@ def decor_outputs(out, report):
     return names
 
 
-def picto_outputs(out):
+def picto_outputs(out, report):
     names = {}
     for k, v in PICTO.items():
         prims = E.flatten_svg(f'<g fill="currentColor">{v}</g>', current=engine.BP,
@@ -140,11 +140,12 @@ def picto_outputs(out):
         name = 'sk_p_' + k
         out[os.path.join(DRAWABLE, name + '.xml')] = E.vector_xml([E.Grp('pictogram', children=prims)], 24, 24,
                                                                   comment=HEADER_XML.format(src=f'pictogram {k!r}'))
+        report['plain'][name] = (prims, 'pictogram')
         names[k] = name
     return names
 
 
-def glyph_outputs(out):
+def glyph_outputs(out, report):
     names = {}
     for spec, k in GLYPHS.items():
         fill = 'currentColor' if k in GLYPH_FILLED else 'none'
@@ -153,11 +154,12 @@ def glyph_outputs(out):
         name = 'sk_g_' + spec
         out[os.path.join(DRAWABLE, name + '.xml')] = E.vector_xml([E.Grp('glyph', children=prims)], 24, 24,
                                                                   comment=HEADER_XML.format(src=f'toolbar glyph {k!r}'))
+        report['plain'][name] = (prims, 'glyph')
         names[spec] = name
     return names
 
 
-def pattern_outputs(out):
+def pattern_outputs(out, report):
     tiles = {}
     for k, (svg, _) in PATTERNS.items():
         m = re.search(r"width='([\d.]+)' height='([\d.]+)'", svg)
@@ -167,6 +169,7 @@ def pattern_outputs(out):
         name = 'sk_t_' + k
         out[os.path.join(DRAWABLE, name + '.xml')] = E.vector_xml([E.Grp('tile', children=prims)], w, h,
                                                                   comment=HEADER_XML.format(src=f'tab pattern {k!r}'))
+        report['plain'][name] = (prims, 'tile')
         tiles[k] = (name, w, h)
     return tiles
 
@@ -242,7 +245,9 @@ def launcher_outputs(out, report):
         if icon is hamper:
             mono_parts.append(E.mono_geom(icon, base))
     out[os.path.join(DRAWABLE, 'sk_l_launcher_foreground.xml')] = E.vector_xml(fg, s, s, comment=HEADER_XML.format(src='launcher hamper + holo star'))
+    report['plain']['sk_l_launcher_foreground'] = (fg, 'launcher')
     mono = E.Prim(E.geom_d(mono_parts[0]), fill=engine.BP, evenodd=True)
+    report['plain']['sk_l_launcher_monochrome'] = ([mono], 'launcher')
     out[os.path.join(DRAWABLE, 'sk_l_launcher_monochrome.xml')] = E.vector_xml(
         [E.Grp('mono', children=[mono])], s, s, comment=HEADER_XML.format(src='launcher hamper, mono'))
     return {'background': 'sk_l_launcher_background', 'foreground': 'sk_l_launcher_foreground',
@@ -275,13 +280,11 @@ def sticker_manifest(entries, catalog_icons):
         fams = ', '.join(kstr(f) for f in e['families'])
         face_ = f'R.drawable.{e["face"]}' if e['face'] else 'null'
         rows.append(f'        StickerEntry({kstr(e["key"])}, R.drawable.{e["res"]}, listOf({fams}), '
-                    f'StickerPersonality.{e["personality"].upper()}, {face_}, StickerSource.DSL, {kstr(e["dsl"])}),')
+                    f'Personality.{e["personality"].upper()}, {face_}, StickerSource.DSL, {kstr(e["dsl"])}),')
     miss = '\n'.join(f'        {kstr(k)},' for k in missing)
     return KT_HEAD + f'''import androidx.annotation.DrawableRes
 import earth.cora.picnic.R
-
-/** The hop a sticker makes on its way to the basket (§8.3). */
-enum class StickerPersonality {{ BERRY, EGG, BREAD, CAN, FROZEN, NONE }}
+import earth.cora.picnic.core.catalog.Personality
 
 /** Where a library sticker's art comes from (§3.2): the DSL, or a long-tail key drafted through the live pipeline. */
 enum class StickerSource {{ DSL, AI }}
@@ -296,7 +299,8 @@ data class StickerEntry(
     val key: String,
     @DrawableRes val drawable: Int,
     val families: List<String>,
-    val personality: StickerPersonality,
+    /** The hop on the way to the basket (§8.3): the catalog's `personality`, else the category default. */
+    val personality: Personality,
     val face: Int?,
     val source: StickerSource,
     val dslKey: String,
@@ -521,14 +525,15 @@ object PatternTiles {{
 # ------------------------------------------------------------------ driver
 def build(report):
     out = {}
+    report['plain'] = {}
     cat, catalog_icons = load_catalog()
     entries = item_outputs(out, catalog_icons, report)
     # the capsule sentinel first, then catalog order
     catalog_icons_sorted = [dict(key='_capsule')] + catalog_icons
     decor = decor_outputs(out, report)
-    pictos = picto_outputs(out)
-    glyphs = glyph_outputs(out)
-    tiles = pattern_outputs(out)
+    pictos = picto_outputs(out, report)
+    glyphs = glyph_outputs(out, report)
+    tiles = pattern_outputs(out, report)
     arts = basket_outputs(out, report)
     lres = launcher_outputs(out, report)
     out[os.path.join(GEN, 'StickerManifest.kt')] = sticker_manifest(entries, catalog_icons_sorted)

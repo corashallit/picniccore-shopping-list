@@ -6,7 +6,7 @@ by Chromium at 8x. Prints the per-image difference and writes side-by-side sheet
     python3 design/stickers/tools/roundtrip.py [--out DIR] [--scale 8] [keys...]
 
 Needs Node with Playwright (`npm i playwright && npx playwright install chromium`, or NODE_PATH pointing at a global
-install)."""
+install, or PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs)."""
 import json
 import os
 import re

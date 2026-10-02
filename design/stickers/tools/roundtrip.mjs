@@ -2,7 +2,8 @@
 // node roundtrip.mjs DIR [BACKGROUND]
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium } from 'playwright';
+// PLAYWRIGHT_MODULE may point at a global install (ESM ignores NODE_PATH), e.g. /usr/lib/node_modules/playwright/index.mjs
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const [dir, bg = '#7A7A7A'] = process.argv.slice(2);
 const pairs = JSON.parse(readFileSync(join(dir, 'pairs.json'), 'utf8'));

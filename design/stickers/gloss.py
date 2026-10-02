@@ -217,7 +217,12 @@ def autogloss(icon, report=None):
     if main:
         d, (pts, g, c) = main
         out.append(G(_path(pts), MAIN_W))
-        info['main'] = dict(part=d['i'], w=MAIN_W, len=round(_len(pts), 1))
+        bx0, by0, bx1, by1 = g.bounds
+        cx_, cy_, hw_, hh_ = (bx0 + bx1) / 2, (by0 + by1) / 2, max((bx1 - bx0) / 2, .1), max((by1 - by0) / 2, .1)
+        angs = [math.degrees(math.atan2((q[1] - cy_) / hh_, (q[0] - cx_) / hw_)) % 360 for q in pts]
+        span = sum((angs[k + 1] - angs[k] + 180) % 360 - 180 for k in range(len(angs) - 1))
+        # span: the share of the contour the main gloss covers, in degrees around the (bbox-normalised) shape (coverage lint)
+        info['main'] = dict(part=d['i'], w=MAIN_W, len=round(_len(pts), 1), span=round(abs(span), 1))
         # dot: continue along the inset ring past the lower-left end
         ring = LineString(g.exterior.coords)
         s0 = ring.project(Point(pts[0]))

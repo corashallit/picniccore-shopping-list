@@ -67,7 +67,7 @@ class ListScreenInteractionTest {
     @Test
     fun headersAnnounceWhatIsLeftToGetAndWhatIsInTheBasket() {
         // Dairy is collapsed (Samples); tick the eggs: 3 left to get, 1 in its basket.
-        show(Samples.shoppingState.toggleChecked(Samples.LIST_ID, "i-eggs"))
+        show(Samples.shoppingState.toggleChecked(Samples.LIST_ID, "i-eggs", Samples.NOW))
         compose.onNodeWithContentDescription("Bakery, 0 to get, 2 in the basket, All picked up!").assertExists()
         val list = compose.onNode(hasScrollToIndexAction())
         list.performScrollToNode(hasContentDescription("Dairy & eggs", substring = true))

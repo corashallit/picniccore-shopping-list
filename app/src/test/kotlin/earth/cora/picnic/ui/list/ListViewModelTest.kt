@@ -5,7 +5,6 @@ import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.core.model.SectionIds
-import earth.cora.picnic.core.model.SectionKind
 import earth.cora.picnic.core.model.currentList
 import earth.cora.picnic.core.model.findItem
 import earth.cora.picnic.core.model.list
@@ -78,7 +77,7 @@ class ListViewModelTest {
             s.sections.map { it.id },
         )
         val unsorted = s.sections.first()
-        assertEquals(SectionKind.UNSORTED, unsorted.kind)
+        assertEquals(SectionUiKind.UNSORTED, unsorted.kind)
         assertNull(unsorted.number)
         assertEquals(-1, unsorted.aisleIndex)
 

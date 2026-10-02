@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!-- WP8 (docs/DESIGN_STICKER.md §21, D20): the app's one name. The launcher label (AndroidManifest) and the
          wordmark both read app_name, so renaming the app is this one line (checklist 236, AppNameTest). Theme
          strings live in strings_theme.xml (WP4), screen strings in strings_screens.xml and friends. -->
     <string name="app_name">Kirakira Basket</string>
-    <string name="wordmark">@string/app_name</string>
+    <!-- Used by WP4 / WP8 (the puffy wordmark on the splash, empty state and About page). -->
+    <string name="wordmark" tools:ignore="UnusedResources">@string/app_name</string>
 </resources>

@@ -70,6 +70,8 @@ class Prim:
     fill_alpha: float = 1.0     # SVG fill-opacity
     name: Optional[str] = None  # path name (recolourable through Compose VectorConfig)
     evenodd: bool = False
+    cap: str = 'round'          # the DSL wraps every sticker in round caps and joins; plain SVG snippets keep their own
+    join: str = 'round'
 
 
 @dataclass
@@ -229,21 +231,33 @@ def has_area(d):
 
 
 # ---------------------------------------------------------------- silhouettes (shapely)
-def _poly_from_d(d, step=.3):
-    """polygons of an absolute path (each subpath closed), sampled every `step` units."""
-    p = SPath(d)
-    polys = []
-    for sp in p.as_subpaths():
-        sp = SPath(sp)
+def _sample(segs, step):
+    """points along consecutive segments, every segment's end point included (corners and star tips stay sharp)."""
+    pts = []
+    for seg in segs:
+        if isinstance(seg, Move):
+            continue
+        if not pts:
+            pts.append((seg.start.x, seg.start.y))
+        if isinstance(seg, (Line, Close)):
+            pts.append((seg.end.x, seg.end.y))
+            continue
         try:
-            L = sp.length(error=1e-3)
+            L = seg.length(error=1e-4)
         except Exception:
             L = 0
-        if not L:
-            continue
-        n = max(24, int(L / step))
-        pts = [sp.point(i / n) for i in range(n + 1)]
-        pts = [(q.x, q.y) for q in pts if q is not None]
+        n = max(2, int(math.ceil(L / step)))
+        for i in range(1, n + 1):
+            q = seg.point(i / n)
+            pts.append((q.x, q.y))
+    return pts
+
+
+def _poly_from_d(d, step=.25):
+    """polygons of an absolute path (each subpath closed), sampled every `step` units plus every vertex."""
+    polys = []
+    for sp in SPath(d).as_subpaths():
+        pts = _sample(list(sp), step)
         if len(pts) >= 3:
             g = Polygon(pts).buffer(0)
             if not g.is_empty:
@@ -251,22 +265,15 @@ def _poly_from_d(d, step=.3):
     return polys
 
 
-def _line_from_d(d, step=.3):
-    p = SPath(d)
+def _line_from_d(d, step=.25):
     lines = []
-    for sp in p.as_subpaths():
-        sp = SPath(sp)
-        try:
-            L = sp.length(error=1e-3)
-        except Exception:
-            L = 0
-        if L < 1e-6:
-            q = list(sp)[0].end
-            lines.append([(q.x, q.y)])
-            continue
-        n = max(8, int(L / step))
-        pts = [sp.point(i / n) for i in range(n + 1)]
-        lines.append([(q.x, q.y) for q in pts if q is not None])
+    for sp in SPath(d).as_subpaths():
+        segs = list(sp)
+        pts = _sample(segs, step)
+        if not pts:
+            q = segs[0].end
+            pts = [(q.x, q.y)]
+        lines.append(pts)
     return lines
 
 
@@ -553,6 +560,8 @@ def flatten_svg(snippet, base=None, current='#25307C', names=None):
         if stroke != 'none':
             prim.stroke = norm_hex(stroke)
             prim.width = float(ctx.get('stroke-width', 1)) * mat_scale(m)
+            prim.cap = ctx.get('stroke-linecap', 'butt')
+            prim.join = ctx.get('stroke-linejoin', 'miter')
         prim.alpha = opacity
         if names:
             prim.name = names.get(prim.fill or prim.stroke)
@@ -595,8 +604,11 @@ def _prim_xml(p, ind):
     if p.evenodd and p.fill is not None:
         attrs.append(_attr('fillType', 'evenOdd'))
     if p.stroke is not None:
-        attrs += [_attr('strokeColor', p.stroke), _attr('strokeWidth', num(p.width)),
-                  _attr('strokeLineCap', 'round'), _attr('strokeLineJoin', 'round')]
+        attrs += [_attr('strokeColor', p.stroke), _attr('strokeWidth', num(p.width))]
+        if p.cap != 'butt':
+            attrs.append(_attr('strokeLineCap', p.cap))
+        if p.join != 'miter':
+            attrs.append(_attr('strokeLineJoin', p.join))
         if p.alpha != 1:
             attrs.append(_attr('strokeAlpha', num(p.alpha)))
     head = f'{ind}<path ' + f'\n{ind}    '.join(attrs)

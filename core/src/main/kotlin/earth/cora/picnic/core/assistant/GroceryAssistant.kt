@@ -87,11 +87,20 @@ data class IngestContext(
      * chômeur" alone). The app is English-only today; pass the UI language once it is localized.
      */
     val appLanguage: String = DEFAULT_APP_LANGUAGE,
+    /**
+     * The pantry entry names as she wrote them, the first 200 in shelf order (§0.4 Q5, §6.2 rule 8): the model
+     * leaves out worked-out items they cover. TODO(WP3): print it in the context block ("In the pantry (she
+     * keeps these at home): …", "nothing yet" when empty) and regenerate the context example.
+     */
+    val pantry: List<String> = emptyList(),
 ) {
     companion object {
         const val DEFAULT_APP_LANGUAGE: String = "English"
     }
 }
+
+/** Why a proposed row starts switched off (§4.17, §6.2). Wire values: none / already_on_list / optional / in_pantry. */
+enum class SkipReason { NONE, ALREADY_ON_LIST, OPTIONAL, IN_PANTRY }
 
 /** One item the model proposed, after client-side post-processing. */
 data class ProposedItem(
@@ -106,6 +115,12 @@ data class ProposedItem(
     val iconFit: IconFit,
     /** True when a learned correction decided the aisle. */
     val aisleFromCorrection: Boolean = false,
+    /** Why the row starts switched off (the recipe card shows it as the reason); NONE = kept. */
+    val skipReason: SkipReason = SkipReason.NONE,
+    /** She named it (typed, photographed or spoken) versus the model worked it out; a named item is never skipped for the pantry. */
+    val named: Boolean = true,
+    /** The pantry entry that covers it ("spices" for cinnamon), when [skipReason] is IN_PANTRY. */
+    val pantryEntry: String? = null,
 )
 
 fun ProposedItem.toGroceryItem(id: String, now: Long, source: ItemSource): GroceryItem = GroceryItem(
@@ -150,7 +165,17 @@ data class IngestResult(
     /** Display names the model returned that were already on the list (or repeated). */
     val skippedDuplicates: List<String>,
     val meta: CallMeta,
+    /** Photos only: the transcribed lines, revealed one by one after the answer (§4.19, D16); else empty. */
+    val lines: List<PhotoLine> = emptyList(),
+    /** The recipe the answer worked from, or null (§4.17). */
+    val recipe: RecipeInfo? = null,
 )
+
+/** One line read off a photographed list (§4.19). [itemIndex] points into [IngestResult.items], or null. */
+data class PhotoLine(val text: String, val crossedOut: Boolean, val correctionOf: String?, val itemIndex: Int?)
+
+/** The recipe card's header facts (§4.17, §4.18): shown only from real fields in the answer (D16). */
+data class RecipeInfo(val title: String, val recipesCompared: Int?, val servings: Int?)
 
 /** Audio as recorded on device: MPEG-4/AAC with an ".m4a" file name (the extension matters). */
 class AudioClip(val bytes: ByteArray, val fileName: String = "recording.m4a")

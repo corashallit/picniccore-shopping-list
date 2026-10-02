@@ -197,6 +197,17 @@ data class AppState(
     val iconOverrides: List<IconOverride> = emptyList(),
     /** normalizeName of the user's favourite items (D17): the sakura heart flag and the "Favourites" chip. */
     val favourites: Set<String> = emptySet(),
+    /** What she keeps at home (§0.4 Q5, §6.13): one pantry for the app, in shelf order. Recipes leave it out. */
+    val pantry: List<PantryEntry> = emptyList(),
+)
+
+/** One pantry shelf sticker (§6.13). [name] as she wrote it (capitalised like an item name). */
+@Serializable
+data class PantryEntry(
+    val name: String,
+    /** The sticker: a learned override, the local match or the IconDecider's answer; null = not resolved yet (the capsule). */
+    val icon: IconRef? = null,
+    val addedAt: Long,
 )
 
 /** One parsed line of [StoreProfile.aislesText]. Derived, never persisted on its own. */

@@ -1,6 +1,6 @@
-# Picnic List
+# Kirakira Basket
 
-A picniccore grocery list for Android, styled after early-90s magical-girl anime.
+A picniccore grocery list for Android, styled after early-90s magical-girl anime. (It was called "Picnic List" until the art pass; the repository, the applicationId `earth.cora.picnic` and the APK file names keep the old name.)
 
 ## What it does
 
@@ -12,7 +12,7 @@ A picniccore grocery list for Android, styled after early-90s magical-girl anime
 
 ## Status
 
-Early work in progress. The visual direction is being chosen from three candidates; see [`design/concepts`](design/concepts/README.md).
+Work in progress. The visual direction is chosen: direction C, the "Furoku Sticker Album". [docs/DESIGN_STICKER.md](docs/DESIGN_STICKER.md) is its build spec (design, acceptance checklist, work packages); [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is the app's contract, amended for it. The earlier candidates are in [`design/concepts`](design/concepts/README.md).
 
 ## API keys
 

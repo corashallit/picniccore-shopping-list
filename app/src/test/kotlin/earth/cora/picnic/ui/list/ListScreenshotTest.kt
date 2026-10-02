@@ -47,8 +47,8 @@ class ListScreenshotTest(private val dark: Boolean, @Suppress("unused") private 
      * yet: an empty crate, four to get).
      */
     private val midTrip = Samples.shoppingState
-        .toggleChecked(Samples.LIST_ID, "i-lemons")
-        .toggleChecked(Samples.LIST_ID, "i-avocado")
+        .toggleChecked(Samples.LIST_ID, "i-lemons", Samples.NOW)
+        .toggleChecked(Samples.LIST_ID, "i-avocado", Samples.NOW)
         .updateList(Samples.LIST_ID) { it.copy(collapsedAisles = setOf("produce", "bakery", "dairy-eggs")) }
 
     @Test

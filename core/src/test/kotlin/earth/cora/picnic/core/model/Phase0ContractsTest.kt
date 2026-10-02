@@ -123,6 +123,18 @@ class Phase0ContractsTest {
     }
 
     @Test
+    fun pantryOneLiners() {
+        val s = state().copy(pantry = listOf(PantryEntry("Flour", addedAt = 1), PantryEntry("Eggs", addedAt = 2)))
+        assertEquals("Flour\nEggs", s.pantryText())
+        assertTrue(s.inPantry("egg"))
+        assertFalse(s.inPantry("Almond flour"))
+        assertEquals(listOf("Eggs"), s.removeFromPantry("flour").pantry.map { it.name })
+        assertSame(s, s.removeFromPantry("salt"))
+        assertEquals(IconRef("egg_carton"), s.setPantryIcon("egg", IconRef("egg_carton")).pantry[1].icon)
+        assertEquals(listOf("Flour", "Eggs"), s.ingestContext("l1").pantry, "every AI request carries the pantry")
+    }
+
+    @Test
     fun albumReferencesCustomIcons() = runTest {
         val sticker = BookSticker(0, "Gochujang", IconRef("condiments_generic", "c-123"), Rarity.NONE, 1)
         val book = TripBook(
