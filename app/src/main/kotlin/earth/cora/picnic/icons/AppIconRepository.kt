@@ -387,7 +387,7 @@ class AppIconRepository internal constructor(
         var retried = false
         while (true) {
             try {
-                return assistant.drawIcon(IconDrawRequest(itemName = job.name, styleReference = reference)).bytes
+                return assistant.drawIcon(IconDrawRequest(itemName = job.name, sheet = reference, mask = reference, subject = "", families = emptyList())).bytes
             } catch (e: LlmError.Refusal) {
                 PicnicLog.w("icon drawing refused by moderation; name blocked")
                 cache.block(job.key)

@@ -95,13 +95,25 @@ internal object Schemas {
         ),
     )
 
-    /** icon_decisions: {decisions:[{id: enum(i1..iN), icon: enum(decidable keys + "none"), category: enum(categories)}]}. */
-    fun iconDecisions(itemIds: List<String>, iconKeys: List<String>, categoryKeys: List<String>): JsonObject = strictObject(
+    /**
+     * icon_decisions: {decisions:[{id: enum(i1..iN), icon: enum(decidable keys + "none"), category: enum(categories),
+     * look: string, body: enum(sticker families), accent: enum(sticker families)}]}. look, body and accent brief a
+     * live drawing (v4, docs/DESIGN_STICKER.md §18.3); look is "" for a match.
+     */
+    fun iconDecisions(
+        itemIds: List<String>,
+        iconKeys: List<String>,
+        categoryKeys: List<String>,
+        familyKeys: List<String>,
+    ): JsonObject = strictObject(
         "decisions" to array(
             strictObject(
                 "id" to enumString(itemIds),
                 "icon" to enumString(iconKeys + ICON_NONE),
                 "category" to enumString(categoryKeys),
+                "look" to string(),
+                "body" to enumString(familyKeys),
+                "accent" to enumString(familyKeys),
             ),
         ),
     )
@@ -195,10 +207,24 @@ internal object Prompts {
     fun aislesBlock(aisles: List<Aisle>): String =
         "Aisles:\n" + aisles.joinToString("\n") { "- ${it.id}: ${oneLine(it.name, 120)}" }
 
-    fun iconPrompt(itemName: String, hint: String?): String {
-        val prompt = iconPromptTemplate.replace("{item}", oneLine(itemName, 80).ifEmpty { "a grocery item" })
-        val extra = hint?.let { oneLine(it, 160) }?.takeIf { it.isNotEmpty() }
-        return if (extra == null) prompt else "$prompt Details about the item: $extra."
+    /**
+     * The live-sticker v4 prompt (icon_prompt.txt): {subject} = [subject] on one line (≤ 300 chars), or
+     * "one <itemName>, as it is sold in a Canadian grocery store" when blank; {colours} = pastel, mid and trace
+     * of each of the first two known [families] (body first); {body} = the body pastel; {band} = the body mid.
+     */
+    fun iconPrompt(itemName: String, subject: String, families: List<String>): String {
+        val what = oneLine(subject, 300).trimEnd('.').ifEmpty { LiveIconDrawer.fallbackSubject(itemName) }
+        val fams = StickerPalette.normalize(families)
+        val colours = fams.joinToString(", ") { name ->
+            val f = StickerPalette.family(name)!!
+            "$name pastel ${f.pastel}, $name mid ${f.mid}, $name trace ${f.trace}"
+        }
+        val body = StickerPalette.family(fams.first())!!
+        return iconPromptTemplate
+            .replace("{subject}", what)
+            .replace("{colours}", colours)
+            .replace("{body}", body.pastel)
+            .replace("{band}", body.mid)
     }
 
     fun wireId(index: Int): String = "i${index + 1}"

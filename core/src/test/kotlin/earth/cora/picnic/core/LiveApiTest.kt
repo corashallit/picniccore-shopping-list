@@ -37,8 +37,8 @@ import kotlin.test.assertTrue
  * Real OpenAI calls with the production prompts and ModelDefaults. Run only with
  * `OPENAI_API_KEY=… ./gradlew -p core test -Plive=true` (excluded otherwise; never in CI).
  * Optional: PICNIC_BASE_URL (another OpenAI-compatible endpoint; default api.openai.com),
- * PICNIC_STYLE_REF (PNG for the drawing test; defaults to the app's bundled
- * assets/icons/_style_reference.png when present). Cost per full run: about US$0.10.
+ * PICNIC_SHEET (a v4 neighbour sheet PNG for the drawing test; defaults to the kimchi sheet in the app's
+ * test resources icons/ai4/). Cost per full run: about US$0.10.
  */
 @Tag("live")
 class LiveApiTest {
@@ -185,9 +185,19 @@ class LiveApiTest {
 
     @Test
     fun drawIcon() = runBlocking {
-        val style = (System.getenv("PICNIC_STYLE_REF")?.let(::File) ?: File("../app/src/main/assets/icons/_style_reference.png"))
-        assumeTrue(style.isFile, "no style reference (set PICNIC_STYLE_REF)")
-        val icon = assistant.drawIcon(IconDrawRequest("Gochujang", hint = "a red plastic tub of Korean chili paste", styleReference = style.readBytes(), styleReferenceFileName = style.name))
+        // Live stickers v4: the mockup's kimchi neighbour sheet (jam, pasta sauce, peanut butter) and the bundled mask.
+        val sheet = File(System.getenv("PICNIC_SHEET") ?: "../app/src/test/resources/icons/ai4/sheet_kimchi.png")
+        val mask = File("../app/src/main/assets/icons/mask.png")
+        assumeTrue(sheet.isFile && mask.isFile, "no neighbour sheet or mask (set PICNIC_SHEET)")
+        val icon = assistant.drawIcon(
+            IconDrawRequest(
+                itemName = "Kimchi",
+                sheet = sheet.readBytes(),
+                mask = mask.readBytes(),
+                subject = "one squat glass jar of kimchi with a round screw lid; a few chunky folded cabbage leaves show through the glass",
+                families = listOf("strawberry", "melon"),
+            ),
+        )
         println("== drawIcon: ${icon.bytes.size} bytes in ${icon.meta.latencyMs} ms")
         assertEquals("RIFF", String(icon.bytes, 0, 4, Charsets.US_ASCII))
         assertEquals("WEBP", String(icon.bytes, 8, 4, Charsets.US_ASCII))

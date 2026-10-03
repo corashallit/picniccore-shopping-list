@@ -44,6 +44,16 @@ data class ApiResult(
     val latencyMs: Long,
 )
 
+/**
+ * One file part of an /images/edits request (an `image[]` or the `mask`). [fileName] carries the extension the
+ * API reads the format from; [mimeType] defaults from it (png, webp, jpeg).
+ */
+class ImagePart(
+    val bytes: ByteArray,
+    val fileName: String,
+    val mimeType: String = OpenAiClient.imageMediaType(fileName),
+)
+
 /** A successful image call: decoded data[0].b64_json bytes. */
 class ImageResult(
     val bytes: ByteArray,
@@ -183,34 +193,37 @@ class OpenAiClient(
     }
 
     /**
-     * POST {base}/images/edits (multipart: model, prompt, image[] = reference PNG, background,
-     * output_format, output_compression, quality, size, n=1, all from [model]).
+     * POST {base}/images/edits (multipart: model, prompt, one `image[]` part per [images] in order, the
+     * optional [mask] part, then background, output_format, output_compression, quality, size and n=1, all
+     * from [model]). Live icons v4 (docs/DESIGN_STICKER.md §18.3) send the 2 x 2 neighbour sheet as the one
+     * image and the bundled mask that opens only its empty fourth cell.
      * Returns the decoded data[0].b64_json bytes. Never retried automatically (not even on 429/5xx):
      * the caller decides, so one drawing is never billed more than twice.
      */
     suspend fun imageEdit(
         model: ImageModel,
         prompt: String,
-        reference: ByteArray,
-        referenceFileName: String,
+        images: List<ImagePart>,
+        mask: ImagePart? = null,
         timeout: Duration = LlmTimeouts.IMAGE,
     ): ImageResult {
+        require(images.isNotEmpty()) { "imageEdit needs at least one image" }
         val conn = connection()
         val form = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("model", model.id)
             .addFormDataPart("prompt", prompt)
-            .addFormDataPart("image[]", referenceFileName, reference.toRequestBody(imageMediaType(referenceFileName).toMediaType()))
-            .addFormDataPart("background", model.background)
+        images.forEach { form.addFormDataPart("image[]", it.fileName, it.bytes.toRequestBody(it.mimeType.toMediaType())) }
+        mask?.let { form.addFormDataPart("mask", it.fileName, it.bytes.toRequestBody(it.mimeType.toMediaType())) }
+        form.addFormDataPart("background", model.background)
             .addFormDataPart("output_format", model.outputFormat)
             .addFormDataPart("output_compression", model.outputCompression.toString())
             .addFormDataPart("quality", model.quality)
             .addFormDataPart("size", model.size)
             .addFormDataPart("n", "1")
-            .build()
         return mapFailures {
             // No automatic retries: a drawing is slow (~10 s) and billed, and the caller retries it
             // at most once itself (the app's icon queue, research/openai_api.md §6.3).
-            val result = parseJson(execute(conn, "POST", "images/edits", form, timeout, maxRetries = 0))
+            val result = parseJson(execute(conn, "POST", "images/edits", form.build(), timeout, maxRetries = 0))
             val b64 = ((result.json["data"] as? JsonArray)?.firstOrNull() as? JsonObject)
                 ?.get("b64_json")?.let { (it as? JsonPrimitive)?.contentOrNull }
                 ?: throw LlmError.BadResponse("image response without data[0].b64_json", requestId = result.requestId)

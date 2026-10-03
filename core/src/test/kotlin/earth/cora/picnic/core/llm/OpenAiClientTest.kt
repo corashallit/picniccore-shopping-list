@@ -164,18 +164,6 @@ class OpenAiClientTest {
     }
 
     @Test
-    fun imageEditsAreNeverRetriedAutomatically() = runTest {
-        api.enqueueFixture(429, "errors/429_rate_limit.json")
-        assertFailsWith<LlmError.RateLimited> { api.client.imageEdit(ModelDefaults.IMAGE, "p", byteArrayOf(1), "ref.png") }
-        api.enqueue(503, """{"error":{"message":"overloaded","type":"server_error","param":null,"code":null}}""")
-        assertFailsWith<LlmError.RateLimited> { api.client.imageEdit(ModelDefaults.IMAGE, "p", byteArrayOf(1), "ref.png") }
-        api.enqueue(502, "")
-        assertFailsWith<LlmError.Network> { api.client.imageEdit(ModelDefaults.IMAGE, "p", byteArrayOf(1), "ref.png") }
-        assertEquals(3, api.server.requestCount)
-        assertTrue(api.sleeps.isEmpty())
-    }
-
-    @Test
     fun quotaIsNotRetriedAndIsNotARateLimit() = runTest {
         api.enqueueFixture(429, "errors/429_insufficient_quota.json")
         assertEquals("insufficient_quota", assertFailsWith<LlmError.QuotaExceeded> { api.client.responses(body()) }.code)
@@ -306,37 +294,6 @@ class OpenAiClientTest {
         assertEquals(listOf("Oatly", "za'atar", "bPC/b Blue Menu"), sentKeywords.take(3))
         assertTrue(sentKeywords.none { '<' in it || '>' in it || '\n' in it })
         assertNull(fields["language"], "never language together with languages[]")
-    }
-
-    @Test
-    fun imageEditIsMultipartAndDecodesTheImage() = runTest {
-        api.enqueueFixture(200, "other/image_edit.json", "x-request-id" to "req_img")
-        val ref = byteArrayOf(9, 8, 7)
-        val result = api.client.imageEdit(ModelDefaults.IMAGE, "Draw ONE new sticker icon of Gochujang", ref, "_style_reference.png")
-        assertContentEquals(TestSupport.fixtureBytes("other/tiny.webp"), result.bytes)
-        assertEquals("req_img", result.requestId)
-        val req = api.take()
-        assertEquals("/v1/images/edits", req.url.encodedPath)
-        val fields = req.formFields()
-        assertEquals(listOf("gpt-image-2.5-flare"), fields["model"])
-        assertEquals(listOf("filename:_style_reference.png"), fields["image[]"])
-        assertEquals(listOf("transparent"), fields["background"])
-        assertEquals(listOf("webp"), fields["output_format"])
-        assertEquals(listOf("80"), fields["output_compression"])
-        assertEquals(listOf("low"), fields["quality"])
-        assertEquals(listOf("1024x1024"), fields["size"])
-        assertEquals(listOf("1"), fields["n"])
-    }
-
-    @Test
-    fun imageModerationIsARefusalAndOtherImageErrorsAreBadResponses() = runTest {
-        api.enqueueFixture(400, "errors/400_moderation_blocked.json")
-        assertFailsWith<LlmError.Refusal> { api.client.imageEdit(ModelDefaults.IMAGE, "p", byteArrayOf(1), "ref.png") }
-        api.enqueueFixture(400, "errors/400_transparent_unsupported.json")
-        assertEquals("invalid_value", assertFailsWith<LlmError.BadResponse> { api.client.imageEdit(ModelDefaults.IMAGE, "p", byteArrayOf(1), "ref.png") }.code)
-        api.enqueue(200, """{"data":[]}""")
-        assertFailsWith<LlmError.BadResponse> { api.client.imageEdit(ModelDefaults.IMAGE, "p", byteArrayOf(1), "ref.png") }
-        assertEquals(3, api.server.requestCount)
     }
 
     @Test

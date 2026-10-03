@@ -1,0 +1,157 @@
+{
+ "dragonfruit": {
+  "name": "Dragon fruit",
+  "families": [
+   "sakura",
+   "melon"
+  ],
+  "neighbours": [
+   "apple",
+   "pear",
+   "cherries"
+  ],
+  "neighbour_u2": [
+   922.4,
+   736.0,
+   749.0
+  ],
+  "target_u2": 802.4,
+  "post4": {
+   "scale": 0.859,
+   "outline_u": 2.0,
+   "area_u2": 763.0,
+   "dE": 10.15,
+   "specks_removed": 2,
+   "gloss_len": 16.8
+  }
+ },
+ "bokchoy": {
+  "name": "Bok choy",
+  "families": [
+   "melon",
+   "mint"
+  ],
+  "neighbours": [
+   "broccoli",
+   "lettuce",
+   "celery"
+  ],
+  "neighbour_u2": [
+   798.6,
+   1030.5,
+   761.1
+  ],
+  "target_u2": 863.4,
+  "post4": {
+   "scale": 1.0,
+   "outline_u": 2.16,
+   "area_u2": 846.4,
+   "dE": 5.46,
+   "specks_removed": 2,
+   "gloss_len": 21.8
+  }
+ },
+ "kimchi": {
+  "name": "Kimchi",
+  "families": [
+   "strawberry",
+   "melon"
+  ],
+  "neighbours": [
+   "jam",
+   "pastasauce",
+   "peanutbutter"
+  ],
+  "neighbour_u2": [
+   1109.2,
+   929.6,
+   1018.4
+  ],
+  "target_u2": 1019.0,
+  "post4": {
+   "scale": 0.975,
+   "outline_u": 2.11,
+   "area_u2": 1020.8,
+   "dE": 7.89,
+   "specks_removed": 47,
+   "gloss_len": 20.8
+  }
+ },
+ "pierogi": {
+  "name": "Pierogi",
+  "families": [
+   "lemon",
+   "peach"
+  ],
+  "neighbours": [
+   "croissant",
+   "buttertart",
+   "sourdough"
+  ],
+  "neighbour_u2": [
+   642.4,
+   704.3,
+   900.1
+  ],
+  "target_u2": 749.0,
+  "post4": {
+   "scale": 0.863,
+   "outline_u": 1.91,
+   "area_u2": 759.7,
+   "dE": 6.01,
+   "specks_removed": 6,
+   "gloss_len": 10.6
+  }
+ },
+ "bagel": {
+  "name": "Sesame bagels",
+  "families": [
+   "cocoa"
+  ],
+  "neighbours": [
+   "sourdough",
+   "donuts",
+   "croissant"
+  ],
+  "neighbour_u2": [
+   900.1,
+   815.0,
+   642.3
+  ],
+  "target_u2": 785.8,
+  "post4": {
+   "scale": 0.933,
+   "outline_u": 2.08,
+   "area_u2": 831.5,
+   "dE": 5.65,
+   "specks_removed": 3,
+   "gloss_len": 14.6
+  }
+ },
+ "oatmilk": {
+  "name": "Oat milk",
+  "families": [
+   "ramune",
+   "cocoa"
+  ],
+  "neighbours": [
+   "cream",
+   "orangejuice",
+   "milkbag"
+  ],
+  "neighbour_u2": [
+   805.5,
+   923.3,
+   934.4
+  ],
+  "target_u2": 887.7,
+  "post4": {
+   "scale": 1.024,
+   "outline_u": 2.37,
+   "area_u2": 876.6,
+   "dE": 2.97,
+   "specks_removed": 3,
+   "gloss_len": 17.6
+  }
+ }
+}
