@@ -48,8 +48,10 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
@@ -73,23 +75,30 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.toSize
 import earth.cora.picnic.R
+import earth.cora.picnic.ui.a11y.textOverflowed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlin.math.PI
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
@@ -311,20 +320,20 @@ fun faceOps(kind: ButtonKind, enabled: Boolean, colors: PicnicColors, leadingSta
     val ops = mutableListOf<FaceOp>()
     when (kind) {
         ButtonKind.Primary -> {
-            ops += FaceOp.Fill(if (enabled) Families.strawberry.mid else colors.backing)
+            ops += FaceOp.Fill(if (enabled) Families.strawberry.mid else colors.disabledFace)
             if (leadingStar && enabled) ops += FaceOp.Star(Families.lemon.pastel)
-            ops += FaceOp.Label(if (enabled) Color.White else colors.ballpointSoft)
+            ops += FaceOp.Label(if (enabled) Color.White else colors.onDisabledFace)
         }
         ButtonKind.Secondary -> {
-            ops += FaceOp.Fill(if (enabled) Color.White else colors.backing)
+            ops += FaceOp.Fill(if (enabled) Color.White else colors.disabledFace)
             if (enabled) ops += FaceOp.Ring(Families.periwinkle.trace)
-            ops += FaceOp.Label(if (enabled) colors.ballpoint else colors.ballpointSoft)
+            ops += FaceOp.Label(if (enabled) colors.ballpoint else colors.onDisabledFace)
         }
-        // Disabled round faces take the pills' disabled tokens (§2.1 `backing`, §4.6): a flat backing disc with a
-        // ballpointSoft glyph, no gloss and no shadow, never a 50 % ghost of the live face (muddy on the Glow navy).
+        // Disabled round faces take the pills' disabled tokens (§4.6): a flat disabled-face disc (`backing` in Day, the
+        // rule navy in Glow) with its soft glyph, no gloss and no shadow, never a 50 % ghost of the live face.
         ButtonKind.Round -> {
-            ops += FaceOp.Fill(if (enabled) colors.pad else colors.backing)
-            ops += FaceOp.GlyphInk(if (enabled) colors.ink else colors.ballpointSoft)
+            ops += FaceOp.Fill(if (enabled) colors.pad else colors.disabledFace)
+            ops += FaceOp.GlyphInk(if (enabled) colors.ink else colors.onDisabledFace)
         }
         ButtonKind.AddBarSnap, ButtonKind.AddBarSpeak, ButtonKind.AddBarSend -> {
             val family = when (kind) {
@@ -332,8 +341,8 @@ fun faceOps(kind: ButtonKind, enabled: Boolean, colors: PicnicColors, leadingSta
                 ButtonKind.AddBarSpeak -> Families.sakura
                 else -> Families.strawberry
             }
-            ops += FaceOp.Fill(if (enabled) family.pastel else colors.backing)
-            ops += FaceOp.GlyphInk(if (enabled) colors.ballpoint else colors.ballpointSoft)
+            ops += FaceOp.Fill(if (enabled) family.pastel else colors.disabledFace)
+            ops += FaceOp.GlyphInk(if (enabled) colors.ballpoint else colors.onDisabledFace)
         }
         ButtonKind.Fab -> {
             ops += FaceOp.Fill(Families.strawberry.mid)
@@ -404,12 +413,17 @@ enum class PicnicButtonStyle { Primary, Secondary, Text }
  * (font scales past 2.0) instead of clipping it.
  * - Primary "candy pill": 52 dp, strawberry mid, 3 dp white border, hs2; DynaPuff 18 white label on a 4 dp #C3264F
  *   stroke; optional flat lemon star ([leadingStar]). Pressed: the shadow goes and the face drops (+2.4, +3.4) in 2
- *   steps of 80 ms. Disabled: backing fill, ballpointSoft label, no stroke, shadow or gloss; [busy] leads with a
- *   4-point star spinner.
+ *   steps of 80 ms. Disabled: the disabled face (`backing` in Day, the rule navy in Glow), its soft label, no stroke,
+ *   shadow or gloss; [busy] leads with a 4-point star spinner.
  * - Secondary: 48 dp white pill, 3 dp white border, an inset 2 dp periwinkle-trace outline, hs; DynaPuff 16 ballpoint,
  *   optional 18 dp [glyph]. Pressed (+1.6, +2.2), flat.
  * - Text: no face; Zen Maru 700 15 sp with a wavy 2 dp sakura underline; pressed = a highlighter band behind the label.
  * Focus: a 2 dp ballpoint ring 3 dp outside.
+ *
+ * A label too long for one line (a large font, a narrow slot) never loses words: the candy pill's shrinks to 15 sp,
+ * then wraps; the others wrap; both onto 2 centred lines, the face growing round them with its one-line caps (a rounded
+ * label, never a fat capsule cutting the corners off its words). Past 2 lines it ends in "…" and reports
+ * TextOverflowed; TalkBack always hears the whole label.
  */
 @Composable
 fun PicnicButton(
@@ -429,6 +443,15 @@ fun PicnicButton(
         PicnicButtonStyle.Text -> TextButton(text, onClick, modifier, enabled, glyph, interactionSource)
     }
 }
+
+/** The lines a pill's label may take before it ends in "…" (§4.6). */
+internal const val PILL_LABEL_LINES = 2
+
+/** The size the candy pill's puffy label shrinks to before it wraps. */
+private val PILL_MIN_LABEL = 15.sp
+
+/** The candy pill's label stroke (4 dp #C3264F). */
+private val PILL_LABEL_STROKE = 4.dp
 
 @Composable
 private fun PillButton(
@@ -453,37 +476,58 @@ private fun PillButton(
     val shadowOffset = if (primary) shadows.hs2 else shadows.hs
     val faceOffset = DpOffset(shadowOffset.x * press, shadowOffset.y * press)
     val height = if (primary) 52.dp else 48.dp
-    val shape = PicnicTheme.shapes.pill
     val kind = if (primary) ButtonKind.Primary else ButtonKind.Secondary
     val ops = faceOps(kind, enabled, c, leadingStar)
+    val puffy = primary && enabled
     // The label's bounds in the face's own coordinates (the gloss keeps 4 dp clear of them, R3).
     var faceCoords by remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     var labelCoords by remember { androidx.compose.runtime.mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
-    val labelFontPx = with(density) { (if (primary) t.primaryButton else t.secondaryButton).fontSize.toPx() }
-    fun labelBox(): Rect? {
-        val f = faceCoords
-        val l = labelCoords
-        if (f == null || l == null || !f.isAttached || !l.isAttached) return null
-        return labelInkBand(f.localBoundingBoxOf(l, clipBounds = false), labelFontPx)
-    }
+    val labelStyle = if (primary) t.primaryButton else t.secondaryButton
+    val labelFontPx = with(density) { labelStyle.fontSize.toPx() }
     val border = PicnicTheme.dimens.border
+    // The label on one line: its width (px, what the label row needs) and its box's height.
+    val measurer = rememberTextMeasurer(cacheSize = 2)
+    val oneLine: IntSize = remember(text, labelStyle, puffy, density) {
+        if (puffy) {
+            val stroke = with(density) { PILL_LABEL_STROKE.toPx() }
+            val box = measurer.measure(text, labelStyle, maxLines = 1, softWrap = false).size.height
+            IntSize(puffyLineWidth(measurer, AnnotatedString(text), labelStyle, PILL_MIN_LABEL.value, stroke, 0f), ceil(box + stroke).toInt())
+        } else {
+            measurer.measure(text, labelStyle, maxLines = 1, softWrap = false).size
+        }
+    }
     // R3 at large text: once the label's ink band reaches the dot's height (font scale ≳ 1.3), a label starting at the
     // usual 27 / 21 dp would sit within 4 dp of the dot, and the mirrored gloss would meet its end. The label then starts
     // past the dot instead, so the gloss keeps its place in the left cap and its 4 dp clearance (ButtonGlossTest).
     // The face is [height] tall at least and grows with a label too tall for it (font scales past 2.0): the inner face
     // is the larger of the nominal one and the label's box (its line, plus the primary's 4 dp stroke).
-    val labelStyle = if (primary) t.primaryButton else t.secondaryButton
     val faceInner = maxOf(
         height - border * 2,
-        with(density) { labelStyle.lineHeight.toDp() } + if (primary && enabled) 4.dp else 0.dp,
+        with(density) { labelStyle.lineHeight.toDp() } + if (puffy) PILL_LABEL_STROKE else 0.dp,
     )
+    val k = faceInner / 52.dp
+    val pastDot = GLOSS_DOT_RIGHT * k + ButtonGloss.CLEARANCE + 1.dp
     val labelStart = run {
-        val face = faceInner
-        val k = face / 52.dp
         val font = with(density) { labelStyle.fontSize.toDp() }
-        val inkTop = face / 2 - font / 2
+        val inkTop = faceInner / 2 - font / 2
         val base = if (primary) 27.dp else 21.dp
-        if (inkTop < GLOSS_DOT_BOTTOM * k + ButtonGloss.CLEARANCE) maxOf(base, GLOSS_DOT_RIGHT * k + ButtonGloss.CLEARANCE + 1.dp) else base
+        if (inkTop < GLOSS_DOT_BOTTOM * k + ButtonGloss.CLEARANCE) maxOf(base, pastDot) else base
+    }
+    val labelEnd = if (primary) 21.dp else 19.dp
+    val leads = (busy && !enabled) || (leadingStar && primary) || glyph != null
+    // The one-line face (its caps): a wrapped label's taller face keeps them, on a rounded label.
+    val capInner = maxOf(faceInner, with(density) { oneLine.height.toDp() })
+    val shape = CappedStadium(capInner / 2 + border)
+    val innerShape = CappedStadium(capInner / 2)
+    val capInnerPx = with(density) { capInner.toPx() }
+    val lineHeightPx = with(density) { labelStyle.lineHeight.toPx() }
+    fun labelBox(): Rect? {
+        val f = faceCoords
+        val l = labelCoords
+        if (f == null || l == null || !f.isAttached || !l.isAttached) return null
+        val row = f.localBoundingBoxOf(l, clipBounds = false)
+        // A wrapped label inks its whole block; one line, the band its glyphs ink.
+        return if (row.height > lineHeightPx * 1.5f) row else labelInkBand(row, labelFontPx)
     }
     Box(
         modifier
@@ -495,16 +539,18 @@ private fun PillButton(
         Box(
             Modifier
                 .heightIn(min = height)
-                .focusRing(shape, c.ballpoint, focused)
+                .focusRing(CappedStadium(capInner / 2 + border + FOCUS_GROW), c.ballpoint, focused)
                 .then(if (enabled) Modifier.hardShadow(shape, shadows.color, shadowOffset) else Modifier)
                 .offset(faceOffset.x, faceOffset.y)
                 .clip(shape)
-                .background(if (enabled) c.stickerWhite else c.backing)
+                .background(if (enabled) c.stickerWhite else c.disabledFace)
                 .padding(border)
-                .clip(shape)
+                .clip(innerShape)
                 .testTag(FACE_TAG)
                 .onPlaced { faceCoords = it }
                 .drawBehind {
+                    // The gloss and the inset ring belong to the one-line face's caps.
+                    val capped = Size(size.width, min(size.height, capInnerPx))
                     for (op in ops) when (op) {
                         is FaceOp.Fill -> drawRect(op.color)
                         is FaceOp.Ring -> {
@@ -512,15 +558,26 @@ private fun PillButton(
                             val w = 2.dp.toPx()
                             drawRoundRect(
                                 op.color, Offset(inset + w / 2, inset + w / 2), Size(size.width - inset * 2 - w, size.height - inset * 2 - w),
-                                CornerRadius((size.height - inset * 2 - w) / 2f), style = Stroke(w),
+                                CornerRadius((capped.height - inset * 2 - w) / 2f), style = Stroke(w),
                             )
                         }
-                        is FaceOp.Crescent -> drawPath(ButtonGloss.of(FaceKind.Pill, size, labelBox(), this).crescent, op.color)
-                        is FaceOp.Dot -> ButtonGloss.of(FaceKind.Pill, size, labelBox(), this).let { drawCircle(op.color, it.dotRadius, it.dotCenter) }
+                        is FaceOp.Crescent -> drawPath(ButtonGloss.of(FaceKind.Pill, capped, labelBox(), this).crescent, op.color)
+                        is FaceOp.Dot -> ButtonGloss.of(FaceKind.Pill, capped, labelBox(), this).let { drawCircle(op.color, it.dotRadius, it.dotCenter) }
                         else -> Unit
                     }
                 }
-                .padding(start = labelStart, end = if (primary) 21.dp else 19.dp),
+                .layout { measurable, constraints ->
+                    // The label's insets: past the dot when it wraps (its first line then reaches the gloss's height).
+                    val endPx = labelEnd.roundToPx()
+                    val basePx = labelStart.roundToPx()
+                    val room = constraints.maxWidth - basePx - endPx - if (leads) (18.dp + 6.dp).roundToPx() else 0
+                    val wraps = constraints.hasBoundedWidth && oneLine.width > room
+                    val startPx = if (wraps) max(basePx, pastDot.roundToPx()) else basePx
+                    val placeable = measurable.measure(constraints.offset(horizontal = -(startPx + endPx)))
+                    val w = constraints.constrainWidth(placeable.width + startPx + endPx)
+                    val h = constraints.constrainHeight(placeable.height)
+                    layout(w, h) { placeable.place(startPx, 0) }
+                },
             contentAlignment = Alignment.Center,
         ) {
             Row(
@@ -529,29 +586,61 @@ private fun PillButton(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 when {
-                    busy && !enabled -> StarSpinner(Modifier.size(18.dp), c.ballpointSoft)
+                    busy && !enabled -> StarSpinner(Modifier.size(18.dp), c.onDisabledFace)
                     leadingStar && primary -> FlatStar(Modifier.size(18.dp))
-                    glyph != null -> Glyph(glyph, null, tint = if (enabled) (if (primary) Color.White else c.ballpoint) else c.ballpointSoft, size = 18.dp)
+                    glyph != null -> Glyph(glyph, null, tint = if (enabled) (if (primary) Color.White else c.ballpoint) else c.onDisabledFace, size = 18.dp)
                 }
                 val labelColor = ops.filterIsInstance<FaceOp.Label>().first().color
-                if (primary && enabled) {
+                if (puffy) {
                     PuffyText(
-                        text, t.primaryButton, fill = labelColor, stroke = 4.dp,
-                        strokeColor = Families.strawberry.trace, shadow = null, minFontSize = 15.sp,
+                        text, t.primaryButton, fill = labelColor, stroke = PILL_LABEL_STROKE,
+                        strokeColor = Families.strawberry.trace, shadow = null, minFontSize = PILL_MIN_LABEL,
+                        maxLines = PILL_LABEL_LINES, textAlign = TextAlign.Center, wrapLast = true,
                     )
                 } else {
-                    Text(
-                        text,
-                        style = if (primary) t.primaryButton else t.secondaryButton,
-                        color = labelColor,
-                        maxLines = 1,
-                    )
+                    WholeLabel(text, labelStyle.copy(color = labelColor), PILL_LABEL_LINES, TextAlign.Center)
                 }
             }
         }
     }
 }
 
+/** How far the focus ring's outline sits outside the face (3 dp gap + half its 2 dp line, [focusRing]). */
+private val FOCUS_GROW = 4.dp
+
+/**
+ * A kit label that never loses words silently: it wraps onto [maxLines], then ends in "…" and reports
+ * [earth.cora.picnic.ui.a11y.TextOverflowed] (the clipped-text checks see it; TalkBack still reads the whole text).
+ */
+@Composable
+internal fun WholeLabel(text: String, style: TextStyle, maxLines: Int, align: TextAlign = TextAlign.Start, modifier: Modifier = Modifier) {
+    var lost by remember { androidx.compose.runtime.mutableStateOf(false) }
+    Text(
+        text,
+        style = style.copy(textAlign = align),
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        onTextLayout = { r -> lost = r.didOverflowHeight || r.multiParagraph.didExceedMaxLines || (0 until r.lineCount).any { r.isLineEllipsized(it) } },
+        modifier = modifier.semantics { if (lost) textOverflowed = true },
+    )
+}
+
+/**
+ * A stadium whose caps stop growing at [maxRadius]: a pill or chip face that grows taller than one line (a wrapped label)
+ * keeps its one-line caps on a rounded label, so the curve never cuts into the corners of its words. Up to twice
+ * [maxRadius] tall it is the plain stadium.
+ */
+@Immutable
+internal class CappedStadium(private val maxRadius: Dp) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val r = min(size.height / 2f, with(density) { maxRadius.toPx() }).coerceAtLeast(0f)
+        return Outline.Rounded(RoundRect(0f, 0f, size.width, size.height, CornerRadius(r)))
+    }
+
+    override fun equals(other: Any?): Boolean = other is CappedStadium && other.maxRadius == maxRadius
+
+    override fun hashCode(): Int = maxRadius.hashCode()
+}
 
 @Composable
 private fun TextButton(
@@ -648,7 +737,7 @@ fun StarSpinner(modifier: Modifier = Modifier, color: Color = PicnicTheme.colors
 /**
  * A 40 dp round sticker button in a 48 dp target (More, Back): a pad circle, 3 dp white border, hs, a 24 dp line
  * [glyph] (never sticker art, which would bring a second gloss), one gloss crescent and dot. Pressed: flat onto its
- * shadow. Disabled: the pills' disabled tokens (a flat `backing` disc, ballpointSoft glyph, no gloss or shadow).
+ * shadow. Disabled: the pills' disabled tokens (a flat disabled-face disc, its soft glyph, no gloss or shadow).
  * [emphasized] is the v1 "primary-filled" flag and maps to the send button's look.
  */
 @Composable
@@ -694,8 +783,8 @@ fun AddBarButton(
 }
 
 /**
- * A round sticker face of [kind] and [faceSize] (≥48 dp target), with the R3 gloss. Disabled: a flat `backing` disc
- * (its border too), the glyph in ballpointSoft, no gloss and no shadow, as the disabled pills (§4.6).
+ * A round sticker face of [kind] and [faceSize] (≥48 dp target), with the R3 gloss. Disabled: a flat disabled-face disc
+ * (`disabledFace`, its border too), the glyph in `onDisabledFace`, no gloss and no shadow, as the disabled pills (§4.6).
  */
 @Composable
 fun RoundStickerButton(
@@ -732,7 +821,7 @@ fun RoundStickerButton(
                 .then(if (enabled) Modifier.hardShadow(CircleShape, shadows.color, shadows.hs) else Modifier)
                 .offset(faceOffset.x, faceOffset.y)
                 .clip(CircleShape)
-                .background(if (enabled) c.stickerWhite else c.backing)
+                .background(if (enabled) c.stickerWhite else c.disabledFace)
                 .padding(PicnicTheme.dimens.border)
                 .clip(CircleShape)
                 .testTag(FACE_TAG)
@@ -835,6 +924,9 @@ fun PicnicFab(
 /**
  * A kiss-cut label chip (§4.7): 32 dp face in a 48 dp target, [family] pastel fill, 3 dp white border, hs, Zen Maru 700
  * 13.5 sp ballpoint. Selected: the family's mid fill and a leading 13 dp puffy star (unless [leading] is given).
+ * Pressed: the face drops onto its shadow in 2 steps, like the pills (never a ripple). A label too long for one line
+ * wraps onto 2 and the face grows round it; past that it ends in "…" ([WholeLabel]). [leadingHeight] is how tall
+ * [leading] stands at most (the chip's caps hold it).
  */
 @Composable
 fun PicnicChip(
@@ -844,32 +936,40 @@ fun PicnicChip(
     modifier: Modifier = Modifier,
     leading: (@Composable () -> Unit)? = null,
     family: StickerFamily = Families.ramune,
+    leadingHeight: Dp = 15.dp,
 ) {
     val c = PicnicTheme.colors
     val on = stringResource(R.string.theme_switch_on)
     val off = stringResource(R.string.theme_switch_off)
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     Box(
         modifier
             .minimumInteractiveComponentSize()
             .semantics { stateDescription = if (selected) on else off }
-            .clickable(role = Role.Checkbox, onClick = onClick),
+            .clickable(interaction, indication = null, role = Role.Checkbox, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        ChipFace(fill = if (selected) family.mid else family.pastel) {
+        ChipFace(fill = if (selected) family.mid else family.pastel, press = rememberPressFraction(pressed), leadingHeight = leadingHeight) {
             when {
                 leading != null -> leading()
                 selected -> DecorSticker("star", size = 15.dp, shadow = false)
             }
-            Text(text, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
+            WholeLabel(text, PicnicTheme.type.label.copy(color = c.ballpoint), CHIP_LABEL_LINES)
         }
     }
 }
 
+/** The lines a chip's label may take before it ends in "…" (§4.7). */
+internal const val CHIP_LABEL_LINES = 2
+
 /**
  * A chip face: a 32 dp kiss-cut pill (3 dp white border, hs) with [fill]. Decorative container. [height] is a MINIMUM:
  * at large font scales the face grows with its label (1 dp above and below it, inside the border) instead of clipping
- * it (§15, font scale 2.0). A caller that sizes the face to its label's line itself ([StoreAisleChip]) passes
- * [grows] false: the face is then exactly [height] tall.
+ * it (§15, font scale 2.0); a wrapped label grows it further, on a rounded label with its one-line caps
+ * ([CappedStadium]: one line of the chip label, or [leadingHeight], whichever is taller). A caller that sizes the face
+ * to its label's line itself ([StoreAisleChip]) passes [grows] false: the face is then exactly [height] tall. [press]
+ * (0 → 1) drops the face onto its shadow.
  */
 @Composable
 fun ChipFace(
@@ -879,23 +979,37 @@ fun ChipFace(
     border: Dp = PicnicTheme.dimens.border,
     horizontal: Dp = 11.dp,
     grows: Boolean = true,
+    press: Float = 0f,
+    leadingHeight: Dp = 0.dp,
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
 ) {
-    val shape = PicnicTheme.shapes.pill
+    val shadows = PicnicTheme.shadows
+    val line = rememberLineHeight(PicnicTheme.type.label)
+    val inner = maxOf(height - border * 2, maxOf(line, leadingHeight) + CHIP_LABEL_ROOM * 2)
+    val shape = CappedStadium(inner / 2 + border)
     Row(
         modifier
             .then(if (grows) Modifier.heightIn(min = height) else Modifier.height(height))
-            .hardShadow(shape, PicnicTheme.shadows)
+            .hardShadow(shape, shadows)
+            .offset(shadows.hs.x * press, shadows.hs.y * press)
             .clip(shape)
             .background(PicnicTheme.colors.stickerWhite)
             .padding(border)
-            .clip(shape)
+            .clip(CappedStadium(inner / 2))
             .background(fill)
             .padding(horizontal = horizontal, vertical = if (grows) CHIP_LABEL_ROOM else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         content = content,
     )
+}
+
+/** The height of one line of [style] here (its text box, which may stand taller than its line height). */
+@Composable
+internal fun rememberLineHeight(style: TextStyle): Dp {
+    val measurer = rememberTextMeasurer(cacheSize = 1)
+    val density = LocalDensity.current
+    return remember(style, density) { with(density) { measurer.measure("Ag", style, maxLines = 1, softWrap = false).size.height.toDp() } }
 }
 
 /** The room a grown chip keeps above and below its label, inside the border. */
@@ -916,7 +1030,7 @@ fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, s
     val style = if (size <= 20.dp) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
     androidx.compose.ui.layout.Layout(
         content = {
-            Box(Modifier.clip(CircleShape).background(Color.White).border(ring, look.family.trace, CircleShape))
+            Box(Modifier.clip(CircleShape).background(PicnicTheme.colors.stickerWhite).border(ring, look.family.trace, CircleShape))
             if (number != null) {
                 Text(number.toString(), style = style.copy(color = look.family.trace), maxLines = 1, softWrap = false)
             } else {
@@ -934,6 +1048,19 @@ fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, s
             circle.place(0, 0)
             mark.place(Alignment.Center.align(IntSize(mark.width, mark.height), IntSize(w, h), layoutDirection))
         }
+    }
+}
+
+/** How big a [NumberCircle] of [number] and [size] draws here (it grows with a large font, [numberCircleDiameter]). */
+@Composable
+internal fun rememberNumberCircleSize(number: Int?, size: Dp, ring: Dp = 2.dp): Dp {
+    val style = if (size <= 20.dp) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
+    val measurer = rememberTextMeasurer(cacheSize = 1)
+    val density = LocalDensity.current
+    return remember(number, size, ring, style, density) {
+        if (number == null) return@remember size
+        val box = measurer.measure(number.toString(), style, maxLines = 1, softWrap = false).size
+        with(density) { numberCircleDiameter(size.roundToPx(), box.width, box.height, ring.roundToPx()).toDp() }
     }
 }
 
@@ -967,6 +1094,7 @@ fun AisleChip(
         modifier = modifier,
         family = look.family,
         leading = { NumberCircle(number, look, size = 20.dp) },
+        leadingHeight = rememberNumberCircleSize(number, 20.dp),
     )
 }
 
@@ -1030,7 +1158,7 @@ fun RarityChip(jackpot: Boolean, modifier: Modifier = Modifier) {
             .height(labelChipHeight(22.dp, text, style, border = 1.5.dp))
             .clearAndSetSemantics { }
             .clip(shape)
-            .background(Color.White)
+            .background(PicnicTheme.colors.stickerWhite)
             .padding(1.5.dp)
             .clip(shape)
             .drawBehind { drawRect(holoBrush(Offset(size.width / 2f, size.height / 2f))) }
@@ -1064,18 +1192,23 @@ internal fun Modifier.shrinkToFitWidth(): Modifier = layout { measurable, constr
     }
 }
 
-/** A source chip (§4.7, web results): a kiss-cut label with a link glyph; opens the URL. */
+/**
+ * A source chip (§4.7, web results): a kiss-cut label with a link glyph; opens the URL. Pressed and long labels as
+ * [PicnicChip].
+ */
 @Composable
 fun SourceChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     Box(
         modifier
             .minimumInteractiveComponentSize()
-            .clickable(role = Role.Button, onClick = onClick),
+            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        ChipFace(fill = Families.ramune.pastel) {
+        ChipFace(fill = Families.ramune.pastel, press = rememberPressFraction(pressed)) {
             Glyph(PicnicGlyph.Link, null, tint = PicnicTheme.colors.ballpoint, size = 15.dp)
-            Text(text, style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint), maxLines = 1)
+            WholeLabel(text, PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint), CHIP_LABEL_LINES)
         }
     }
 }

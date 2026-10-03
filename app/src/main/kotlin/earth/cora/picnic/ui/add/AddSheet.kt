@@ -621,8 +621,8 @@ private fun SpeakTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
 
 /**
  * The error state (rule 6, §6.12): the friendly message in hanko with the torn-paper glyph, inline (never a system
- * dialog), with "Try again", "Add as plain lines" and "Open Settings" as they apply. The pills keep one line: from font
- * scale 1.5 the long labels show their short words and TalkBack hears the full ones (§15: nothing clips).
+ * dialog), with "Try again", "Add as plain lines" and "Open Settings" as they apply. At a large font a pill's label
+ * wraps and the pill grows round it (§4.6, item 337): the same words at every size.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -630,7 +630,6 @@ private fun ErrorBlock(failed: AddPhase.Failed, actions: AddActions) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val message = failed.message ?: stringResource(failed.problem.copy())
-    val large = LocalDensity.current.fontScale >= VERY_LARGE_TEXT
     Column(Modifier.fillMaxWidth().testTag(ADD_ERROR_TAG), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
             Glyph(PicnicGlyph.TornPaper, null, tint = c.hanko, size = 20.dp, modifier = Modifier.padding(top = 1.dp))
@@ -639,30 +638,17 @@ private fun ErrorBlock(failed: AddPhase.Failed, actions: AddActions) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             if (failed.retryable) PicnicButton(stringResource(R.string.add_retry), onClick = actions.onRetry, glyph = PicnicGlyph.Refresh)
             if (failed.canUsePlainLines) {
-                ShortLabelButton(R.string.add_plain_lines, R.string.add_plain_lines_short, large, actions.onUsePlainLines, PicnicGlyph.Edit)
+                PicnicButton(stringResource(R.string.add_plain_lines), onClick = actions.onUsePlainLines, style = PicnicButtonStyle.Secondary, glyph = PicnicGlyph.Edit)
             }
             if (failed.needsSettings) {
-                ShortLabelButton(R.string.add_open_settings, R.string.add_open_settings_short, large, actions.onOpenSettings, PicnicGlyph.Settings)
+                PicnicButton(stringResource(R.string.add_open_settings), onClick = actions.onOpenSettings, style = PicnicButtonStyle.Secondary, glyph = PicnicGlyph.Settings)
             }
             // The microphone was turned off: the words say where to allow it, and this takes her there.
             if (failed.problem == AddProblem.MIC_DENIED) {
-                ShortLabelButton(R.string.add_open_phone_settings, R.string.add_open_phone_settings_short, large, actions.onOpenAppSettings, PicnicGlyph.Settings)
+                PicnicButton(stringResource(R.string.add_open_phone_settings), onClick = actions.onOpenAppSettings, style = PicnicButtonStyle.Secondary, glyph = PicnicGlyph.Settings)
             }
         }
     }
-}
-
-/** A secondary pill that shows [short] words at very large text and always tells TalkBack the [full] ones. */
-@Composable
-private fun ShortLabelButton(full: Int, short: Int, large: Boolean, onClick: () -> Unit, glyph: PicnicGlyph) {
-    val fullText = stringResource(full)
-    PicnicButton(
-        if (large) stringResource(short) else fullText,
-        onClick = onClick,
-        style = PicnicButtonStyle.Secondary,
-        glyph = glyph,
-        modifier = if (large) Modifier.semantics { contentDescription = fullText } else Modifier,
-    )
 }
 
 /** The app's own copy for each problem (core's AI errors bring their own friendly message). */

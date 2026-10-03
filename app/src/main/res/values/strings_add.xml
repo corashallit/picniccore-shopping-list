@@ -114,10 +114,6 @@
     <string name="add_open_settings">Open Settings</string>
     <!-- Microphone permission turned off for good: Android's page for this app, where she can allow it -->
     <string name="add_open_phone_settings">Open phone settings</string>
-    <!-- The same, short, for very large text (the pill keeps one line; TalkBack hears the long form) -->
-    <string name="add_plain_lines_short">Plain lines</string>
-    <string name="add_open_settings_short">Settings</string>
-    <string name="add_open_phone_settings_short">Phone settings</string>
     <!-- A review with no rows and no message from the answer (rule 4): says so plainly above "OK" -->
     <string name="add_nothing_note">Nothing to add from that note.</string>
     <string name="add_nothing_photo">Nothing to add from that photo.</string>
