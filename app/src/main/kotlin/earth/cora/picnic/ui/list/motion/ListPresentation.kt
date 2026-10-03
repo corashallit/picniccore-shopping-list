@@ -90,6 +90,12 @@ enum class RowPhase {
 
     /** Un-check: the hanko lifts (160 ms) and the ghost waits for the sticker to hop back (360 ms). */
     Landing,
+
+    /**
+     * Un-check before the sticker hopped (an accidental double tap, §8.3 "rapid taps"): the sticker never left the row,
+     * so it stays; only the hanko lifts (160 ms).
+     */
+    Lifting,
 }
 
 /** A basket's overrides while a chain plays (§5.3, §8.3, §8.4). */
@@ -155,8 +161,11 @@ sealed interface StampPhase {
     /** The "now" ring. */
     data object Now : StampPhase
 
-    /** The pictogram thunking in, started at [t0]. */
-    data class Thunking(val t0: Long) : StampPhase
+    /**
+     * The pictogram thunking in, started at [t0]; [inPlace] (a ListChange or reduced motion, §8.4, §8.8): a 120 ms fade
+     * in place instead, with no burst.
+     */
+    data class Thunking(val t0: Long, val inPlace: Boolean = false) : StampPhase
 
     data object Stamped : StampPhase
 }
@@ -200,6 +209,12 @@ data class CelebrationPresentation(
     val talkBack: Boolean = false,
     /** The summary was tapped: the progress bar is gone and a Done button closes it (§0.4 Q7). */
     val keptAt: Long? = null,
+    /**
+     * How long the summary waits before it closes by itself: its reading hold passed through Android's "Time to take
+     * action" setting (it carries an action, "tap to keep it", §9). The progress bar fills over exactly this. 0 = the
+     * plan's hold (no engine, previews).
+     */
+    val summaryHoldMs: Long = 0,
     /** The overlay fades (200 ms) from here, then it is gone. */
     val closingT0: Long? = null,
 )

@@ -13,6 +13,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -43,8 +46,14 @@ import earth.cora.picnic.ui.theme.ToastHostState
  * place while it holds (text never moves during its hold, §9). Owner: WP6.
  */
 
-/** The Next card's test tag. */
+/** The Next card's test tag: its button node, inside its motion layer, so its bounds are where it is drawn. */
 const val NEXT_CARD_TAG: String = "picnic_next_card"
+
+/** The Next card's slot: where it is laid out (its resting place), before its motion. */
+const val NEXT_CARD_SLOT_TAG: String = "picnic_next_card_slot"
+
+/** The toast's slot: the whole overlay, or, under a stacked card, the part below it that the toast is clipped to. */
+const val TOAST_SLOT_TAG: String = "picnic_toast_slot"
 
 /** The overlay's test tag. */
 const val OVERLAY_TAG: String = "picnic_motion_overlay"
@@ -69,7 +78,8 @@ fun MotionOverlay(
     // Arrival order: the second one sits 8 dp above the first, frozen while it shows.
     if (toastId != stack.toastId) {
         stack.toastId = toastId
-        stack.toastLiftPx = if (toastId != null && stack.cardT0 != null) stack.cardHeightPx + with(density) { 8.dp.roundToPx() } else 0
+        // Over the card wherever it sits (it may itself be lifted over an earlier toast).
+        stack.toastLiftPx = if (toastId != null && stack.cardT0 != null) stack.cardLiftPx + stack.cardHeightPx + with(density) { 8.dp.roundToPx() } else 0
     }
     val cardT0 = card?.t0
     if (cardT0 != stack.cardT0) {
@@ -78,11 +88,24 @@ fun MotionOverlay(
     }
     val toastLift = with(density) { stack.toastLiftPx.toDp() }
     val cardLift = with(density) { stack.cardLiftPx.toDp() }
+    // The card came second and sits over a toast: it enters and leaves in place (a 120 ms fade), so it never
+    // sweeps through the toast below it, and the toast's lift-off is clipped 3 dp under the card's face (§4.15, §9).
+    val stacked = card != null && stack.cardLiftPx > 0
+    // Only a toast below the card is clipped; a later toast that arrives over the card is not.
+    val clipToast = stacked && stack.toastLiftPx == 0
+    val cardFaceBottom = bottomInset + 20.dp + cardLift
     Box(modifier.fillMaxSize().testTag(OVERLAY_TAG)) {
         FlightLayer(engine, presentation)
         eggs()
-        // The toast host, measured at its own height so the note's height is known for stacking.
-        Layout(content = { ToastHost(toasts, bottomInset = bottomInset + toastLift, bottomGap = 20.dp) }, modifier = Modifier.fillMaxSize()) { m, c ->
+        // The toast host, measured at its own height so the note's height is known for stacking. Under a stacked card
+        // its slot ends 3 dp under the card's face and clips: the toast's lift-off never draws over the card.
+        Layout(
+            content = { ToastHost(toasts, bottomInset = bottomInset + toastLift, bottomGap = 20.dp) },
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .testTag(TOAST_SLOT_TAG)
+                .then(if (clipToast) Modifier.fillMaxWidth().height(cardFaceBottom - STACK_CLIP).clipToBounds() else Modifier.fillMaxSize()),
+        ) { m, c ->
             val placeable = m.first().measure(c.copy(minHeight = 0, maxHeight = Constraints.Infinity))
             val pads = (bottomInset + toastLift + 20.dp).roundToPx()
             if (toasts.current != null) stack.toastNoteHeightPx = (placeable.height - pads).coerceAtLeast(0)
@@ -93,6 +116,7 @@ fun MotionOverlay(
                 card,
                 engine.clock,
                 onSkip = { engine.skipNextCard() },
+                stacked = stacked,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     // The card face sits 20 dp above the inset; its box carries 8 dp of room for the sparkles.
@@ -102,6 +126,12 @@ fun MotionOverlay(
         }
     }
 }
+
+/**
+ * How far under the stacked card's face the toast below it is clipped: past the card's tilted corner (about 2 dp at
+ * −1°), short of the toast's own tilted top (it rests 8 dp below, its corners up to 4 dp higher at −2°).
+ */
+private val STACK_CLIP: Dp = 3.dp
 
 /** The Next card box's room round the face (corner sparkles, shadow). */
 private val CARD_ROOM: Dp = 8.dp
@@ -118,11 +148,12 @@ private class StackState {
 /**
  * The Next card in motion (§10): it rises from below (translateY(100 % + 130 dp) at 4° → −8 dp at −1.5° → rest at −1°,
  * 400 ms), holds still for its computed hold, exits downward (300 ms); under reduced motion it fades in and out (120 ms)
- * and holds the same time. A tap anywhere on it skips it. TalkBack: one button "Next: aisle 5, Breakfast", "Double-tap to
- * dismiss"; the card never steals focus.
+ * and holds the same time. [stacked] over a toast, it fades in and out in place too, so its path never crosses the
+ * toast (§4.15). A tap anywhere on it skips it. TalkBack: one button "Next: aisle 5, Breakfast",
+ * "Double-tap to dismiss"; the card never steals focus.
  */
 @Composable
-fun NextCardHost(card: NextCardPresentation, clock: MotionClock, onSkip: () -> Unit, modifier: Modifier = Modifier) {
+fun NextCardHost(card: NextCardPresentation, clock: MotionClock, onSkip: () -> Unit, modifier: Modifier = Modifier, stacked: Boolean = false) {
     val stop = card.stop ?: return
     val spoken = nextStopSpoken(stop)
     val dismiss = stringResource(R.string.motion_next_dismiss)
@@ -130,54 +161,65 @@ fun NextCardHost(card: NextCardPresentation, clock: MotionClock, onSkip: () -> U
     val px = LocalDensity.current.density
     var bounds by remember { mutableStateOf<Rect?>(null) }
     if (probe != null) {
-        // Tests only: read the clock in composition so every frame reports the card's pose.
+        // Tests only: read the clock in composition so every frame reports the card's pose (the harness also samples
+        // where the card is really drawn, from its button node's bounds).
         val now = clock.now
         val b = bounds
         SideEffect {
             if (b != null) {
-                val pose = nextCardPose(card, now)
+                val pose = nextCardPose(card, now, stacked)
                 probe.text(NEXT_CARD_TAG, now, b, dy = pose.dyFraction * b.height + pose.dyDp * px, rotation = pose.rotation, alpha = pose.alpha)
             }
         }
     }
+    // The slot is where the card rests; the card moves inside it. Its button node, its tap target and its test tag
+    // sit inside the motion layer, so they follow the card as it rises and leaves: a tap where it is not is the list's.
     Box(
         modifier
             .onGloballyPositioned { bounds = it.boundsInRoot() }
-            .testTag(NEXT_CARD_TAG)
-            .clearAndSetSemantics {
-                contentDescription = spoken
-                role = Role.Button
-                onClick(label = dismiss) {
-                    onSkip()
-                    true
-                }
-            }
-            .pointerInput(card.t0) { detectTapGestures { onSkip() } }
-            .graphicsLayer {
-                val pose = nextCardPose(card, clock.now)
-                translationY = pose.dyFraction * size.height + pose.dyDp * density
-                rotationZ = pose.rotation
-                alpha = pose.alpha
-            },
+            .testTag(NEXT_CARD_SLOT_TAG),
     ) {
-        NextStopCard(
-            number = stop.position.takeIf { it > 0 },
-            displayName = stop.displayName,
-            storeAisle = stop.storeAisle,
-            look = stop.look,
-            nextLabel = stringResource(R.string.motion_next),
-        )
+        Box(
+            Modifier
+                .graphicsLayer {
+                    val pose = nextCardPose(card, clock.now, stacked)
+                    translationY = pose.dyFraction * size.height + pose.dyDp * density
+                    rotationZ = pose.rotation
+                    alpha = pose.alpha
+                }
+                .testTag(NEXT_CARD_TAG)
+                .clearAndSetSemantics {
+                    contentDescription = spoken
+                    role = Role.Button
+                    onClick(label = dismiss) {
+                        onSkip()
+                        true
+                    }
+                }
+                .pointerInput(card.t0) { detectTapGestures { onSkip() } },
+        ) {
+            NextStopCard(
+                number = stop.position.takeIf { it > 0 },
+                displayName = stop.displayName,
+                storeAisle = stop.storeAisle,
+                look = stop.look,
+                nextLabel = stringResource(R.string.motion_next),
+            )
+        }
     }
 }
 
 /** The Next card's pose at [now]: translateY as (a fraction of its height, dp), rotation and alpha. */
 internal data class CardPose(val dyFraction: Float, val dyDp: Float, val rotation: Float, val alpha: Float)
 
-internal fun nextCardPose(card: NextCardPresentation, now: Long): CardPose {
+internal fun nextCardPose(card: NextCardPresentation, now: Long, stacked: Boolean = false): CardPose {
     val exit = card.exitT0
-    if (card.reduced) {
-        val a = if (exit != null && now >= exit) fadeOut(now - exit) else fadeIn(now - card.t0)
-        return CardPose(0f, 0f, NextCardMotion.REST_ROTATION, a)
+    if (card.reduced || stacked) {
+        val leaving = exit != null && now >= exit
+        val a = if (leaving) fadeOut(now - exit!!) else fadeIn(now - card.t0)
+        // Stacked over a toast: a fade in place (NextCardMotion.STACKED_SHIFT_DP), never reaching the toast.
+        val shift = if (stacked && !card.reduced) NextCardMotion.STACKED_SHIFT_DP * (1f - a) else 0f
+        return CardPose(0f, shift, NextCardMotion.REST_ROTATION, a)
     }
     return if (exit != null && now >= exit) {
         val (f, d, r) = NextCardMotion.exit(now - exit)

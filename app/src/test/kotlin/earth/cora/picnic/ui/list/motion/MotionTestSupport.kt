@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
@@ -25,6 +26,7 @@ import earth.cora.picnic.platform.FakeTimeouts
 import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.ui.theme.LocalTimeouts
 import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.TOAST_TAG
 import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.ToastHostState
 import java.io.File
@@ -84,12 +86,63 @@ class HarnessRig(
         compose.waitForIdle()
         compose.mainClock.advanceTimeByFrame()
         compose.waitForIdle()
+        sampleReal()
     }
 
+    /** Advances [ms] one frame at a time, sampling where the card and the toast are really drawn on every frame. */
     fun advance(ms: Long) {
         compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(ms)
-        compose.waitForIdle()
+        val until = now + ms
+        while (now < until) {
+            if (p.nextCard == null && toasts.current == null) {
+                // Nothing to sample: let the clock run (it still steps frame by frame).
+                compose.mainClock.advanceTimeBy(until - now)
+                compose.waitForIdle()
+                break
+            }
+            frame()
+        }
+    }
+
+    /**
+     * Where the Next card's face and the toast's note are really drawn now (their semantics nodes' bounds, which pass
+     * through the motion layers), reported to the probe as their real geometry and as overlays to each other
+     * (StillnessProbe): the stillness of each is measured on what the screen shows, not on its own report.
+     */
+    private fun sampleReal() {
+        if (p.nextCard == null && toasts.current == null) return
+        val t = now
+        val d = compose.density.density
+        compose.onAllNodesWithTag(NEXT_CARD_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.let { n ->
+            val face = n.boundsInRoot.deflate(8f * d)
+            probe.real(NEXT_CARD_TAG, t, face)
+            probe.overlay(NEXT_CARD_TAG, t, face)
+        }
+        toastNote()?.let { note ->
+            probe.text(TOAST_TAG, t, note)
+            probe.real(TOAST_TAG, t, note)
+            probe.overlay(TOAST_TAG, t, note)
+        }
+    }
+
+    /**
+     * The toast's note as drawn (root px): its live-region body, which sits inside the note's motion layer, grown by the
+     * note's padding, border and the washi strip above it (WP4's StickyNote: 17 / 29 / 13 dp, and 11 dp below with an
+     * action chip, 19 without).
+     */
+    fun toastNote(): Rect? {
+        val d = compose.density.density
+        val below = if (toasts.current?.actionLabel != null) 11f else 19f
+        val body = compose.onAllNodes(
+            androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(TOAST_TAG)) and
+                androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.LiveRegion),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: return null
+        if (body.width <= 0f || body.height <= 0f) return null
+        val note = Rect(body.left - 17f * d, body.top - 29f * d, body.right + 13f * d, body.bottom + below * d)
+        // Under a stacked card the toast's slot clips it: what is drawn is the part inside the slot.
+        val slot = compose.onAllNodesWithTag(TOAST_SLOT_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: return note
+        return if (note.overlaps(slot)) note.intersect(slot) else null
     }
 
     /** Advances to [time] (test-clock ms; frames are 16 ms, so the clock lands on the first frame at or after it). */

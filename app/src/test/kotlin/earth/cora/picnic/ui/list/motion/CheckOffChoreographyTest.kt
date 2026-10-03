@@ -146,6 +146,41 @@ class CheckOffChoreographyTest {
         assertEquals(listOf(false, true, false), rig.engine.flightLog.filter { it.itemId == "apples" }.map { it.back })
     }
 
+    /**
+     * Item 128, an accidental double tap: an un-check before the sticker hopped (at +100 ms during the slam, +250 ms during
+     * the peel) leaves the sticker on its row on every frame; only the hanko lifts. No flight, no ghost, no badge pop.
+     */
+    @Test
+    fun rapidRetapDuringTheSlam() = retapBeforeTheHop(100)
+
+    @Test
+    fun rapidRetapDuringThePeel() = retapBeforeTheHop(250)
+
+    private fun retapBeforeTheHop(at: Long) {
+        run {
+            val rig = HarnessRig(compose, produceOpen()).start()
+            val t0 = rig.tap("apples")
+            rig.advanceTo(t0 + at)
+            assertTrue("still on the row before the un-check", RowMotion.showsSticker(true, rig.p.rows["apples"]))
+            val u0 = rig.tap("apples")
+            val frames = rig.sampleTo(u0 + 600)
+            for ((t, p) in frames) {
+                assertTrue("+$at: the sticker shows at ${t - u0} (${p.rows["apples"]})", RowMotion.showsSticker(false, p.rows["apples"]))
+                assertTrue("+$at: nothing flies at ${t - u0}", p.flights.none { it.itemId == "apples" })
+                assertNull("+$at: no badge pop", p.baskets["produce"]?.badgePopT0?.takeIf { it >= u0 })
+            }
+            // The hanko lifts off (1 → 1.1 → gone, 160 ms), over the spot.
+            val first = frames.first().second
+            assertEquals(RowPhase.Lifting, first.rows["apples"])
+            assertTrue(RowMotion.liftsHanko(first.rows["apples"]))
+            assertEquals(1.1f, RowMotion.hankoScale(false, RowPhase.Lifting, u0, u0 + 90, reduced = false), 0f)
+            assertEquals(0f, RowMotion.hankoScale(false, RowPhase.Lifting, u0, u0 + 170, reduced = false), 0f)
+            assertBeat("+$at: settled", u0 + Beats.HANKO_LIFT, frames.firstTime { it.rows["apples"] == null })
+            assertTrue(rig.engine.flightLog.none { it.itemId == "apples" })
+            assertFalse(rig.model.item("apples").checked)
+        }
+    }
+
     /** Item 129: a basket that is not laid out: the chain lands in place and the book still updates in place. */
     @Test
     fun noBasketLandsInPlace() {
@@ -214,6 +249,45 @@ class CheckOffChoreographyTest {
         assertEquals(false, frames.first().second.baskets["aisle-2-baking"]?.lidClosed)
         assertTrue("no Next card", frames.all { it.second.nextCard == null })
         assertTrue("events: ${rig.engine.eventLog}", rig.engine.eventLog.none { it is MotionEvent.AisleDone || it is MotionEvent.NextShown })
+    }
+
+    @Test
+    fun revertDuringAisleDoneByAdd() {
+        // (d) Adding an item to the finished aisle at L + 600 (a quick add) re-opens it: the lid re-opens, the stamp
+        // returns to its number, no fold, no Next card.
+        val rig = HarnessRig(compose, MotionFixture.state()).start()
+        val t0 = rig.tap("baking-powder")
+        val L = t0 + 620
+        rig.advanceTo(L + 600)
+        assertEquals(true, rig.p.baskets["aisle-2-baking"]?.lidClosed)
+        var change: ListChange? = null
+        compose.runOnIdle { change = rig.model.add(MotionFixture.item("sugar").copy(id = "vanilla", name = "Vanilla", quantity = "59 mL", icon = "vanilla")) }
+        rig.frame()
+        assertEquals(ChangeCause.ADD, change!!.cause)
+        assertEquals(setOf("aisle-2-baking"), change!!.aisleReopened)
+        val frames = rig.sampleTo(L + 2600)
+        val at0 = frames.first().second.baskets["aisle-2-baking"]!!
+        assertEquals(false, at0.lidClosed)
+        assertTrue("re-opens in place", at0.inPlace)
+        assertTrue("no Next card", frames.all { it.second.nextCard == null })
+        assertTrue("no fold", frames.all { it.second.aisles["aisle-2-baking"]?.foldT0 == null })
+        assertTrue(rig.engine.eventLog.none { it is MotionEvent.AisleDone || it is MotionEvent.NextShown })
+    }
+
+    @Test
+    fun revertAfterTheCardRoseExitsIt() {
+        // (e) Un-checking at L + 1320, just after the Next card started to rise: the card exits at once.
+        val rig = HarnessRig(compose, MotionFixture.state()).start()
+        val t0 = rig.tap("baking-powder")
+        val L = t0 + 620
+        rig.advanceTo(L + 1320)
+        val card = rig.p.nextCard!!
+        assertNull(card.exitT0)
+        val u0 = rig.tap("baking-powder")
+        assertEquals("exits at once", u0, rig.p.nextCard?.exitT0)
+        val frames = rig.sampleTo(u0 + 400)
+        assertBeat("gone after its 300 ms exit", u0 + 300, frames.firstTime { it.nextCard == null })
+        assertTrue(frames.filter { it.second.nextCard != null }.all { it.second.nextCard!!.t0 == card.t0 })
     }
 
     /** Item 87: the item's name and detail never move through the check and the un-check chains. */

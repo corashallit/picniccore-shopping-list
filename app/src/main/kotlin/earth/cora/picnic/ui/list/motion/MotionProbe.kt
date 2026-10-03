@@ -19,6 +19,9 @@ interface MotionProbe {
 
     /** An overlay [tag] drawn at [time] over [bounds] (root px); [behind] = drawn behind every text plate (rays, confetti). */
     fun overlay(tag: String, time: Long, bounds: Rect?, behind: Boolean = false)
+
+    /** The piece [tag] recomposed (the performance gate: motion plays in draw and layer lambdas, not by recomposing). */
+    fun recomposed(tag: String) = Unit
 }
 
 /** The probe the motion pieces report to; null outside tests. */

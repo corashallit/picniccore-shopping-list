@@ -8,7 +8,9 @@ import kotlin.math.abs
  * frame on the test clock, its laid-out bounds, its transform and its alpha, and every overlay that could cross a text
  * reports its bounds. A text is STILL while its transform and alpha are constant (and it is fully shown) and no overlay
  * drawn in front of it crosses its bounds; rays and confetti drawn behind every plate do not count. [stillFrom] measures
- * how long a text stays still from a given moment (its settle). Test helper; owner WP6.
+ * how long a text stays still from a given moment (its settle). The harness also samples where the Next card and the
+ * toast are really drawn (their nodes' bounds through every layer, [real]) and reports each as an overlay to the other,
+ * so a card sweeping through a held toast, or the toast's lift crossing a held card, fails. Test helper; owner WP6.
  */
 class StillnessProbe : MotionProbe {
     data class TextFrame(val time: Long, val bounds: Rect, val dx: Float, val dy: Float, val scale: Float, val rotation: Float, val alpha: Float) {
@@ -31,8 +33,24 @@ class StillnessProbe : MotionProbe {
 
     data class OverlayFrame(val tag: String, val time: Long, val bounds: Rect?, val behind: Boolean)
 
+    /** Where a piece was really drawn at [time] (root px): its node's bounds through every layer, sampled by the harness. */
+    data class RealFrame(val time: Long, val bounds: Rect)
+
     private val texts = LinkedHashMap<String, MutableList<TextFrame>>()
+    private val reals = LinkedHashMap<String, MutableList<RealFrame>>()
     private val overlays = ArrayList<OverlayFrame>()
+
+    /**
+     * The harness's sample of where [tag] is really drawn at [time] (its semantics node's bounds, which pass through the
+     * motion layers): a text is still only while these stay put too, so the check never rests on the piece's own word.
+     */
+    fun real(tag: String, time: Long, bounds: Rect) {
+        val list = reals.getOrPut(tag) { ArrayList() }
+        val f = RealFrame(time, bounds)
+        if (list.isNotEmpty() && list.last().time == time) list[list.size - 1] = f else list += f
+    }
+
+    fun realFrames(tag: String): List<RealFrame> = reals[tag].orEmpty()
 
     override fun text(tag: String, time: Long, bounds: Rect, dx: Float, dy: Float, scale: Float, rotation: Float, alpha: Float) {
         val list = texts.getOrPut(tag) { ArrayList() }
@@ -44,6 +62,15 @@ class StillnessProbe : MotionProbe {
     override fun overlay(tag: String, time: Long, bounds: Rect?, behind: Boolean) {
         overlays += OverlayFrame(tag, time, bounds, behind)
     }
+
+    private val recompositions = HashMap<String, Int>()
+
+    override fun recomposed(tag: String) {
+        recompositions[tag] = (recompositions[tag] ?: 0) + 1
+    }
+
+    /** How many times [tag] recomposed so far. */
+    fun recompositions(tag: String): Int = recompositions[tag] ?: 0
 
     fun frames(tag: String): List<TextFrame> = texts[tag].orEmpty()
 
@@ -69,6 +96,8 @@ class StillnessProbe : MotionProbe {
             why?.invoke("not fully shown at ${ref.time} (alpha ${ref.alpha})")
             return 0
         }
+        val real = reals[tag].orEmpty()
+        val realRef = real.firstOrNull { it.time >= ref.time }
         var last = ref.time
         for (k in i0 until list.size) {
             val f = list[k]
@@ -76,7 +105,14 @@ class StillnessProbe : MotionProbe {
                 why?.invoke("moved at ${f.time}: $f vs $ref")
                 return f.time - from
             }
-            val crossing = overlays.firstOrNull { o -> !o.behind && o.time == f.time && o.bounds != null && o.bounds.overlaps(f.drawn) }
+            // Where it is really drawn, when the harness sampled it: the same as at the settle.
+            val r = real.firstOrNull { it.time == f.time }
+            if (r != null && realRef != null && !sameRect(r.bounds, realRef.bounds)) {
+                why?.invoke("really drawn elsewhere at ${f.time}: ${r.bounds} vs ${realRef.bounds}")
+                return f.time - from
+            }
+            val drawn = r?.bounds ?: f.drawn
+            val crossing = overlays.firstOrNull { o -> o.tag != tag && !o.behind && o.time == f.time && o.bounds != null && o.bounds.overlaps(drawn) }
             if (crossing != null) {
                 why?.invoke("crossed by ${crossing.tag} at ${f.time}")
                 return f.time - from
@@ -87,8 +123,12 @@ class StillnessProbe : MotionProbe {
         return last - from
     }
 
+    private fun sameRect(a: Rect, b: Rect): Boolean =
+        abs(a.left - b.left) <= 0.5f && abs(a.top - b.top) <= 0.5f && abs(a.right - b.right) <= 0.5f && abs(a.bottom - b.bottom) <= 0.5f
+
     fun clear() {
         texts.clear()
+        reals.clear()
         overlays.clear()
     }
 }

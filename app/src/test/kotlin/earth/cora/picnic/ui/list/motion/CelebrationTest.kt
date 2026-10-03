@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.TripStats
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.updateList
 import earth.cora.picnic.core.store.Album
 import earth.cora.picnic.core.store.InMemoryAlbumStore
 import earth.cora.picnic.core.store.InMemoryStateStore
@@ -161,15 +162,15 @@ class CelebrationTest {
         assertEquals(8930L, plan.beat(BeatName.Bonus).at)
         assertEquals(11230L, plan.beat(BeatName.Curl).at)
         assertEquals(12150L, plan.summaryAt)
-        assertEquals(16950L, plan.closeAt)
-        val frames = rig.sampleTo(s + 17300)
+        assertEquals(18450L, plan.closeAt)
+        val frames = rig.sampleTo(s + 18800)
         assertBeat("jingle", s, rig.feedback.times(Cue.CELEBRATION).firstOrNull()?.let { maxOf(it, s) })
         assertBeat("PER-FECT! thunk", s + 4300, rig.feedback.times(Cue.PERFECT).firstOrNull())
         assertBeat("pon!", s + 9030, rig.feedback.times(Cue.CAPSULE_POP).firstOrNull())
         assertBeat("peel", s + 11230, rig.feedback.times(Cue.UNCHECK).lastOrNull())
         assertBeat("kira", s + 11830, rig.feedback.times(Cue.MAGIC_APPEAR).lastOrNull())
-        assertBeat("closes by itself", s + 16950, frames.firstTime { it.celebration?.closingT0 != null })
-        assertBeat("gone", s + 16950 + 200, frames.firstTime(from = s + 16950) { it.celebration == null })
+        assertBeat("closes by itself", s + 18450, frames.firstTime { it.celebration?.closingT0 != null })
+        assertBeat("gone", s + 18450 + 200, frames.firstTime(from = s + 18450) { it.celebration == null })
     }
 
     /** Item 182: each text beat holds still its rule from its settle (StillnessProbe). */
@@ -177,7 +178,7 @@ class CelebrationTest {
     fun readHolds() {
         val rig = HarnessRig(compose, lastOne()).start()
         val s = rig.finish()
-        rig.advanceTo(s + 17000)
+        rig.advanceTo(s + 18500)
         fun check(tag: String, settle: Long, hold: Long) {
             var why = ""
             val still = rig.probe.stillFrom(tag, s + settle) { why = it }
@@ -189,8 +190,52 @@ class CelebrationTest {
         check(CelebrationTags.PERFECT, 4730, 1500)
         check(CelebrationTags.BANNER, 6530, 2400)
         check(CelebrationTags.BONUS, 9430, 1800)
-        for (tag in listOf(CelebrationTags.TITLE, CelebrationTags.CHIP, CelebrationTags.LCD, CelebrationTags.PERFECT, CelebrationTags.BANNER, CelebrationTags.BONUS)) {
-            check(tag, 12150, 4800)
+        // The summary: 17 words with the progress bar's label, 6.3 s.
+        for (tag in listOf(CelebrationTags.TITLE, CelebrationTags.CHIP, CelebrationTags.LCD, CelebrationTags.PERFECT, CelebrationTags.BANNER, CelebrationTags.BONUS, CelebrationTags.CLOSING_LABEL)) {
+            check(tag, 12150, 6300)
+        }
+    }
+
+    /**
+     * The performance gate (§20.20): the scene's motion plays in draw and layer lambdas, so the shelf (8 baskets with
+     * their minis) recomposes only as riders leave it (24 of them), not on every frame of the 17 s scene, and the
+     * dancing pet's LCD only when its pose changes.
+     */
+    @Test
+    fun shelfAndPetDoNotRecomposeEveryFrame() {
+        val state = lastOne().let { s -> s.updateList(MotionFixture.LIST_ID) { it.copy(trip = it.trip!!.copy(pet = true)) } }
+        val rig = HarnessRig(compose, state).start()
+        val s = rig.finish()
+        val shelf0 = rig.probe.recompositions(CelebrationTags.SHELF)
+        val frames = rig.sampleTo(s + 3000).size
+        val shelf = rig.probe.recompositions(CelebrationTags.SHELF) - shelf0
+        assertTrue("the shelf recomposed $shelf times over $frames frames", shelf <= 30)
+        val lcd0 = rig.probe.recompositions(CelebrationTags.LCD)
+        val danceFrames = rig.sampleTo(s + 6230 + 2400).size
+        val lcd = rig.probe.recompositions(CelebrationTags.LCD) - lcd0
+        assertTrue("the pet LCD recomposed $lcd times over $danceFrames frames", lcd <= 8)
+    }
+
+    /**
+     * §11.2: the page curl peels the scene's bottom-right 150 dp corner "beside the bonus card, never over text": the
+     * bonus card (and every other text plate) stays clear of that corner, at font scale 1.0 and 2.0.
+     */
+    @Test
+    fun curlNeverCoversText() = curlClear(1f)
+
+    @Test
+    fun curlNeverCoversTextAtFontScale200() = curlClear(2f)
+
+    private fun curlClear(fontScale: Float) {
+        val rig = HarnessRig(compose, lastOne(), fontScale = fontScale).start()
+        val s = rig.finish()
+        rig.advanceTo(s + 12600)
+        val scene = rig.bounds(CelebrationTags.SCENE)
+        val corner = androidx.compose.ui.unit.DpRect(scene.right - 150.dp, scene.bottom - 150.dp, scene.right, scene.bottom)
+        for (tag in listOf(CelebrationTags.BONUS, CelebrationTags.BANNER, CelebrationTags.CLOSING_LABEL, CelebrationTags.PERFECT)) {
+            val b = rig.bounds(tag)
+            val clear = b.bottom <= corner.top || b.right <= corner.left
+            assertTrue("font scale $fontScale: $tag $b reaches into the curl's corner $corner", clear)
         }
     }
 
@@ -212,7 +257,7 @@ class CelebrationTest {
         assertTrue(overlays.filter { it.tag == "cele_confetti" || it.tag == "cele_rays" }.all { it.behind })
     }
 
-    /** Item 184: one tap or Back closes it; it closes by itself at 16.95 s, except with TalkBack on (then it waits). */
+    /** Item 184: one tap or Back closes it; it closes by itself at 18.45 s, except with TalkBack on (then it waits). */
     @Test
     fun closeRules() {
         var activity: androidx.activity.ComponentActivity? = null
@@ -241,8 +286,8 @@ class CelebrationTest {
         // By itself at the end of the summary hold.
         rig.resetTrip()
         s = rig.finish()
-        val frames = rig.sampleTo(s + 17300)
-        assertBeat("auto-close", s + 16950, frames.firstTime { it.celebration?.closingT0 != null })
+        val frames = rig.sampleTo(s + 18800)
+        assertBeat("auto-close", s + 18450, frames.firstTime { it.celebration?.closingT0 != null })
         // TalkBack: no countdown; it waits for a tap; the announcement plays.
         compose.runOnIdle { rig.talkBackState.value = true }
         rig.resetTrip()
@@ -320,11 +365,12 @@ class CelebrationTest {
         val s = rig.finish()
         val plan = rig.p.celebration!!.plan!!
         assertTrue(plan.reduced)
-        assertEquals(6000L, plan.summaryHold)
-        val frames = rig.sampleTo(s + 6500)
-        assertBeat("fades out after its hold", s + 120 + 6000, frames.firstTime { it.celebration?.closingT0 != null })
-        for (tag in listOf(CelebrationTags.TITLE, CelebrationTags.CHIP, CelebrationTags.LCD, CelebrationTags.PERFECT, CelebrationTags.BANNER, CelebrationTags.BONUS)) {
-            assertTrue("$tag still for the hold", rig.probe.stillFrom(tag, s + 120) >= 6000)
+        // max(6000, readHold(17 words, with the progress bar's label)) = 6.3 s.
+        assertEquals(6300L, plan.summaryHold)
+        val frames = rig.sampleTo(s + 6800)
+        assertBeat("fades out after its hold", s + 120 + 6300, frames.firstTime { it.celebration?.closingT0 != null })
+        for (tag in listOf(CelebrationTags.TITLE, CelebrationTags.CHIP, CelebrationTags.LCD, CelebrationTags.PERFECT, CelebrationTags.BANNER, CelebrationTags.BONUS, CelebrationTags.CLOSING_LABEL)) {
+            assertTrue("$tag still for the hold", rig.probe.stillFrom(tag, s + 120) >= 6300)
         }
         assertTrue("no ride, confetti or curl", rig.probe.overlaysAt(s + 3000).none { it.tag == "cele_confetti" || it.tag == "cele_curl" || it.tag == "cele_shake" })
     }
@@ -394,45 +440,106 @@ class CelebrationTest {
         assertTrue(frames.any { it.time >= s + 11230 + 120 })
     }
 
-    /** Item 314: the summary's progress bar; a tap on the summary keeps it (Done closes it); elsewhere closes; TalkBack has none. */
+    /**
+     * Item 314: the summary card shows a washi progress bar along its bottom edge that fills over the summary hold; a tap
+     * on the card keeps it (Done closes it); a tap on the rays, the shelf or the album corner closes it, as "tap to
+     * skip" taught; TalkBack has no bar.
+     */
     @Test
     fun progressBarAndKeep() {
-        assertEquals(0f, closingFill(0, 4800, false), 0f)
-        assertEquals(0.5f, closingFill(2400, 4800, false), 0.001f)
-        assertEquals(1f, closingFill(4800, 4800, false), 0f)
-        assertEquals(0.375f, closingFill(2400 - 1, 4800, true), 0.001f)
+        assertEquals(0f, closingFill(0, 6300, false), 0f)
+        assertEquals(0.5f, closingFill(3150, 6300, false), 0.001f)
+        assertEquals(1f, closingFill(6300, 6300, false), 0f)
+        assertEquals(0.375f, closingFill(3150 - 1, 6300, true), 0.001f)
         val rig = HarnessRig(compose, lastOne()).start()
         var s = rig.finish()
         rig.advanceTo(s + 12150 - 200)
-        assertTrue("no bar before the summary", compose.onAllNodesWithTag(CelebrationTags.CLOSING, useUnmergedTree = true).fetchSemanticsNodes().isEmpty() || rig.p.celebration!!.keptAt == null)
+        assertNull(rig.p.celebration!!.keptAt)
         rig.advanceTo(s + 13000)
-        compose.onNodeWithTag(CelebrationTags.CLOSING, useUnmergedTree = true).fetchSemanticsNode()
         assertTrue("P1", texts(CelebrationTags.CLOSING).contains("Closing… tap to keep it"))
-        // A tap on the summary keeps it: the bar goes, Done shows, and it no longer closes by itself.
-        compose.onNodeWithTag(CelebrationTags.CONTENT, useUnmergedTree = true).performTouchInput { click(Offset(width / 2f, height / 3f)) }
+        // The bar runs along the summary card's bottom edge (straddling it), inside the card's width.
+        val card = rig.bounds(CelebrationTags.SUMMARY_CARD)
+        val bar = rig.bounds(CelebrationTags.CLOSING)
+        assertTrue("bar $bar along the card's bottom edge $card", bar.bottom <= card.bottom + 0.5.dp && bar.bottom >= card.bottom - 2.dp && bar.left >= card.left && bar.right <= card.right)
+        // A tap on the summary card keeps it: the bar goes, Done shows, and it no longer closes by itself.
+        compose.onNodeWithTag(CelebrationTags.SUMMARY_CARD, useUnmergedTree = true).performTouchInput { click(Offset(width / 2f, height / 3f)) }
         rig.frame()
         assertNotNull("#3 at ${rig.now - s}: ${rig.p.celebration?.let { c -> "t0=${c.t0 - s} closing=${c.closingT0?.minus(s)} kept=${c.keptAt?.minus(s)}" }}", rig.p.celebration!!.keptAt)
-        rig.advanceTo(s + 18000)
+        rig.advanceTo(s + 20000)
         assertNotNull("#4 at ${rig.now - s}: ${rig.p.celebration?.let { c -> "t0=${c.t0 - s} closing=${c.closingT0?.minus(s)} kept=${c.keptAt?.minus(s)}" }}", rig.p.celebration)
         assertTrue("P2", compose.onAllNodesWithTag(CelebrationTags.CLOSING, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        // Done sits on the card where the bar was: nothing below it moved.
+        assertEquals(card, rig.bounds(CelebrationTags.SUMMARY_CARD))
         compose.onNodeWithTag(CelebrationTags.DONE, useUnmergedTree = true).performClick()
         rig.advance(250)
         assertNull("#10 at ${rig.now - s}: ${rig.p.celebration?.let { c -> "t0=${c.t0 - s} closing=${c.closingT0?.minus(s)} kept=${c.keptAt?.minus(s)}" }}", rig.p.celebration)
-        // A tap elsewhere during the summary closes it at once.
-        rig.resetTrip()
-        s = rig.finish()
-        rig.advanceTo(s + 13000)
-        compose.onNodeWithTag(CELEBRATION_TAG).performTouchInput { click(Offset(width - 20f, height - 20f)) }
-        rig.frame()
-        assertNotNull("#5 at ${rig.now - s}: ${rig.p.celebration?.let { c -> "t0=${c.t0 - s} closing=${c.closingT0?.minus(s)} kept=${c.keptAt?.minus(s)}" }}", rig.p.celebration!!.closingT0)
-        assertNull("#11 at ${rig.now - s}: ${rig.p.celebration?.let { c -> "t0=${c.t0 - s} closing=${c.closingT0?.minus(s)} kept=${c.keptAt?.minus(s)}" }}", rig.p.celebration!!.keptAt)
-        rig.advance(250)
+        // A tap elsewhere during the summary closes it at once: the rays above the shelf, the shelf, the album corner.
+        val elsewhere = listOf<(Float, Float) -> Offset>(
+            { w, _ -> Offset(w / 2f, rig.bounds(CelebrationTags.SHELF).bottom.value * compose.density.density + 2f) },
+            { w, _ -> Offset(w - 30f, 40f) },
+            { w, h -> Offset(w - 20f, h - 20f) },
+        )
+        for ((i, at) in elsewhere.withIndex()) {
+            rig.resetTrip()
+            s = rig.finish()
+            rig.advanceTo(s + 13000)
+            compose.onNodeWithTag(CELEBRATION_TAG).performTouchInput { click(at(width.toFloat(), height.toFloat())) }
+            rig.frame()
+            assertNotNull("#5.$i at ${rig.now - s}", rig.p.celebration!!.closingT0)
+            assertNull("#11.$i", rig.p.celebration!!.keptAt)
+            rig.advance(250)
+        }
         // TalkBack: no countdown bar.
         compose.runOnIdle { rig.talkBackState.value = true }
         rig.resetTrip()
         s = rig.finish()
         rig.advanceTo(s + 13000)
         assertTrue("P3", compose.onAllNodesWithTag(CelebrationTags.CLOSING, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+    }
+
+    /**
+     * Item 314 with "Time to take action" (§9, §15): the summary carries an action ("tap to keep it"), so it waits the
+     * recommended timeout before it closes, and the bar fills over exactly that time.
+     */
+    @Test
+    fun progressBarFollowsTimeToTakeAction() {
+        val timeouts = earth.cora.picnic.platform.FakeTimeouts(actionTimeoutMs = 20_000)
+        val rig = HarnessRig(compose, lastOne(), timeouts = timeouts).start()
+        val s = rig.finish()
+        val cele = rig.p.celebration!!
+        assertEquals(20_000L, cele.summaryHoldMs)
+        assertTrue("asked with the action flag: ${timeouts.requests}", timeouts.requests.contains(6300L to true))
+        val frames = rig.sampleTo(s + 12150 + 20_400)
+        assertBeat("closes after the recommended timeout", s + 12150 + 20_000, frames.firstTime { it.celebration?.closingT0 != null })
+        assertTrue("still open at 30 s", frames.filter { it.first < s + 12150 + 20_000 }.all { it.second.celebration?.closingT0 == null })
+        // The bar's fill: half way at 10 s, full at 20 s.
+        assertEquals(0.5f, closingFill(10_000, cele.summaryHoldMs, false), 0.001f)
+    }
+
+    /**
+     * A configuration change (a rotation) re-creates the screen's composition mid-scene: the engine, kept by the
+     * screen's ViewModel, keeps the celebration, which carries on where it was and closes on time; nothing replays.
+     */
+    @Test
+    fun survivesRecreation() {
+        val shown = androidx.compose.runtime.mutableStateOf(true)
+        val rig = HarnessRig(compose, lastOne())
+        rig.start { if (shown.value) MotionHarness(rig.model, rig.toasts) }
+        val s = rig.finish()
+        rig.advanceTo(s + 5000)
+        val before = rig.p.celebration!!
+        compose.runOnIdle { shown.value = false }
+        rig.advance(400)
+        compose.runOnIdle { shown.value = true }
+        rig.frame()
+        val after = rig.p.celebration
+        assertNotNull("the scene is still up", after)
+        assertEquals(before.t0, after!!.t0)
+        compose.onNodeWithTag(CELEBRATION_TAG).fetchSemanticsNode()
+        assertEquals(1, rig.feedback.count(Cue.CELEBRATION))
+        val frames = rig.sampleTo(s + 18800)
+        assertBeat("closes on time", s + 18450, frames.firstTime { it.celebration?.closingT0 != null })
+        assertEquals(1, rig.engine.eventLog.count { it is MotionEvent.CelebrationStarted })
     }
 
     // ---- helpers ----

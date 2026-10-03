@@ -27,11 +27,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +58,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -119,6 +122,7 @@ object CelebrationTags {
     const val BONUS = "cele_bonus"
     const val SUMMARY_CARD = "cele_summary_card"
     const val CLOSING = "cele_closing"
+    const val CLOSING_LABEL = "cele_closing_label"
     const val DONE = "cele_done"
     const val STAMP_CARD = "cele_stamp_card"
     const val SHELF = "cele_shelf"
@@ -217,7 +221,7 @@ fun CelebrationScene(
                 Confetti(sc, w, h)
                 SceneContent(sc, content, copy, anchors, onSummaryCard)
                 AlbumCorner(sc, content.bonus, w, h)
-                BottomBand(sc, copy, w, anchors, onSummaryCard, onDone)
+                BottomBand(sc, copy, anchors, onDone)
             }
             if (probe != null) ProbeReports(sc, probe, anchors, origin, sceneSize)
         }
@@ -262,14 +266,15 @@ private fun shakeDx(sc: SceneClock): Float {
     }
 }
 
-private val RayColors = listOf(Color(0xFFFFD6E8), Color(0xFFFFF3A6), Color(0xFFCCEBFF), Color(0xFFE6F6EE))
-
 /** Pastel rays: 7.5° conic stripes, fading in over 600 ms from 0.04 s, then turning once per 24 s. Behind everything. */
 @Composable
 private fun Rays(sc: SceneClock) {
     val loop by rememberLoopTime(enabled = !sc.reduced)
+    // The scene is always Day: sakura, lemon and ramune pastels between stripes of the mint binder.
+    val ground = PicnicTheme.colors.binder
+    val rayColors = listOf(Families.sakura.pastel, Families.lemon.pastel, Families.ramune.pastel, ground)
     Canvas(Modifier.fillMaxSize()) {
-        drawRect(Color(0xFFE6F6EE))
+        drawRect(ground)
         val e = sc.since(BeatName.Iris)
         val a = if (sc.reduced) 1f else (e / 600f).coerceIn(0f, 1f)
         val c = Offset(size.width / 2f, size.height * 0.2f)
@@ -277,7 +282,7 @@ private fun Rays(sc: SceneClock) {
         rotate((loop % 24_000L) * 360f / 24_000f, c) {
             for (i in 0 until 48) {
                 val start = i * 7.5f
-                drawArc(RayColors[i % 4], start, 7.5f, true, Offset(c.x - r, c.y - r), Size(r * 2, r * 2), alpha = a)
+                drawArc(rayColors[i % 4], start, 7.5f, true, Offset(c.x - r, c.y - r), Size(r * 2, r * 2), alpha = a)
             }
         }
     }
@@ -418,6 +423,9 @@ private class SceneAnchors {
     var title: Rect by mutableStateOf(Rect.Zero)
     var shelf: List<Rect> by mutableStateOf(emptyList())
     var hamper: Rect by mutableStateOf(Rect.Zero)
+
+    /** Where the riders drop into the hamper: its rim's centre (root px). */
+    var hamperMouth: Offset by mutableStateOf(Offset.Zero)
     var origin: Offset by mutableStateOf(Offset.Zero)
     var sceneRight: Float by mutableFloatStateOf(0f)
 
@@ -434,11 +442,11 @@ private class SceneAnchors {
     /** Every text plate's laid-out bounds (root px, before its own motion), by tag. */
     val plates: MutableMap<String, Rect> = LinkedHashMap()
 
-    /** The summary's content and its closing bar (root px): together they are "the summary" a tap keeps open. */
+    /** The summary card and its closing bar (root px): together they are "the summary" a tap keeps open. */
     var content: Rect? = null
     var closing: Rect? = null
 
-    /** The summary card: the content and, while it shows, the closing bar along its bottom edge. */
+    /** The summary card (§0.4 Q7) with, while it shows, the washi bar along its bottom edge. */
     fun card(): Rect? {
         val a = content ?: return closing
         val b = closing ?: return a
@@ -469,13 +477,7 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(top = 10.dp, start = 12.dp, end = 12.dp, bottom = BAND)
-                .testTag(CelebrationTags.CONTENT)
-                .onGloballyPositioned {
-                    val b = it.boundsInRoot()
-                    anchors.plates[CelebrationTags.SUMMARY_CARD] = b
-                    anchors.content = b
-                    anchors.card()?.let(onSummaryCard)
-                },
+                .testTag(CelebrationTags.CONTENT),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // ---- Text beat 1: the title with its chip, the LCD and (bottom-left) "tap to skip" ----
@@ -515,15 +517,117 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
             }
             Spacer(Modifier.height(10.dp))
             Shelf(sc, content, anchors)
-            Spacer(Modifier.height(12.dp))
-            StampCard(sc, content, anchors)
-            Spacer(Modifier.height(12.dp))
-            Banner(sc, content, copy, anchors)
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
+            SummaryCard(sc, copy, anchors, onSummaryCard) {
+                StampCard(sc, content, anchors)
+                Spacer(Modifier.height(8.dp))
+                Banner(sc, content, copy, anchors)
+            }
             PicnicSpread(sc, content, copy, anchors)
         }
         Riders(sc, content, anchors)
         KiraStars(sc, anchors)
+    }
+}
+
+/**
+ * The summary card (§0.4 Q7): the trip's results, the stamp card with PER-FECT! and the ribbon banner, on a ruled pad
+ * card (white kiss-cut, hs2) that fades in behind them as the summary starts, with the washi progress bar along its
+ * bottom edge, labelled "Closing… tap to keep it". A tap on this card keeps the scene open (the bar goes, and a Done
+ * button shows in the bottom band, where "tap to skip" was); a tap on the rays, the shelf, the picnic or the album
+ * corner closes it, as "tap to skip" taught. Its last row is laid out from the start and keeps its place once kept, so
+ * nothing moves when the bar comes or goes; under TalkBack (no countdown) it has none.
+ */
+@Composable
+private fun SummaryCard(
+    sc: SceneClock,
+    copy: CelebrationCopy,
+    anchors: SceneAnchors,
+    onSummaryCard: (Rect) -> Unit,
+    results: @Composable () -> Unit,
+) {
+    val c = PicnicTheme.colors
+    val shape = RoundedCornerShape(16.dp)
+    val bar = !sc.cele.talkBack
+    val rule = c.rule.copy(alpha = 0.55f)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .testTag(CelebrationTags.SUMMARY_CARD)
+            .onGloballyPositioned {
+                val b = it.boundsInRoot()
+                anchors.plates[CelebrationTags.SUMMARY_CARD] = b
+                anchors.content = b
+                anchors.card()?.let(onSummaryCard)
+            },
+    ) {
+        // The pad card, behind every plate on it; the washi strip straddles its bottom edge.
+        Box(
+            Modifier
+                .matchParentSize()
+                .padding(bottom = if (bar) STRIP / 2 else 0.dp)
+                .graphicsLayer { alpha = summaryCardAlpha(sc) }
+                .hardShadow(shape, PicnicTheme.shadows, large = true)
+                .clip(shape)
+                .background(c.stickerWhite)
+                .padding(3.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(c.pad)
+                .ruledLines(24.dp, rule, firstLine = 20.dp),
+        )
+        Column(
+            Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // The stamp card's own box leaves room above it for PER-FECT!'s overhang: no padding needed.
+            results()
+            if (bar) {
+                Spacer(Modifier.height(2.dp))
+                SummaryBarRow(sc, copy, anchors, onSummaryCard)
+            } else {
+                Spacer(Modifier.height(10.dp))
+            }
+        }
+    }
+}
+
+/** The washi strip's height; it straddles the summary card's bottom edge. */
+private val STRIP: Dp = 16.dp
+
+/** The summary card fades in behind its plates over 200 ms as the summary starts (at once under reduced motion). */
+private fun summaryCardAlpha(sc: SceneClock): Float {
+    if (sc.reduced) return 1f
+    return (sc.since(BeatName.Summary) / 200f).coerceIn(0f, 1f)
+}
+
+/**
+ * The card's last row: the washi progress bar and its label while the summary waits to close. Once kept, the bar goes
+ * and the row keeps its place empty (the Done button is in the bottom band), so nothing on the card or below it moves.
+ */
+@Composable
+private fun SummaryBarRow(sc: SceneClock, copy: CelebrationCopy, anchors: SceneAnchors, onSummaryCard: (Rect) -> Unit) {
+    val cele = sc.cele
+    val summaryAt = sc.at(BeatName.Summary).let { if (sc.reduced) 0L else it }
+    if (cele.keptAt != null) {
+        // The bar's footprint, drawn as nothing.
+        ClosingBar(sc, copy, summaryAt, anchors, Modifier.fillMaxWidth().padding(horizontal = 14.dp), placeholder = true)
+    } else {
+        DisposableEffect(Unit) {
+            onDispose {
+                anchors.closing = null
+                anchors.card()?.let(onSummaryCard)
+            }
+        }
+        ClosingBar(
+            sc, copy, summaryAt, anchors,
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp)
+                .onGloballyPositioned {
+                    anchors.closing = it.boundsInRoot()
+                    anchors.card()?.let(onSummaryCard)
+                },
+        )
     }
 }
 
@@ -585,12 +689,19 @@ private fun Modifier.titleGlint(sc: SceneClock): Modifier = drawWithContent {
 @Composable
 private fun SceneLcd(sc: SceneClock, content: CelebrationContent) {
     if (content.petHatched) {
-        // The pixel bee dances 4 × 500 ms with the banner (egg 15); the pose is read every frame while it dances.
-        val e = sc.clock.now - sc.cele.t0 - sc.at(BeatName.PetDance)
-        val pose = when {
-            sc.reduced || e < 0 || e >= 2000 -> PetPose.Rest
-            else -> listOf(PetPose.Dance1, PetPose.Dance2, PetPose.Dance3, PetPose.Dance4)[(e / 500).toInt().coerceIn(0, 3)]
+        // The pixel bee dances 4 × 500 ms with the banner (egg 15). The pose is derived from the clock, so the chip
+        // recomposes only when the pose changes (five times), never every frame of the scene.
+        val pose by remember(sc) {
+            derivedStateOf(structuralEqualityPolicy()) {
+                val e = sc.clock.now - sc.cele.t0 - sc.at(BeatName.PetDance)
+                when {
+                    sc.reduced || e < 0 || e >= 2000 -> PetPose.Rest
+                    else -> listOf(PetPose.Dance1, PetPose.Dance2, PetPose.Dance3, PetPose.Dance4)[(e / 500).toInt().coerceIn(0, 3)]
+                }
+            }
         }
+        val probe = LocalMotionProbe.current
+        if (probe != null) SideEffect { probe.recomposed(CelebrationTags.LCD) }
         LcdChip(LcdState(LcdMode.Pet, content.stats.stickers, content.total, petPose = pose))
     } else {
         // A text plate holds still (§9): the scene's LCD does not blink its star.
@@ -616,8 +727,19 @@ private fun Shelf(sc: SceneClock, content: CelebrationContent, anchors: SceneAnc
     val perRow = ceil(stops.size / rows.toFloat()).toInt().coerceAtLeast(1)
     val rects = remember(stops.size) { arrayOfNulls<Rect>(stops.size) }
     val riders = content.riders
+    // How many of each basket's minis have left on the ribbon, and whether the shelf has emptied (2.2 s). Derived from
+    // the clock, so the shelf recomposes only when a rider departs (about 24 times), never every frame of the scene.
+    val departures by remember(sc, riders, stops.size) {
+        derivedStateOf(structuralEqualityPolicy()) {
+            val e = sc.t()
+            if (e >= 2200) null else List(stops.size) { i -> riders.withIndex().count { (k, rider) -> rider.stopIndex == i && e >= riderStart(k) } }
+        }
+    }
     val gap = if (rows == 1) 0.dp else 2.dp
+    val probe = LocalMotionProbe.current
     BoxWithConstraints(Modifier.testTag(CelebrationTags.SHELF), contentAlignment = Alignment.Center) {
+        // Tests only: the performance gate counts the shelf's recompositions.
+        if (probe != null) SideEffect { probe.recomposed(CelebrationTags.SHELF) }
         // A basket's art box is 1.18 × the shelf size (the art has margins round it), shrunk to fit the row: a full
         // row of 8 on a 360 dp phone gets 42 dp boxes rather than running off the screen.
         val box = min(basketW.value * 1.18f, (maxWidth.value - gap.value * (perRow - 1)) / perRow).dp
@@ -630,10 +752,8 @@ private fun Shelf(sc: SceneClock, content: CelebrationContent, anchors: SceneAnc
                     for (i in r * perRow until min(stops.size, (r + 1) * perRow)) {
                         val stop = stops[i]
                         // A basket's minis leave as their riders depart; the rest go at 2.2 s ("shelf baskets empty").
-                        val e = sc.t()
-                        val departed = riders.withIndex().filter { (k, rider) -> rider.stopIndex == i && e >= riderStart(k) }.size
-                        val gone = e >= 2200
-                        val minis = if (gone) emptyList() else stop.gotten.drop(departed).take(earth.cora.picnic.ui.theme.gen.BasketManifest.MAX_MINIS).mapIndexed { k, icon -> BasketMini("$i-$k", icon) }
+                        val departed = departures?.getOrNull(i)
+                        val minis = if (departed == null) emptyList() else stop.gotten.drop(departed).take(earth.cora.picnic.ui.theme.gen.BasketManifest.MAX_MINIS).mapIndexed { k, icon -> BasketMini("$i-$k", icon) }
                         MotionBasket(
                             kind = stop.basket,
                             look = stop.look,
@@ -737,6 +857,8 @@ private fun flipDegrees(sc: SceneClock): Float {
 @Composable
 private fun StampCardFace(stops: List<earth.cora.picnic.ui.list.motion.CelebrationStop>, cols: Int, rows: Int, stamp: Dp, back: Boolean, sc: SceneClock) {
     val c = PicnicTheme.colors
+    // The card's front is the sticker book's release paper (the scene is always Day).
+    val releasePaper = c.book.releasePaper
     val shape = RoundedCornerShape(10.dp)
     Box(
         Modifier
@@ -748,7 +870,7 @@ private fun StampCardFace(stops: List<earth.cora.picnic.ui.list.motion.Celebrati
             .padding(3.dp)
             .clip(RoundedCornerShape(8.dp))
             .drawBehind {
-                if (back) drawRect(holoBrush(Offset(size.width / 2f, size.height / 2f))) else drawRect(Color(0xFFFFF0F7))
+                if (back) drawRect(holoBrush(Offset(size.width / 2f, size.height / 2f))) else drawRect(releasePaper)
             }
             .drawWithContent {
                 drawContent()
@@ -786,6 +908,7 @@ private fun StampCardFace(stops: List<earth.cora.picnic.ui.list.motion.Celebrati
 @Composable
 private fun Banner(sc: SceneClock, content: CelebrationContent, copy: CelebrationCopy, anchors: SceneAnchors) {
     val text = copy.banner(content.stats.stickers, earth.cora.picnic.core.model.TripStats.formatMinutes(content.stats.minutes))
+    val shadow = PicnicTheme.shadows.color
     Box(
         Modifier
             .plate(anchors, CelebrationTags.BANNER)
@@ -802,7 +925,7 @@ private fun Banner(sc: SceneClock, content: CelebrationContent, copy: Celebratio
                 }
                 alpha = if (e < 0) 0f else 1f
             }
-            .drawBehind { drawBanner() },
+            .drawBehind { drawBanner(shadow) },
         contentAlignment = Alignment.Center,
     ) {
         PuffyText(
@@ -819,7 +942,7 @@ private fun Banner(sc: SceneClock, content: CelebrationContent, copy: Celebratio
 }
 
 /** The banner: a sakura band 46 dp tall with swallow-tail ends, white stitching, a hard shadow. */
-private fun DrawScope.drawBanner() {
+private fun DrawScope.drawBanner(shadow: Color) {
     val tail = 18.dp.toPx()
     val notch = 9.dp.toPx()
     val h = size.height
@@ -834,7 +957,7 @@ private fun DrawScope.drawBanner() {
         close()
     }
     val inner = Rect(tail, 3.dp.toPx(), w - tail, h - 3.dp.toPx())
-    translate(2.4.dp.toPx(), 3.4.dp.toPx()) { drawPath(body, Color(0xFF6E7BD0)) }
+    translate(2.4.dp.toPx(), 3.4.dp.toPx()) { drawPath(body, shadow) }
     drawPath(body, Families.sakura.trace)
     drawRoundRect(Color.White, inner.topLeft - Offset(3.dp.toPx(), 3.dp.toPx()), Size(inner.width + 6.dp.toPx(), inner.height + 6.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
     drawRoundRect(Families.sakura.mid, inner.topLeft, inner.size, androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()))
@@ -847,6 +970,8 @@ private fun DrawScope.drawBanner() {
 
 @Composable
 private fun PicnicSpread(sc: SceneClock, content: CelebrationContent, copy: CelebrationCopy, anchors: SceneAnchors) {
+    val shadow = PicnicTheme.shadows.color
+    val cloth = PicnicTheme.colors.stickerWhite
     Box(Modifier.fillMaxWidth().height(196.dp)) {
         // The gingham blanket.
         Canvas(
@@ -857,11 +982,11 @@ private fun PicnicSpread(sc: SceneClock, content: CelebrationContent, copy: Cele
                 .graphicsLayer { rotationZ = -2f },
         ) {
             val shape = RoundedCornerShape(12.dp).createOutline(size, layoutDirection, this)
-            translate(2.4.dp.toPx(), 3.4.dp.toPx()) { drawOutline(shape, Color(0xFF6E7BD0)) }
-            drawOutline(shape, Color.White)
+            translate(2.4.dp.toPx(), 3.4.dp.toPx()) { drawOutline(shape, shadow) }
+            drawOutline(shape, cloth)
             val inner = Rect(3.dp.toPx(), 3.dp.toPx(), size.width - 3.dp.toPx(), size.height - 3.dp.toPx())
             clipRect(inner.left, inner.top, inner.right, inner.bottom) {
-                drawRect(Color(0xFFFFF5F8))
+                drawRect(Families.strawberry.pastel, alpha = 0.18f)
                 drawGingham(Families.strawberry.mid.copy(alpha = 0.32f), 9.dp.toPx(), inner)
             }
         }
@@ -881,19 +1006,35 @@ private fun PicnicSpread(sc: SceneClock, content: CelebrationContent, copy: Cele
                     },
             )
         }
-        Hamper(sc, content, anchors, Modifier.align(Alignment.TopStart).offset(x = 52.dp, y = 2.dp))
-        BonusCard(sc, content.bonus, copy, anchors, Modifier.align(Alignment.TopEnd).offset(x = (-2).dp, y = 8.dp))
+        Hamper(sc, content, anchors, Modifier.align(Alignment.TopStart).offset(x = 52.dp, y = 18.dp))
+        BonusCard(sc, content.bonus, copy, anchors, Modifier.align(Alignment.TopEnd).offset(x = (-2).dp, y = 4.dp))
     }
 }
 
+/**
+ * The open picnic hamper the ribbon ride ends in: the wicker picnic basket at 116 dp, drawn as baskets are (back, the
+ * minis, front), so the trip's own stickers sit in it, the newest five showing from 2.1 s as the riders land; until
+ * then it shows its dotted landing spot. It pops in at 0.15 s and wobbles at 2.3 s.
+ */
 @Composable
 private fun Hamper(sc: SceneClock, content: CelebrationContent, anchors: SceneAnchors, modifier: Modifier) {
-    val minis = content.riders.takeLast(6)
+    val minis = remember(content) {
+        content.riders.takeLast(earth.cora.picnic.ui.theme.gen.BasketManifest.MAX_MINIS).mapIndexed { k, r -> BasketMini("hamper-$k", r.icon, holo = r.holo) }
+    }
+    val filled by remember(sc) { derivedStateOf { sc.reduced || sc.t() >= HAMPER_FILLS } }
+    val art = earth.cora.picnic.ui.theme.gen.BasketManifest.art(earth.cora.picnic.core.model.BasketKind.WICKER_PICNIC.key)
+    val width = 116.dp
+    val height = width * (earth.cora.picnic.ui.theme.gen.BasketManifest.VIEWPORT_HEIGHT / earth.cora.picnic.ui.theme.gen.BasketManifest.VIEWPORT_WIDTH)
     Box(
         modifier
-            .size(116.dp)
+            .size(width, height)
             .testTag(CelebrationTags.HAMPER)
-            .onGloballyPositioned { anchors.hamper = it.boundsInRoot() }
+            .onGloballyPositioned {
+                val b = it.boundsInRoot()
+                anchors.hamper = b
+                val rim = (art?.rimY ?: 24f) / earth.cora.picnic.ui.theme.gen.BasketManifest.VIEWPORT_WIDTH * b.width
+                anchors.hamperMouth = Offset(b.center.x, b.top + rim)
+            }
             .graphicsLayer {
                 val e = sc.since(BeatName.Hamper)
                 val s = if (sc.reduced) 1f else popScale(e, 400)
@@ -911,21 +1052,21 @@ private fun Hamper(sc: SceneClock, content: CelebrationContent, anchors: SceneAn
                 transformOrigin = TransformOrigin(0.5f, 0.9f)
             },
     ) {
-        // The landed riders peek out of it from 2.1 s.
-        minis.forEachIndexed { k, rider ->
-            ItemIcon(
-                rider.icon, null, size = 34.dp, holo = rider.holo,
-                modifier = Modifier
-                    .offset(x = (18 + k * 13).dp, y = (22 + (k % 2) * 5).dp)
-                    .graphicsLayer {
-                        alpha = if (sc.reduced || sc.t() >= 2100) 1f else 0f
-                        rotationZ = (k * 11 % 17 - 8).toFloat()
-                    },
-            )
-        }
-        DecorSticker("hamper", Modifier.offset(y = 14.dp), size = 116.dp)
+        MotionBasket(
+            kind = earth.cora.picnic.core.model.BasketKind.WICKER_PICNIC,
+            look = AisleLooks.of(1),
+            gotten = minis,
+            toGet = 0,
+            complete = false,
+            presentation = BasketPresentation(minisHidden = !filled),
+            clock = sc.clock,
+            size = DpSize(width, height),
+        )
     }
 }
+
+/** The hamper's minis show as the riders land (§11.2: hamper minis at 2.1 s). */
+private const val HAMPER_FILLS: Long = 2100
 
 @Composable
 private fun BonusCard(sc: SceneClock, bonus: BonusSticker?, copy: CelebrationCopy, anchors: SceneAnchors, modifier: Modifier) {
@@ -989,7 +1130,7 @@ private fun BonusCard(sc: SceneClock, bonus: BonusSticker?, copy: CelebrationCop
         ) {
             Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
                 // After it is put into the album pocket, the card keeps its peeled ghost with a small sakura heart.
-                val inPocket = sc.since(BeatName.PocketMagic) >= 0
+                val inPocket by remember(sc) { derivedStateOf { sc.since(BeatName.PocketMagic) >= 0 } }
                 BonusArt(bonus, 52.dp, ghost = inPocket)
                 if (inPocket) DecorSticker("heart", Modifier.align(Alignment.TopEnd), size = 16.dp)
             }
@@ -1053,7 +1194,7 @@ private fun Ribbon(sc: SceneClock, anchors: SceneAnchors) {
         if (shelf.isEmpty() || anchors.hamper == Rect.Zero) return@Canvas
         val o = anchors.origin
         val from = Offset(shelf.first().center.x - o.x, shelf.maxOf { it.bottom } - o.y)
-        val to = Offset(anchors.hamper.center.x - o.x, anchors.hamper.top + anchors.hamper.height * 0.32f - o.y)
+        val to = anchors.hamperMouth - o
         val path = ribbonPath(from, to, size.width)
         val drawn = Stepped(12).transform((e / 1200f).coerceIn(0f, 1f))
         val fade = if (sc.t() > 2450) (1f - (sc.t() - 2450) / 300f).coerceIn(0f, 1f) else 1f
@@ -1084,7 +1225,7 @@ private fun Riders(sc: SceneClock, content: CelebrationContent, anchors: SceneAn
                         val o = anchors.origin
                         val startRect = shelf.getOrNull(rider.stopIndex) ?: shelf.firstOrNull() ?: Rect.Zero
                         val start = startRect.center - o
-                        val end = Offset(anchors.hamper.center.x - o.x, anchors.hamper.top + anchors.hamper.height * 0.32f - o.y)
+                        val end = anchors.hamperMouth - o
                         val u = riderU(sc, k)
                         val p = riderPoint(start, end, (anchors.hamper.right - o.x).coerceAtLeast(1f) * 1.6f, u)
                         IntOffset((p.x - 15.dp.toPx()).roundToInt(), (p.y - 15.dp.toPx()).roundToInt())
@@ -1120,7 +1261,7 @@ private fun KiraStars(sc: SceneClock, anchors: SceneAnchors) {
     for (k in 0 until 4) {
         DecorSticker(
             "kira",
-            size = 44.dp,
+            size = KIRA,
             shadow = false,
             modifier = Modifier
                 .offset {
@@ -1144,7 +1285,7 @@ private fun KiraStars(sc: SceneClock, anchors: SceneAnchors) {
                         else -> 1f
                     }
                     val tw = if (sc.reduced || e < 250) Pose() else Twinkle.at(loop, k * 90L)
-                    val s = pop * tw.scale * (r.width / (44f * density.density))
+                    val s = pop * tw.scale * (r.width / (KIRA.value * density.density))
                     transformOrigin = TransformOrigin(0f, 0f)
                     scaleX = s
                     scaleY = s
@@ -1154,10 +1295,13 @@ private fun KiraStars(sc: SceneClock, anchors: SceneAnchors) {
     }
 }
 
+/** The kira stars' size (§11.2: 48 dp), where the room beside the title allows it. */
+private val KIRA: Dp = 48.dp
+
 /**
- * Kira star [k]'s bounds (root px), clear of every text plate: the upper pair beside the title (as big as the room
- * there allows, 44 dp at most), the lower pair smaller, tucked under the title's ends beside the chip. Zero when there
- * is no room (a long title at font scale 2).
+ * Kira star [k]'s bounds (root px), clear of every text plate: the upper pair beside the title (48 dp where the room
+ * there allows, smaller where it does not), the lower pair smaller, tucked under the title's ends beside the chip. Zero
+ * when there is no room (a long title at font scale 2).
  */
 private fun kiraRect(anchors: SceneAnchors, k: Int, density: Float): Rect {
     val title = anchors.title
@@ -1165,7 +1309,7 @@ private fun kiraRect(anchors: SceneAnchors, k: Int, density: Float): Rect {
     val left = k % 2 == 0
     val gap = 4f * density
     val room = if (left) title.left - anchors.origin.x - 2 * gap else anchors.sceneRight - title.right - 2 * gap
-    val upper = min(44f * density, room)
+    val upper = min(KIRA.value * density, room)
     if (upper < 18f * density) return Rect.Zero
     val r = if (k < 2) {
         val x = if (left) title.left - gap - upper else title.right + gap
@@ -1190,6 +1334,12 @@ private val CORNER: Dp = 150.dp
 
 @Composable
 private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
+    val c = PicnicTheme.colors
+    val vinyl = c.albumVinyl
+    val stripe = c.albumStripe
+    val shadow = PicnicTheme.shadows.color
+    // The scene page's back: white with a breath of periwinkle.
+    val flapBack = androidx.compose.ui.graphics.lerp(c.stickerWhite, Families.periwinkle.pastel, 0.22f)
     Box(Modifier.fillMaxSize()) {
         Canvas(Modifier.fillMaxSize()) {
             val e = sc.since(BeatName.Curl)
@@ -1212,10 +1362,10 @@ private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
             }
             // The album page under the curl: pink pinstripe vinyl.
             clipPath(corner) {
-                drawRect(Color(0xFFFFE9F2))
+                drawRect(vinyl)
                 var x = 0f
                 while (x < W) {
-                    drawRect(Color(0xFFFFD6E8), Offset(x, 0f), Size(2.dp.toPx(), H))
+                    drawRect(stripe, Offset(x, 0f), Size(2.dp.toPx(), H))
                     x += 10.dp.toPx()
                 }
                 for (p in pocketRects(W, H, this)) {
@@ -1231,8 +1381,8 @@ private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
                 lineTo(W - leg, H - leg)
                 close()
             }
-            translate(2.4.dp.toPx(), 3.4.dp.toPx()) { drawPath(flap, Color(0xFF6E7BD0)) }
-            drawPath(flap, Color(0xFFF7F8FF))
+            translate(2.4.dp.toPx(), 3.4.dp.toPx()) { drawPath(flap, shadow) }
+            drawPath(flap, flapBack)
             drawPath(flap, Families.periwinkle.mid, style = Stroke(1.dp.toPx()))
             drawLine(Color.White, Offset(W - leg, H), Offset(W, H - leg), 1.5.dp.toPx())
         }
@@ -1287,15 +1437,16 @@ private fun pocketRects(w: Float, h: Float, density: androidx.compose.ui.unit.De
 }
 
 /* ------------------------------------------------------------------------------------------------
- * The bottom band: "tap to skip" (until the curl), then the washi progress bar "Closing… tap to keep it" over the
- * summary hold, or the Done button once kept. No countdown under TalkBack.
+ * The bottom band: "tap to skip" (until the curl). The summary's washi progress bar "Closing… tap to keep it" runs
+ * along the summary card's bottom edge (SummaryCard), or its Done button once kept. No countdown under TalkBack.
  * ------------------------------------------------------------------------------------------------ */
 
 @Composable
-private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, w: Dp, anchors: SceneAnchors, onSummaryCard: (Rect) -> Unit, onDone: () -> Unit) {
+private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, anchors: SceneAnchors, onDone: () -> Unit) {
     val c = PicnicTheme.colors
-    val cele = sc.cele
     Box(Modifier.fillMaxSize().padding(start = 12.dp, bottom = 14.dp), contentAlignment = Alignment.BottomStart) {
+        // Kept open (§0.4 Q7): Done closes it.
+        if (sc.cele.keptAt != null) PicnicButton(copy.done, onDone, Modifier.testTag(CelebrationTags.DONE))
         if (!sc.reduced) {
             Box(
                 Modifier
@@ -1313,29 +1464,6 @@ private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, w: Dp, anchors: Sc
                 SceneChip(copy.skip, PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 17.sp), maxLines = 1)
             }
         }
-        if (!cele.talkBack) {
-            val summaryAt = sc.at(BeatName.Summary).let { if (sc.reduced) 0L else it }
-            val kept = cele.keptAt != null
-            if (kept) {
-                PicnicButton(copy.done, onDone, Modifier.testTag(CelebrationTags.DONE))
-            } else {
-                DisposableEffect(Unit) {
-                    onDispose {
-                        anchors.closing = null
-                        anchors.card()?.let(onSummaryCard)
-                    }
-                }
-                ClosingBar(
-                    sc, copy, summaryAt,
-                    Modifier
-                        .width(w - CORNER - 20.dp)
-                        .onGloballyPositioned {
-                            anchors.closing = it.boundsInRoot()
-                            anchors.card()?.let(onSummaryCard)
-                        },
-                )
-            }
-        }
     }
 }
 
@@ -1345,22 +1473,24 @@ private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, w: Dp, anchors: Sc
  * label sits above the strip so no part of the fill is ever hidden.
  */
 @Composable
-private fun ClosingBar(sc: SceneClock, copy: CelebrationCopy, summaryAt: Long, modifier: Modifier) {
+private fun ClosingBar(sc: SceneClock, copy: CelebrationCopy, summaryAt: Long, anchors: SceneAnchors, modifier: Modifier, placeholder: Boolean = false) {
     val c = PicnicTheme.colors
-    val hold = sc.plan.summaryHold
+    // The bar fills over the hold the engine waits ("Time to take action" included), so it is full as it closes.
+    val hold = sc.cele.summaryHoldMs.takeIf { it > 0 } ?: sc.plan.summaryHold
     val start = if (sc.reduced) 120L else summaryAt
     Column(
         modifier
-            .testTag(CelebrationTags.CLOSING)
+            .then(if (placeholder) Modifier.clearAndSetSemantics { } else Modifier.testTag(CelebrationTags.CLOSING))
             .graphicsLayer {
                 val e = sc.clock.now - sc.cele.t0 - start
-                alpha = if (e < 0) 0f else 1f
+                alpha = if (e < 0 || placeholder) 0f else 1f
             },
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Box(
             Modifier
                 .padding(start = 4.dp)
+                .then(if (placeholder) Modifier else Modifier.plate(anchors, CelebrationTags.CLOSING_LABEL))
                 .clip(RoundedCornerShape(5.dp))
                 .background(Families.lemon.pastel)
                 .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -1370,7 +1500,7 @@ private fun ClosingBar(sc: SceneClock, copy: CelebrationCopy, summaryAt: Long, m
         Canvas(
             Modifier
                 .fillMaxWidth()
-                .height(18.dp)
+                .height(STRIP)
                 .graphicsLayer { rotationZ = -1.2f },
         ) {
             drawWashi(WashiPattern.LemonDots)
@@ -1428,6 +1558,11 @@ private fun ProbeReports(sc: SceneClock, probe: MotionProbe, anchors: SceneAncho
         val bo = sc.since(BeatName.Bonus)
         val k = if (sc.reduced) 1f else PopEasing.transform((bo / 500f).coerceIn(0f, 1f))
         report(CelebrationTags.BONUS, MotionPose(dy = 60f * (1f - k), scaleX = 0.4f + 0.6f * k, scaleY = 0.4f + 0.6f * k, alpha = if (bo < 0 && !sc.reduced) 0f else 1f))
+        if (!sc.cele.talkBack && sc.cele.keptAt == null) {
+            // The progress bar's label arrives with the summary and stays put while the strip under it fills.
+            val start = if (sc.reduced) 120L else sc.at(BeatName.Summary)
+            report(CelebrationTags.CLOSING_LABEL, MotionPose.Rest, if (sc.clock.now - sc.cele.t0 - start < 0) 0f else 1f)
+        }
         if (sc.reduced) return@SideEffect
         // Overlays that could cross a text: the shake, the curl, the glints, the ink ring, the kira stars.
         if (dx != 0f) probe.overlay("cele_shake", now, Rect(origin, size))

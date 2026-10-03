@@ -52,6 +52,9 @@ object Beats {
     /** The row keeps its ghost until the sticker is back: 360 ms. */
     const val GHOST_UNTIL: Long = 360
 
+    /** The hanko lifts off an un-checked row: 1 → 1.1 → gone, 2 steps (160 ms). */
+    const val HANKO_LIFT: Long = 160
+
     /** The twin peels off the book: gone at +320. */
     const val PEEL_OFF: Long = 320
 
@@ -643,6 +646,12 @@ object NextCardMotion {
 
     /** Settled at rest at −1°. */
     const val REST_ROTATION: Float = -1f
+
+    /**
+     * Stacked over a toast (§4.15), the card enters and leaves in its reduced form, a 120 ms fade in place: the 8 dp gap
+     * above the toast, less both pieces' tilted corners, leaves no room for a rise that could not touch it.
+     */
+    const val STACKED_SHIFT_DP: Float = 0f
 
     /**
      * The rise: translateY(100 % + 130 dp) at 4° → −8 dp at −1.5° (75 %) → rest at −1°, the cardIn easing in each

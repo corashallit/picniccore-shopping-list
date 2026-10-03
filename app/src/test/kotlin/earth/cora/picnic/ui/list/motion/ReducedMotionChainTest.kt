@@ -51,6 +51,10 @@ class ReducedMotionChainTest {
         assertBeat("stamp", L + 500, frames.firstTime { it.stamps[baking] is StampPhase.Thunking })
         assertBeat("card", L + 1300, frames.firstTime { it.nextCard != null })
         assertTrue(frames.first { it.second.nextCard != null }.second.nextCard!!.reduced)
+        // Reduced motion silences movement, never sound or haptics (§14.3): the peel's "tk" at 200 and the tray curl's
+        // "peel" at L + 800 still sound, at their beats.
+        assertBeat("peel cue", t0 + Beats.PEEL, rig.feedback.times(Cue.PEEL).firstOrNull())
+        assertBeat("curl cue", L + Beats.CURL, rig.feedback.times(Cue.UNCHECK).firstOrNull())
         // Nothing moves: no flight, burst, curl, page turn or lift.
         assertTrue(frames.all { (_, p) -> p.flights.isEmpty() && p.bursts.isEmpty() && p.bookFx.liftT0 == null && p.bookFx.pageTurn == null })
         assertTrue(frames.all { (_, p) -> p.aisles[baking]?.curlT0 == null && p.baskets[baking]?.hopT0 == null })
@@ -66,6 +70,7 @@ class ReducedMotionChainTest {
         val cele = frames.first { it.second.celebration != null }.second.celebration!!
         assertTrue(cele.reduced)
         assertEquals(0L, cele.plan!!.summaryAt)
-        assertEquals(6000L, cele.plan!!.summaryHold)
+        // max(6000, readHold(17 words, with the progress bar's label)).
+        assertEquals(6300L, cele.plan!!.summaryHold)
     }
 }

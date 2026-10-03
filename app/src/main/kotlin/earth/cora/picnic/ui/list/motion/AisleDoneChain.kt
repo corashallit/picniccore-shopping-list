@@ -73,6 +73,8 @@ data class BasketMini(val itemId: String, val icon: IconRef, val holo: Boolean =
  * minis not landed yet are hidden and the badge counts them still to get; the newest mini squashes as it lands; the
  * basket wobbles; a sakura heart rises off the rim; the lid shuts (2 frames) and GOT IT slams onto it; the basket hops.
  * [size] 80 × 64 dp on a strip, 64 × 51 in a tray header ([tray]: the badge sits 2 dp from the top), 120 × 96 in cards.
+ * The ambient beat (§8.5, a folded basket only): it wobbles from [ambientT0] and [ambientPeekItem] peeks up 3 dp, both
+ * read off [ambientClock] (AmbientDirector.clock), never off the engine's [clock].
  */
 @Composable
 fun MotionBasket(
@@ -88,6 +90,7 @@ fun MotionBasket(
     tray: Boolean = false,
     ambientPeekItem: String? = null,
     ambientT0: Long? = null,
+    ambientClock: MotionClock? = null,
 ) {
     val art = BasketManifest.art(kind.key) ?: return
     val reduced = LocalReducedMotion.current
@@ -104,6 +107,7 @@ fun MotionBasket(
     val lidOpen = rememberVectorArt(art.lidOpen)
     val lidClosed = rememberVectorArt(art.lidClosed)
     val shadows = PicnicTheme.shadows
+    val ghostDash = PicnicTheme.colors.ghostDash
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val hankoStyle = PicnicTheme.type.hanko
     Box(
@@ -111,11 +115,18 @@ fun MotionBasket(
             .size(size)
             .decorative()
             .graphicsLayer {
-                if (reduced || p == null) return@graphicsLayer
+                if (reduced) return@graphicsLayer
+                // The ambient wobble (§8.5) plays on the ambient director's clock: the engine's sleeps while idle.
+                val ambientWob = if (ambientT0 != null && ambientClock != null) BasketMotion.wobble(ambientClock.now - ambientT0) else 0f
+                if (p == null) {
+                    rotationZ = ambientWob
+                    transformOrigin = TransformOrigin(BasketMotion.wobblePivotX, BasketMotion.wobblePivotY)
+                    return@graphicsLayer
+                }
                 val now = clock.now
                 val wob = p.wobbleT0?.let { BasketMotion.wobble(now - it) } ?: 0f
                 val hop = p.hopT0?.let { BasketMotion.hop(now - it) } ?: MotionPose.Rest
-                rotationZ = wob
+                rotationZ = wob + ambientWob
                 translationY = hop.dy * density
                 scaleX = hop.scaleX
                 scaleY = hop.scaleY
@@ -136,7 +147,7 @@ fun MotionBasket(
             val x = unit * slot.centreX - miniSize / 2
             val y = unit * (art.rimY - BasketManifest.MINI_SIZE * BasketManifest.MINI_LIFT + slot.raise)
             val squashing = p?.squashItem == mini.itemId && p.squashT0 != null
-            val peeking = ambientPeekItem == mini.itemId && ambientT0 != null
+            val peeking = !reduced && ambientPeekItem == mini.itemId && ambientT0 != null && ambientClock != null
             ItemIcon(
                 mini.icon, null, size = miniSize, aisleIndex = mini.aisleIndex, holo = mini.holo, pixel = mini.pixel,
                 modifier = Modifier
@@ -154,7 +165,7 @@ fun MotionBasket(
                                 scaleY = sy
                             }
                         }
-                        if (peeking) translationY = BasketMotion.ambientPeek(clock.now - ambientT0!!) * density
+                        if (peeking) translationY = BasketMotion.ambientPeek(ambientClock!!.now - ambientT0!!) * density
                     },
             )
         }
@@ -163,7 +174,7 @@ fun MotionBasket(
             if (shown.isEmpty() && !shut) {
                 val u = this.size.width / BasketManifest.VIEWPORT_WIDTH
                 drawDashedCircle(
-                    Color(0xFF9AA8F5), Offset(art.landingSpotX * u, art.landingSpotY * u),
+                    ghostDash, Offset(art.landingSpotX * u, art.landingSpotY * u),
                     BasketManifest.LANDING_SPOT_RADIUS * u, 1.8.dp.toPx(), 3.2.dp.toPx(), 2.4.dp.toPx(),
                 )
             }
@@ -216,7 +227,8 @@ fun MotionBasket(
         // The "+n" tag on the right shoulder when more than five are in.
         if (extra > 0) PlusTag(extra, art, unit)
         // The badge: what is still to get (hidden at 0), popping on a change.
-        if (count > 0) Badge(count, look, size, tray, p?.badgePopT0, clock, reduced)
+        // In place (a ListChange, reduced motion), the badge's count simply changes: no pop (§8.4).
+        if (count > 0) Badge(count, look, size, tray, p?.badgePopT0, clock, reduced || p?.inPlace == true)
         // The sakura heart rising off the rim on a landing.
         val heartT0 = p?.heartT0
         if (heartT0 != null && !reduced) {
@@ -278,9 +290,12 @@ private fun PlusTag(extra: Int, art: BasketArt, unit: Dp) {
     }
 }
 
-/** The 22 dp count sticker (§4.12): white, 2 dp aisle-trace border, DynaPuff 13 sp trace numeral, hs; never on the art. */
+/**
+ * The 22 dp count sticker (§4.12): white, 2 dp aisle-trace border, DynaPuff 13 sp trace numeral, hs; never on the art.
+ * [still]: no pop (reduced motion, or a change played in place).
+ */
 @Composable
-private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, popT0: Long?, clock: MotionClock, reduced: Boolean) {
+private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, popT0: Long?, clock: MotionClock, still: Boolean) {
     val measurer = rememberTextMeasurer(cacheSize = 4)
     val style = PicnicTheme.type.badgeNumeral.copy(color = look.family.trace, fontSize = 13.sp)
     val shadow = PicnicTheme.shadows
@@ -290,7 +305,7 @@ private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, po
             .offset(basket.width + BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp - d, (if (tray) BasketManifest.BADGE_TOP_TRAY_DP else BasketManifest.BADGE_TOP_STRIP_DP).dp)
             .size(d)
             .graphicsLayer {
-                if (popT0 != null && !reduced) {
+                if (popT0 != null && !still) {
                     val s = BasketMotion.badgePop(clock.now - popT0)
                     scaleX = s
                     scaleY = s
@@ -343,6 +358,8 @@ fun StampCircle(
         null -> now && !stamped
     }
     val thunkT0 = (phase as? StampPhase.Thunking)?.t0
+    // A ListChange completes the aisle in place: the pictogram fades in (120 ms) with no thunk or burst, as under reduced motion.
+    val fade = reduced || (phase as? StampPhase.Thunking)?.inPlace == true
     val pictogram = rememberVectorArt(DecorManifest.pictograms.getValue(look.pictogram.key))
     val ink = SolidColor(look.stampInk(variant))
     val turn by rememberLoopTime(enabled = isNow && !reduced)
@@ -368,7 +385,7 @@ fun StampCircle(
                     .graphicsLayer {
                         if (thunkT0 == null) {
                             rotationZ = -10f
-                        } else if (reduced) {
+                        } else if (fade) {
                             rotationZ = -10f
                             alpha = fadeIn(clock.now - thunkT0)
                         } else {
@@ -383,7 +400,7 @@ fun StampCircle(
                 val s = this.size.width * 0.75f
                 drawArt(pictogram, Size(s, s), Offset((this.size.width - s) / 2f, (this.size.height - s) / 2f), paint = { path, _ -> if (path.name == "ink") ink else null })
             }
-            if (thunkT0 != null && !reduced) {
+            if (thunkT0 != null && !fade) {
                 for (i in 0 until 4) {
                     Canvas(
                         Modifier
@@ -416,10 +433,11 @@ fun StampCircle(
 
 /**
  * The tray curling away like a page from its bottom-right corner (4 frames, 300 ms): the corner is cut away (the ground
- * shows through) and the flap, its back in [flap] with a periwinkle edge and a hard shadow, folds over it. Draws nothing
- * extra when [curlT0] is null or under reduced motion.
+ * shows through) and the flap, its back in [flap] with a periwinkle edge and a hard shadow in [shadow] (the theme's,
+ * `PicnicTheme.shadows.color`, so Glow gets its own), folds over it. Draws nothing extra when [curlT0] is null or under
+ * reduced motion.
  */
-fun Modifier.trayCurl(curlT0: Long?, clock: MotionClock, flap: Color, edge: Color = Families.periwinkle.mid, shadow: Color = Color(0xFF6E7BD0), reduced: Boolean = false): Modifier =
+fun Modifier.trayCurl(curlT0: Long?, clock: MotionClock, flap: Color, shadow: Color, edge: Color = Families.periwinkle.mid, reduced: Boolean = false): Modifier =
     drawWithContent {
         val t0 = curlT0
         if (t0 == null || reduced) {

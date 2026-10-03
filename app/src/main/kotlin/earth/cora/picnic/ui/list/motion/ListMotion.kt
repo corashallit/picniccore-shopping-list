@@ -27,9 +27,15 @@ import kotlinx.coroutines.withContext
  */
 
 /**
- * Runs [engine]'s frame loop for as long as this is composed (it ticks only while something is in flight), keeps its
+ * Runs [engine]'s frame loop for as long as this is composed (it ticks only while something is in flight) and keeps its
  * settings current (the Surprises switches, reduced motion, TalkBack, the density) and its spoken strings in the app's
- * language, and drops every chain when the screen leaves (state is never late: the list then shows the committed state).
+ * language.
+ *
+ * The engine belongs to the list screen's ViewModel, so a rotation or another configuration change, which only
+ * re-creates this composition, keeps every chain: a celebration or a Next card mid-hold carries on where it was (the
+ * beats that fell due meanwhile catch up silently, MotionChoreographer.tick). The ViewModel calls
+ * [MotionChoreographer.finishAll] when it is cleared or switches lists. [finishOnDispose] is for an engine that lives
+ * in the composition itself (remembered), which goes with it anyway.
  */
 @Composable
 fun MotionEngineHost(
@@ -39,6 +45,7 @@ fun MotionEngineHost(
     eggs: Boolean = true,
     /** Forces TalkBack's behaviour on or off (tests); null follows the platform. */
     talkBackOverride: Boolean? = null,
+    finishOnDispose: Boolean = false,
 ) {
     val reduced = LocalReducedMotion.current
     val talkBack = talkBackOverride ?: isScreenReaderOn()
@@ -56,7 +63,7 @@ fun MotionEngineHost(
         engine.strings = strings
     }
     LaunchedEffect(engine) { withContext(FixedMotionScale) { engine.run() } }
-    DisposableEffect(engine) { onDispose { engine.finishAll() } }
+    DisposableEffect(engine, finishOnDispose) { onDispose { if (finishOnDispose) engine.finishAll() } }
 }
 
 /** The engine's spoken strings and the Next card's word, from strings_motion.xml. */
@@ -106,11 +113,14 @@ object RowMotion {
      * Reduced motion: the sticker until the landing, then a 120 ms cross-fade to the ghost ([ghostAlpha]).
      */
     fun showsSticker(checked: Boolean, phase: RowPhase?): Boolean = when (phase) {
-        RowPhase.Slam, RowPhase.Peeling -> true
+        RowPhase.Slam, RowPhase.Peeling, RowPhase.Lifting -> true
         RowPhase.Away -> false
         RowPhase.Landing -> false
         RowPhase.Idle, null -> !checked
     }
+
+    /** True while an un-checked row still draws its hanko, lifting off (with the spot under it). */
+    fun liftsHanko(phase: RowPhase?): Boolean = phase == RowPhase.Landing || phase == RowPhase.Lifting
 
     /** The ghost's alpha (1 = fully the ghost): the reduced-motion cross-fades at the landing and the un-check. */
     fun ghostAlpha(checked: Boolean, phase: RowPhase?, rowStart: Long?, now: Long, reduced: Boolean): Float {
@@ -128,7 +138,7 @@ object RowMotion {
         val e = now - rowStart
         return when {
             reduced -> 1f
-            phase == RowPhase.Landing -> HankoMotion.lift(e)
+            liftsHanko(phase) -> HankoMotion.lift(e)
             checked -> HankoMotion.slam(e)
             else -> 0f
         }
@@ -138,7 +148,7 @@ object RowMotion {
     fun hankoAlpha(checked: Boolean, phase: RowPhase?, rowStart: Long?, now: Long, reduced: Boolean): Float {
         if (!reduced || rowStart == null || phase == null) return 1f
         val e = now - rowStart
-        return if (phase == RowPhase.Landing) fadeOut(e) else if (checked) fadeIn(e) else 1f
+        return if (liftsHanko(phase)) fadeOut(e) else if (checked) fadeIn(e) else 1f
     }
 }
 

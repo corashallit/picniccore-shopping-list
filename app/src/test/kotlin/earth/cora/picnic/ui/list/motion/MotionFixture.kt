@@ -101,14 +101,21 @@ object MotionFixture {
         return checked.setRarity(LIST_ID, "maple", Rarity.SHINY).setOpenAisle(LIST_ID, "aisle-2-baking")
     }
 
-    /** Everything checked but [left] (in their aisles), the list still open on [open]; times after the fixture's. */
+    /**
+     * Everything checked but [left] (in their aisles), the list still open on [open]. The rest of the shop is checked a
+     * minute apart up to [TRIP_START] + 41 min, so the trip's shop time freezes at the fixture's "41 min" (§11.2) when
+     * the last one is checked.
+     */
     fun allBut(left: List<String>, open: String? = null, title: String = "Saturday shop"): AppState {
         var s = state(title)
-        var t = TRIP_START + 26 * MIN
         val list = s.list(LIST_ID)!!
-        for (it in list.items) if (!it.checked && it.id !in left) s = s.toggleChecked(LIST_ID, it.id, t++)
+        val rest = list.items.filter { !it.checked && it.id !in left }
+        rest.forEachIndexed { i, it -> s = s.toggleChecked(LIST_ID, it.id, TRIP_START + (SHOP_MINUTES - (rest.size - 1 - i)) * MIN) }
         return s.setOpenAisle(LIST_ID, open)
     }
+
+    /** The fixture trip's shop time (§11.2 "24 stickers · 41 min"). */
+    const val SHOP_MINUTES: Long = 41
 
     /** The default-aisles variant (the app's own 14-aisle text) with the same 24 items filed into it by name. */
     fun defaultAisles(): AppState = unchecked(Aisles.DEFAULT_TEXT)
@@ -149,6 +156,28 @@ object MotionFixture {
         return s.setOpenAisle(LIST_ID, baking)
     }
 
+    /**
+     * Baking nearly done (Baking powder left) and one thing in "Everything else" (Picnic napkins, no aisle): finishing
+     * Baking brings the Next card for "Everything else" (the capsule in its circle).
+     */
+    fun everythingElseNext(): AppState {
+        var s = AppState(
+            lists = listOf(GroceryList(LIST_ID, "Saturday shop", WRITTEN)),
+            currentListId = LIST_ID,
+            store = StoreProfile(name = STORE, aislesText = AISLES),
+        )
+        val items = listOf(
+            item("flour"),
+            item("sugar"),
+            item("baking-powder"),
+            item("flour").copy(id = "napkins", name = "Picnic napkins", quantity = "50 pack", aisleId = null, icon = "napkins"),
+        )
+        for (it in items) s = s.addItems(LIST_ID, listOf(it), WRITTEN).first
+        s = s.toggleChecked(LIST_ID, "flour", TRIP_START)
+        s = s.toggleChecked(LIST_ID, "sugar", TRIP_START + MIN)
+        return s.setOpenAisle(LIST_ID, "aisle-2-baking")
+    }
+
     val catalog: IconCatalog get() = IconCatalog.default
 }
 
@@ -169,8 +198,9 @@ fun GroupedList.motionSections(): List<MotionSection> = sections.map { s ->
     MotionSection(
         id = s.id,
         position = s.position,
-        displayName = s.displayName,
-        fullName = s.aisle?.name ?: s.displayName,
+        // WP5's list labels the Unsorted section "Everything else" (§4.10).
+        displayName = if (s.kind == SectionKind.UNSORTED) "Everything else" else s.displayName,
+        fullName = s.aisle?.name ?: if (s.kind == SectionKind.UNSORTED) "Everything else" else s.displayName,
         storeAisle = s.storeAisle,
         look = if (s.kind == SectionKind.UNSORTED) AisleLooks.everythingElse else AisleLooks.of(s.position),
     )
@@ -256,6 +286,12 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
 
     /** Moves [itemId] to [aisleId]. */
     fun move(itemId: String, aisleId: String?): ListChange? = change(ChangeCause.MOVE) { it.moveItemToAisle(listId, itemId, aisleId, now) }
+
+    /** Adds [item] (a quick add, or Snap / Speak committing): a ListChange when it re-opens an aisle or the trip. */
+    fun add(item: GroceryItem): ListChange? = change(ChangeCause.ADD) { it.addItems(listId, listOf(item), now).first }
+
+    /** Any other change through [op] (a re-sort, an aisle-text edit, an Undo), reported with [cause]. */
+    fun apply(cause: ChangeCause, op: (AppState) -> AppState): ListChange? = change(cause) { op(it) }
 
     /** Opens [sectionId] (a tap on its strip). */
     fun open(sectionId: String?) {

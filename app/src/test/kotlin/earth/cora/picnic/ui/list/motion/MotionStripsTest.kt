@@ -19,6 +19,11 @@ import org.robolectric.annotation.GraphicsMode
  * WP6's frame-strip goldens (docs/DESIGN_STICKER.md §20 "strip", Appendix C): each choreography captured at fixed
  * times on the Compose test clock, one PNG per frame, `<name>_<variant>_<t>.png` (t in ms from the strip's moment),
  * in Day and Glow. Recorded with `./gradlew :app:recordRoborazziDebug --tests '*MotionStripsTest*'`.
+ *
+ * PROVISIONAL (see [ProvisionalGoldens]): these strips play on [MotionHarness], a test-only stand-in for WP5's list.
+ * Only WP6's own pieces in them are real (the flights, MotionBasket, StampCircle, the book twin, the curl, the ribbon);
+ * the tabs, rows, book and add bar around them are hand-drawn stand-ins. They are re-recorded on WP5's ListScreen
+ * with the real wiring in part 3, and items 125–127, 148, 150 and 177 are not done until then.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -119,4 +124,22 @@ class MotionStripsTest(private val variant: ThemeVariant) {
         @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
         fun variants(): List<Array<Any>> = listOf(ThemeVariant.Day, ThemeVariant.Glow).map { arrayOf<Any>(it) }
     }
+}
+
+/**
+ * The WP6 goldens recorded on the [MotionHarness] stand-in rather than WP5's real list (Appendix C names that must show
+ * the real list): provisional until part 3 re-records them on ListScreen. GoldenCoverageTest and the lead's review can
+ * read this list; the celebration strip's frames before the scene covers the list (0.1 s) show the harness list too.
+ */
+object ProvisionalGoldens {
+    val prefixes: List<String> = listOf(
+        "hop_berry_", "hop_egg_", "hop_bread_", "hop_can_", "hop_frozen_",
+        "landing_strip_", "uncheck_strip_", "book_magic_strip_", "book_peel_strip_", "aisle_done_strip_",
+        "celebration_strip_day_100", "celebration_strip_glow_100",
+    )
+
+    /** The checklist items that rest on them and stay open until the re-recording. */
+    val items: List<Int> = listOf(125, 126, 127, 148, 150, 177)
+
+    fun isProvisional(name: String): Boolean = prefixes.any { name.startsWith(it) }
 }

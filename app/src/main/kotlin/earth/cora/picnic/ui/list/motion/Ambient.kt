@@ -20,6 +20,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.ui.theme.GlintSpec
 import kotlin.math.hypot
@@ -31,6 +33,14 @@ import kotlin.random.Random
  * unchecked sticker gets a WHITE gloss sweep (an 80 % band clipped to the sticker, 6 steps, 900 ms; holo is for rewards
  * only, §2.11). They run only while visible and never under reduced motion; they are decorative loops, so they ride the
  * infinite-animation frame clock (tests' policy stops them unless a test drives them). Owner: WP6.
+ *
+ * The beats' times are on the director's own frame clock, so the pieces that play them read [AmbientDirector.clock]:
+ * the engine's MotionClock only moves while a chain is in flight, and an idle list is exactly when the loops run.
+ *
+ * WP5 wiring: `val ambient = rememberAmbient(ambientVisible(resumed, fraction), reduced, baskets, stickers)`, with the
+ * fraction from [Modifier.visibleFraction] on the list; then `MotionBasket(…, ambientPeekItem = beat?.peekItem,
+ * ambientT0 = beat?.wobbleT0 (for beat?.wobbleSection's basket), ambientClock = ambient.clock)` and the row sticker's
+ * `Modifier.glossSweep(beat?.sweepT0 (for beat?.sweepItem), ambient.clock)`, where `beat = ambient.state.value`.
  */
 
 /** The ambient loops' current beat: a folded basket's wobble with a peeking mini, a sticker's gloss sweep. */
@@ -63,6 +73,12 @@ class AmbientDirector(private val random: Random = Random(7)) {
 
     /** The beat showing now, or null. */
     val state: State<AmbientPresentation?> get() = beat
+
+    /**
+     * The frame time the beats' t0s are on, advanced every frame while a beat plays (and once as it ends). The pieces
+     * read it in their draw and layer lambdas, so a beat animates without recomposing anything.
+     */
+    val clock: MotionClock = MotionClock()
 
     /** Beats so far (tests). */
     var beats: Int = 0
@@ -103,6 +119,8 @@ class AmbientDirector(private val random: Random = Random(7)) {
                     }
                 }
                 if (cur != null && cur.wobbleT0 == null && cur.sweepT0 == null) cur = null
+                // The clock moves only while something plays, so an idle list invalidates nothing.
+                if (cur != null || beat.value != null) clock.now = now
                 if (cur != beat.value) beat.value = cur
             }
         } finally {
@@ -116,8 +134,9 @@ class AmbientDirector(private val random: Random = Random(7)) {
 }
 
 /**
- * The ambient loops for a list: running only while [visible] (the screen resumed and the list at least 10 % visible)
- * and never under [reduced] motion. Returns the beat showing now.
+ * The ambient loops for a list: running only while [visible] (the screen resumed and the list at least 10 % visible,
+ * [ambientVisible]) and never under [reduced] motion. Returns the director: its [AmbientDirector.state] is the beat
+ * showing now, its [AmbientDirector.clock] the time the pieces play it on.
  */
 @Composable
 fun rememberAmbient(
@@ -127,16 +146,40 @@ fun rememberAmbient(
     stickers: () -> List<String>,
     director: AmbientDirector = remember { AmbientDirector() },
     frame: suspend () -> Long = { withInfiniteAnimationFrameMillis { it } },
-): State<AmbientPresentation?> {
+): AmbientDirector {
     val b by rememberUpdatedState(baskets)
     val s by rememberUpdatedState(stickers)
     LaunchedEffect(visible, reduced, director) {
         if (visible && !reduced) director.run(frame, { b() }, { s() })
     }
-    return director.state
+    return director
 }
 
-/** The white gloss sweep over a sticker (clipped to what the sticker drew), from [t0] on [clock]. */
+/** The §8.5 gate: the loops run only while the screen is resumed and at least 10 % of the list is on screen. */
+fun ambientVisible(resumed: Boolean, visibleFraction: Float): Boolean = resumed && visibleFraction >= AMBIENT_MIN_VISIBLE
+
+/** At least this much of the list must be on screen for the ambient loops to run (§8.5). */
+const val AMBIENT_MIN_VISIBLE: Float = 0.1f
+
+/**
+ * Reports how much of this element is inside the window (0..1, by area) whenever it moves: the list's visibility for
+ * [ambientVisible].
+ */
+fun Modifier.visibleFraction(onChange: (Float) -> Unit): Modifier = onGloballyPositioned { c ->
+    val w = c.size.width.toFloat()
+    val h = c.size.height.toFloat()
+    if (w <= 0f || h <= 0f || !c.isAttached) {
+        onChange(0f)
+        return@onGloballyPositioned
+    }
+    val shown = c.boundsInWindow()
+    onChange(((shown.width * shown.height) / (w * h)).coerceIn(0f, 1f))
+}
+
+/**
+ * The white gloss sweep over a sticker (clipped to what the sticker drew), from [t0] on [clock]: the ambient director's
+ * [AmbientDirector.clock] (never the engine's, which sleeps while the list is idle).
+ */
 fun Modifier.glossSweep(t0: Long?, clock: MotionClock): Modifier =
     if (t0 == null) this else this
         .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }

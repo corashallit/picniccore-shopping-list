@@ -220,7 +220,11 @@ class MotionChoreographer(
 
     override fun keepCelebration() = enqueue { t -> keep(t) }
 
-    /** Drops every chain and override at once (the screen left): the list shows its committed state. */
+    /**
+     * Drops every chain and override at once: the list shows its committed state. The engine's owner calls it when the
+     * list screen is really gone (its ViewModel is cleared) or another list is shown; never on a configuration change,
+     * which only re-creates the composition (MotionEngineHost picks the chains up where they are).
+     */
     fun finishAll() {
         pending.clear()
         timeline.clear()
@@ -231,6 +235,7 @@ class MotionChoreographer(
         trip = null
         perfect = null
         nextCard = null
+        queuedCard = null
         celebration = null
         scroll = null
         snapshot.value = ListPresentation.Identity
@@ -256,7 +261,7 @@ class MotionChoreographer(
 
     /** True while a chain, a beat or a queued event needs frames. */
     fun busy(): Boolean = pending.isNotEmpty() || !timeline.isEmpty || checks.isNotEmpty() || unchecks.isNotEmpty() ||
-        aisleChains.isNotEmpty() || reopens.isNotEmpty() || perfect != null || nextCard != null || scroll != null ||
+        aisleChains.isNotEmpty() || reopens.isNotEmpty() || perfect != null || nextCard != null || queuedCard != null || scroll != null ||
         (trip != null) || celebrationMoving()
 
     private fun celebrationMoving(): Boolean {
@@ -266,8 +271,21 @@ class MotionChoreographer(
 
     /** Advances the engine to frame time [time]: starts queued events, runs due beats, publishes the presentation. */
     fun tick(time: Long) {
+        val prev = now
+        val wasTicked = ticked
         now = if (ticked) maxOf(now, time) else time
         ticked = true
+        // Frames stopped while beats were due (the screen was away: a rotation, another screen, the app in the
+        // background, with the engine kept by its ViewModel): what fell due meanwhile catches up silently, so coming
+        // back never plays a burst of stale sounds or announcements. Events still go out (the finale is persisted).
+        if (wasTicked && now - prev > CATCH_UP_GAP && !timeline.isEmpty) {
+            quiet = true
+            try {
+                timeline.advanceTo(now - 1)
+            } finally {
+                quiet = false
+            }
+        }
         while (pending.isNotEmpty()) pending.removeFirst()(now)
         timeline.advanceTo(now)
         expire(now)
@@ -333,13 +351,14 @@ class MotionChoreographer(
         val chain = CheckChain(e, t, reduced, resumeFrom, resumeScale)
         checks[e.itemId] = chain
         val g = rowGroup(e.itemId)
-        feedback.cue(Cue.HANKO)
-        if (resumeFrom == null && !reduced) timeline.at(t + Beats.PEEL, g) { feedback.cue(Cue.PEEL) }
+        cue(Cue.HANKO)
+        // The peel's "tk" sounds under reduced motion too: it silences movement, never sound or haptics (§14.3).
+        if (resumeFrom == null) timeline.at(t + Beats.PEEL, g) { cue(Cue.PEEL) }
         timeline.at(chain.hopAt, g) { launchHop(chain) }
         timeline.at(chain.land, g) { land(chain) }
-        if (chain.turn) timeline.at(chain.turnAt, g) { feedback.cue(Cue.UNCHECK) }
+        if (chain.turn) timeline.at(chain.turnAt, g) { cue(Cue.UNCHECK) }
         timeline.at(chain.magic, g) {
-            feedback.cue(Cue.MAGIC_APPEAR)
+            cue(Cue.MAGIC_APPEAR)
             e.slot?.let { emit(MotionEvent.MagicAppeared(e.itemId, it)) }
         }
         val origin = checkCentre(e.itemId)
@@ -389,8 +408,8 @@ class MotionChoreographer(
 
     private fun land(chain: CheckChain) {
         chain.flight = null
-        feedback.cue(Cue.LAND)
-        feedback.cue(Cue.LCD_TICK)
+        cue(Cue.LAND)
+        cue(Cue.LCD_TICK)
         emit(MotionEvent.Landed(chain.id, chain.section))
     }
 
@@ -407,8 +426,13 @@ class MotionChoreographer(
         var flight: Flight?,
         /** The basket wobbles (the sticker leaves it). */
         val wobble: Boolean,
+        /**
+         * The sticker never left the row (un-checked before its hop, an accidental double tap): no flight, no ghost,
+         * no badge tick (the badge never counted it down); only the hanko lifts.
+         */
+        val home: Boolean = false,
     ) {
-        val endsAt: Long = t0 + maxOf(Beats.GHOST_UNTIL, if (peelTwin) Beats.PEEL_OFF else 0)
+        val endsAt: Long = t0 + maxOf(if (home) Beats.HANKO_LIFT else Beats.GHOST_UNTIL, if (peelTwin) Beats.PEEL_OFF else 0)
     }
 
     private fun startUncheck(e: ToggleEvent, t: Long) {
@@ -465,8 +489,10 @@ class MotionChoreographer(
                 flightRecords += FlightRecord(e.itemId, basketKey, rowKey, back = true)
             }
         }
-        unchecks[e.itemId] = UncheckChain(e, t, reduced, peelTwin = twinShown, flight = flight, wobble = inBasket)
-        feedback.cue(Cue.UNCHECK)
+        // Still on the row: before its hop (under reduced motion, before its landing fade).
+        val home = check != null && check.resumeFrom == null && (t < check.hopAt || (check.reduced && t < check.land))
+        unchecks[e.itemId] = UncheckChain(e, t, reduced, peelTwin = twinShown, flight = flight, wobble = inBasket, home = home)
+        cue(Cue.UNCHECK)
         if (e.aisleCompleted) reopenAisle(e.sectionId, t)
         if (e.tripCompleted) reopenTrip(t)
     }
@@ -485,7 +511,7 @@ class MotionChoreographer(
         /** A ListChange on the open aisle: 120 ms fades at the same beats, the fold at L + 1100 (no curl). */
         InPlaceOpen,
 
-        /** A ListChange on a folded aisle: fades, the card or celebration at L + 700. */
+        /** A ListChange on a folded aisle: fades; the card at L + 1300 or the celebration at L + 1350, as for any ListChange. */
         InPlaceFolded,
     }
 
@@ -500,7 +526,14 @@ class MotionChoreographer(
     ) {
         val open: Boolean = form == AisleForm.Tap || form == AisleForm.InPlaceOpen
         val curl: Boolean = form == AisleForm.Tap && !inPlace
-        val nextAt: Long = L + if (open) Beats.NEXT_CARD else Beats.FOLDED_NEXT
+
+        /** The curl's "peel" sounds whenever a tap finished the open tray, also under reduced motion (§14.3). */
+        val curlCue: Boolean = form == AisleForm.Tap
+
+        /** Only a check-off tap on a folded aisle brings the card (or the scene) forward to L + 700 (§8.4). */
+        val folded: Boolean = form == AisleForm.Folded
+        val nextAt: Long = L + if (folded) Beats.FOLDED_NEXT else Beats.NEXT_CARD
+        val tripAt: Long = L + if (folded) Beats.FOLDED_NEXT else Beats.CELEBRATION
         val endsAt: Long = if (open) L + Beats.BOW + 300 else L + Beats.STAMP + StampMotion.THUNK
     }
 
@@ -520,16 +553,16 @@ class MotionChoreographer(
         val chain = AisleChain(sectionId, L, form, next, tripDone, created, inPlace || form == AisleForm.InPlaceOpen || form == AisleForm.InPlaceFolded)
         aisleChains[sectionId] = chain
         val g = aisleGroup(sectionId)
-        timeline.at(L + Beats.LID, g) { feedback.cue(Cue.AISLE_DONE) }
-        timeline.at(L + Beats.STAMP, g) { feedback.cue(Cue.STAMP) }
-        if (chain.curl) timeline.at(L + Beats.CURL, g) { feedback.cue(Cue.UNCHECK) }
+        timeline.at(L + Beats.LID, g) { cue(Cue.AISLE_DONE) }
+        timeline.at(L + Beats.STAMP, g) { cue(Cue.STAMP) }
+        if (chain.curlCue) timeline.at(L + Beats.CURL, g) { cue(Cue.UNCHECK) }
         if (chain.open) {
             timeline.at(L + Beats.FOLD, g) { aisleDone(sectionId) }
         } else {
             timeline.at(L + Beats.STAMP, g) { aisleDone(sectionId) }
         }
         if (tripDone) {
-            startTrip(L, if (chain.open) Beats.CELEBRATION else Beats.FOLDED_NEXT, finaleShown, origin, created)
+            startTrip(L, chain.tripAt - L, finaleShown, origin, created)
         } else if (next != null) {
             timeline.at(chain.nextAt, g) { openNext(next, chain.nextAt) }
         }
@@ -537,7 +570,7 @@ class MotionChoreographer(
 
     private fun aisleDone(sectionId: String) {
         val name = sections[sectionId]?.displayName
-        if (name != null) announcer.polite(strings.aisleDone(name))
+        if (name != null) say(strings.aisleDone(name))
         emit(MotionEvent.AisleDone(sectionId))
     }
 
@@ -563,8 +596,12 @@ class MotionChoreographer(
             lidShut = t >= chain.L + Beats.LID
             hanko = t >= chain.L + Beats.LID_HANKO
             ribbon = chain.open && t >= chain.L + Beats.RIBBON
-            // The Next card this chain raised exits at once.
-            if (nextCard != null && chain.next != null && nextCard?.sectionId == chain.next) exitNextCard(t)
+            // The Next card this chain raised exits at once (or never rises, if it was waiting its turn).
+            if (nextCard != null && chain.next != null && nextCard?.sectionId == chain.next && nextCard!!.t0 >= chain.nextAt) exitNextCard(t)
+            if (chain.next != null && queuedCard?.sectionId == chain.next) {
+                timeline.cancel(nextGroup(queuedCard!!.t0))
+                queuedCard = null
+            }
             if (scroll?.sectionId == chain.next) scroll = null
         } else {
             // A settled done aisle: lid shut with its GOT IT, ribbon tied.
@@ -632,14 +669,14 @@ class MotionChoreographer(
         timeline.cancel(PERFECT)
         perfect = PerfectChain(at, inPlace)
         timeline.at(at, PERFECT) {
-            feedback.cue(Cue.PERFECT)
+            cue(Cue.PERFECT)
             emit(MotionEvent.BookPerfect)
         }
     }
 
     private fun announceComplete(content: CelebrationContent?) {
         val stats = content?.stats ?: return
-        announcer.polite(strings.listComplete(stats.stickers, stats.minutes))
+        say(strings.listComplete(stats.stickers, stats.minutes))
     }
 
     private fun startCelebration(at: Long, origin: Offset?) {
@@ -648,8 +685,11 @@ class MotionChoreographer(
         val reduced = settings.reducedMotion
         val talkBack = settings.talkBack
         val plan = content?.let {
-            CelebrationTimeline.plan(it.listName, it.stats, it.petHatched, reduced, strings.celebration, it.total)
+            CelebrationTimeline.plan(it.listName, it.stats, it.petHatched, reduced, strings.celebration, it.total, closingBar = !talkBack)
         }
+        // The summary carries an action ("tap to keep it"): its hold follows "Time to take action" (§9, §15).
+        val summaryHold = timeouts.recommended(plan?.summaryHold ?: CelebrationTimeline.SUMMARY_FLOOR_RM, controls = true)
+        val summarySettle = plan?.beat(BeatName.Summary)?.settle ?: Beats.RM_FADE
         celebration = CelebrationPresentation(
             listId = id,
             t0 = at,
@@ -658,21 +698,22 @@ class MotionChoreographer(
             origin = origin,
             reduced = reduced,
             talkBack = talkBack,
+            summaryHoldMs = summaryHold,
         )
         trip = null
-        feedback.cue(Cue.CELEBRATION)
+        cue(Cue.CELEBRATION)
         announceComplete(content)
         emit(MotionEvent.TripComplete(id, scene = true))
         emit(MotionEvent.CelebrationStarted(id, content?.bonus))
         if (plan != null && !reduced) {
-            plan.beatOrNull(BeatName.Perfect)?.let { b -> timeline.at(at + b.at, CELEBRATION) { feedback.cue(Cue.PERFECT) } }
-            plan.beatOrNull(BeatName.CapsulePop)?.let { b -> timeline.at(at + b.at, CELEBRATION) { feedback.cue(Cue.CAPSULE_POP) } }
-            plan.beatOrNull(BeatName.Curl)?.let { b -> timeline.at(at + b.at, CELEBRATION) { feedback.cue(Cue.UNCHECK) } }
-            plan.beatOrNull(BeatName.PocketMagic)?.let { b -> timeline.at(at + b.at, CELEBRATION) { feedback.cue(Cue.MAGIC_APPEAR) } }
+            plan.beatOrNull(BeatName.Perfect)?.let { b -> timeline.at(at + b.at, CELEBRATION) { cue(Cue.PERFECT) } }
+            plan.beatOrNull(BeatName.CapsulePop)?.let { b -> timeline.at(at + b.at, CELEBRATION) { cue(Cue.CAPSULE_POP) } }
+            plan.beatOrNull(BeatName.Curl)?.let { b -> timeline.at(at + b.at, CELEBRATION) { cue(Cue.UNCHECK) } }
+            plan.beatOrNull(BeatName.PocketMagic)?.let { b -> timeline.at(at + b.at, CELEBRATION) { cue(Cue.MAGIC_APPEAR) } }
         }
         // The summary closes by itself at the end of its hold, except with TalkBack on: then it waits for a tap.
         if (!talkBack) {
-            val closeAt = at + (plan?.closeAt ?: (Beats.RM_FADE + CelebrationTimeline.SUMMARY_FLOOR_RM))
+            val closeAt = at + summarySettle + summaryHold
             timeline.at(closeAt, CELEBRATION) { startClose(closeAt) }
         } else {
             // Keep the beats running to the summary so the scene settles, then sleep until a tap.
@@ -714,18 +755,46 @@ class MotionChoreographer(
         scroll = ScrollRequest(next, at)
         timeline.at(at + SCROLL_HOLD, SCROLL) { if (scroll?.t0 == at) scroll = null }
         val stop = sections[next]
-        if (stop != null) announcer.polite(strings.nextStop(stop))
+        if (stop != null) say(strings.nextStop(stop))
         if (!settings.nextStopCard || stop == null) {
             emit(MotionEvent.NextShown(next, card = false))
             return
         }
+        // Another aisle finished while a card is up (she checks Breakfast's last item while "NEXT 5 Breakfast" holds):
+        // that card leaves now, and the new one rises once it has gone, so each card gets its full hold and the two
+        // never share the screen. A card still waiting to rise is replaced.
+        queuedCard?.let { timeline.cancel(nextGroup(it.t0)) }
+        queuedCard = null
+        val up = nextCard
+        val riseAt = if (up == null) at else {
+            exitNextCard(at)
+            val leaving = nextCard!!
+            leaving.exitT0!! + if (leaving.reduced) Beats.RM_FADE else NextCardMotion.EXIT
+        }
         val reduced = settings.reducedMotion
         val hold = nextHold(stop)
-        val settled = at + if (reduced) Beats.RM_FADE else NextCardMotion.RISE
-        nextCard = NextCardPresentation(next, hold, at, stop, settledAt = settled, exitT0 = null, reduced = reduced)
-        feedback.cue(Cue.NEXT_CARD)
-        emit(MotionEvent.NextShown(next, card = true))
-        timeline.at(settled + hold, nextGroup(at)) { exitNextCard(settled + hold) }
+        val settled = riseAt + if (reduced) Beats.RM_FADE else NextCardMotion.RISE
+        val card = NextCardPresentation(next, hold, riseAt, stop, settledAt = settled, exitT0 = null, reduced = reduced)
+        if (riseAt <= at) {
+            showCard(card)
+        } else {
+            queuedCard = card
+            timeline.at(riseAt, nextGroup(riseAt)) {
+                if (queuedCard?.t0 == riseAt) {
+                    queuedCard = null
+                    showCard(card)
+                }
+            }
+        }
+    }
+
+    /** The card rises ("pon!") and holds; its scheduled exit only ever acts on this card. */
+    private fun showCard(card: NextCardPresentation) {
+        nextCard = card
+        cue(Cue.NEXT_CARD)
+        emit(MotionEvent.NextShown(card.sectionId, card = true))
+        val exitAt = card.settledAt + card.holdMs
+        timeline.at(exitAt, nextGroup(card.t0)) { if (nextCard?.t0 == card.t0) exitNextCard(exitAt) }
     }
 
     /** The Next card's still hold: readHold(words("NEXT 5 Breakfast"), 2600), doubled with TalkBack, then the recommended timeout. */
@@ -749,6 +818,9 @@ class MotionChoreographer(
         val out = if (card.reduced) Beats.RM_FADE else NextCardMotion.EXIT
         timeline.at(t + out, nextGroup(card.t0)) { if (nextCard?.t0 == card.t0) nextCard = null }
     }
+
+    /** A card waiting for the one before it to leave (two aisles done in a row). */
+    private var queuedCard: NextCardPresentation? = null
 
     // =============================================================================================
     // ListChange: the in-place form (§8.4).
@@ -780,11 +852,8 @@ class MotionChoreographer(
                 inPlace = true,
             )
         }
-        if (c.tripCompleted) {
-            val leadChain = lead?.let { aisleChains[it] }
-            val offset = if (leadChain == null || leadChain.open) Beats.CELEBRATION else Beats.FOLDED_NEXT
-            startTrip(t, offset, c.finaleShown, origin = null, created = t)
-        }
+        // The in-place form has no folded exception (§8.4): the celebration at L + 1350 whichever aisle finished it.
+        if (c.tripCompleted) startTrip(t, Beats.CELEBRATION, c.finaleShown, origin = null, created = t)
     }
 
     // =============================================================================================
@@ -899,7 +968,13 @@ class MotionChoreographer(
         for (u in unchecks.values) {
             val e = u.event
             val since = t - u.t0
-            if (since < (if (u.reduced) Beats.RM_FADE else Beats.GHOST_UNTIL)) {
+            if (u.home) {
+                // The sticker never left: it stays on the row while the hanko lifts off it.
+                if (since < (if (u.reduced) Beats.RM_FADE else Beats.HANKO_LIFT)) {
+                    rows[e.itemId] = RowPhase.Lifting
+                    rowStarts[e.itemId] = u.t0
+                }
+            } else if (since < (if (u.reduced) Beats.RM_FADE else Beats.GHOST_UNTIL)) {
                 rows[e.itemId] = RowPhase.Landing
                 rowStarts[e.itemId] = u.t0
             }
@@ -908,7 +983,7 @@ class MotionChoreographer(
             val b = basket(e.sectionId)
             if (u.reduced) b.inPlace = true
             if (u.wobble && !u.reduced && since < BasketMotion.WOBBLE) b.wobble(u.t0)
-            if (since < 300) b.badgePop(u.t0)
+            if (!u.home && since < 300) b.badgePop(u.t0)
             val slot = e.slot
             if (slot != null && u.peelTwin && since < (if (u.reduced) Beats.RM_FADE else Beats.PEEL_OFF)) {
                 spots[slot] = SpotPhase.Peeling(u.t0, e.icon, e.holo)
@@ -938,7 +1013,7 @@ class MotionChoreographer(
             val stampAt = L + Beats.STAMP
             when {
                 t < stampAt -> stamps[a.sectionId] = StampPhase.Now
-                t < stampAt + StampMotion.THUNK -> stamps[a.sectionId] = StampPhase.Thunking(stampAt)
+                t < stampAt + StampMotion.THUNK -> stamps[a.sectionId] = StampPhase.Thunking(stampAt, inPlace = a.inPlace)
             }
             if (a.next != null && t < stampAt) stamps.putIfAbsent(a.next, StampPhase.Waiting)
             // The tray: open until the fold, curls at L + 800, folds at L + 1100; the next opens at L + 1300.
@@ -1064,6 +1139,17 @@ class MotionChoreographer(
         )
     }
 
+    /** True while stale beats catch up after the frames stopped (see [tick]). */
+    private var quiet = false
+
+    private fun cue(c: Cue) {
+        if (!quiet) feedback.cue(c)
+    }
+
+    private fun say(text: String) {
+        if (!quiet) announcer.polite(text)
+    }
+
     private fun emit(event: MotionEvent) {
         log.addLast(event)
         while (log.size > 256) log.removeFirst()
@@ -1083,5 +1169,8 @@ class MotionChoreographer(
 
         /** A scroll request stays in the presentation this long (the list runs each request once). */
         const val SCROLL_HOLD: Long = 1200
+
+        /** A gap between frames longer than this, with beats due, means the frames stopped (see [tick]). */
+        const val CATCH_UP_GAP: Long = 500
     }
 }

@@ -381,7 +381,7 @@ private fun HarnessTray(model: HarnessModel, s: AisleSection, p: ListPresentatio
             .fillMaxWidth()
             .testTag(HarnessTags.tray(s.id))
             .unfoldMotion(ap?.foldT0, clock, reduced)
-            .trayCurl(ap?.curlT0, clock, flap = look.family.pastel, reduced = reduced)
+            .trayCurl(ap?.curlT0, clock, flap = look.family.pastel, shadow = PicnicTheme.shadows.color, reduced = reduced)
             .then(if (current) Modifier.border(3.dp, Families.lemon.mid, RoundedCornerShape(15.dp)).padding(3.dp) else Modifier)
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
@@ -479,9 +479,10 @@ fun HarnessRow(model: HarnessModel, item: GroceryItem, p: ListPresentation) {
         with(anchors) {
             Box(Modifier.size(48.dp).anchor(AnchorRegistry.checkKey(item.id)), contentAlignment = Alignment.Center) {
                 val hanko = RowMotion.hankoScale(item.checked, phase, start, clock.now, reduced)
-                if (!item.checked && phase != RowPhase.Landing) StickerSpot()
-                if (item.checked || phase == RowPhase.Landing) {
-                    if (phase == RowPhase.Landing) StickerSpot()
+                val lifting = RowMotion.liftsHanko(phase)
+                if (!item.checked && !lifting) StickerSpot()
+                if (item.checked || lifting) {
+                    if (lifting) StickerSpot()
                     Box(Modifier.size(48.dp).rowHanko(item.checked, phase, start, clock, reduced)) {
                         if (hanko > 0f || phase == null) {
                             HankoStamp(HankoText.GotIt, Modifier.offset(4.dp, 4.dp).graphicsLayer { rotationZ = hankoAngle(item.id) })

@@ -42,9 +42,15 @@ class CelebrationTimelineTest {
         assertEquals(11750L, p.at(BeatName.PocketKira))
         assertEquals(11830L, p.at(BeatName.PocketMagic))
         assertEquals(12150L, p.summaryAt)
-        assertEquals(12, p.summaryWords)
-        assertEquals(4800L, p.summaryHold)
-        assertEquals(16950L, p.closeAt)
+        // Everything on screen at the summary, with the progress bar's label "Closing… tap to keep it" (§0.4 Q7, §9):
+        // 12 words of results + 5 of the label = 17, so max(4000, readHold(17)) = 6.3 s and it closes at 18.45 s.
+        assertEquals(17, p.summaryWords)
+        assertEquals(6300L, p.summaryHold)
+        assertEquals(18450L, p.closeAt)
+        // Without the bar (TalkBack: no countdown) the label is not on screen and does not count.
+        val talkBack = CelebrationTimeline.plan("Saturday shop", fixture, petHatched = false, closingBar = false)
+        assertEquals(12, talkBack.summaryWords)
+        assertEquals(4800L, talkBack.summaryHold)
         assertEquals("♡ Saturday shop", p.listChip)
         assertEquals("24/24★", p.lcd)
         // The §19.2 contract returns the same beats.
@@ -62,9 +68,9 @@ class CelebrationTimelineTest {
         assertEquals(4500L, title.hold)
         // Every later beat moves on by the longer title hold.
         assertEquals(700L + 4500, p.at(BeatName.Perfect))
-        assertEquals(15, p.summaryWords)
-        assertEquals(5700L, p.summaryHold)
-        assertEquals(p.summaryAt + 5700, p.closeAt)
+        assertEquals(20, p.summaryWords)
+        assertEquals(7200L, p.summaryHold)
+        assertEquals(p.summaryAt + 7200, p.closeAt)
         assertNoMotionInsideHolds(p)
     }
 
@@ -94,8 +100,12 @@ class CelebrationTimelineTest {
         assertTrue(p.reduced)
         assertEquals(0L, p.summaryAt)
         assertEquals(120L, p.beat(BeatName.Summary).settle)
-        assertEquals(6000L, p.summaryHold)
-        assertEquals(120L + 6000, p.closeAt)
+        // 17 words with the bar's label: max(6000, readHold(17)) = 6.3 s.
+        assertEquals(17, p.summaryWords)
+        assertEquals(6300L, p.summaryHold)
+        assertEquals(120L + 6300, p.closeAt)
+        // Without the bar: 12 words, the 6 s floor.
+        assertEquals(6000L, CelebrationTimeline.plan("Saturday shop", fixture, petHatched = false, reduced = true, closingBar = false).summaryHold)
         // A long name lifts the hold above the 6 s floor.
         val long = CelebrationTimeline.plan("Big family Sunday dinner shop for the cottage weekend", fixture, false, reduced = true)
         assertEquals(readHold(long.summaryWords, 6000), long.summaryHold)

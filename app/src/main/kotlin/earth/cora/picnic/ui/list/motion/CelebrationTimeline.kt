@@ -113,6 +113,8 @@ object CelebrationTimeline {
     /**
      * The whole storyboard. [total] is the LCD's denominator (every item, so equal to the stickers at completion).
      * Reduced motion: only the summary frame, faded in over 120 ms at 0 and held max(6000, readHold(all its words)).
+     * [closingBar]: the summary shows the washi progress bar and its label "Closing… tap to keep it" (§0.4 Q7); its
+     * words arrive with the summary, so they count (§9). Off under TalkBack, where there is no countdown.
      */
     fun plan(
         listName: String,
@@ -121,12 +123,14 @@ object CelebrationTimeline {
         reduced: Boolean = false,
         copy: CelebrationCopy = CelebrationCopy.English,
         total: Int = stats.stickers,
+        closingBar: Boolean = true,
     ): CelebrationPlan {
         val listChip = "♡ $listName"
         val lcd = "${stats.stickers}/$total★"
         val banner = copy.banner(stats.stickers, TripStats.formatMinutes(stats.minutes))
-        // Everything on screen at the summary: the title, the chip, the LCD, PERFECT, the banner, the bonus (not "tap to skip").
-        val summaryText = listOf(copy.title, listChip, lcd, copy.perfect, banner, copy.bonus).joinToString(" ")
+        // Everything on screen at the summary: the title, the chip, the LCD, PERFECT, the banner, the bonus and the
+        // closing bar's label (not "tap to skip", which left at the curl).
+        val summaryText = (listOf(copy.title, listChip, lcd, copy.perfect, banner, copy.bonus) + listOfNotNull(copy.closing.takeIf { closingBar })).joinToString(" ")
         val summaryWords = words(summaryText)
         if (reduced) {
             val hold = readHold(summaryWords, SUMMARY_FLOOR_RM)

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.DpRect
 import earth.cora.picnic.core.model.AppState
+import earth.cora.picnic.core.model.updateList
 import earth.cora.picnic.ui.theme.ThemeVariant
 import org.junit.Rule
 import org.junit.Test
@@ -39,7 +40,7 @@ class MotionGoldensTest(private val variant: ThemeVariant) {
         val rig = HarnessRig(compose, state, variant = variant, fontScale = fontScale).start()
         val t0 = rig.tap("baking-powder")
         rig.advanceTo(t0 + 620 + 1300 + 400 + 200)
-        rig.capture(name, rect(rig.bounds(NEXT_CARD_TAG), 8f))
+        rig.capture(name, rect(rig.bounds(NEXT_CARD_SLOT_TAG), 8f))
     }
 
     /** Item 168. */
@@ -66,13 +67,46 @@ class MotionGoldensTest(private val variant: ThemeVariant) {
 
     private val lastOne = { MotionFixture.allBut(listOf("toothpaste"), open = "household") }
 
-    /** Items 186, 187: the summary (Day over the Day list; Day tokens over a Glow list). */
+    /**
+     * Items 186, 187: the summary over a Day list and over a Glow list (Appendix C names both `celebration_summary_glow`,
+     * by its variant rule, and `celebration_summary_over_glow`, item 187; the scene is always Day, so they are one frame).
+     */
     @Test
     fun celebrationSummary() {
         val rig = HarnessRig(compose, lastOne(), variant = variant).start()
         val s = rig.toScene()
         rig.advanceTo(s + 12600)
-        rig.capture(if (day) "celebration_summary_day" else "celebration_summary_over_glow")
+        rig.capture("celebration_summary_$v")
+        if (!day) rig.capture("celebration_summary_over_glow")
+    }
+
+    /** Item 314: the summary kept open by a tap on its card: the bar is gone, Done sits on the card's edge (Day only). */
+    @Test
+    fun celebrationSummaryKept() {
+        if (!day) return
+        val rig = HarnessRig(compose, lastOne()).start()
+        val s = rig.toScene()
+        rig.advanceTo(s + 13000)
+        compose.runOnIdle { rig.engine.keepCelebration() }
+        rig.advance(300)
+        rig.capture("celebration_summary_kept_day")
+    }
+
+    /** The pixel bee dancing on the scene's LCD with the banner (egg 15 hatched; Day only), cropped to the title beat. */
+    @Test
+    fun celebrationPetDance() {
+        if (!day) return
+        val state = lastOne().updateList(MotionFixture.LIST_ID) { it.copy(trip = it.trip!!.copy(pet = true)) }
+        val rig = HarnessRig(compose, state).start()
+        val s = rig.toScene()
+        rig.advanceTo(s + 6230 + 700)
+        rig.capture("celebration_pet_dance_day", Rect(0f, 0f, 360f * px, 140f * px))
+    }
+
+    /** The Next card for "Everything else": the capsule in the number circle (Day only). */
+    @Test
+    fun nextcardEverythingElse() {
+        if (day) nextCard("nextcard_everything_else_day", MotionFixture.everythingElseNext())
     }
 
     /** Item 314: the summary with its washi progress bar part filled (Day, over Glow). */
@@ -130,17 +164,17 @@ class MotionGoldensTest(private val variant: ThemeVariant) {
         compose.onNodeWithTag(HarnessTags.LIST).performScrollToIndex(rig.model.grouped().sections.indexOfFirst { it.id == "household" })
         rig.advance(300)
         val s = rig.toScene()
-        val times = if (day) listOf(100L, 700L, 2400L, 3300L, 4600L, 5000L, 6600L, 9500L, 11500L, 12200L, 15000L) else listOf(100L, 250L, 700L)
+        // The item's whole time list in both variants (Appendix C): the scene is Day over either list.
+        val times = listOf(100L, 700L, 2400L, 3300L, 4600L, 5000L, 6600L, 9500L, 11500L, 12200L, 15000L)
         rig.strip("celebration_strip_$v", s, times)
     }
 
-    /** Item 189: a 100-item trip rides 24 stickers (Day only). */
+    /** Item 189: a 100-item trip rides 24 stickers, `celebration_ride_100_items_<variant>_<t>`. */
     @Test
     fun celebrationRide100() {
-        if (!day) return
-        val rig = HarnessRig(compose, MotionFixture.many(100, 8)).start()
+        val rig = HarnessRig(compose, MotionFixture.many(100, 8), variant = variant).start()
         val s = rig.toScene(last = "i99")
-        rig.strip("celebration_ride_100_items", s, listOf(850L, 1100L, 1350L, 1600L, 1850L, 2100L, 2450L)) { Rect(0f, 0f, 360f * px, 560f * px) }
+        rig.strip("celebration_ride_100_items_$v", s, listOf(850L, 1100L, 1350L, 1600L, 1850L, 2100L, 2450L)) { Rect(0f, 0f, 360f * px, 600f * px) }
     }
 
     companion object {

@@ -1,6 +1,15 @@
 package earth.cora.picnic.ui.list.motion
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.setOpenAisle
 import earth.cora.picnic.platform.Cue
@@ -22,6 +31,70 @@ class AisleDoneTest {
     val compose = createComposeRule()
 
     private val baking = "aisle-2-baking"
+
+    /**
+     * Items 176, 178 (§8.4 in-place form): a stamp that completes in place fades in with no thunk and no 4-pictogram
+     * burst, and the badge's count changes with no pop; the tap form thunks with its burst and pops.
+     */
+    @Test
+    fun inPlaceStampAndBadgeDoNotMove() {
+        val clock = MotionClock()
+        var phase by androidx.compose.runtime.mutableStateOf<StampPhase?>(StampPhase.Thunking(1000, inPlace = true))
+        var basket by androidx.compose.runtime.mutableStateOf(BasketPresentation(badgePopT0 = 1000, inPlace = true))
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            earth.cora.picnic.ui.theme.PicnicTheme {
+                androidx.compose.foundation.layout.Column {
+                    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.size(64.dp).testTag("stamp"), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        StampCircle(earth.cora.picnic.ui.theme.AisleLooks.of(4), 4, stamped = true, now = false, phase = phase, clock = clock)
+                    }
+                    // Room round the basket: its badge sits partly outside its box.
+                    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.testTag("basket").padding(24.dp)) {
+                        MotionBasket(
+                            kind = earth.cora.picnic.core.model.BasketKind.MIXING_BOWL,
+                            look = earth.cora.picnic.ui.theme.AisleLooks.of(4),
+                            gotten = emptyList(),
+                            toGet = 2,
+                            complete = false,
+                            presentation = basket,
+                            clock = clock,
+                        )
+                    }
+                }
+            }
+        }
+        fun shot(tag: String) = compose.onNodeWithTag(tag).captureToImage().toPixelMap().let { m -> IntArray(m.width * m.height) { i -> m[i % m.width, i / m.width].hashCode() } }
+        fun at(t: Long, tag: String): IntArray {
+            compose.runOnIdle { clock.now = t }
+            // A frame, so the layers and placements that read the clock redraw.
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+            return shot(tag)
+        }
+        // The settled stamp, for comparison.
+        compose.runOnIdle { phase = StampPhase.Stamped }
+        val settled = at(1050, "stamp")
+        compose.runOnIdle { phase = StampPhase.Thunking(1000, inPlace = true) }
+        /** Pixels outside the 24 dp stamp circle (where the burst flies) that differ from the settled stamp's. */
+        fun outsideCircle(px: IntArray): Int {
+            val w = (64 * 3)
+            val c = w / 2f
+            val r = 12 * 3 + 2
+            return px.indices.count { i -> val x = i % w; val y = i / w; (x - c) * (x - c) + (y - c) * (y - c) > r * r && px[i] != settled[i] }
+        }
+        // In place: a fade, nothing outside the circle, and the badge never changes size.
+        assertEquals("no burst in place", 0, outsideCircle(at(1150, "stamp")))
+        val badgeEarly = at(1050, "basket")
+        val badgeLate = at(1500, "basket")
+        assertTrue("no pop in place", badgeEarly.contentEquals(badgeLate))
+        // The tap form: the thunk's burst flies outside the circle, and the badge pops.
+        compose.runOnIdle {
+            phase = StampPhase.Thunking(1000, inPlace = false)
+            basket = BasketPresentation(badgePopT0 = 1000, inPlace = false)
+        }
+        assertTrue("the tap form bursts", outsideCircle(at(1150, "stamp")) > 0)
+        assertTrue("the tap form pops", !at(1150, "basket").contentEquals(at(1500, "basket")))
+    }
 
     /** Item 177: lid L + 300, stamp L + 500, curl L + 800, fold L + 1100 (ribbon 1200, bow 1400, card 1300). */
     @Test

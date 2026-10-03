@@ -32,8 +32,9 @@ import earth.cora.picnic.ui.theme.ThemeVariant
  * The celebration host (docs/DESIGN_STICKER.md §6.1 item 5, §11.3, §0.4 Q7): above everything but the system bars,
  * always in Day tokens (the bars switch to dark icons while it shows). Taps:
  * - before the summary, one tap anywhere closes it (§11.3);
- * - during the summary, a tap on the summary keeps it open (the progress bar goes, a Done button closes it); a tap
- *   anywhere else closes it at once; Back closes it at any moment.
+ * - during the summary, a tap on the summary card (the pad card holding the stamp card and the banner, with the washi
+ *   progress bar along its bottom edge) keeps it open: the bar goes and a Done button closes it; a tap anywhere else
+ *   (the rays, the shelf, the picnic, the album corner) closes it at once; Back closes it at any moment.
  * TalkBack: the scene is one node, "Celebration", double-tap to close; no countdown, it waits (§11.3). Owner: WP6.
  */
 
