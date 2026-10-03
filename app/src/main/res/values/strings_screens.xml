@@ -11,8 +11,10 @@
     <string name="screens_back">Back</string>
     <string name="screens_cancel">Cancel</string>
     <string name="screens_close">Close</string>
+    <string name="screens_done">Done</string>
+    <string name="screens_more_options">More options</string>
 
-    <!-- List switcher -->
+    <!-- List switcher (§6.4) -->
     <string name="lists_title">Your lists</string>
     <string name="lists_all_done">All picked up</string>
     <plurals name="lists_remaining">
@@ -20,37 +22,40 @@
         <item quantity="other">%1$d to get</item>
     </plurals>
     <string name="lists_rename">Rename %1$s</string>
+    <string name="lists_rename_label">List name</string>
     <string name="lists_rename_save">Save the new name</string>
     <string name="lists_delete">Delete %1$s</string>
-    <string name="lists_delete_confirm_empty">Delete \"%1$s\"?</string>
-    <plurals name="lists_delete_confirm">
-        <item quantity="one">Delete \"%1$s\" and its %2$d item?</item>
-        <item quantity="other">Delete \"%1$s\" and its %2$d items?</item>
-    </plurals>
+    <string name="lists_delete_title">Delete %1$s?</string>
+    <string name="lists_delete_book">Its sticker book goes into your album.</string>
     <string name="lists_delete_yes">Delete</string>
-    <string name="lists_delete_no">Keep it</string>
+    <string name="lists_delete_no">Not yet</string>
     <string name="lists_new_label">New list</string>
     <string name="lists_new_placeholder">Costco run, party snacks…</string>
     <string name="lists_new_action">Start the new list</string>
 
-    <!-- Edit sheet -->
-    <string name="edit_title">Edit item</string>
+    <!-- Edit sheet (§6.3) -->
+    <string name="edit_hero">%1$s sticker</string>
+    <string name="edit_favourite">Favourite</string>
+    <string name="edit_in_pantry">In my pantry</string>
+    <string name="edit_pantry_on">%1$s is in your pantry · recipes will leave it out</string>
+    <string name="edit_pantry_off">%1$s is off your pantry shelf</string>
     <string name="edit_name">Name</string>
     <string name="edit_quantity">Amount</string>
     <string name="edit_quantity_placeholder">2, 500 g, 4 L</string>
     <string name="edit_note">Note</string>
-    <string name="edit_note_placeholder">ripe ones, on sale…</string>
-    <string name="edit_aisle">Aisle</string>
-    <string name="edit_aisle_hint">Moving it teaches the app where this lives next time.</string>
-    <string name="edit_aisle_unsorted">Unsorted</string>
-    <string name="edit_icon">Icon</string>
-    <string name="edit_all_icons">All icons</string>
-    <string name="edit_icons_title">An icon for %1$s</string>
-    <string name="edit_draw">Draw a new icon</string>
-    <string name="edit_drawing">Drawing…</string>
-    <string name="edit_draw_hint">Draws a one-of-a-kind icon for \"%1$s\". It takes about 10 seconds and costs about 1.5¢ (US).</string>
+    <string name="edit_note_placeholder">ripe ones, unsalted…</string>
+    <string name="edit_aisle">Move to aisle</string>
+    <string name="edit_aisle_hint">The app puts it there next time too.</string>
+    <string name="edit_everything_else">Everything else</string>
+    <string name="edit_sticker">Change sticker</string>
+    <string name="edit_more_stickers">More stickers</string>
+    <string name="edit_fewer_stickers">Fewer stickers</string>
+    <string name="edit_draw">Draw a new sticker</string>
+    <string name="edit_drawing">Drawing a new sticker…</string>
+    <string name="edit_draw_hint">Takes about 10&#160;s and costs about 1.5¢&#160;(US).</string>
+    <string name="edit_draw_no_key">Drawing a new sticker needs an OpenAI key (Settings).</string>
     <string name="edit_save">Save</string>
-    <string name="edit_remove">Remove</string>
+    <string name="edit_delete">Delete</string>
 
     <!-- Aisles -->
     <string name="aisles_title">Store aisles</string>
@@ -92,31 +97,148 @@
     <string name="aisles_leave_discard">Discard</string>
     <string name="aisles_leave_keep">Keep editing</string>
 
-    <!-- Settings (amendment A1: the OpenAI key and icons only, nothing about models or addresses) -->
+    <!-- Settings (§6.8; amendment A4: the Surprises card; nothing about models or addresses) -->
     <string name="settings_title">Settings</string>
     <string name="settings_key_title">Your OpenAI key</string>
-    <string name="settings_key_intro">Kirakira Basket uses OpenAI to sort your items into aisles, read photos and voice notes, and draw icons. Paste an OpenAI API key to turn that on.</string>
+    <string name="settings_key_intro">Kirakira Basket uses OpenAI to sort your items into aisles, read photos and voice notes, and pick or draw stickers. Paste an OpenAI API key to turn that on.</string>
     <string name="settings_key_label">OpenAI API key</string>
     <string name="settings_key_placeholder">sk-…</string>
-    <string name="settings_key_saved_placeholder">Saved: %1$s</string>
     <string name="settings_key_saved">Saved. Paste a new key here to replace it.</string>
     <string name="settings_key_missing">Not set yet: adding items with AI needs it.</string>
-    <string name="settings_key_show">Show</string>
-    <string name="settings_key_hide">Hide</string>
     <string name="settings_save">Save</string>
     <string name="settings_remove_key">Remove key</string>
     <string name="settings_key_storage">Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.</string>
     <string name="settings_test">Test connection</string>
     <string name="settings_test_running">Checking…</string>
-    <string name="settings_test_ok">Connected · %1$d ms</string>
-    <string name="settings_test_failed">Couldn\'t connect. %1$s</string>
-    <string name="settings_icons">Icons</string>
-    <string name="settings_draw_icons">Draw new icons with AI</string>
-    <string name="settings_draw_icons_note">When the icon library has nothing that fits, the app draws one. Drawing a new icon takes about 10 s and costs about 1.5¢ (US).</string>
+    <string name="settings_test_ok">Connected</string>
+    <string name="settings_stickers">Stickers</string>
+    <string name="settings_draw_icons">Draw new stickers with AI</string>
+    <string name="settings_draw_icons_note">Drawing a new sticker takes about 10&#160;s and costs about 1.5¢&#160;(US).</string>
+    <string name="settings_surprises">Surprises</string>
+    <string name="settings_eggs">Easter eggs</string>
+    <string name="settings_eggs_hint">all 18 secrets</string>
+    <string name="settings_sounds">Sounds</string>
+    <string name="settings_sounds_hint">thunk, tk, pff, pon!</string>
+    <string name="settings_haptics">Haptics</string>
+    <string name="settings_haptics_hint">hanko thunk, peel tick</string>
+    <string name="settings_next_card">“Next stop” card</string>
+    <string name="settings_next_card_hint">between aisles</string>
+    <string name="settings_celebration">Celebration</string>
+    <string name="settings_celebration_hint">when the list is done</string>
+    <string name="settings_weather">Weather surprises</string>
+    <string name="settings_weather_hint">rain and first-snow stickers; asks Environment Canada for Toronto’s forecast</string>
+    <string name="settings_weather_hint_area">rain and first-snow stickers; asks Environment Canada for the forecast for %1$s</string>
+    <string name="settings_area">Use my area</string>
+    <string name="settings_area_hint">tonight’s sunset and the forecast near you, not Toronto’s</string>
+    <string name="settings_area_hint_on">sunset and forecast near %1$s; approximate area only</string>
+    <string name="settings_area_hint_finding">sunset and forecast near you; approximate area only</string>
+    <string name="settings_area_hint_denied">location isn’t allowed, so Toronto for now</string>
+    <string name="settings_surprises_footer">Reduced motion follows your phone’s setting.</string>
+    <string name="settings_area_rationale_title">Use my area?</string>
+    <!-- §0.4 Q6, verbatim; PRIVACY.md says the same (PrivacyDocTest). -->
+    <string name="settings_area_rationale">Kirakira Basket can use your approximate area to find tonight’s sunset and the local forecast for its weather surprises. Your area stays on this phone; only the forecast request names the nearest city.</string>
+    <string name="settings_area_continue">Continue</string>
+    <string name="settings_area_not_now">Not now</string>
+    <string name="settings_area_denied">Location wasn’t allowed, so the surprises use Toronto.</string>
     <string name="settings_help_title">About your key</string>
     <string name="settings_help_budget">Make the key in its own OpenAI project with a monthly budget and \"Enforce a hard limit\" turned on, so a lost phone or a leaked key can\'t run up a big bill.</string>
     <string name="settings_help_restricted">A restricted key is enough: List models (Read), Model capabilities (Request) and Responses API (Write). One key per person.</string>
     <string name="settings_help_guide">If someone else made your key, they have a step-by-step guide for these settings.</string>
-    <string name="settings_help_privacy">Text, photos and recordings go to OpenAI when you ask the app to sort or read them. Item names also go there in the background, to sort them into aisles and to pick or draw their icons (you can turn drawing off above).</string>
+    <string name="settings_help_privacy">Text, photos, recordings and your pantry go to OpenAI when you ask the app to sort or read something. Item names also go there in the background, to sort them into aisles and to pick or draw their stickers (you can turn drawing off above).</string>
+    <string name="settings_about_row">About &amp; licences</string>
+    <string name="settings_about_row_hint">fonts, credits and the version</string>
     <string name="settings_version">%1$s %2$s</string>
+
+    <!-- The More menu of the Album and Settings screens (§4.24) -->
+    <string name="menu_back_to_list">Back to %1$s</string>
+    <string name="menu_back_to_your_list">Back to your list</string>
+    <string name="menu_my_store">My store &amp; aisles</string>
+    <string name="menu_my_pantry">My pantry</string>
+    <string name="menu_album">Sticker album</string>
+    <string name="menu_settings">Settings</string>
+
+    <!-- About & licences (§6.9) -->
+    <string name="about_title">About &amp; licences</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_made_for">Made for one friend in Ontario</string>
+    <string name="about_sun_hint">tap the sun… 7 times?</string>
+    <string name="about_licences">Licences</string>
+    <string name="about_licences_intro">The lettering comes from free fonts under the SIL Open Font License 1.1. Their licences:</string>
+    <string name="about_licence_use">%1$s · %2$s</string>
+    <string name="about_licence_expanded">open</string>
+    <string name="about_licence_collapsed">closed</string>
+    <string name="about_art">Sticker art</string>
+    <string name="about_art_credit">Every sticker, basket and doodle is original, made for this app.</string>
+    <string name="about_lab">Surprise lab</string>
+    <string name="about_lab_hint">try every surprise on a practice list</string>
+    <string name="about_lab_unlocked">Surprise lab unlocked ★</string>
+
+    <!-- Surprise lab shell (§6.9; the eggs and the sandbox are WP9's) -->
+    <string name="lab_title">Surprise lab</string>
+    <string name="lab_subtitle">every surprise, on a practice list</string>
+    <string name="lab_ribbon">Surprise lab · practice list</string>
+    <string name="lab_note">Each surprise plays on a practice copy of “Saturday shop”. Nothing here touches your lists, your album or your settings.</string>
+    <string name="lab_try">Try it</string>
+    <string name="lab_try_egg">Try %1$s</string>
+    <string name="lab_needs_motion">needs animations on</string>
+    <string name="lab_egg_number">%1$d · %2$s</string>
+    <string-array name="lab_egg_names">
+        <item>Dusk binder</item>
+        <item>Ladybug stroll</item>
+        <item>Rolling produce</item>
+        <item>Petal shake</item>
+        <item>Midnight snack</item>
+        <item>Shiny sticker</item>
+        <item>Magic word</item>
+        <item>Nap time</item>
+        <item>Birthday cake</item>
+        <item>Bonus stage</item>
+        <item>Seasonal sheets</item>
+        <item>Golden hour</item>
+        <item>Gashapon jackpot</item>
+        <item>Perfect week</item>
+        <item>LCD pet</item>
+        <item>Rainy day</item>
+        <item>Ant parade</item>
+        <item>LCD receipt</item>
+    </string-array>
+    <string-array name="lab_egg_tries">
+        <item>Tap the sun by the title 7 times.</item>
+        <item>Press and hold a folded basket for a second.</item>
+        <item>Add apples, lemons or strawberries.</item>
+        <item>Give the phone a little shake.</item>
+        <item>Open the list between 11 pm and 4 am.</item>
+        <item>Every new item has a 1 in 200 chance.</item>
+        <item>Send “kirakira” from the add bar.</item>
+        <item>Get every stop but one, and leave its basket empty.</item>
+        <item>Add a birthday cake, then check it off.</item>
+        <item>Tap the first four stamps: 1st, 1st, 2nd, 2nd, 3rd, 4th, 3rd, 4th</item>
+        <item>Open the app in a season’s two weeks: Thanksgiving, Halloween…</item>
+        <item>Open the list in the half hour before sunset.</item>
+        <item>A newly drawn sticker has a 1 in 100 chance.</item>
+        <item>Finish four trips in a row with everything checked.</item>
+        <item>Press and hold the LCD before the list is done.</item>
+        <item>Turn on Weather surprises on a rainy day.</item>
+        <item>Have three picnic things on the list.</item>
+        <item>Press and hold the LCD once the list is done.</item>
+    </string-array>
+
+    <!-- My pantry (§6.13) -->
+    <string name="pantry_title">My pantry</string>
+    <string name="pantry_subtitle">things you keep at home · recipes leave them out</string>
+    <string name="pantry_add_label">Add to pantry:</string>
+    <string name="pantry_add_hint">flour, salt, spices…</string>
+    <string name="pantry_add_action">Add to pantry</string>
+    <string name="pantry_text_label">Pantry as text:</string>
+    <string name="pantry_empty">Nothing on the shelves yet. Write what you always keep at home, and recipes will leave it out.</string>
+    <string name="pantry_limit">Recipes check the first 200</string>
+    <string name="pantry_sticker">%1$s, in your pantry</string>
+    <string name="pantry_take_off">Take off the shelf</string>
+    <string name="pantry_change">Change sticker</string>
+    <string name="pantry_change_title">A sticker for %1$s</string>
+    <string name="pantry_suggest">Add %1$s to your pantry</string>
+    <string name="pantry_already">%1$s is already in your pantry</string>
+    <string name="pantry_took_off">%1$s is off your pantry shelf</string>
+    <string name="screens_undo">Undo</string>
+    <string name="screens_save_failed">Couldn\'t save. Try again.</string>
 </resources>
