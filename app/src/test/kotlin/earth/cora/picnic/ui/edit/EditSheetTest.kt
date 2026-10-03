@@ -3,6 +3,15 @@ package earth.cora.picnic.ui.edit
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import android.os.Looper
+import earth.cora.picnic.core.store.StateStore
+import earth.cora.picnic.ui.common.AppearScale
+import earth.cora.picnic.ui.pantry.putOnShelf
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import org.robolectric.Shadows.shadowOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onAllNodesWithText
@@ -271,6 +280,40 @@ class EditSheetTest {
         compose.mainClock.advanceTimeBy(1_000)
         compose.onNodeWithTag(TOAST_TAG).assertDoesNotExist()
         compose.onNodeWithText("In my pantry").assertIsOn()
+    }
+
+    /**
+     * The heart and the jar open as stored, with no magic appear when the stored values arrive a moment after the sheet
+     * (the appear marks her switching one on, §6.3).
+     */
+    @Test
+    fun storedTogglesOpenWithoutTheAppear() {
+        val app = EditSamples.app.let { a ->
+            a.copy(favourites = a.favourites + normalizeName("Milk, 2 %")).putOnShelf("Milk, 2 %", SaturdayShop.NOW)
+        }
+        val inner = InMemoryStateStore(app)
+        val gate = CompletableDeferred<Unit>()
+        val slow = object : StateStore by inner {
+            override val states: Flow<AppState> = flow {
+                gate.await()
+                emitAll(inner.states)
+            }
+        }
+        val vm = EditExtrasViewModel(slow, { SaturdayShop.NOW }, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate))
+        compose.mainClock.autoAdvance = false
+        compose.setContent { PicnicTheme { EditItemSheet(EditSamples.milk(), { _, _, _ -> }, {}, {}, {}, {}, {}, vm = vm) } }
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithText("Favourite").assertIsOff()
+        gate.complete(Unit)
+        repeat(4) {
+            shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeByFrame()
+        }
+        compose.onNodeWithText("Favourite").assertIsOn()
+        compose.onNodeWithText("In my pantry").assertIsOn()
+        val appearing = compose.onAllNodes(SemanticsMatcher.keyIsDefined(AppearScale), useUnmergedTree = true).fetchSemanticsNodes()
+            .map { it.config[AppearScale] }
+        assertTrue("no magic appear on open: $appearing", appearing.all { it == 1f })
     }
 
     private fun ownerWith(vm: EditExtrasViewModel): ViewModelStoreOwner {

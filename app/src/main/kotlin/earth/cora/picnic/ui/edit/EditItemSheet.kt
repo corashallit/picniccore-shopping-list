@@ -103,6 +103,11 @@ fun EditItemSheetContent(
     onPantryChange: (Boolean) -> Unit = {},
     aisleStyles: Map<String, AisleStyle> = emptyMap(),
     visible: Boolean = true,
+    /**
+     * [favourite] and [inPantry] are the stored values (false while the store loads): when it turns true, the toggles take
+     * them as they are, without the magic appear that marks switching one on.
+     */
+    togglesReady: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val item = state.item
@@ -148,6 +153,7 @@ fun EditItemSheetContent(
                 onFavouriteChange = onFavouriteChange,
                 onPantryChange = onPantryChange,
                 aisleStyles = aisleStyles,
+                togglesReady = togglesReady,
             )
         }
     }
@@ -173,6 +179,7 @@ internal fun EditDetails(
     onFavouriteChange: (Boolean) -> Unit,
     onPantryChange: (Boolean) -> Unit,
     aisleStyles: Map<String, AisleStyle>,
+    togglesReady: Boolean = true,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
@@ -194,12 +201,14 @@ internal fun EditDetails(
                     checked = favourite,
                     onCheckedChange = onFavouriteChange,
                     offGlyph = PicnicGlyph.Heart,
+                    ready = togglesReady,
                 ) { DecorSticker("heart", size = 30.dp) }
                 StickerToggle(
                     label = stringResource(R.string.edit_in_pantry),
                     checked = inPantry,
                     onCheckedChange = onPantryChange,
                     offGlyph = PicnicGlyph.Jar,
+                    ready = togglesReady,
                 ) { ItemIcon(IconRef(PANTRY_JAR), contentDescription = null, size = 30.dp) }
             }
         }
@@ -326,11 +335,13 @@ private fun StickerToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     offGlyph: PicnicGlyph,
+    ready: Boolean = true,
     on: @Composable () -> Unit,
 ) {
     val c = PicnicTheme.colors
-    // The magic appear plays when she switches it on, not when the sheet opens with it on.
-    var played by remember { mutableStateOf(checked) }
+    // The magic appear plays when she switches it on, not when the sheet opens with it on (nor when the stored value
+    // arrives a frame after the sheet).
+    var played by remember(ready) { mutableStateOf(checked) }
     LaunchedEffect(checked) { if (!checked) played = false }
     Row(
         Modifier

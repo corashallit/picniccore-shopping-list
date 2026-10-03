@@ -58,6 +58,8 @@ data class EditExtrasUi(
     val favourites: Set<String> = emptySet(),
     val state: AppState? = null,
     val aisleStyles: Map<String, AisleStyle> = emptyMap(),
+    /** The store has answered: until then the toggles show off without a magic appear when the real value arrives. */
+    val loaded: Boolean = false,
 ) {
     fun favourite(name: String): Boolean = normalizeName(name) in favourites
 
@@ -84,7 +86,7 @@ class EditExtrasViewModel(
     val toasts: Flow<EditToast> = _toasts.asSharedFlow()
 
     val extras: StateFlow<EditExtrasUi> = store.states
-        .map { EditExtrasUi(favourites = it.favourites, state = it, aisleStyles = it.store.aisleStyles) }
+        .map { EditExtrasUi(favourites = it.favourites, state = it, aisleStyles = it.store.aisleStyles, loaded = true) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, EditExtrasUi())
 
     fun setFavourite(itemName: String, on: Boolean) {
@@ -209,6 +211,7 @@ fun EditItemRoute(
         onFavouriteChange = { vm.setFavourite(name, it) },
         onPantryChange = { vm.setInPantry(name, it, onText, offText) },
         aisleStyles = extras.aisleStyles,
+        togglesReady = extras.loaded,
         modifier = modifier,
     )
 }
