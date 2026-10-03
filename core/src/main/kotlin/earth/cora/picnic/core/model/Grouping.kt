@@ -3,7 +3,8 @@ package earth.cora.picnic.core.model
 /*
  * Grouping in place (docs/DESIGN_STICKER.md §19.1, D1, D2). Replaces the v1 shape with its CHECKED
  * section: checked rows stay in their aisle, and each aisle lists what is gotten for its basket.
- * Consumer: the List screen (ListUiState). Owner: WP3 (GroupingInPlaceTest).
+ * Exactly one aisle is open (GroceryList.openAisle). Consumer: the List screen (ListUiState).
+ * Owner: WP3 (GroupingInPlaceTest).
  */
 
 /** Kind of a displayed section. There is no CHECKED section any more (D1). */
@@ -60,7 +61,7 @@ object ListGrouping {
      *   aisles in walking order.
      * - rows: every item, oldest first (addedAt, then list order). gotten: the checked ones by checkedAt
      *   (null checkedAt counts as addedAt; ties keep row order).
-     * - basket: [basketFor] for aisles; BasketKind.DEFAULT for UNSORTED.
+     * - basket: [basketFor] for aisles; BasketKind.EVERYTHING_ELSE (the wire basket) for UNSORTED.
      * - storeAisle: [styleFor]'s storeAisle, else storeAisleNumber(aisle.name).
      */
     fun group(
@@ -89,9 +90,8 @@ object ListGrouping {
                 toGet = toGet,
                 total = rows.size,
                 complete = rows.isNotEmpty() && toGet == 0,
-                // TODO(WP3): §4.10 / §5.2 give "Everything else" the wire shopping basket; BasketKind.DEFAULT
-                //  keeps the v1 look until WP3 switches it (with the basket keyword tuning).
-                basket = aisle?.let(basketFor) ?: BasketKind.DEFAULT,
+                // §4.10 / §5.2: "Everything else" always has the wire shopping basket.
+                basket = aisle?.let(basketFor) ?: BasketKind.EVERYTHING_ELSE,
             )
         }
 

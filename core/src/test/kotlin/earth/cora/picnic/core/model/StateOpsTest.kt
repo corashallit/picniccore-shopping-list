@@ -6,6 +6,7 @@ import earth.cora.picnic.core.catalog.IconCatalog
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -50,15 +51,44 @@ class StateOpsTest {
 
     @Test
     fun addItemsDedupesAgainstUncheckedItemsAndWithinTheBatch() {
-        val s = state(item("a", "Lemons"), item("b", "Milk", checked = true))
-        val (after, outcome) = s.addItems("l1", listOf(item("c", "lemon"), item("d", "milk"), item("e", "Eggs"), item("f", "EGGS"), item("g", " ★ ")), NOW)
-        // Phase 0 keeps v1 here; WP3 makes a checked match revive the existing row instead (§6.2 rule 7, Q8).
-        assertEquals(listOf("a", "b", "d", "e"), after.items().map { it.id }, "checked Milk does not block a new milk")
+        val s = state(item("a", "Lemons"), item("b", "Kiwi"))
+        val (after, outcome) = s.addItems("l1", listOf(item("c", "lemon"), item("e", "Eggs"), item("f", "EGGS"), item("g", " ★ ")), NOW)
+        assertEquals(listOf("a", "b", "e"), after.items().map { it.id })
         assertNull(after.findItem("c"))
-        assertEquals(AddOutcome(added = listOf("d", "e"), alreadyThere = listOf("a"), revived = emptyList()), outcome)
+        assertEquals(AddOutcome(added = listOf("e"), alreadyThere = listOf("a"), revived = emptyList()), outcome)
         assertSame(s, s.addItems("l1", emptyList(), NOW).first)
         assertEquals(s to AddOutcome(emptyList(), listOf("a"), emptyList()), s.addItems("l1", listOf(item("z", "Lemon")), NOW))
         assertEquals(s to AddOutcome.NONE, s.addItems("nope", listOf(item("y", "Kiwi")), NOW))
+    }
+
+    @Test
+    fun addItemsRevivesChecked() {
+        // §6.2 rule 7 / Q8: a duplicate of a checked item un-checks it ("Milk is back on your list"); never a second row.
+        val s = state(item("a", "Lemons"), item("b", "Milk"), item("c", "Bread")).toggleChecked("l1", "b", NOW).toggleChecked("l1", "c", NOW + 1)
+        val (after, outcome) = s.addItems("l1", listOf(item("d", "milk"), item("e", "Eggs"), item("f", "MILK")), NOW + 5)
+        assertEquals(listOf("a", "b", "c", "e"), after.items().map { it.id }, "no second Milk row")
+        val milk = after.findItem("b")!!
+        assertFalse(milk.checked)
+        assertNull(milk.checkedAt)
+        assertNull(milk.bookSlot, "its twin peels out of the book")
+        assertEquals("Milk", milk.name, "nothing else is rewritten")
+        assertEquals(AddOutcome(added = listOf("e"), alreadyThere = emptyList(), revived = listOf("b")), outcome)
+        assertEquals(NOW + 5, after.list("l1")!!.trip!!.lastActivityAt, "a revive is an un-check")
+        assertEquals(1, after.findItem("c")!!.bookSlot, "other stickers keep their spots")
+
+        // Undo of a revive checks it again (into the lowest free spot).
+        val undone = after.toggleChecked("l1", "b", NOW + 6)
+        assertEquals(0, undone.findItem("b")!!.bookSlot)
+
+        // An unchecked match wins over a checked one with the same name.
+        val both = state(item("x", "Milk"), item("y", "Milk")).toggleChecked("l1", "x", NOW)
+        assertEquals(AddOutcome(emptyList(), listOf("y"), emptyList()), both.addItems("l1", listOf(item("z", "milk")), NOW).second)
+
+        // Reviving an item of a complete trip re-opens it.
+        val done = state(item("a", "Milk"), item("b", "Eggs")).toggleChecked("l1", "a", NOW).toggleChecked("l1", "b", NOW + 1)
+        assertNotNull(done.list("l1")!!.trip!!.completedAt)
+        val revived = done.addItems("l1", listOf(item("m", "milk")), NOW + 2).first
+        assertNull(revived.list("l1")!!.trip!!.completedAt)
     }
 
     @Test
@@ -66,6 +96,24 @@ class StateOpsTest {
         val s = state(item("a", "Lemons"), other = listOf(item("p", "Plates")))
         val after = s.addItems("l1", listOf(item("p", "Pears")), NOW).first
         assertSame(s, after)
+    }
+
+    @Test
+    fun aisleLooksAndRarity() {
+        val s = state(item("a", "A"), item("b", "B"))
+        val style = AisleStyle(family = "lemon", pattern = "polka")
+        val styled = s.setAisleStyle("produce", style)
+        assertEquals(style, styled.store.aisleStyles["produce"])
+        assertSame(s, s.setAisleStyle("not-an-aisle", style))
+        assertTrue(styled.setAisleStyle("produce", AisleStyle()).store.aisleStyles.isEmpty(), "an all-default style is removed")
+        assertTrue(styled.setAisleStyle("produce", null).store.aisleStyles.isEmpty())
+
+        val bowl = s.setAisleBasket("aisle-2-baking-spices", BasketKind.MIXING_BOWL)
+        assertEquals(BasketKind.MIXING_BOWL, bowl.store.aisleBaskets["aisle-2-baking-spices"])
+        assertSame(bowl, bowl.setAisleBasket("aisle-2-baking-spices", BasketKind.MIXING_BOWL))
+        assertSame(s, s.setAisleBasket("nope", BasketKind.COOLER))
+        assertEquals(Rarity.SHINY, s.setRarity("l1", "b", Rarity.SHINY).findItem("b")!!.rarity)
+        assertSame(s, s.setRarity("l1", "b", Rarity.NONE))
     }
 
     @Test
@@ -175,6 +223,8 @@ class StateOpsTest {
         assertTrue(collapsed.setSectionCollapsed("l1", "produce", false).list("l1")!!.collapsedAisles.isEmpty())
         val noChecked = state(item("b", "B"))
         assertSame(noChecked, noChecked.clearChecked("l1"))
+        val withTrip = state(item("a", "A"), item("b", "B")).toggleChecked("l1", "a", NOW)
+        assertNull(withTrip.clearChecked("l1").list("l1")!!.trip, "v1 Clear checked closes the trip without filing")
     }
 
     @Test

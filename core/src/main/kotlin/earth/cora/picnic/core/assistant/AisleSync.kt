@@ -5,6 +5,7 @@ import earth.cora.picnic.core.llm.LlmError
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.applyAisleAssignments
+import earth.cora.picnic.core.model.findItem
 import earth.cora.picnic.core.model.itemsNeedingAisle
 import earth.cora.picnic.core.model.setAisleBaskets
 import earth.cora.picnic.core.store.StateStore
@@ -67,10 +68,40 @@ class AisleSync(
     }
 
     /**
-     * "Re-sort my list" (§6.7) and pull to refresh (D18): re-files EVERY item not placed by hand (not only
-     * Unsorted ones) with the fast model. Owner: WP3. PHASE-0 STUB.
+     * "Re-sort my list" (§6.7, AisleSyncTest.resortAll): re-files EVERY item not placed by hand, in every list and
+     * whether or not it is checked (not only Everything else), with the fast model; learned corrections still win
+     * (client-side, in recategorize). Items she placed by hand into an aisle that still exists, or deliberately into
+     * Everything else, keep their place. The report counts the items that got a real aisle ([AisleSyncReport.recategorized])
+     * and those left in Everything else ([AisleSyncReport.leftUnsorted]): "Sorted 6 items · 2 left in Everything else".
+     * Baskets are not touched. Never throws LlmError (offline: nothing moves, the error is reported).
      */
-    suspend fun resortAll(): AisleSyncReport = TODO("WP3: AisleSync.resortAll (§6.7, AisleSyncTest)")
+    suspend fun resortAll(): AisleSyncReport = mutex.withLock {
+        val state = store.current()
+        val ids = state.store.aisles().mapTo(HashSet()) { it.id }
+        val candidates = state.lists.flatMap { it.items }
+            .filterNot { it.manuallyPlaced && (it.aisleId == null || it.aisleId in ids) }
+            .distinctBy { it.id }
+            .map { NamedItem(id = it.id, name = it.name) }
+        if (candidates.isEmpty()) return@withLock AisleSyncReport(false, 0, 0, null)
+        val assignments = try {
+            assistant.recategorize(candidates, state.store.aisles(), state.corrections)
+        } catch (e: LlmError) {
+            val left = candidates.count { c -> state.findItem(c.id)?.aisleId !in ids }
+            return@withLock AisleSyncReport(false, candidates.size - left, left, e)
+        }
+        // An item the model cannot place keeps the aisle it has (a re-sort never empties a good aisle into Everything else).
+        val current = state.lists.flatMap { it.items }.associate { it.id to it.aisleId }
+        val applied = candidates
+            .filter { assignments[it.id] != null || current[it.id] !in ids }
+            .associate { it.id to assignments[it.id] }
+        val after = try {
+            store.update { it.applyAisleAssignments(applied, clock()) }
+        } catch (e: IOException) {
+            return@withLock AisleSyncReport(false, 0, candidates.size, null, e)
+        }
+        val placed = candidates.count { c -> after.findItem(c.id)?.aisleId in ids }
+        AisleSyncReport(false, placed, candidates.size - placed, null)
+    }
 
     /**
      * After typed / raw-lines items were committed with aisleId == null: recategorize just those

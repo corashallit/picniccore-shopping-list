@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "currentListId": "l",
+  "lists": [{"id": "l", "title": "Groceries", "createdAt": 0,
+    "items": [{"id": "a", "name": "Flour", "icon": "flour", "addedAt": 1}]}],
+  "store": {"name": "My store", "aislesText": "Produce"}
+}

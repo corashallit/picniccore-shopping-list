@@ -1,12 +1,12 @@
 package earth.cora.picnic.core.model
 
 import earth.cora.picnic.core.assistant.ProposedItem
+import earth.cora.picnic.core.assistant.SkipReason
 
 /*
  * The pantry (Cora's answer to Q5, docs/DESIGN_STICKER.md §0.4, §6.13): what she keeps at home. One pantry for
  * the app; it never adds or removes list items, it only tells the AI what to leave out of the things it works
- * out. Owner: WP3 (PantryOpsTest, PantryMatchTest). PHASE-0 CONTRACT: the one-line ops have bodies; the rest
- * are TODO("WP3: ...") stubs.
+ * out. Owner: WP3 (PantryOpsTest, PantryMatchTest).
  */
 
 /** Pantry entries sent with an AI request: the first 200 in shelf order (§6.13). */
@@ -16,14 +16,34 @@ const val PANTRY_IN_CONTEXT: Int = 200
 fun AppState.pantryText(): String = pantry.joinToString("\n") { it.name }
 
 /**
- * Commits the "Pantry as text" field: splits on new lines, commas and " and ", drops quantities ("2 kg flour"
- * -> "Flour"), capitalises like an item name, dedupes by normalizeName, keeps the text's order and the icon
- * and addedAt of unchanged names (new ones get [now]).
+ * Commits the "Pantry as text" field (§6.13, PantryOpsTest): splits on new lines, commas, semicolons and " and "
+ * (PantryNames.split), drops quantities and bullets ("2 kg flour" -> "Flour"), capitalises like an item name,
+ * dedupes by normalizeName (the first one stays), keeps the text's order, and keeps the icon and addedAt of names
+ * that were already there (new ones get [now], no icon yet). Same state when nothing changed.
  */
-fun AppState.setPantryText(text: String, now: Long): AppState = TODO("WP3: setPantryText (§6.13, PantryOpsTest)")
+fun AppState.setPantryText(text: String, now: Long): AppState {
+    val existing = pantry.associateBy { normalizeName(it.name) }
+    val seen = HashSet<String>()
+    val entries = PantryNames.split(text).mapNotNull { name ->
+        val key = normalizeName(name)
+        if (!seen.add(key)) return@mapNotNull null
+        existing[key]?.copy(name = name) ?: PantryEntry(name = name, icon = null, addedAt = now)
+    }
+    return if (entries == pantry) this else copy(pantry = entries)
+}
 
-/** Adds entries (the add field, the Edit sheet toggle, a suggestion chip); names already there are skipped (same state if all were). */
-fun AppState.addToPantry(names: List<String>, now: Long): AppState = TODO("WP3: addToPantry (§6.13, PantryOpsTest)")
+/**
+ * Adds entries at the end of the shelves (the add field, the Edit sheet toggle, a suggestion chip, §6.13). Each
+ * name is split and cleaned like [setPantryText]; names already there (by normalizeName) are skipped, so the
+ * same state comes back when all of them were.
+ */
+fun AppState.addToPantry(names: List<String>, now: Long): AppState {
+    val seen = pantry.mapTo(HashSet()) { normalizeName(it.name) }
+    val added = names.flatMap(PantryNames::split).mapNotNull { name ->
+        if (seen.add(normalizeName(name))) PantryEntry(name = name, icon = null, addedAt = now) else null
+    }
+    return if (added.isEmpty()) this else copy(pantry = pantry + added)
+}
 
 /** "Take off the shelf" / the Edit sheet toggle off: removes the entry whose normalizeName is [normalizedName]. */
 fun AppState.removeFromPantry(normalizedName: String): AppState {
@@ -51,12 +71,70 @@ fun AppState.inPantry(name: String): Boolean {
     return key.isNotEmpty() && pantry.any { normalizeName(it.name) == key }
 }
 
-/** The client-side backstop for the model's pantry rule (§6.2 rule 8). Pure. */
-object PantryMatch {
-    /** normalizeName equality with singular/plural folding only: "eggs"/"egg", "berries"/"berry"; "flour" does not cover "almond flour". */
-    fun covers(entry: String, itemName: String): Boolean = TODO("WP3: PantryMatch.covers (§6.2 rule 8, PantryMatchTest)")
+/** How pantry text becomes entry names (§6.13). */
+object PantryNames {
+    private val SEPARATORS = Regex("""\r?\n|;|(?<!\d),|,(?!\d)|\s+(?:and|et|&)\s+""", RegexOption.IGNORE_CASE)
+    private val BULLET = Regex("""^(?:[-*•·+–—]|\[[ xX✓]?]|[☐☑✓✔□■]|\d{1,2}[.)](?=\s))\s*""")
 
-    /** A named item is never skipped for the pantry (switched back on); a worked-out item an entry covers is skipped as IN_PANTRY. */
-    fun apply(items: List<ProposedItem>, pantry: List<String>): List<ProposedItem> =
-        TODO("WP3: PantryMatch.apply (§6.2 rule 8, PantryMatchTest)")
+    /** "2 kg flour, salt and pepper\n- spices" -> ["Flour", "Salt", "Pepper", "Spices"]. Blank pieces go. */
+    fun split(text: String): List<String> = text.split(SEPARATORS).mapNotNull(::clean)
+
+    /** One piece: bullets and quantities dropped, spaces collapsed, capitalised; null when nothing is left. */
+    fun clean(piece: String): String? {
+        var s = piece.trim().replace(Regex("\\s+"), " ")
+        repeat(2) { s = s.replaceFirst(BULLET, "").trim() }
+        s = s.trimEnd('.', '!', '?', ':').trim()
+        val name = Quantities.split(s).name.trim().removePrefix("of ").trim()
+        if (name.none { it.isLetter() }) return null
+        return name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+    }
+}
+
+/** The client-side backstop for the model's pantry rule (§6.2 rule 8, PantryMatchTest). Pure. */
+object PantryMatch {
+    /**
+     * The pantry [entry] covers [itemName]: equal after normalizeName and singular/plural folding of the last
+     * word ("eggs"/"egg", "tomatoes"/"tomato", "berries"/"berry", "peaches"/"peach"), and nothing more: "flour" does
+     * not cover "almond flour", and "spices" does not cover "cinnamon" here (the model judges broad entries).
+     */
+    fun covers(entry: String, itemName: String): Boolean {
+        val a = key(entry)
+        return a.isNotEmpty() && (a == key(itemName) || normalizeName(entry) == normalizeName(itemName))
+    }
+
+    /** The first pantry entry that [covers] [itemName], or null. */
+    fun coveringEntry(pantry: List<String>, itemName: String): String? = pantry.firstOrNull { covers(it, itemName) }
+
+    /**
+     * Applies the two client rules to an ingest answer: a NAMED item (typed, photographed or spoken) is never
+     * skipped for the pantry (an in_pantry row is switched back on); a worked-out item that a pantry entry covers is
+     * skipped as IN_PANTRY with that entry even when the model kept it. Other skip reasons stay as the model gave them.
+     */
+    fun apply(items: List<ProposedItem>, pantry: List<String>): List<ProposedItem> = items.map { item ->
+        when {
+            item.named && item.skipReason == SkipReason.IN_PANTRY -> item.copy(skipReason = SkipReason.NONE, pantryEntry = null)
+            item.named -> item
+            item.skipReason == SkipReason.NONE -> coveringEntry(pantry, item.name)
+                ?.let { item.copy(skipReason = SkipReason.IN_PANTRY, pantryEntry = it) } ?: item
+            item.skipReason == SkipReason.IN_PANTRY && item.pantryEntry.isNullOrBlank() ->
+                item.copy(pantryEntry = coveringEntry(pantry, item.name))
+            else -> item
+        }
+    }
+
+    private fun key(name: String): String {
+        val words = foldText(name).split(' ').filter { it.isNotEmpty() }
+        if (words.isEmpty()) return ""
+        return (words.dropLast(1) + singular(words.last())).joinToString(" ")
+    }
+
+    private fun singular(word: String): String = when {
+        word.length <= 3 -> word
+        word.endsWith("ies") -> word.dropLast(3) + "y"
+        word.endsWith("oes") || word.endsWith("ches") || word.endsWith("shes") || word.endsWith("sses") ||
+            word.endsWith("xes") || word.endsWith("zes") -> word.dropLast(2)
+        word.endsWith("ss") || word.endsWith("us") || word.endsWith("is") -> word
+        word.endsWith("s") -> word.dropLast(1)
+        else -> word
+    }
 }

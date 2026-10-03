@@ -84,7 +84,7 @@ class OpenAiGroceryAssistantTest {
         val ctx = input[1]["content"]!!.jsonArray.single().jsonObject["text"]!!.str()
         assertTrue(ctx.startsWith("Store aisles in walking order (id: name):\n- produce: Produce\n"))
         assertTrue("- nutritional yeast -> bulk-natural-foods" in ctx)
-        assertTrue("Already on the list: Butter, Bananas, Paper towels\n\nApp language: English." in ctx)
+        assertTrue("Already on the list: Butter, Bananas, Paper towels\n\nIn the pantry (she keeps these at home): nothing yet\n\nApp language: English." in ctx)
         assertEquals("ingredients for pancakes from scratch", input[2]["content"]!!.jsonArray.single().jsonObject["text"]!!.str())
 
         val tool = body["tools"]!!.jsonArray.single().jsonObject
@@ -112,7 +112,7 @@ class OpenAiGroceryAssistantTest {
         )
         assertEquals(
             TestSupport.fixture("context_example.txt").trim(),
-            Prompts.contextBlock(benchmark.aisles, benchmark.corrections, benchmark.existingNames),
+            Prompts.contextBlock(benchmark.aisles, benchmark.corrections, benchmark.existingNames, pantry = benchmark.pantry),
         )
         assertTrue(Prompts.contextBlock(emptyList(), emptyList(), emptyList()).endsWith("- none\n\nAlready on the list: nothing yet"))
         assertFalse("Already on the list" in Prompts.contextBlock(aisles, emptyList(), null))
@@ -282,10 +282,16 @@ class OpenAiGroceryAssistantTest {
             ),
         )
         val result = assistant.ingest(IngestInput.Text("x"), context)
-        assertEquals(listOf("Eggs", "Lemon"), result.items.map { it.name })
-        assertEquals("12", result.items.first().quantity, "the duplicate's quantity fills the gap")
-        assertNull(result.items[1].quantity)
-        assertNull(result.items[1].note)
+        assertEquals(listOf("Butter", "Banana", "Eggs", "Lemon"), result.items.map { it.name })
+        assertEquals(
+            listOf(SkipReason.ALREADY_ON_LIST, SkipReason.ALREADY_ON_LIST, SkipReason.NONE, SkipReason.NONE),
+            result.items.map { it.skipReason },
+            "names already on the list stay as skipped rows (\"already on your list\")",
+        )
+        val eggs = result.items[2]
+        assertEquals("12", eggs.quantity, "the duplicate's quantity fills the gap")
+        assertNull(result.items[3].quantity)
+        assertNull(result.items[3].note)
         assertEquals(listOf("Butter", "Banana", "eggs"), result.skippedDuplicates)
         assertEquals("Added stuff (example.com).", result.message)
     }
@@ -382,7 +388,7 @@ class OpenAiGroceryAssistantTest {
         assertEquals(aisles.size, partial.size)
         api.token = null
         val offline = assistant.assignBasketsOrGuess(aisles, catalog.baskets::guess)
-        assertEquals(BasketKind.FRUIT_CRATE, offline["produce"])
+        assertEquals(BasketKind.WICKER_PICNIC, offline["produce"])
     }
 
     @Test

@@ -1,5 +1,6 @@
 package earth.cora.picnic.core.model
 
+import earth.cora.picnic.core.store.BookSticker
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -11,15 +12,18 @@ import kotlinx.serialization.Serializable
 
 /**
  * Current state.json schema version. Bump together with a migration in StateMigrations.
- * Phase 0 (docs/DESIGN_STICKER.md §21.3) adds the v2 fields below with defaults but keeps version 1:
- * WP3 bumps this to 2 TOGETHER with the real v1 -> v2 step (§7.2, StateMigrationV2Test). Bumping it
- * earlier would stamp files "v2" that never ran that step, so they would skip it for good.
+ * v2 (docs/DESIGN_STICKER.md §7.2): trips, book slots, check-off times, rarity, the open aisle, aisle styles,
+ * favourites and the pantry. The v1 -> v2 step is real (StateMigrations.v1ToV2, StateMigrationV2Test).
  */
-const val STATE_SCHEMA_VERSION: Int = 1
+const val STATE_SCHEMA_VERSION: Int = 2
 
 /** Where an item came from. Persisted by name. */
 @Serializable
 enum class ItemSource { TYPED, AI_TEXT, PHOTO, VOICE }
+
+/** How rare an item's sticker is (eggs 6 and 13, §12.2). Persisted by name; NONE for almost everything. */
+@Serializable
+enum class Rarity { NONE, SHINY, JACKPOT }
 
 /**
  * How well [GroceryItem.icon] depicts the item (the icon cascade, docs/ARCHITECTURE.md §8.2). Persisted by serial name.
@@ -29,10 +33,6 @@ enum class ItemSource { TYPED, AI_TEXT, PHOTO, VOICE }
  * - PENDING: no local match yet and the IconDecider (step 2) has not answered (offline, or still running).
  *   [GroceryItem.icon] is IconCatalog.DEFAULT_ICON meanwhile. IconRepository.resumePending() retries these.
  */
-/** How rare an item's sticker is (eggs 6 and 13, §12.2). Persisted by name; NONE for almost everything. */
-@Serializable
-enum class Rarity { NONE, SHINY, JACKPOT }
-
 @Serializable
 enum class IconFit {
     @SerialName("exact") EXACT,
@@ -116,6 +116,11 @@ data class Trip(
     val receiptSaved: Boolean = false,
     /** Egg 8: the nap cat trotted off; it does not return this trip. */
     val napDismissed: Boolean = false,
+    /**
+     * The celebration's bonus sticker (§11.2), saved when the scene starts so skipping never loses it;
+     * filed as TripBook.bonus. Set once per trip (setTripBonus).
+     */
+    val bonus: BookSticker? = null,
 )
 
 /** The LCD receipt (egg 18, §13.2). Values are frozen when it is first printed. */
@@ -267,13 +272,16 @@ enum class BasketKind(val key: String) {
     @SerialName("bottle_carrier") BOTTLE_CARRIER("bottle_carrier"),
     @SerialName("candy_jar") CANDY_JAR("candy_jar"),
     @SerialName("vanity_case") VANITY_CASE("vanity_case"),
-    /** D8: the 17th kind (Baking). Keyword tuning so the default store maps per §5.2 is WP3's (BasketCatalogTest). */
+    /** D8: the 17th kind (Baking). The keywords are tuned so the default store maps per §5.2 (BasketCatalogTest). */
     @SerialName("mixing_bowl") MIXING_BOWL("mixing_bowl"),
     ;
 
     companion object {
-        /** Used for Unsorted, for the checked section and when nothing matches. */
+        /** When nothing matches (the keyword heuristic's answer for an unclear aisle, §5.2). */
         val DEFAULT: BasketKind = WICKER_PICNIC
+
+        /** "Everything else" (the UNSORTED section) always uses the wire shopping basket (§4.10, §5.2). */
+        val EVERYTHING_ELSE: BasketKind = WIRE_BASKET
 
         fun fromKey(key: String): BasketKind? = entries.firstOrNull { it.key == key }
     }

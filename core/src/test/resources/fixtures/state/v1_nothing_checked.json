@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "currentListId": "6f1c",
+  "lists": [{
+    "id": "6f1c", "title": "Groceries", "createdAt": 1759330000000,
+    "items": [
+      {"id": "a1", "name": "Lemons", "quantity": "2", "aisleId": "produce", "icon": "lemon",
+       "iconFit": "exact", "checked": false, "addedAt": 1759330100000, "source": "AI_TEXT", "manuallyPlaced": false},
+      {"id": "c3", "name": "Dish rack", "icon": "paper_bag", "iconFit": "pending",
+       "checked": false, "addedAt": 1759330200000, "source": "TYPED", "manuallyPlaced": false}
+    ],
+    "collapsedAisles": ["bakery"]
+  }],
+  "store": {"name": "My store", "aislesText": "Produce\nBakery\nDairy & eggs", "aisleBaskets": {"produce": "berry_punnet"}},
+  "corrections": [{"name": "oat milk", "aisleId": "dairy-eggs", "at": 1759330000000}],
+  "iconOverrides": [{"name": "nooch", "icon": "spice_jar", "at": 1759330300000}]
+}

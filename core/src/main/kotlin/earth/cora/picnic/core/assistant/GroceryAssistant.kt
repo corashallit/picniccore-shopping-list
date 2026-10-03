@@ -16,14 +16,17 @@ interface GroceryAssistant {
     /**
      * One Responses API call to ModelDefaults.SMART with a strict JSON schema. Text and transcript
      * input may use web_search (the model decides; ModelDefaults.WEB_SEARCH). Post-processing is
-     * already applied to the result: learned corrections override aisle_id, unknown/"unsorted"
-     * aisle -> null, learned icon overrides replace icon (fit EXACT), "exact" on a *_generic key holds
-     * only when the catalog lists the name for it, a model "approximate" becomes EXACT when IconCatalog.matchExact knows the name
-     * (curated key, label or alias; no head-noun guess), an invalid icon ->
-     * IconCatalog.DEFAULT_ICON + APPROXIMATE, duplicates (vs context.existingNames and within the
-     * answer) removed and reported in [IngestResult.skippedDuplicates]. The model's icon/icon_fit
-     * counts as step 2 of the icon cascade for these items. Blank input returns an empty result
-     * without a request. Sources are capped at 8 (cited and opened pages first).
+     * already applied to the result: quantities in metric (normalizeMetric), learned corrections override
+     * aisle_id, unknown/"unsorted" aisle -> null, learned icon overrides replace icon (fit EXACT), "exact" on a
+     * *_generic key holds only when the catalog lists the name for it, a model "approximate" becomes EXACT when
+     * IconCatalog.matchExact knows the name (curated key, label or alias; no head-noun guess), an invalid icon ->
+     * IconCatalog.DEFAULT_ICON + APPROXIMATE. Skipped rows (§4.17) stay in [IngestResult.items] with their
+     * [ProposedItem.skipReason]: names already on the list (vs context.existingNames) come back as
+     * ALREADY_ON_LIST and are also named in [IngestResult.skippedDuplicates], repeats within the answer are merged
+     * (also named there), and the pantry backstop (PantryMatch) runs last. Commit only the rows she keeps
+     * (skipReason NONE by default). Photos carry [IngestResult.lines]; recipe answers [IngestResult.recipe].
+     * The model's icon/icon_fit counts as step 2 of the icon cascade for these items. Blank input returns an
+     * empty result without a request. Sources are capped at 8 (cited and opened pages first).
      */
     suspend fun ingest(input: IngestInput, context: IngestContext): IngestResult
 
@@ -88,9 +91,9 @@ data class IngestContext(
      */
     val appLanguage: String = DEFAULT_APP_LANGUAGE,
     /**
-     * The pantry entry names as she wrote them, the first 200 in shelf order (§0.4 Q5, §6.2 rule 8): the model
-     * leaves out worked-out items they cover. TODO(WP3): print it in the context block ("In the pantry (she
-     * keeps these at home): …", "nothing yet" when empty) and regenerate the context example.
+     * The pantry entry names as she wrote them, the first 200 in shelf order (§0.4 Q5, §6.2 rule 8): the context
+     * block prints them ("In the pantry (she keeps these at home): …", "nothing yet" when empty) and the model
+     * leaves out the worked-out items they cover (PantryMatch backs it up).
      */
     val pantry: List<String> = emptyList(),
 ) {

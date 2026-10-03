@@ -16,6 +16,7 @@ import earth.cora.picnic.core.assistant.IngestContext
 import earth.cora.picnic.core.assistant.IngestInput
 import earth.cora.picnic.core.assistant.OfflineParser
 import earth.cora.picnic.core.assistant.ProposedItem
+import earth.cora.picnic.core.assistant.SkipReason
 import earth.cora.picnic.core.assistant.WebSource
 import earth.cora.picnic.core.assistant.toGroceryItem
 import earth.cora.picnic.core.catalog.IconCatalog
@@ -392,12 +393,14 @@ class AddViewModel(
         skipped: List<String>,
     ) {
         val aisles = ctx.aisles.associateBy { it.id }
-        val rows = items.mapIndexed { i, item ->
+        // Phase-0 bridge until WP7's recipe card: rows already on the list are shown as "skipped" names only,
+        // and optional or pantry rows start switched off (§4.17).
+        val rows = items.filter { it.skipReason != SkipReason.ALREADY_ON_LIST }.mapIndexed { i, item ->
             val aisle = item.aisleId?.let(aisles::get)
             PreviewItemUi(
                 key = i,
                 item = item,
-                keep = true,
+                keep = item.skipReason == SkipReason.NONE,
                 aisleTitle = aisle?.name ?: ListGrouping.UNSORTED_TITLE,
                 icon = if (item.iconFit == IconFit.PENDING) IconRef(catalog.fallbackFor(item.icon)) else IconRef(item.icon),
                 aisleIndex = aisle?.let { it.position - 1 } ?: -1,

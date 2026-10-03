@@ -30,6 +30,20 @@ internal object Schemas {
         putJsonArray("type") { add(JsonPrimitive("string")); add(JsonPrimitive("null")) }
     }
 
+    fun boolean(): JsonObject = buildJsonObject { put("type", "boolean") }
+
+    fun nullableInteger(): JsonObject = buildJsonObject {
+        putJsonArray("type") { add(JsonPrimitive("integer")); add(JsonPrimitive("null")) }
+    }
+
+    /** An object or null (strict mode: anyOf with a null branch). */
+    fun nullable(schema: JsonObject): JsonObject = buildJsonObject {
+        putJsonArray("anyOf") {
+            add(schema)
+            add(buildJsonObject { put("type", "null") })
+        }
+    }
+
     fun enumString(values: List<String>): JsonObject {
         require(values.isNotEmpty()) { "enum must not be empty" }
         return buildJsonObject {
@@ -60,7 +74,11 @@ internal object Schemas {
         }
     }
 
-    /** grocery_items: {items:[{name, quantity|null, note|null, aisle_id, icon, icon_fit}], message}. */
+    /**
+     * grocery_items (docs/DESIGN_STICKER.md §19.1): {items:[{name, quantity|null, note|null, aisle_id, icon, icon_fit,
+     * skip_reason, named, pantry_entry}], message, lines:[{text, crossed_out, correction_of|null, item_index|null}],
+     * recipe:{title, recipes_compared|null, servings|null}|null}.
+     */
     fun ingest(aisleIds: List<String>, iconKeys: List<String>): JsonObject = strictObject(
         "items" to array(
             strictObject(
@@ -70,9 +88,27 @@ internal object Schemas {
                 "aisle_id" to enumString(aisleIds + UNSORTED_WIRE_ID),
                 "icon" to enumString(iconKeys),
                 "icon_fit" to enumString(listOf(ICON_FIT_EXACT, ICON_FIT_APPROXIMATE)),
+                "skip_reason" to enumString(SKIP_REASONS),
+                "named" to boolean(),
+                "pantry_entry" to string(),
             ),
         ),
         "message" to string(),
+        "lines" to array(
+            strictObject(
+                "text" to string(),
+                "crossed_out" to boolean(),
+                "correction_of" to nullableString(),
+                "item_index" to nullableInteger(),
+            ),
+        ),
+        "recipe" to nullable(
+            strictObject(
+                "title" to string(),
+                "recipes_compared" to nullableInteger(),
+                "servings" to nullableInteger(),
+            ),
+        ),
     )
 
     /** aisle_assignments: {assignments:[{id: enum(i1..iN), aisle_id: enum(aisles + "unsorted")}]}. */
@@ -109,6 +145,9 @@ internal object Schemas {
     const val ICON_FIT_EXACT = "exact"
     const val ICON_FIT_APPROXIMATE = "approximate"
     const val ICON_NONE = "none"
+
+    /** Wire values of SkipReason, in its order. */
+    val SKIP_REASONS: List<String> = listOf("none", "already_on_list", "optional", "in_pantry")
 }
 
 /** Prompt texts (core/src/main/resources/prompts, documented in docs/PROMPTS.md) and context blocks. */
@@ -161,13 +200,15 @@ internal object Prompts {
 
     /**
      * The per-request developer message (research/openai/examples/context_example.txt): aisles in
-     * walking order, learned corrections, and (for ingest) the names already on the list.
+     * walking order, learned corrections, and (for ingest) the names already on the list and the pantry
+     * ("In the pantry (she keeps these at home): …", "nothing yet" when empty, §6.2 rule 8).
      */
     fun contextBlock(
         aisles: List<Aisle>,
         corrections: List<Correction>,
         existingNames: List<String>?,
         appLanguage: String? = null,
+        pantry: List<String>? = null,
     ): String = buildString {
         append("Store aisles in walking order (id: name):\n")
         aisles.forEach { append("- ").append(it.id).append(": ").append(oneLine(it.name, 120)).append('\n') }
@@ -179,6 +220,11 @@ internal object Prompts {
             val names = existingNames.map { oneLine(it, 80) }.filter { it.isNotEmpty() }.take(MAX_EXISTING_NAMES)
             append("\nAlready on the list: ")
             append(if (names.isEmpty()) "nothing yet" else names.joinToString(", "))
+        }
+        if (pantry != null) {
+            val entries = pantry.map { oneLine(it, 80) }.filter { it.isNotEmpty() }.take(MAX_PANTRY_ENTRIES)
+            append("\n\nIn the pantry (she keeps these at home): ")
+            append(if (entries.isEmpty()) "nothing yet" else entries.joinToString(", "))
         }
         appLanguage?.let { oneLine(it, 40) }?.takeIf { it.isNotEmpty() }?.let { language ->
             append("\n\nApp language: ").append(language)
@@ -208,6 +254,9 @@ internal object Prompts {
     const val PHOTO_INSTRUCTION = "Photo of a handwritten shopping list. Add its items."
     const val TRANSCRIPT_PREFIX = "Voice note transcript: "
     const val MAX_EXISTING_NAMES = 150
+
+    /** Pantry entries in the context block (AppState.ingestContext already caps them at PANTRY_IN_CONTEXT). */
+    const val MAX_PANTRY_ENTRIES = 200
 }
 
 /** Builds /responses bodies in the cache-friendly order (research/openai_api.md §2.1). */

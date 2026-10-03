@@ -77,7 +77,7 @@ class AisleSyncTest {
         assertEquals("bakery", s.findItem("b")!!.aisleId)
         assertNull(s.findItem("c")!!.aisleId)
         assertEquals(
-            mapOf("produce" to BasketKind.BERRY_PUNNET, "bakery" to BasketKind.BREAD_BASKET, "frozen" to BasketKind.ICE_BUCKET),
+            mapOf("produce" to BasketKind.BERRY_PUNNET, "bakery" to BasketKind.BREAD_BASKET, "frozen" to BasketKind.COOLER),
             s.store.aisleBaskets,
             "missing model baskets fall back to the heuristic",
         )
@@ -92,7 +92,7 @@ class AisleSyncTest {
         assertFalse(report.basketsFromModel)
         assertIs<LlmError.Network>(report.error)
         assertEquals(1, report.leftUnsorted)
-        assertEquals(BasketKind.FRUIT_CRATE, store.current().store.aisleBaskets["produce"])
+        assertEquals(BasketKind.WICKER_PICNIC, store.current().store.aisleBaskets["produce"])
         assertEquals(BasketKind.FLOWER_BUCKET, store.current().store.aisleBaskets["fleurs"])
         assertNull(store.current().findItem("a")!!.aisleId)
     }
@@ -107,6 +107,38 @@ class AisleSyncTest {
         assertEquals(listOf("a"), assistant.recategorized.single().map { it.id })
         assertNull(store.current().findItem("b")!!.aisleId, "not asked about")
         assertEquals(AisleSyncReport(false, 0, 0, null), AisleSync(store, assistant, catalog.baskets).sortItems(emptyList()))
+    }
+
+    @Test
+    fun resortAll() = runTest {
+        val start = state(
+            item("a", "Lemons", "bakery"), // misfiled: re-sorted
+            item("b", "Croissant"), // Everything else: sorted
+            item("c", "Bread", "bakery", manual = true), // placed by hand: stays, not asked
+            item("d", "Glitter", manual = true), // deliberately Everything else: stays, not asked
+            item("e", "Mystery", "frozen"), // the model cannot place it: keeps its aisle
+            item("f", "Thing"), // the model cannot place it: stays in Everything else
+            item("g", "Peas", "gone", manual = true), // placed by hand into a vanished aisle: re-sorted
+        ).let { s -> s.copy(lists = s.lists + GroceryList("l2", "Party", 0, listOf(item("h", "Ice", "produce").copy(checked = true)))) }
+        val store = InMemoryStateStore(start)
+        val assistant = FakeAssistant(placements = mapOf("Lemons" to "produce", "Croissant" to "bakery", "Peas" to "frozen", "Ice" to "frozen"))
+        val report = AisleSync(store, assistant, catalog.baskets).resortAll()
+        assertEquals(listOf("a", "b", "e", "f", "g", "h"), assistant.recategorized.single().map { it.id }, "every item not placed by hand, every list, checked or not")
+        val s = store.current()
+        assertEquals("produce", s.findItem("a")!!.aisleId)
+        assertEquals("bakery", s.findItem("b")!!.aisleId)
+        assertEquals("bakery", s.findItem("c")!!.aisleId)
+        assertNull(s.findItem("d")!!.aisleId)
+        assertEquals("frozen", s.findItem("e")!!.aisleId, "a re-sort never empties a good aisle into Everything else")
+        assertNull(s.findItem("f")!!.aisleId)
+        assertEquals("frozen", s.findItem("g")!!.aisleId)
+        assertEquals("frozen", s.findItem("h")!!.aisleId)
+        assertEquals(AisleSyncReport(false, recategorized = 5, leftUnsorted = 1, error = null), report, "Sorted 5 items · 1 left in Everything else")
+
+        val offline = AisleSync(InMemoryStateStore(start), FakeAssistant(recategorizeError = LlmError.Network(IOException("x"))), catalog.baskets).resortAll()
+        assertIs<LlmError.Network>(offline.error)
+        assertEquals(3, offline.leftUnsorted, "Croissant, Thing and Peas (vanished aisle) are in Everything else")
+        assertEquals(AisleSyncReport(false, 0, 0, null), AisleSync(InMemoryStateStore(state(item("c", "Bread", "bakery", manual = true))), assistant, catalog.baskets).resortAll())
     }
 
     @Test

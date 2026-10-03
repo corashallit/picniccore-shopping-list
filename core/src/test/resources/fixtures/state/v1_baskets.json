@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "currentListId": "l",
+  "lists": [{"id": "l", "title": "Groceries", "createdAt": 0, "items": []}],
+  "store": {
+    "name": "My store",
+    "aislesText": "Produce\nBakery\nDeli & cheese\nMeat & seafood\nAisle 1 - Breakfast, coffee & tea\nAisle 2 - Baking & spices\nAisle 3 - Pasta, rice & international\nAisle 4 - Canned goods & soups\nAisle 5 - Snacks & drinks\nAisle 6 - Household & cleaning\nAisle 7 - Health, beauty & baby\nDairy & eggs\nFrozen\nBulk & natural foods",
+    "aisleBaskets": {
+      "produce": "flower_bucket",
+      "bakery": "bread_basket",
+      "deli-cheese": "cooler",
+      "meat-seafood": "cooler",
+      "aisle-1-breakfast-coffee-tea": "egg_basket",
+      "aisle-2-baking-spices": "canvas_tote",
+      "aisle-3-pasta-rice-international": "canvas_tote",
+      "aisle-4-canned-goods-soups": "jar_shelf",
+      "aisle-5-snacks-drinks": "bottle_carrier",
+      "aisle-6-household-cleaning": "wire_basket",
+      "aisle-7-health-beauty-baby": "vanity_case",
+      "dairy-eggs": "milk_crate",
+      "frozen": "ice_bucket",
+      "bulk-natural-foods": "canvas_tote",
+      "gone-aisle": "canvas_tote"
+    }
+  }
+}
