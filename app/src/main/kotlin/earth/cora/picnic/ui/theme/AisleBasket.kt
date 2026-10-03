@@ -98,3 +98,16 @@ fun AisleBasket(
         )
     }
 }
+
+/** What a basket shows of its gotten stickers (§5.3, item 106): the newest five in their fill-order slots, and "+n". */
+@Immutable
+data class BasketFill(val shown: List<BasketMini>, val slots: List<earth.cora.picnic.ui.theme.gen.MiniSlot>, val extra: Int)
+
+/** The basket's mini layout, shared by every basket drawing (pure, unit-tested). */
+object BasketLayout {
+    /** [gotten] in check-off order: the newest [earth.cora.picnic.ui.theme.gen.BasketManifest.MAX_MINIS] shown, newest on top, the rest counted in "+n". */
+    fun fill(gotten: List<BasketMini>): BasketFill {
+        val shown = gotten.takeLast(earth.cora.picnic.ui.theme.gen.BasketManifest.MAX_MINIS)
+        return BasketFill(shown, earth.cora.picnic.ui.theme.gen.BasketManifest.MINI_SLOTS[shown.size].orEmpty(), gotten.size - shown.size)
+    }
+}

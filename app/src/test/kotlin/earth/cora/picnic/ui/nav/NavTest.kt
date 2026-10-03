@@ -85,8 +85,8 @@ class NavTest {
     fun albumRoute() {
         launch()
         assertTrue(atList())
-        // List → Settings (its top-bar button) → More options → Sticker album, all by taps.
-        compose.onNodeWithContentDescription("Settings").performClick()
+        // List → More options → Settings → More options → Sticker album, all by taps.
+        menu("Settings") // the list's overflow menu (§4.24)
         waitForText("Your OpenAI key")
         menu("Sticker album")
         compose.waitUntil(5_000) { at(AlbumRoute::class) }
@@ -97,7 +97,7 @@ class NavTest {
         compose.onNodeWithContentDescription("Back").performClick()
         compose.waitUntil(5_000) { atList() }
         // And the album's own menu goes straight back to the list.
-        compose.onNodeWithContentDescription("Settings").performClick()
+        menu("Settings") // the list's overflow menu (§4.24)
         waitForText("Your OpenAI key")
         menu("Sticker album")
         compose.waitUntil(5_000) { at(AlbumRoute::class) }
@@ -110,7 +110,7 @@ class NavTest {
     @Test
     fun pantryFromTheSettingsAndAlbumMenus() {
         launch()
-        compose.onNodeWithContentDescription("Settings").performClick()
+        menu("Settings") // the list's overflow menu (§4.24)
         waitForText("Your OpenAI key")
         menu("My pantry")
         compose.waitUntil(5_000) { at(PantryRoute::class) }
@@ -120,7 +120,7 @@ class NavTest {
         compose.waitUntil(5_000) { atList() }
 
         // Settings → Sticker album → My pantry: still one screen above the list.
-        compose.onNodeWithContentDescription("Settings").performClick()
+        menu("Settings") // the list's overflow menu (§4.24)
         waitForText("Your OpenAI key")
         menu("Sticker album")
         compose.waitUntil(5_000) { at(AlbumRoute::class) }

@@ -99,8 +99,9 @@ fun MotionBasket(
     val shut = p?.lidClosed ?: complete
     val minisHidden = p?.minisHidden ?: shut
     val visible = gotten.filter { p == null || it.itemId !in p.hiddenMinis }
-    val shown = if (minisHidden) emptyList() else visible.takeLast(BasketManifest.MAX_MINIS)
-    val extra = if (minisHidden) 0 else (visible.size - shown.size)
+    val fill = if (minisHidden) null else earth.cora.picnic.ui.theme.BasketLayout.fill(visible)
+    val shown = fill?.shown.orEmpty()
+    val extra = fill?.extra ?: 0
     val count = toGet + (p?.toGetLag ?: 0)
     val unit = size.width / BasketManifest.VIEWPORT_WIDTH
     val back = rememberVectorArt(art.back)
@@ -141,7 +142,7 @@ fun MotionBasket(
             drawBasketLayer(back, shadows.color, shadows.hs.x.toPx(), shadows.hs.y.toPx())
         }
         // The minis, in their fill-order slots; the newest on top.
-        val slots = BasketManifest.MINI_SLOTS[shown.size].orEmpty()
+        val slots = fill?.slots.orEmpty()
         val miniSize = size.width * (BasketManifest.MINI_SIZE / BasketManifest.VIEWPORT_WIDTH)
         shown.forEachIndexed { i, mini ->
             val slot = slots.getOrNull(i) ?: return@forEachIndexed

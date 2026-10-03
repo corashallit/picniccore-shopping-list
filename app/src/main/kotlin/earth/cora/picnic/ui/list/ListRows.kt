@@ -1,5 +1,6 @@
 package earth.cora.picnic.ui.list
 
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -80,6 +81,8 @@ import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.FixedMotionScale
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.HankoStamp
+import earth.cora.picnic.ui.theme.LocalPieceProbe
+import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.HankoText
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LocalReducedMotion
@@ -377,6 +380,7 @@ internal fun RowContent(
     // The pop (§6.2): scale .9 → 1.1 → 1 over 400 ms on the sticker, and a 400 ms highlighter flash on the text band.
     val popScale = remember { Animatable(1f) }
     val flash = remember { Animatable(0f) }
+    val probe = LocalPieceProbe.current
     LaunchedEffect(pop?.generation) {
         val p = pop ?: return@LaunchedEffect
         withContext(FixedMotionScale) {
@@ -400,25 +404,6 @@ internal fun RowContent(
             .fillMaxWidth()
             .heightIn(min = rowMinHeight())
             .testTag(ListTags.row(row.id))
-            .clearAndSetSemantics {
-                contentDescription = row.spoken
-                role = Role.Checkbox
-                toggleableState = ToggleableState(row.checked)
-                stateDescription = if (row.checked) gotIt else notChecked
-                onClick(label = checkLabel) {
-                    act.onToggle(row.id)
-                    true
-                }
-                onLongClick(label = editLabel) {
-                    act.onEdit(row.id)
-                    true
-                }
-                customActions = listOf(
-                    CustomAccessibilityAction(checkLabel) { act.onToggle(row.id); true },
-                    CustomAccessibilityAction(deleteLabel) { act.onDelete(row.id); true },
-                    CustomAccessibilityAction(editLabel) { act.onEdit(row.id); true },
-                )
-            }
             .onKeyEvent { e ->
                 // Space toggles like Enter (§4.4); Enter is the clickable's own.
                 if (e.key == Key.Spacebar && e.type == KeyEventType.KeyUp) {
@@ -428,13 +413,29 @@ internal fun RowContent(
                     e.key == Key.Spacebar
                 }
             }
+            // The whole row is the toggle; long-press edits. The click and its focus sit outside the clearing semantics,
+            // so the one node TalkBack and the keyboard reach keeps both (§4.4, §15).
+            .focusProperties { canFocus = true }
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
                 role = Role.Checkbox,
+                onClickLabel = checkLabel,
+                onLongClickLabel = editLabel,
                 onLongClick = { act.onEdit(row.id) },
                 onClick = { act.onToggle(row.id) },
             )
+            .clearAndSetSemantics {
+                contentDescription = row.spoken
+                role = Role.Checkbox
+                toggleableState = ToggleableState(row.checked)
+                stateDescription = if (row.checked) gotIt else notChecked
+                customActions = listOf(
+                    CustomAccessibilityAction(checkLabel) { act.onToggle(row.id); true },
+                    CustomAccessibilityAction(deleteLabel) { act.onDelete(row.id); true },
+                    CustomAccessibilityAction(editLabel) { act.onEdit(row.id); true },
+                )
+            }
             .padding(start = 6.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -443,6 +444,7 @@ internal fun RowContent(
             Box(
                 Modifier
                     .size(52.dp)
+                    .probe(probe, "sticker:${row.id}")
                     .anchor(AnchorRegistry.rowKey(row.id))
                     .graphicsLayer {
                         scaleX = popScale.value
@@ -485,19 +487,19 @@ internal fun RowContent(
                 style = t.itemName.copy(color = if (row.checked) c.inkSoft else c.ink),
                 struck = row.checked,
                 strike = c.hanko,
-                modifier = Modifier.testTag(ListTags.name(row.id)),
+                modifier = Modifier.testTag(ListTags.name(row.id)).probe(probe, "name:${row.id}"),
             )
             if (row.detail != null || row.holo) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.detail?.let {
-                        Text(it, style = t.itemDetail.copy(color = c.inkSoft), modifier = Modifier.weight(1f, fill = false).testTag(ListTags.detail(row.id)))
+                        Text(it, style = t.itemDetail.copy(color = c.inkSoft), modifier = Modifier.weight(1f, fill = false).testTag(ListTags.detail(row.id)).probe(probe, "detail:${row.id}"))
                     }
                     if (row.holo) RarityChip(jackpot = row.rarity == earth.cora.picnic.core.model.Rarity.JACKPOT)
                 }
             }
         }
         with(anchors) {
-            Box(Modifier.size(48.dp).anchor(AnchorRegistry.checkKey(row.id)).testTag(ListTags.check(row.id)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(48.dp).anchor(AnchorRegistry.checkKey(row.id)).testTag(ListTags.check(row.id)).probe(probe, "check:${row.id}"), contentAlignment = Alignment.Center) {
                 val lifting = RowMotion.liftsHanko(phase)
                 if (!row.checked || lifting) StickerSpot()
                 if (row.checked || lifting) {

@@ -20,7 +20,6 @@ import earth.cora.picnic.core.model.TripStatsValue
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.currentList
 import earth.cora.picnic.core.model.iconRef
-import earth.cora.picnic.core.model.normalizeMetric
 import earth.cora.picnic.core.model.normalizeName
 import earth.cora.picnic.core.model.stamps
 import earth.cora.picnic.core.model.tripBook
@@ -278,12 +277,12 @@ sealed interface ListEvent {
     data class Message(val text: String) : ListEvent
 }
 
-/** "1 L basket · from your recipe": quantity and note joined, metric after normalisation (§16, checklist 296), or null. */
-internal fun GroceryItem.detailLine(): String? =
-    listOfNotNull(quantity?.trim()?.ifEmpty { null }, note?.trim()?.ifEmpty { null })
-        .joinToString(" · ")
-        .ifEmpty { null }
-        ?.let(::normalizeMetric)
+/**
+ * "1 L basket · from your recipe": the quantity and the note, metric after normalisation (§16, checklist 296), or null.
+ * The same line the add flows show (a recipe amount after the quantity's "·" may stay in cooking measures; the note may
+ * not), so a row reads the same in the recipe card and on the list.
+ */
+internal fun GroceryItem.detailLine(): String? = earth.cora.picnic.ui.add.AddRules.detailLine(quantity, note)
 
 /** Catalog keys with [item]'s category first (catalog order otherwise; the paper bag gets plain catalog order). */
 internal fun iconChoicesFor(item: GroceryItem, catalog: IconCatalog): List<String> {

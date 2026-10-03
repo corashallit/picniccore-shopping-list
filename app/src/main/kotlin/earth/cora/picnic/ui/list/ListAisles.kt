@@ -174,15 +174,12 @@ internal fun FoldedStrip(
             .testTag(ListTags.strip(section.id))
             .focusRequester(focus)
             .focusProperties { canFocus = true }
+            // The click (and its focus) outside the clearing semantics, so the one node keeps both (§15).
+            .clickable(remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = expand) { open() }
             .clearAndSetSemantics {
                 contentDescription = label
                 role = Role.Button
-                onClick(label = expand) {
-                    open()
-                    true
-                }
-            }
-            .clickable(remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = expand) { open() },
+            },
         content = {
             Box(Modifier.layoutId("face").stripFace())
             Column(Modifier.layoutId("text"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -357,15 +354,13 @@ internal fun TrayHeader(
                     .size(48.dp)
                     .testTag(ListTags.chevron(section.id))
                     .focusRequester(chevronFocus)
+                    // Focusable by touch too, so her unfold can hand focus to it (§15, item 193).
+                    .focusProperties { canFocus = true }
+                    .clickable(remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = collapse) { fold() }
                     .clearAndSetSemantics {
                         contentDescription = collapse
                         role = Role.Button
-                        onClick(label = collapse) {
-                            fold()
-                            true
-                        }
-                    }
-                    .clickable(remember { MutableInteractionSource() }, indication = null, role = Role.Button) { fold() },
+                    },
                 contentAlignment = Alignment.Center,
             ) { ChevronFace(up = true) }
             if (current) Bee(Modifier.layoutId("bee"))
