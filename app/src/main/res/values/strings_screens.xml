@@ -57,45 +57,81 @@
     <string name="edit_save">Save</string>
     <string name="edit_delete">Delete</string>
 
-    <!-- Aisles -->
-    <string name="aisles_title">Store aisles</string>
-    <string name="aisles_store_card">Your store</string>
-    <string name="aisles_store_name">Store name</string>
-    <string name="aisles_text_label">Aisles, in walking order</string>
-    <string name="aisles_text_placeholder">Produce\nBakery\nAisle 2 - Baking &amp; spices</string>
+    <!-- My store (§6.7, §4.26): no model names, no AI card -->
+    <string name="aisles_title">My store</string>
+    <string name="aisles_subtitle">walking order · colours · baskets</string>
+    <string name="aisles_store_label">Store:</string>
+    <string name="aisles_store_hint">your store’s name</string>
+    <string name="aisles_text_label">Aisles as text:</string>
     <string name="aisles_text_hint">One aisle per line, in the order you walk through the store. Lines starting with # are notes.</string>
-    <plurals name="aisles_preview_title">
-        <item quantity="one">%1$d aisle</item>
-        <item quantity="other">%1$d aisles</item>
-    </plurals>
-    <string name="aisles_preview_empty">No aisles yet: everything goes to Unsorted.</string>
-    <plurals name="aisles_preview_detail">
-        <item quantity="one">%1$s · %2$d item</item>
-        <item quantity="other">%1$s · %2$d items</item>
-    </plurals>
-    <string name="aisles_save">Save aisles</string>
+    <string name="aisles_store_aisle">store aisle %1$d</string>
+    <string name="aisles_store_aisle_field">store aisle</string>
+    <string name="aisles_label">%1$s, aisle %2$d</string>
+    <string name="aisles_label_store">%1$s, aisle %2$d, store aisle %3$d</string>
+    <string name="aisles_edit">Edit %1$s</string>
+    <string name="aisles_edit_done">Done editing %1$s</string>
+    <string name="aisles_name_field">Aisle name</string>
+    <string name="aisles_move_up">Move up</string>
+    <string name="aisles_move_down">Move down</string>
+    <string name="aisles_colour">Colour</string>
+    <string name="aisles_pattern">Pattern</string>
+    <string name="aisles_basket">Basket</string>
+    <string name="aisles_add">Add aisle</string>
+    <string name="aisles_new_name">New aisle</string>
     <string name="aisles_resort">Re-sort my list</string>
-    <string name="aisles_resort_hint">Re-sorting picks a basket for each aisle and places items that have no aisle.</string>
-    <plurals name="aisles_resort_hint_count">
-        <item quantity="one">Re-sorting picks a basket for each aisle and places the %1$d item that has no aisle.</item>
-        <item quantity="other">Re-sorting picks a basket for each aisle and places the %1$d items that have no aisle.</item>
-    </plurals>
-    <string name="aisles_syncing">Sorting your list into the aisles…</string>
-    <string name="aisles_save_failed">Couldn\'t save. Try again.</string>
-    <string name="aisles_report_nothing">Aisles saved. Everything is already in place.</string>
+    <string name="aisles_resorting">Sorting your list into the aisles…</string>
+    <string name="aisles_preview_note">Showing your text. It is saved when you tap Done or leave the field.</string>
+    <string name="aisles_empty">No aisles yet: everything goes to Everything else.</string>
     <plurals name="aisles_report_sorted">
         <item quantity="one">Sorted %1$d item</item>
         <item quantity="other">Sorted %1$d items</item>
     </plurals>
-    <plurals name="aisles_report_left">
-        <item quantity="one">%1$d item left in Unsorted.</item>
-        <item quantity="other">%1$d items left in Unsorted.</item>
-    </plurals>
+    <string name="aisles_report_left">%1$d left in Everything else</string>
     <string name="aisles_report_both">%1$s · %2$s</string>
-    <string name="aisles_leave_title">Save your aisle changes?</string>
-    <string name="aisles_leave_save">Save</string>
-    <string name="aisles_leave_discard">Discard</string>
-    <string name="aisles_leave_keep">Keep editing</string>
+    <string name="aisles_report_nothing">Everything is already in place.</string>
+    <string-array name="aisles_family_names">
+        <item>Strawberry</item>
+        <item>Ramune blue</item>
+        <item>Lemon</item>
+        <item>Melon</item>
+        <item>Grape</item>
+        <item>Peach</item>
+        <item>Mint</item>
+        <item>Sakura</item>
+        <item>Cocoa</item>
+        <item>Periwinkle</item>
+    </string-array>
+    <string-array name="aisles_pattern_names">
+        <item>Gingham</item>
+        <item>Polka dots</item>
+        <item>Stripes</item>
+        <item>Hearts</item>
+        <item>Stars</item>
+        <item>Clouds</item>
+        <item>Small check</item>
+        <item>Waves</item>
+        <item>Flowers</item>
+        <item>Plain</item>
+    </string-array>
+    <string-array name="aisles_basket_names">
+        <item>Wicker picnic basket</item>
+        <item>Bread basket</item>
+        <item>Fruit crate</item>
+        <item>Berry punnet</item>
+        <item>Wire basket</item>
+        <item>Egg basket</item>
+        <item>Milk crate</item>
+        <item>Cooler</item>
+        <item>Ice bucket</item>
+        <item>Bento box</item>
+        <item>Jar shelf</item>
+        <item>Canvas tote</item>
+        <item>Flower bucket</item>
+        <item>Bottle carrier</item>
+        <item>Candy jar</item>
+        <item>Vanity case</item>
+        <item>Mixing bowl</item>
+    </string-array>
 
     <!-- Settings (§6.8; amendment A4: the Surprises card; nothing about models or addresses) -->
     <string name="settings_title">Settings</string>
@@ -241,4 +277,46 @@
     <string name="pantry_took_off">%1$s is off your pantry shelf</string>
     <string name="screens_undo">Undo</string>
     <string name="screens_save_failed">Couldn\'t save. Try again.</string>
+
+    <!-- Sticker album (§6.10, §4.25) and the filed trip book (§6.6, read-only) -->
+    <string name="album_title">Sticker album</string>
+    <string name="album_subtitle">★ %1$d of %2$d collected · %3$d holo</string>
+    <string name="album_lcd_label">%1$d of %2$d stickers collected</string>
+    <string name="album_tab_groceries">Groceries</string>
+    <string name="album_tab_picnic">Picnic</string>
+    <string name="album_tab_seasonal">Seasonal</string>
+    <string name="album_drawn_for_you">Drawn for you</string>
+    <string name="album_picnic_sheet">Picnic sheet</string>
+    <string name="album_sakura_sheet">Sakura sheet</string>
+    <string name="album_pocket_empty">Not collected yet</string>
+    <string name="album_pocket">%1$s, rarity %2$d of 3</string>
+    <string name="album_pocket_holo">%1$s, holo, rarity %2$d of 3</string>
+    <string name="album_pocket_lift">Lift the sticker</string>
+    <string name="album_books_title">Trip sticker books</string>
+    <plurals name="album_book_count">
+        <item quantity="one">%1$d of %2$d sticker</item>
+        <item quantity="other">%1$d of %2$d stickers</item>
+    </plurals>
+    <string name="album_book_perfect">perfect</string>
+    <string name="album_book_receipt">receipt</string>
+    <string name="album_book_open">Open trip book</string>
+    <string name="album_perfect_title">Perfect weeks</string>
+    <string name="album_perfect_week">week %1$d of 4</string>
+    <string name="album_perfect_unlocked">sakura sheet unlocked</string>
+    <string name="album_perfect_stamp_done">Week %1$d: stamped</string>
+    <string name="album_perfect_stamp_not_yet">Week %1$d: not yet</string>
+    <string name="album_season_next">next! · %1$s %2$s</string>
+    <string name="album_season_locked">%1$s, not collected yet</string>
+    <string name="album_back_pocket">Back pocket</string>
+    <string name="album_back_pocket_sheet">sticker sheet 2 of 2</string>
+    <string name="album_empty_title">Your album is waiting</string>
+    <string name="album_empty_body">Check something off to collect your first sticker.</string>
+    <string name="book_sheet_stats">%1$d of %2$d stickers · %3$d of %4$d aisles stamped</string>
+    <string name="book_sheet_stamped">%1$s: stamped</string>
+    <string name="book_sheet_not_yet">%1$s: not yet</string>
+    <string name="book_sheet_stickers">Stickers</string>
+    <string name="book_sheet_receipt">Receipt</string>
+    <string name="book_receipt_stickers">%1$d stickers</string>
+    <string name="book_receipt_baskets">%1$d baskets</string>
+    <string name="book_receipt_shiny">%1$d shiny</string>
 </resources>

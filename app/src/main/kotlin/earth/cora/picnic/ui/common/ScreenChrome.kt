@@ -41,8 +41,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import earth.cora.picnic.R
+import androidx.compose.ui.unit.sp
 import earth.cora.picnic.ui.theme.Glyph
+import earth.cora.picnic.ui.theme.INLINE_GLYPHS
 import earth.cora.picnic.ui.theme.MenuItem
+import earth.cora.picnic.ui.theme.PadPatch
+import earth.cora.picnic.ui.theme.PicnicText
+import earth.cora.picnic.ui.theme.PuffyText
 import earth.cora.picnic.ui.theme.OverflowMenu
 import earth.cora.picnic.ui.theme.PicnicBackground
 import earth.cora.picnic.ui.theme.PicnicButton
@@ -88,13 +93,18 @@ fun SecondaryScreen(
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     PicnicBackground(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            PicnicTopBar(
-                title = title,
-                subtitle = subtitle,
-                modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
-                navigation = { BackButton(onBack) },
-                actions = actions,
-            )
+            val barInsets = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+            if (subtitle != null && subtitle.any { it in INLINE_GLYPHS }) {
+                GlyphSubtitleTopBar(title, subtitle, onBack, barInsets, actions)
+            } else {
+                PicnicTopBar(
+                    title = title,
+                    subtitle = subtitle,
+                    modifier = barInsets,
+                    navigation = { BackButton(onBack) },
+                    actions = actions,
+                )
+            }
             Box(
                 Modifier
                     .weight(1f)
@@ -110,7 +120,32 @@ fun SecondaryScreen(
 }
 
 /**
- * The scrolling column of a secondary screen: [ScreenGutter] sides, room for the last card's hard shadow, the navigation
+ * [PicnicTopBar]'s layout for a subtitle that carries inline glyphs ("★ 64 of 216 collected · 3 holo"): the same Back
+ * button, puffy title and pad patch, with the subtitle drawn by [PicnicText] so its star is an inline vector (§2.7).
+ */
+@Composable
+private fun GlyphSubtitleTopBar(title: String, subtitle: String, onBack: () -> Unit, modifier: Modifier, actions: @Composable RowScope.() -> Unit) {
+    val c = PicnicTheme.colors
+    val t = PicnicTheme.type
+    Column(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = PicnicTheme.dimens.appBar)
+            .padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BackButton(onBack)
+            Column(Modifier.weight(1f).padding(start = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                PuffyText(title, style = t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp, heading = true)
+                PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft), maxLines = 1) }
+            }
+            actions()
+        }
+    }
+}
+
+/**
+ * The scrolling column of a secondary screen:[ScreenGutter] sides, room for the last card's hard shadow, the navigation
  * bar and the keyboard below it.
  */
 @Composable

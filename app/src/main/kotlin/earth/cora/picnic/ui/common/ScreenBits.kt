@@ -93,9 +93,12 @@ fun Chevron(modifier: Modifier = Modifier) {
  * page, a 2 dp dashed periwinkle-trace outline (radius 10, exact dashes, DashSpec), a plus and the [text]. One button.
  */
 @Composable
-fun DashedAddSpot(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun DashedAddSpot(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, onBacking: Boolean = false) {
     val c = PicnicTheme.colors
-    val dash = if (c.isDark) Families.periwinkle.mid else Families.periwinkle.trace
+    // On the sticker-sheet backing (light in every variant) the spot keeps its Day inks.
+    val dark = c.isDark && !onBacking
+    val dash = if (dark) Families.periwinkle.mid else Families.periwinkle.trace
+    val ink = if (onBacking) c.ballpoint else c.ink
     Row(
         modifier
             .heightIn(min = 48.dp)
@@ -104,15 +107,15 @@ fun DashedAddSpot(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
                 val inset = 1.dp.toPx()
                 val r = 10.dp.toPx()
                 val rect = RoundRect(inset, inset, size.width - inset, size.height - inset, CornerRadius(r))
-                drawRoundRect(Color.White.copy(alpha = if (c.isDark) 0.08f else 0.5f), Offset(inset, inset), Size(size.width - 2 * inset, size.height - 2 * inset), CornerRadius(r))
+                drawRoundRect(Color.White.copy(alpha = if (dark) 0.08f else 0.5f), Offset(inset, inset), Size(size.width - 2 * inset, size.height - 2 * inset), CornerRadius(r))
                 drawDashedPath(Path().apply { addRoundRect(rect) }, dash, 2.dp.toPx(), 5.dp.toPx(), 3.5.dp.toPx())
             }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
     ) {
-        Glyph(PicnicGlyph.Add, contentDescription = null, tint = c.ink, size = 20.dp)
-        Text(text, style = PicnicTheme.type.label.copy(color = c.ink, fontSize = 15.sp))
+        Glyph(PicnicGlyph.Add, contentDescription = null, tint = ink, size = 20.dp)
+        Text(text, style = PicnicTheme.type.label.copy(color = ink, fontSize = 15.sp))
     }
 }
 

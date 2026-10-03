@@ -111,6 +111,8 @@ data class AlbumUiState(
     val perfectStreak: Int = 0,
     /** The sakura sheet is unlocked: "week 4 of 4 · sakura sheet unlocked" and the PER-FECT! hanko. */
     val perfectEarned: Boolean = false,
+    /** The perfect-week card is holo for the week after a perfect week (egg 14, Album.perfectUntil). */
+    val perfectHolo: Boolean = false,
     val backPocketOpen: Boolean = false,
     val listTitle: String = "",
 ) {
@@ -124,6 +126,7 @@ class AlbumViewModel(
     private val today: () -> LocalDate,
     listTitle: Flow<String> = flowOf(""),
     private val zone: ZoneId = ZoneId.of("America/Toronto"),
+    private val now: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
     private val tab = MutableStateFlow(AlbumTab.Groceries)
 
@@ -152,8 +155,9 @@ class AlbumViewModel(
 
     private fun build(a: Album, t: AlbumTab, title: String, fresh: Set<String>): AlbumUiState {
         val collectibleKeys = catalog.collectibleKeys
+        val collectibleSet = collectibleKeys.toSet()
         val drawn = a.collected.filterKeys { it.startsWith(CUSTOM_KEY_PREFIX) }
-        val collectedCount = a.collected.keys.count { it in collectibleKeys.toSet() || it.startsWith(CUSTOM_KEY_PREFIX) }
+        val collectedCount = a.collected.keys.count { it in collectibleSet || it.startsWith(CUSTOM_KEY_PREFIX) }
         val holo = a.collected.values.count { it.holo }
 
         fun pocket(key: String, name: String, c: Collected?, icon: IconRef) = PocketUi(
@@ -162,7 +166,7 @@ class AlbumViewModel(
             icon = if (c != null) icon else null,
             holo = c?.holo == true,
             stars = stars(c),
-            face = StickerManifest.entries.firstOrNull { it.key == key }?.hasFace == true,
+            face = key in AlbumFaces.anchors || StickerManifest.entries.firstOrNull { it.key == key }?.hasFace == true,
             fresh = c != null && key in fresh,
         )
 
@@ -210,6 +214,7 @@ class AlbumViewModel(
             books = a.books.map(::bookRow),
             perfectStreak = a.perfectStreak,
             perfectEarned = sakuraOpen || a.perfectStreak >= PERFECT_WEEK,
+            perfectHolo = (a.perfectUntil ?: 0L) > now(),
             backPocketOpen = a.backPocketOpen,
             listTitle = title,
         )
@@ -241,8 +246,11 @@ class AlbumViewModel(
         /** The group of live-drawn stickers. */
         const val DRAWN_FOR_YOU = "Drawn for you"
 
-        /** "Sat 26 Sep" (§7.3's date label). */
-        val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.CANADA)
+        /** "Sat 26 Sep" (§7.3's date label; the US English short names carry no full stops, unlike en-CA's "Sat."). */
+        val DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
+
+        /** "Oct 12" (the seasonal card's "next!" chip). */
+        val MONTH_DAY: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d", Locale.US)
 
         fun stars(c: Collected?): Int = when {
             c == null -> 0
@@ -258,6 +266,7 @@ class AlbumViewModel(
                     c.catalog,
                     { Instant.ofEpochMilli(c.clock()).atZone(ZoneId.of("America/Toronto")).toLocalDate() },
                     c.store.states.map { it.currentList().title },
+                    now = c.clock,
                 )
             }
         }
