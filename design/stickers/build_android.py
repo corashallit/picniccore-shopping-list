@@ -35,9 +35,9 @@ KOTLIN_FILES = ('StickerManifest.kt', 'BasketManifest.kt', 'DecorManifest.kt', '
 import engine  # noqa: E402
 from engine import fmt  # noqa: E402
 from icons import ICONS, IBY  # noqa: E402
-from deco import DECO, DBY, PICTO, TB, G57, face  # noqa: E402
+from deco import DECO, DBY, PICTO, TB, G57, LCD_EXTRAS, face  # noqa: E402
 from baskets import BASKETS, FILL, SI, LIFT, MAXIN  # noqa: E402
-from patterns import PATTERNS  # noqa: E402
+from patterns import PATTERNS, WASHI, SEASON_WASHI  # noqa: E402
 from variants import FACES  # noqa: E402
 import launcher  # noqa: E402
 import catalog_map  # noqa: E402
@@ -57,17 +57,11 @@ BASKET_KIND = {
     'jarshelf': 'jar_shelf', 'vanity': 'vanity_case',
 }
 
-# toolbar glyphs: spec name (§3.4) -> DSL TB key
-GLYPHS = {
-    'add': 'plus', 'close': 'close', 'check': 'check', 'back': 'back', 'more': 'more', 'camera': 'cam', 'mic': 'mic',
-    'stop': 'stop', 'settings': 'gear', 'edit': 'pencil', 'undo': 'undo', 'refresh': 'resort', 'sparkle': 'sparkle',
-    'expand': 'chev-down', 'collapse': 'chev-up', 'link': 'link', 'drag': 'drag', 'key': 'key', 'eye': 'eye',
-    'web': 'web', 'search': 'search', 'sort': 'sort',
-}
+# toolbar glyphs: spec name (§3.4) -> DSL TB key, and the glyphs filled with currentColor (WP2: deco.py)
+from deco import GLYPH_NAMES as GLYPHS, GLYPH_FILLED  # noqa: E402
 GLYPHS_SPEC = ['add', 'close', 'check', 'back', 'more', 'camera', 'gallery', 'mic', 'stop', 'send', 'settings', 'aisles',
                'lists', 'edit', 'delete', 'undo', 'refresh', 'sparkle', 'expand', 'collapse', 'link', 'drag', 'key', 'eye',
                'web', 'search', 'sort', 'scissors', 'album', 'trip', 'cassette', 'envelope', 'polaroid']
-GLYPH_FILLED = ('more', 'drag')            # deco.tb_symbols fills these two with currentColor
 
 
 def load_catalog():
@@ -175,7 +169,16 @@ def pattern_outputs(out, report):
                                                                   comment=HEADER_XML.format(src=f'tab pattern {k!r}'))
         report['plain'][name] = (prims, 'tile')
         tiles[k] = (name, w, h)
-    return tiles
+    washi = {}
+    for k, (svg, w, h) in WASHI.items():
+        inner = re.sub(r'^<svg[^>]*>|</svg>$', '', svg)
+        prims = E.flatten_svg(inner.replace("'", '"'))
+        name = 'sk_t_washi_' + k
+        out[os.path.join(DRAWABLE, name + '.xml')] = E.vector_xml([E.Grp('tile', children=prims)], w, h,
+                                                                  comment=HEADER_XML.format(src=f'washi tape {k!r}'))
+        report['plain'][name] = (prims, 'washi')
+        washi[k] = (name, w, h)
+    return tiles, washi
 
 
 def basket_outputs(out, report):
@@ -246,14 +249,14 @@ def launcher_outputs(out, report):
                         width=E.CUT_W * k, evenodd=True)
         fg.append(E.Grp(f'{icon.key}_shadow', children=[shadow]))
         fg += [E.Grp(f'{icon.key}_{g.name}', clip=g.clip, children=g.children) for g in groups if g.name != 'dominant']
-        if icon is hamper:
-            mono_parts.append(E.mono_geom(icon, base))
+        mono_parts.append(E.mono_geom(launcher.mono_icon(icon), base))     # WP2: the simplified hamper + the star
     out[os.path.join(DRAWABLE, 'sk_l_launcher_foreground.xml')] = E.vector_xml(fg, s, s, comment=HEADER_XML.format(src='launcher hamper + holo star'))
     report['plain']['sk_l_launcher_foreground'] = (fg, 'launcher')
-    mono = E.Prim(E.geom_d(mono_parts[0]), fill=engine.BP, evenodd=True)
+    from shapely.ops import unary_union
+    mono = E.Prim(E.geom_d(unary_union(mono_parts)), fill=engine.BP, evenodd=True)
     report['plain']['sk_l_launcher_monochrome'] = ([mono], 'launcher')
     out[os.path.join(DRAWABLE, 'sk_l_launcher_monochrome.xml')] = E.vector_xml(
-        [E.Grp('mono', children=[mono])], s, s, comment=HEADER_XML.format(src='launcher hamper, mono'))
+        [E.Grp('mono', children=[mono])], s, s, comment=HEADER_XML.format(src='launcher hamper + star, mono'))
     return {'background': 'sk_l_launcher_background', 'foreground': 'sk_l_launcher_foreground',
             'monochrome': 'sk_l_launcher_monochrome'}
 
@@ -358,8 +361,8 @@ def basket_manifest(arts):
             defaultAisle = {kstr(a["aisle"])},
             back = R.drawable.{r["back"]},
             front = R.drawable.{r["front"]},
-            lidOpen = {opt("lid_open")},
-            lidClosed = {opt("lid_closed")},
+            lidOpen = R.drawable.{r["lid_open"]},
+            lidClosed = R.drawable.{r["lid_closed"]},
             deco = {opt("deco")},
             lidOpenStandsBehind = {str(a["show_open"]).lower()},
             rimY = {kf(a["rim"] + 9)},
@@ -380,11 +383,15 @@ import earth.cora.picnic.R
 data class MiniSlot(val centreX: Float, val raise: Float, val tilt: Float)
 
 /**
- * One basket kind's layers (§5.1). Draw order: [lidOpen] (only while [lidOpenStandsBehind] and the aisle is not done),
- * [back] (carries the whole die-cut in its `cut` group, the shadow tint, and the decoration of decorated kinds in its
- * `deco` group), the gotten minis, [front], then [lidClosed] when the aisle is done. [deco] repeats the decoration
- * alone (already inside [back]; never draw both). Every coordinate is in viewport units (80 x 64 = the DSL's
- * 64 x 48 grid, viewBox -8 -9 80 64, shifted by (+8, +9)).
+ * One basket kind's layers (§5.1, §5.3). Every kind has all four of [back], [front], [lidOpen] and [lidClosed]; the
+ * four decorated kinds also have [deco]. Draw order: [lidOpen] (behind everything: while [lidOpenStandsBehind] and
+ * the aisle is not done, and for every kind while the lid of a done basket is open: the peek, and the frame before it
+ * shuts or after it re-opens), [back] (carries the whole die-cut in its `cut` group, the shadow tint, and the decoration
+ * of decorated kinds in its `deco` group, so a decorated basket keeps it when empty, R4), the gotten minis, [front],
+ * then [lidClosed] when the aisle is done. [back], [lidOpen] and [lidClosed] each carry their own `cut` group (white
+ * border, tinted for the shadow); [front] draws inside the back's die-cut. [deco] repeats the decoration alone (already
+ * inside [back]; never draw both). Every coordinate is in viewport units (80 x 64 = the DSL's 64 x 48 grid, viewBox
+ * -8 -9 80 64, shifted by (+8, +9)); every layer's die-cut stays inside the viewport.
  */
 data class BasketArt(
     val kind: String,
@@ -392,8 +399,8 @@ data class BasketArt(
     val defaultAisle: String,
     @DrawableRes val back: Int,
     @DrawableRes val front: Int,
-    val lidOpen: Int?,
-    val lidClosed: Int?,
+    @DrawableRes val lidOpen: Int,
+    @DrawableRes val lidClosed: Int,
     val deco: Int?,
     val lidOpenStandsBehind: Boolean,
     /** The rim's top edge: minis sit at rimY - [BasketManifest.MINI_SIZE] x [BasketManifest.MINI_LIFT] + raise. */
@@ -417,9 +424,19 @@ object BasketManifest {{
     const val HANKO_ROTATION: Float = -12f
     const val LANDING_SPOT_RADIUS: Float = 7f
 
-    /** The to-get badge's top-right flag slot (the mockup's CSS): its right edge and top, viewport units. */
-    const val BADGE_RIGHT: Float = 92f
-    const val BADGE_TOP: Float = 2f
+    /**
+     * The to-get badge (§4.12): a [BADGE_SIZE_DP] count sticker in the basket box's top-right flag slot, its right edge
+     * [BADGE_RIGHT_OUTSIDE_DP] outside the box's right edge, its top [BADGE_TOP_STRIP_DP] below the box's top on a
+     * folded strip and [BADGE_TOP_TRAY_DP] in a tray header. In dp, at every basket size; never part of the art.
+     */
+    const val BADGE_SIZE_DP: Float = 22f
+    const val BADGE_RIGHT_OUTSIDE_DP: Float = 12f
+    const val BADGE_TOP_STRIP_DP: Float = 8f
+    const val BADGE_TOP_TRAY_DP: Float = 2f
+
+    /** The "+n" tag (more than [MAX_MINIS] gotten, §4.12) sits on the basket's right shoulder: its centre, viewport units. */
+    const val PLUS_TAG_CENTRE_X: Float = 66f
+    const val PLUS_TAG_CENTRE_Y: Float = 45f
 
     /** Mini layouts for 1..[MAX_MINIS] gotten stickers (§5.3); more than five shows the newest five and a "+n" tag. */
     val MINI_SLOTS: Map<Int, List<MiniSlot>> = mapOf(
@@ -442,7 +459,7 @@ def decor_manifest(decor, pictos, glyphs, launcher_res):
     d = '\n'.join(f'        {kstr(k)} to R.drawable.{v},' for k, v in decor.items())
     p = '\n'.join(f'        {kstr(k)} to R.drawable.{v},' for k, v in pictos.items())
     g = '\n'.join(f'        {kstr(k)} to R.drawable.{v},' for k, v in glyphs.items())
-    todo = ', '.join(x for x in GLYPHS_SPEC if x not in glyphs)
+    todo = ', '.join(x for x in GLYPHS_SPEC if x not in glyphs) or 'none (the whole §3.4 set is drawn)'
     return KT_HEAD + f'''import earth.cora.picnic.R
 
 object DecorManifest {{
@@ -464,7 +481,9 @@ object DecorManifest {{
 
     /**
      * Toolbar glyphs (§3.4), by the spec's names: `sk_g_<name>`, 24 dp, 2u ballpoint lines with round caps, no border,
-     * no gloss (tint as a whole). Not drawn yet: {todo}.
+     * no gloss (tint as a whole). Not drawn yet: {todo}. Also here: `jar` (My pantry), `basket` (the store-aisle chip),
+     * `torn` (a field error), `paste` (the key field), and the inline copy glyphs `heart` (♡), `star` (★),
+     * `star_outline` (☆) and `note` (♪), which text shows as inline vectors, never as font glyphs (§2.7).
      */
     val glyphs: Map<String, Int> = mapOf(
 {g}
@@ -486,6 +505,10 @@ def lcd_glyphs():
         bits = ', '.join('0b' + ln for ln in lines)
         c = "' '" if ch == ' ' else ("'\\''" if ch == "'" else f"'{ch}'")
         rows.append(f'        {c} to LcdGlyph({w}, intArrayOf({bits})),')
+    extras = []
+    for ch, x in LCD_EXTRAS.items():
+        d = E.compact(E.bake(x['d'], E.Matrix()))
+        extras.append(f'        \'{ch}\' to LcdExtra({kf(x["advance"])}, {kf(x["stroke"])}, {kstr(d)}),')
     return KT_HEAD + f'''/**
  * One 5 x 7 dot-matrix glyph (§13.1): [width] columns (1..5) and seven [rows], top first; bit (width - 1 - c) of a row
  * is column c, lit when set.
@@ -506,22 +529,53 @@ object LcdGlyphs {{
     )
 
     fun glyph(c: Char): LcdGlyph? = glyphs[c]
+
+    /**
+     * The vector extras (§13.1), drawn as shapes instead of dots: ★ (the LCD star; Dusk and Glow show the full moon ●
+     * instead, never a crescent), ♪ and ♡. Each also has a dot fallback in [glyphs].
+     */
+    val extras: Map<Char, LcdExtra> = mapOf(
+{chr(10).join(extras)}
+    )
 }}
+
+/**
+ * A vector LCD extra: [pathData] in units of the dot pitch p (x from the glyph's left edge, y from the top of the
+ * 7-row cell; even-odd fill, so ♡ is hollow), outlined by [stroke] p with round joins in the same colour, and
+ * [advance] p wide including its gap.
+ */
+class LcdExtra(val advance: Float, val stroke: Float, val pathData: String)
 '''
 
 
-def pattern_tiles(tiles):
+def pattern_tiles(tiles, washi):
     rows = '\n'.join(f'        {kstr(k)} to PatternTile({kstr(k)}, R.drawable.{n}, {kf(w)}, {kf(h)}),' for k, (n, w, h) in tiles.items())
+    wrows = '\n'.join(f'        {kstr(k)} to PatternTile({kstr(k)}, R.drawable.{n}, {kf(w)}, {kf(h)}),' for k, (n, w, h) in washi.items())
+    srows = '\n'.join(f'        {kstr(k)} to {kstr(v)},' for k, v in SEASON_WASHI.items())
     return KT_HEAD + f'''import androidx.annotation.DrawableRes
 import earth.cora.picnic.R
 
-/** A tab pattern mask tile (§2.12): white on transparent, printed in the aisle mid; tile size in dp. */
+/** A pattern tile (§2.12): a tab pattern's white-on-transparent mask (printed in the aisle mid) or a washi tile; size in dp. */
 data class PatternTile(val name: String, @DrawableRes val drawable: Int, val widthDp: Float, val heightDp: Float)
 
 object PatternTiles {{
     /** By pattern name (the aisle rotation's order, §2.3); `plain` is an empty tile. */
     val tiles: Map<String, PatternTile> = mapOf(
 {rows}
+    )
+
+    /**
+     * Washi tape tiles (§2.12): full-colour (not masks), repeated along the 18 dp tape, whose torn ends, rotation and
+     * overall opacity the theme draws. `sakura` is the everyday tape; `gingham` (toasts, sheet handles), `dots` and
+     * `mint` the others; then the seasonal tapes and the rainy-day `raindrop` (egg 16).
+     */
+    val washi: Map<String, PatternTile> = mapOf(
+{wrows}
+    )
+
+    /** The tape each season wears (`Season.name` -> [washi] key, egg 11). */
+    val seasonWashi: Map<String, String> = mapOf(
+{srows}
     )
 }}
 '''
@@ -538,14 +592,14 @@ def build(report):
     decor = decor_outputs(out, report)
     pictos = picto_outputs(out, report)
     glyphs = glyph_outputs(out, report)
-    tiles = pattern_outputs(out, report)
+    tiles, washi = pattern_outputs(out, report)
     arts = basket_outputs(out, report)
     lres = launcher_outputs(out, report)
     out[os.path.join(GEN, 'StickerManifest.kt')] = sticker_manifest(entries, catalog_icons_sorted)
     out[os.path.join(GEN, 'BasketManifest.kt')] = basket_manifest(arts)
     out[os.path.join(GEN, 'DecorManifest.kt')] = decor_manifest(decor, pictos, glyphs, lres)
     out[os.path.join(GEN, 'LcdGlyphs.kt')] = lcd_glyphs()
-    out[os.path.join(GEN, 'PatternTiles.kt')] = pattern_tiles(tiles)
+    out[os.path.join(GEN, 'PatternTiles.kt')] = pattern_tiles(tiles, washi)
     report['entries'] = entries
     report['catalog'] = catalog_icons
     report['out'] = out

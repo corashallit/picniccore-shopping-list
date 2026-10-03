@@ -87,7 +87,8 @@ def pairs(scale, only=None):
             '<stop offset=".5" stop-color="#C9F2E3"/><stop offset=".72" stop-color="#FFF3A6"/><stop offset="1" stop-color="#E4D6FF"/></linearGradient>')
     dsl = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{108 * scale // 2}" height="{108 * scale // 2}" viewBox="0 0 108 108"><defs>{holo}{clips_h}{sym_h}{clips_s}{sym_s}</defs>'
            '<rect width="108" height="108" fill="#E6F6EE"/>' + ''.join(f'<rect x="{x}" width="2" height="108" fill="#CDEEDD"/>' for x in range(0, 108, 10)) +
-           '<use href="#sticker-i-launch" x="25" y="27" width="56" height="56"/><use href="#sticker-i-star4holo" x="64" y="27" width="19" height="19"/></svg>')
+           '<use href="#sticker-i-launch" x="%s" y="%s" width="%s" height="%s"/><use href="#sticker-i-star4holo" x="%s" y="%s" width="%s" height="%s"/></svg>'
+           % (*launcher.HAMPER_BOX, launcher.HAMPER_BOX[2], *launcher.STAR_BOX, launcher.STAR_BOX[2]))
     bg = vd2svg.convert(res('sk_l_launcher_background'), scale=scale / 2)
     fg = vd2svg.convert(res('sk_l_launcher_foreground'), scale=scale / 2)
     vd = bg.replace('</svg>', '') + re.sub(r'^<svg[^>]*>', '', fg)

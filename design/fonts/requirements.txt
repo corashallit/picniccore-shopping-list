@@ -1,0 +1,2 @@
+# Python 3.11+. design/fonts/build_fonts.py: instance DynaPuff, subset every face (docs/DESIGN_STICKER.md §2.7)
+fonttools==4.66.1
