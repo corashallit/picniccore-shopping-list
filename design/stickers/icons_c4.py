@@ -147,16 +147,16 @@ add('beer', 'Beer', [
       'lemon', 'w', ol=1.6),
 ], qty='6 × 341 mL', aisle='drinks')
 
-# wine: a dark green bottle with a grape foil capsule and a blank label, beside a stemmed glass of red wine
+# wine: a dark green bottle with a burgundy foil capsule and a blank label, beside a stemmed glass of red wine
 add('wine', 'Wine', [
-    F(('path', 'M15.6 5.8H21.4V12.4H15.6Z'), 'grape', 'm', ol=1.8),
+    F(('path', 'M15.6 5.8H21.4V12.4H15.6Z'), 'strawberry', 'deep', ol=1.8),
     F(('path', 'M15.8 12H21.2V16.2C21.2 18.4 26.2 18.8 26.2 23.6V38.8Q26.2 42 23 42H14Q10.8 42 10.8 38.8V23.6C10.8 18.8 15.8 18.4 15.8 16.2Z'),
       'melon', 'deep', band=.16, band_t='tr'),
     F(('rect', 12.8, 26.4, 11.4, 10.2, 2.4), 'melon', 'w', ol=1.5, cut=False, det=['M15.4 29.4H21.6'], det_t='m', det_w=1.3),
-    TUBE('M34.6 32.2V39.2', 'grape', 2.8, 'w'),
-    F(('ellipse', 34.6, 40.2, 6.2, 1.8), 'grape', 'w', ol=1.6),
-    F(('path', 'M27 18.8H42.2C42.6 26.6 39.6 33.2 34.6 33.2C29.6 33.2 26.6 26.6 27 18.8Z'), 'grape', 'w', ol=2,
-      band='M25 24.4H44V36H25Z', band_t='deep', det=['M27.4 24.4H41.8'], det_t='tr', det_w=1.5),
+    TUBE('M34.6 32.2V39.2', 'strawberry', 2.8, 'w'),
+    F(('ellipse', 34.6, 40.2, 6.2, 1.8), 'strawberry', 'w', ol=1.6),
+    F(('path', 'M27 18.8H42.2C42.6 26.6 39.6 33.2 34.6 33.2C29.6 33.2 26.6 26.6 27 18.8Z'), 'strawberry', 'w', ol=2,
+      band='M25 24.4H44V36H25Z', band_t='tr', det=['M27.4 24.4H41.8'], det_t='tr', det_w=1.5),
 ], qty='750 mL bottle', aisle='drinks')
 
 # ================================================================ baby and pet
@@ -493,54 +493,57 @@ add('picnic_blanket', 'Picnic blanket', [
     F(('rect', 25.8, 30.2, 4.4, 2.6, 1), 'cocoa', 'm', ol=1.2, cut=False),
 ], qty='1 blanket', aisle='garden')
 
-# paper plates: a stack of fluted white paper plates seen face-on, the top one printed with a mint border round a plain well
-def _c4_fluted(cx, cy, R, m=16, amp=.045):
-    """a fluted (scalloped) disc of outer radius R with m flutes."""
-    return _c4_poly(_C4Poly([(cx + R * (1 - amp + amp * _c4m.cos(m * t * 2 * _c4m.pi / 192)) * _c4m.cos(t * 2 * _c4m.pi / 192),
-                              cy + R * (1 - amp + amp * _c4m.cos(m * t * 2 * _c4m.pi / 192)) * _c4m.sin(t * 2 * _c4m.pi / 192)) for t in range(192)]).simplify(.02))
-
-
-def _c4_ring(cx, cy, r):
-    return f'M{fmt(cx - r)} {fmt(cy)}A{fmt(r)} {fmt(r)} 0 1 1 {fmt(cx + r)} {fmt(cy)}A{fmt(r)} {fmt(r)} 0 1 1 {fmt(cx - r)} {fmt(cy)}'
-
-
-add('paper_plates', 'Paper plates', [
-    F(('path', _c4_fluted(24, 27.4, 14.6, 20, .03)), 'mint', 'm', ol=1.6, band=.3, band_t='deep'),
-    F(('path', _c4_fluted(24, 23.8, 14.6, 20, .03)), 'mint', 'w', band=.12, band_t='p'),
-    LINE(_c4_ring(24, 23.8, 11.2), 'mint', 3.8, t='p', cut=False),
-    LINE(_c4_ring(24, 23.8, 8.7), 'mint', 1.3, t='m', cut=False),
-    LINE(_c4_ring(24, 23.8, 13.4), 'mint', 1.1, t='m', cut=False),
-], qty='50 plates', aisle='garden')
-
-# paper & plastic cups: a stack of three nested sakura paper cups with white polka dots and thin rolled rims, the top one open
-def _c4_cup(cx, top, h, wt=19.6, wb=12.4, opening=False):
-    l0, r0, l1, r1, y1 = cx - wt / 2, cx + wt / 2, cx - wb / 2, cx + wb / 2, top + h
-    body = (f'M{fmt(l0)} {fmt(top + 1)}H{fmt(r0)}L{fmt(r1 + .3)} {fmt(y1 - 2.2)}Q{fmt(r1)} {fmt(y1)} {fmt(r1 - 2.2)} {fmt(y1)}'
-            f'H{fmt(l1 + 2.2)}Q{fmt(l1)} {fmt(y1)} {fmt(l1 - .3)} {fmt(y1 - 2.2)}Z')
-    dots = _c4_dots([(cx + dx + (2.4 if (i % 2) else 0), top + 5.4 + i * 4.2) for i in range(int((h - 5) / 4.2) + 1) for dx in (-7.2, -2.4, 2.4)])
-    out = [F(('path', body), 'sakura', 'p', band=.2, band_t='m', tex=[dots], tex_t='w', tex_w=2.4)]
-    if opening:
-        out += [F(('ellipse', cx, top + .2, wt / 2 + 1.2, 2.6), 'sakura', 'm'),
-                F(('ellipse', cx, top + .4, wt / 2 - .9, 1.3), 'sakura', 'deep', ol=1.3, cut=False)]
-    else:
-        out.append(F(('rect', l0 - 1.2, top - 1.4, wt + 2.4, 3.2, 1.6), 'sakura', 'm'))
+# paper plates: a stack of three paper plates seen from a little above, the top one with a ribbed mint rim round a plain
+# white well (seen face-on a lone plate read as a button or a bottle cap at 22-30 dp; the stack reads as plates)
+def _c4_ribs(cx, cy, r0x, r0y, r1x, r1y, n):
+    """n radial ribs between two concentric ellipses"""
+    out = ''
+    for i in range(n):
+        t = 2 * _c4m.pi * i / n
+        c, s_ = _c4m.cos(t), _c4m.sin(t)
+        out += f'M{fmt(cx + r0x * c)} {fmt(cy + r0y * s_)}L{fmt(cx + r1x * c)} {fmt(cy + r1y * s_)}'
     return out
 
 
+_C4_PY = 26.4
+add('paper_plates', 'Paper plates', [
+    F(('ellipse', 24, _C4_PY + 6.8, 17.6, 8.8), 'mint', 'p', ol=1.8),
+    F(('ellipse', 24, _C4_PY + 3.4, 17.6, 8.8), 'mint', 'w', ol=1.8),
+    F(('ellipse', 24, _C4_PY, 17.6, 8.8), 'mint', 'p', band=.2, band_t='m',
+      det=[_c4_ribs(24, _C4_PY, 12.8, 6.4, 15.8, 7.8, 24)], det_t='m', det_w=1.2),
+    F(('ellipse', 24, _C4_PY - .5, 11.6, 5.6), 'mint', 'w', ol=1.5, cut=False),
+], qty='50 plates', aisle='garden')
+
+
+# paper & plastic cups: a stack of two sakura paper cups with white polka dots and rolled rims, the top one lifted and
+# tipped a little so both cups read (three straight-nested rims read as one cup with a ridged lid)
+def _c4_cup(cx, top, h, wt=19.6, wb=12.4, tf=None):
+    l0, r0, l1, r1, y0, y1 = cx - wt / 2, cx + wt / 2, cx - wb / 2, cx + wb / 2, top + 1, top + h
+    body = (f'M{fmt(l0)} {fmt(y0)}H{fmt(r0)}L{fmt(r1 + .3)} {fmt(y1 - 2.2)}Q{fmt(r1)} {fmt(y1)} {fmt(r1 - 2.2)} {fmt(y1)}'
+            f'H{fmt(l1 + 2.2)}Q{fmt(l1)} {fmt(y1)} {fmt(l1 - .3)} {fmt(y1 - 2.2)}Z')
+    dots = _c4_dots([(cx + dx + (2.4 if (i % 2) else 0), top + 5.4 + i * 4.2) for i in range(int((h - 6) / 4.2) + 1) for dx in (-7.2, -2.4, 2.4)])
+    k = dict(tf=tf, sband=False) if tf else {}
+    return [F(('path', body), 'sakura', 'p', band=.2, band_t='m', tex=[dots], tex_t='w', tex_w=2.4, **k),
+            F(('ellipse', cx, top + .2, wt / 2 + 1.2, 2.6), 'sakura', 'm', **k),
+            F(('ellipse', cx, top + .4, wt / 2 - .9, 1.3), 'sakura', 'deep', ol=1.3, cut=False, **k)]
+
+
 add('paper_cups', 'Paper & plastic cups', [
-    *_c4_cup(24, 9.4, 22.4, opening=True),
-    *_c4_cup(24, 14.8, 22.4),
-    *_c4_cup(24, 19.8, 22.2),
+    *_c4_cup(22.6, 17.2, 24.8),
+    *_c4_cup(25.4, 8.8, 22.4, tf='rotate(7 25.4 20)'),
 ], qty='30 cups', aisle='garden')
 
-# disposable cutlery: a chunky white plastic fork, knife and spoon fanned out and tied together with a pink ribbon bow
-_C4_FORK = 'M18.6 9.4Q18.6 7 21 7H27Q29.4 7 29.4 9.4V14.6C29.4 18.4 27.4 20.4 26.2 21.2V39.8Q26.2 42 24 42Q21.8 42 21.8 39.8V21.2C20.6 20.4 18.6 18.4 18.6 14.6Z'
-_C4_SPOON = 'M24 6C27.6 6 29.6 9.4 29.6 13.4C29.6 17.4 27.6 20 26.2 20.8V39.8Q26.2 42 24 42Q21.8 42 21.8 39.8V20.8C20.4 20 18.4 17.4 18.4 13.4C18.4 9.4 20.4 6 24 6Z'
+# disposable cutlery: a chunky white plastic spoon, knife and fork fanned out and tied together with a pink ribbon bow; the
+# fork has real tines (a flat-topped head read as a spatula), so the spoon's broad bowl, upper left, carries the gloss
+_C4_FORK = ('M17.4 15V8.4Q17.4 6.6 19.1 6.6Q20.8 6.6 20.8 8.4V12.6Q20.8 13.6 21.6 13.6Q22.4 13.6 22.4 12.6V8.4Q22.4 6.6 24 6.6Q25.6 6.6 25.6 8.4'
+            'V12.6Q25.6 13.6 26.4 13.6Q27.2 13.6 27.2 12.6V8.4Q27.2 6.6 28.9 6.6Q30.6 6.6 30.6 8.4V15C30.6 18.4 27.8 20.4 26.2 21.2V39.8Q26.2 42 24 42'
+            'Q21.8 42 21.8 39.8V21.2C20.2 20.4 17.4 18.4 17.4 15Z')
+_C4_SPOON = 'M24 5.4C28 5.4 30.4 9 30.4 13.4C30.4 17.6 28.2 20.2 26.2 21V39.8Q26.2 42 24 42Q21.8 42 21.8 39.8V21C19.8 20.2 17.6 17.6 17.6 13.4C17.6 9 20 5.4 24 5.4Z'
 _C4_KNIFE = 'M21.4 22V9Q21.4 6.2 24 6.4C27.2 6.8 28 12 28 16.4C28 19.8 27.2 21.4 26.2 22V39.8Q26.2 42 24 42Q21.8 42 21.8 39.8V22Z'
 add('plastic_cutlery', 'Disposable cutlery', [
-    F(('path', _C4_FORK), 'ramune', 'w', tf='rotate(-33 24 33)', band=.12, band_t='p', det=['M22.2 7.2V13.4', 'M25.8 7.2V13.4'], det_w=1.6),
-    F(('path', _C4_SPOON), 'ramune', 'w', tf='rotate(33 24 33)', band=.12, band_t='p'),
-    F(('ellipse', 24, 13.8, 3.4, 5), 'ramune', 'p', tf='rotate(33 24 33)', ol=0, cut=False),
+    F(('path', _C4_SPOON), 'ramune', 'w', tf='rotate(-30 24 33)', band=.12, band_t='p'),
+    F(('ellipse', 24, 13.6, 4, 5.6), 'ramune', 'p', tf='rotate(-30 24 33)', ol=0, cut=False),
+    F(('path', _C4_FORK), 'ramune', 'w', tf='rotate(30 24 33)', band=.12, band_t='p'),
     F(('path', _C4_KNIFE), 'ramune', 'w', band=.12, band_t='p',
       det=['M21.8 22H26.2', 'M26.8 10.8L27.8 11.6M27 13.6L28 14.4M27 16.4L28 17.2'], det_t='m', det_w=1.2),
     F(('path', 'M22.6 32.2L19.6 38.6L22 38.2L22.8 40.4L24.8 33Z'), 'sakura', 'm', ol=1.5),

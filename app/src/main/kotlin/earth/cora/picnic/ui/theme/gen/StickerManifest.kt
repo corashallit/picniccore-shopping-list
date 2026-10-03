@@ -139,7 +139,7 @@ object StickerManifest {
         StickerEntry("soda", R.drawable.sk_i_soda, listOf("strawberry"), Personality.NONE, null, StickerSource.DSL, "soda"),
         StickerEntry("lemonade", R.drawable.sk_i_lemonade, listOf("lemon", "ramune"), Personality.NONE, null, StickerSource.DSL, "lemonade"),
         StickerEntry("beer", R.drawable.sk_i_beer, listOf("cocoa", "lemon"), Personality.NONE, null, StickerSource.DSL, "beer"),
-        StickerEntry("wine", R.drawable.sk_i_wine, listOf("melon", "grape"), Personality.NONE, null, StickerSource.DSL, "wine"),
+        StickerEntry("wine", R.drawable.sk_i_wine, listOf("melon", "strawberry"), Personality.NONE, null, StickerSource.DSL, "wine"),
         StickerEntry("ice_cream", R.drawable.sk_i_ice_cream, listOf("sakura", "cocoa"), Personality.FROZEN, null, StickerSource.DSL, "icecream"),
         StickerEntry("popsicle", R.drawable.sk_i_popsicle, listOf("sakura", "ramune"), Personality.FROZEN, null, StickerSource.DSL, "icepops"),
         StickerEntry("frozen_pizza", R.drawable.sk_i_frozen_pizza, listOf("lemon", "peach"), Personality.FROZEN, null, StickerSource.DSL, "pizza"),
