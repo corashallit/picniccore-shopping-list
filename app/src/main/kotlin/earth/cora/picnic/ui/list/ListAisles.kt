@@ -37,6 +37,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -114,13 +116,28 @@ object ListTags {
     fun check(id: String): String = "picnic_row_check_$id"
 }
 
+/**
+ * The aisle's whole name as TalkBack reads it (§15), never ellipsized: the display name with "&" as "and", then the
+ * store's own number ("Baking, store aisle 2"), as the Next card says it.
+ */
+@Composable
+internal fun spokenAisleName(s: SectionUi): String {
+    val name = earth.cora.picnic.ui.list.motion.MotionStrings.spoken(s.displayName)
+    return s.storeAisle?.let { stringResource(R.string.list_aisle_store_spoken, name, it) } ?: name
+}
+
 /** The strip's TalkBack line (§15): "Aisle 1, Produce: 2 left of 5" / "Everything else: 5 of 5 in the basket". */
 @Composable
 internal fun stripLabel(s: SectionUi, toGet: Int): String {
     val counts = if (toGet == 0) stringResource(R.string.list_strip_done_spoken, s.total, s.total) else stringResource(R.string.list_strip_left_spoken, toGet, s.total)
-    val name = earth.cora.picnic.ui.list.motion.MotionStrings.spoken(s.fullName)
+    val name = spokenAisleName(s)
     return if (s.position > 0) stringResource(R.string.list_strip_label, s.position, name, counts) else stringResource(R.string.list_strip_label_unsorted, name, counts)
 }
+
+/** The open tray's heading for TalkBack (§15): "Aisle 4, Baking, store aisle 2" / "Everything else". */
+@Composable
+internal fun trayHeading(s: SectionUi): String =
+    if (s.position > 0) stringResource(R.string.list_aisle_heading, s.position, spokenAisleName(s)) else spokenAisleName(s)
 
 /**
  * A folded strip (§4.10): white 56 dp, radius 6, hs: the tab on the top-left, the meta line under it (led by the store
@@ -277,7 +294,8 @@ internal fun FoldedStrip(
             text.place(start, ((h - text.height) / 2).coerceAtLeast(px(3.dp)))
             // The ribbon box is 30 dp wide with its 10 dp band at 10–20 dp.
             ribbon?.place(bandX - px(10.dp), 0)
-            bow?.place(basketX - px(14.dp), px(4.dp))
+            // On the basket's left shoulder, and never back over the end of a long name.
+            bow?.place(maxOf(basketX - px(14.dp), textEnd + px(1.dp)), px(4.dp))
             basketM.place(basketX, h - basketM.height)
             chevron.place(chevronX, (h - chevron.height) / 2)
         }
@@ -306,7 +324,8 @@ internal fun TrayHeader(
     val shadows = PicnicTheme.shadows
     val ring = currentRing(current)
     val probe = LocalPieceProbe.current
-    val collapse = stringResource(R.string.list_tray_collapse, earth.cora.picnic.ui.list.motion.MotionStrings.spoken(section.fullName))
+    val collapse = stringResource(R.string.list_tray_collapse, earth.cora.picnic.ui.list.motion.MotionStrings.spoken(section.displayName))
+    val heading = trayHeading(section)
     val fold by rememberUpdatedState(onFold)
     Layout(
         modifier = modifier
@@ -322,7 +341,11 @@ internal fun TrayHeader(
                 look = section.look,
                 size = TabSize.Tray,
                 ballpoint = true,
-                modifier = Modifier.layoutId("tab").testTag(ListTags.headerTab(section.id)),
+                // The tab is the tray's heading: TalkBack reads the whole name even when the tab ellipsizes (§15).
+                modifier = Modifier.layoutId("tab").testTag(ListTags.headerTab(section.id)).semantics {
+                    contentDescription = heading
+                    heading()
+                },
                 probeKey = "trayTab:${section.id}",
             )
             section.storeAisle?.let { StoreAisleChip(it, Modifier.layoutId("chip").testTag(ListTags.storeChip(section.id)).probe(probe, "chip:${section.id}")) }

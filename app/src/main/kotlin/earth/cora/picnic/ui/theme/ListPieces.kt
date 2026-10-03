@@ -27,6 +27,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.node.GlobalPositionAwareModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -92,13 +95,33 @@ fun fitTabName(measurer: TextMeasurer, name: String, style: TextStyle, maxWidthP
  */
 fun interface PieceProbe {
     fun report(key: String, bounds: Rect, fontSp: Float?)
+
+    /** The element reported under [key] left the screen (a name tag lifted off, a page turned). */
+    fun gone(key: String) = Unit
 }
 
 val LocalPieceProbe = androidx.compose.runtime.staticCompositionLocalOf<PieceProbe?> { null }
 
-/** Reports this element's bounds to [probe] under [key] (no-op without a probe). */
+/** Reports this element's bounds to [probe] under [key] each time it is placed, and when it leaves (no-op without a probe). */
 fun Modifier.probe(probe: PieceProbe?, key: String?, fontSp: Float? = null): Modifier =
-    if (probe == null || key == null) this else onGloballyPositioned { probe.report(key, it.boundsInRoot(), fontSp) }
+    if (probe == null || key == null) this else this then ProbeElement(probe, key, fontSp)
+
+private data class ProbeElement(val probe: PieceProbe, val key: String, val fontSp: Float?) : ModifierNodeElement<ProbeNode>() {
+    override fun create() = ProbeNode(probe, key, fontSp)
+
+    override fun update(node: ProbeNode) {
+        if (node.key != key) node.probe.gone(node.key)
+        node.probe = probe
+        node.key = key
+        node.fontSp = fontSp
+    }
+}
+
+private class ProbeNode(var probe: PieceProbe, var key: String, var fontSp: Float?) : Modifier.Node(), GlobalPositionAwareModifierNode {
+    override fun onGloballyPositioned(coordinates: LayoutCoordinates) = probe.report(key, coordinates.boundsInRoot(), fontSp)
+
+    override fun onDetach() = probe.gone(key)
+}
 
 /** The tab's height (§2.9): 38 dp in a tray header, 32 dp on a folded strip. */
 enum class TabSize(val height: Dp, val circle: Dp, val numeralSp: Float) {

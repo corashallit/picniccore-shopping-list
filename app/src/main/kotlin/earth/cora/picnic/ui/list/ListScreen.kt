@@ -59,6 +59,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
@@ -254,19 +256,23 @@ fun ListRoute(
         vm.events.collect { event ->
             when (event) {
                 is ListEvent.Deleted -> toasts.show(tears.toast(event))
-                is ListEvent.NewBook -> toasts.show(
-                    ToastMessage(
-                        resources.getString(R.string.list_toast_new_book),
-                        kind = "book",
-                        actionLabel = resources.getString(R.string.list_undo),
-                        onAction = event.undo,
-                    ),
-                )
+                is ListEvent.NewBook -> {
+                    // The nudge asked for exactly this; once the fresh book has started it has nothing left to offer.
+                    toasts.current?.takeIf { it.kind == NUDGE_KIND }?.let { toasts.finished(it.id) }
+                    toasts.show(
+                        ToastMessage(
+                            resources.getString(R.string.list_toast_new_book),
+                            kind = "book",
+                            actionLabel = resources.getString(R.string.list_undo),
+                            onAction = event.undo,
+                        ),
+                    )
+                }
                 ListEvent.NewTrip -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_new_trip), kind = "trip"))
                 is ListEvent.Nudge -> toasts.show(
                     ToastMessage(
                         resources.getString(R.string.list_toast_nudge),
-                        kind = "nudge",
+                        kind = NUDGE_KIND,
                         actionLabel = resources.getString(R.string.list_toast_nudge_action),
                         onAction = { screen.newTripOpen = true },
                         minHoldMs = NUDGE_FLOOR,
@@ -345,6 +351,9 @@ fun ListRoute(
     // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet.
     AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry)
 }
+
+/** The nudge's toast kind. */
+private const val NUDGE_KIND: String = "nudge"
 
 /** The nudge's reading floor (§6.1, §9: it carries an action): 6 s. */
 private const val NUDGE_FLOOR: Long = 6000
@@ -685,8 +694,12 @@ private fun AisleList(
         screen.syncing = false
     }
     val connection = remember(screen, pullPx, triggerPx, reduced) {
-        object : NestedScrollConnection {
+        object : NestedScrollConnection, PullGate {
             private var raw = 0f
+
+            /** A finger is on the list: only her own drag pulls the bunting, never a programmatic scroll (a focus
+             * hand-off's bring-into-view, the next stop opening) that runs into the top. */
+            override var touching = false
 
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 // Pushing back up while pulled: the bunting rises first.
@@ -703,7 +716,7 @@ private fun AisleList(
                 // The scroll collapses the app bar and the book (and expands them on the way back).
                 if (consumed.y < -COLLAPSE_SLOP * density.density) screen.scrolledDown = true
                 if (consumed.y > COLLAPSE_SLOP * density.density) screen.scrolledDown = false
-                if (source == NestedScrollSource.UserInput && available.y > 0f) {
+                if (touching && source == NestedScrollSource.UserInput && available.y > 0f) {
                     raw += available.y
                     screen.pull = (raw * PULL_FOLLOW).coerceAtMost(pullPx)
                     return Offset(0f, available.y)
@@ -727,7 +740,19 @@ private fun AisleList(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .pointerInput(connection) {
+                // Watches (never consumes) whether a finger is down, for the pull to refresh.
+                awaitPointerEventScope {
+                    while (true) {
+                        val e = awaitPointerEvent(PointerEventPass.Initial)
+                        connection.touching = e.changes.any { it.pressed }
+                    }
+                }
+            },
+    ) {
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -834,6 +859,11 @@ private fun AisleList(
         }
         if (screen.pull > 0f) Bunting(screen.pull / pullPx, Modifier.align(Alignment.TopCenter))
     }
+}
+
+/** Whether a finger is on the list (the pull to refresh follows only her own drags). */
+private interface PullGate {
+    var touching: Boolean
 }
 
 /** Pull to refresh (§6.1): the list follows at 0.6×, at most 70 dp; a release past 40 dp re-syncs. */

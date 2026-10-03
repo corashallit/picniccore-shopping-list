@@ -20,6 +20,9 @@
     <string name="list_strip_left_spoken">%1$d left of %2$d</string>
     <string name="list_strip_done_spoken">%1$d of %2$d in the basket</string>
     <string name="list_strip_expand">Expand</string>
+    <!-- An aisle's whole name for TalkBack (§15): "Baking, store aisle 2"; the open tray's heading "Aisle 4, Baking, store aisle 2". -->
+    <string name="list_aisle_store_spoken">%1$s, store aisle %2$d</string>
+    <string name="list_aisle_heading">Aisle %1$d, %2$s</string>
     <string name="list_tray_collapse">Collapse %1$s</string>
 
     <!-- A row (§4.11, §15): the state and the custom actions. -->

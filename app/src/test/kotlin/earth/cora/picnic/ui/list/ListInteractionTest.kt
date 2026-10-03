@@ -65,34 +65,41 @@ class ListInteractionTest {
     /** Item 58: the row is a checkbox (role, on/off state, "got it" / "not checked"); Space and Enter toggle it. */
     @Test
     fun checkboxSemanticsAndKeyboard() {
-        val rig = ListRig()
+        // Produce is open: checking Strawberries leaves Apples to get, so the tray stays open for the second look.
+        val rig = ListRig(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, "produce"))
         compose.show(rig)
-        val before = config(ListTags.row("baking-powder"))
+        val before = config(ListTags.row("strawberries"))
         assertEquals(Role.Checkbox, before.getOrNull(SemanticsProperties.Role))
         assertEquals(ToggleableState.Off, before.getOrNull(SemanticsProperties.ToggleableState))
         assertEquals("not checked", before.getOrNull(SemanticsProperties.StateDescription))
-        assertTrue(before.getOrNull(SemanticsProperties.ContentDescription)!!.single().startsWith("Baking powder"))
+        assertEquals(listOf("Strawberries, 1 litre basket"), before.getOrNull(SemanticsProperties.ContentDescription))
         val actions = before.getOrNull(SemanticsActions.CustomActions).orEmpty().map { it.label }
         assertEquals(listOf("Check", "Delete", "Edit"), actions)
+        assertEquals("Check", before.getOrNull(SemanticsActions.OnClick)?.label)
 
         // Keyboard: focus the row, Space checks it.
-        row("baking-powder").performSemanticsAction(SemanticsActions.RequestFocus)
+        row("strawberries").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.waitForIdle()
-        row("baking-powder").assertIsFocused()
-        row("baking-powder").performKeyInput { pressKey(Key.Spacebar) }
+        row("strawberries").assertIsFocused()
+        row("strawberries").performKeyInput { pressKey(Key.Spacebar) }
         compose.waitForIdle()
-        assertTrue("Space checked it", rig.app.isChecked("baking-powder"))
-        val after = config(ListTags.row("baking-powder"))
+        assertTrue("Space checked it", rig.app.isChecked("strawberries"))
+        val after = config(ListTags.row("strawberries"))
         assertEquals(ToggleableState.On, after.getOrNull(SemanticsProperties.ToggleableState))
         assertEquals("got it", after.getOrNull(SemanticsProperties.StateDescription))
         assertEquals(listOf("Uncheck", "Delete", "Edit"), after.getOrNull(SemanticsActions.CustomActions).orEmpty().map { it.label })
 
-        // Enter un-checks it.
-        row("flour").performSemanticsAction(SemanticsActions.RequestFocus)
+        // Enter un-checks a checked row.
+        row("bananas").performSemanticsAction(SemanticsActions.RequestFocus)
         compose.waitForIdle()
-        row("flour").performKeyInput { pressKey(Key.Enter) }
+        row("bananas").performKeyInput { pressKey(Key.Enter) }
         compose.waitForIdle()
-        assertFalse("Enter un-checked it", rig.app.isChecked("flour"))
+        assertFalse("Enter un-checked it", rig.app.isChecked("bananas"))
+        // And the TalkBack action does the same as a tap.
+        val check = config(ListTags.row("bananas"))[SemanticsActions.CustomActions].first { it.label == "Check" }
+        compose.runOnIdle { check.action() }
+        compose.waitForIdle()
+        assertTrue(rig.app.isChecked("bananas"))
     }
 
     /** Item 71: the empty list has no book; "Start my list" focuses the add field. */
@@ -123,6 +130,17 @@ class ListInteractionTest {
         assertEquals("produce", rig.app.list(ListFixture.LIST_ID)!!.openAisle)
         compose.onNodeWithTag(ListTags.header("produce")).assertExists()
         assertEquals("Collapse Produce", config(ListTags.chevron("produce")).getOrNull(SemanticsProperties.ContentDescription)?.single())
+        // A store number is read as the Next card says it, never as a second "aisle" (§15): the strip, the tray's
+        // heading and its chevron.
+        assertEquals(listOf("Aisle 4, Baking, store aisle 2: 1 left of 3"), config(ListTags.strip("aisle-2-baking")).getOrNull(SemanticsProperties.ContentDescription))
+        compose.onNodeWithTag(ListTags.LIST).performScrollToKey("strip:aisle-2-baking")
+        compose.waitForIdle()
+        compose.onNodeWithTag(ListTags.strip("aisle-2-baking")).performClick()
+        compose.waitForIdle()
+        val heading = config(ListTags.headerTab("aisle-2-baking"))
+        assertEquals(listOf("Aisle 4, Baking, store aisle 2"), heading.getOrNull(SemanticsProperties.ContentDescription))
+        assertTrue("the tab is the tray's heading", heading.contains(SemanticsProperties.Heading))
+        assertEquals("Collapse Baking", config(ListTags.chevron("aisle-2-baking")).getOrNull(SemanticsProperties.ContentDescription)?.single())
     }
 
     /** Item 84: rows are at least 56 dp with a 52 dp sticker; a tap anywhere on the row toggles it; long-press edits. */
@@ -300,7 +318,8 @@ class ListInteractionTest {
         assertTrue(rig.app.isChecked("baking-powder"))
         assertEquals("the old book is in the album", 1, rig.album.flowValue().books.size)
         compose.onNodeWithTag(TOAST_TAG).assertExists()
-        compose.onNodeWithText("New sticker book for today ✦ your last shop is in the album").assertExists()
+        // The ✦ is drawn as a vector between the words (§16), so the text node reads without it.
+        compose.onNodeWithText("New sticker book for today your last shop is in the album", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Undo").performClick()
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()

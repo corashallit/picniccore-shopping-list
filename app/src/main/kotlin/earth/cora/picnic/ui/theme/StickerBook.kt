@@ -239,6 +239,7 @@ private fun BookPages(
                     .width(layout.leftWidth.dp)
                     .fillMaxHeight()
                     .testTag(BookTags.LEFT)
+                    .probe(LocalPieceProbe.current, "bookLeft")
                     .then(if (perfect) Modifier.drawBehind { drawRect(holoBrush(center)) } else Modifier)
                     .pointerInput(state.stamps, layout) {
                         detectTapGestures { pos ->
@@ -270,6 +271,7 @@ private fun BookPages(
                     .weight(1f)
                     .fillMaxHeight()
                     .testTag(BookTags.RIGHT)
+                    .probe(LocalPieceProbe.current, "bookRight")
                     .bookPageLift(fx, clock)
                     .graphicsLayer {
                         // The page turns about the spine: the engine's (a twin on another page, a new book) or New trip's.
@@ -575,6 +577,7 @@ private fun PageLcd(text: String, modifier: Modifier) {
     val shape = RoundedCornerShape(5.dp)
     Box(
         modifier
+            .probe(LocalPieceProbe.current, "pageLcd:$text")
             .decorative()
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
@@ -596,6 +599,7 @@ private fun NameTag(text: String, modifier: Modifier) {
     Box(
         modifier
             .testTag(BookTags.NAME_TAG)
+            .probe(LocalPieceProbe.current, "nameTag:$text")
             .rotate(-2f)
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
@@ -683,7 +687,7 @@ private fun CollapsedBook(state: BookUi, presentation: BookPresentation, clock: 
         val twins = subcompose("twins") {
             Row(horizontalArrangement = Arrangement.spacedBy((-3).dp)) {
                 for (t in shown) {
-                    BookTwin(t.icon, t.slot, presentation.spots[t.slot], clock, Modifier.testTag(BookTags.twin(t.slot)), size = 22.dp, holo = t.holo, pixel = state.pixel, aisleIndex = t.aisleIndex)
+                    BookTwin(t.icon, t.slot, presentation.spots[t.slot], clock, Modifier.testTag(BookTags.twin(t.slot)).probe(LocalPieceProbe.current, "collapsedTwin:${t.slot}"), size = 22.dp, holo = t.holo, pixel = state.pixel, aisleIndex = t.aisleIndex)
                 }
             }
         }.map { it.measure(loose) }

@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -97,6 +98,7 @@ import earth.cora.picnic.ui.theme.TrayPart
 import earth.cora.picnic.ui.theme.hankoAngle
 import earth.cora.picnic.ui.theme.highlighterBand
 import earth.cora.picnic.ui.theme.traySlice
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -149,12 +151,25 @@ internal fun TrayRow(
     val reduced = LocalReducedMotion.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
-    val swipe = remember { Animatable(0f) }
+    // The swipe's offset follows the finger synchronously (every drag event lands before the release reads it); the
+    // release then animates it home on its own job, which a new drag cancels.
+    var offset by remember { mutableFloatStateOf(0f) }
+    val settle = remember { Animatable(0f) }
+    var settling by remember { mutableStateOf<Job?>(null) }
     var tearT0 by remember { mutableStateOf<Long?>(null) }
     var tearNow by remember { mutableStateOf(0L) }
     val act by rememberUpdatedState(actions)
     val thresholdPx = with(density) { SWIPE_THRESHOLD.toPx() }
     val minH = rowMinHeight()
+    fun home(ms: Int) {
+        settling?.cancel()
+        settling = scope.launch {
+            withContext(FixedMotionScale) {
+                settle.snapTo(offset)
+                settle.animateTo(0f, tween(ms)) { offset = value }
+            }
+        }
+    }
     Box(
         modifier
             .fillMaxWidth()
@@ -171,13 +186,13 @@ internal fun TrayRow(
             Modifier
                 .matchParentSize()
                 .padding(horizontal = inset)
-                .then(if (swipe.value != 0f || tearing) Modifier.clip(slotShape) else Modifier),
+                .then(if (offset != 0f || tearing) Modifier.clip(slotShape) else Modifier),
         ) {
             if (tearing) {
                 // The slot left behind shows the backing paper while the halves tumble off (§8.6).
                 Box(Modifier.matchParentSize().background(c.backing))
-            } else if (swipe.value != 0f) {
-                SwipeBand(right = swipe.value > 0f, progress = abs(swipe.value) / thresholdPx, Modifier.matchParentSize())
+            } else if (offset != 0f) {
+                SwipeBand(right = offset > 0f, progress = abs(offset) / thresholdPx, Modifier.matchParentSize())
             }
         }
         val content: @Composable (Modifier) -> Unit = { m ->
@@ -194,22 +209,26 @@ internal fun TrayRow(
                     .padding(horizontal = inset)
                     .pointerInput(row.id, reduced) {
                         detectHorizontalDragGestures(
+                            onDragStart = {
+                                settling?.cancel()
+                                settling = null
+                            },
                             onDragEnd = {
-                                val v = swipe.value
-                                scope.launch {
-                                    withContext(FixedMotionScale) {
-                                        when {
-                                            v >= thresholdPx -> {
-                                                act.onToggle(row.id)
-                                                swipe.animateTo(0f, tween(220))
-                                            }
-                                            v <= -thresholdPx -> {
-                                                act.onTearCue()
-                                                if (reduced) {
-                                                    act.onDelete(row.id)
-                                                    swipe.snapTo(0f)
-                                                } else {
-                                                    swipe.snapTo(0f)
+                                val v = offset
+                                when {
+                                    v >= thresholdPx -> {
+                                        // The same chain as a tap (§4.11).
+                                        act.onToggle(row.id)
+                                        home(220)
+                                    }
+                                    v <= -thresholdPx -> {
+                                        act.onTearCue()
+                                        offset = 0f
+                                        if (reduced) {
+                                            act.onDelete(row.id)
+                                        } else {
+                                            settling = scope.launch {
+                                                withContext(FixedMotionScale) {
                                                     val start = withFrameMillis { it }
                                                     tearT0 = start
                                                     while (true) {
@@ -217,50 +236,55 @@ internal fun TrayRow(
                                                         tearNow = n - start
                                                         if (n - start >= TEAR_TOTAL) break
                                                     }
-                                                    act.onDelete(row.id)
                                                 }
+                                                act.onDelete(row.id)
                                             }
-                                            else -> swipe.animateTo(0f, tween(200))
                                         }
                                     }
+                                    else -> home(200)
                                 }
                             },
-                            onDragCancel = { scope.launch { swipe.animateTo(0f, tween(200)) } },
+                            onDragCancel = { home(200) },
                         ) { change, amount ->
                             change.consume()
-                            scope.launch { swipe.snapTo((swipe.value + amount).coerceIn(-thresholdPx * 1.6f, thresholdPx * 1.6f)) }
+                            offset = (offset + amount).coerceIn(-thresholdPx * 1.6f, thresholdPx * 1.6f)
                         }
                     },
             )
         }
         if (!tearing) {
-            content(Modifier.graphicsLayer { translationX = swipe.value })
+            content(Modifier.graphicsLayer { translationX = offset })
         } else {
             val e = tearNow
-            // The perforation prints in at 62 % (2 frames, 120 ms), then the halves tumble off (600 ms).
+            // The perforation prints in at 62 % (2 frames, 120 ms), then the halves tumble off (600 ms). The halves are
+            // pictures of the row on its way out: no TalkBack node, no test tag twice.
             Perforation(e, Modifier.matchParentSize().padding(horizontal = inset))
             val f = if (e < TEAR_PERFORATE) 0f else TearEasing.transform(((e - TEAR_PERFORATE).toFloat() / TEAR_FALL).coerceIn(0f, 1f))
             content(
-                Modifier.graphicsLayer {
-                    clip = true
-                    shape = HalfShape(left = true)
-                    translationX = -40.dp.toPx() * f
-                    translationY = 80.dp.toPx() * f
-                    rotationZ = -18f * f
-                    alpha = 1f - f * 0.6f
-                    transformOrigin = TransformOrigin(0.31f, 0.5f)
-                },
+                Modifier
+                    .clearAndSetSemantics { }
+                    .graphicsLayer {
+                        clip = true
+                        shape = HalfShape(left = true)
+                        translationX = -40.dp.toPx() * f
+                        translationY = 80.dp.toPx() * f
+                        rotationZ = -18f * f
+                        alpha = 1f - f * 0.6f
+                        transformOrigin = TransformOrigin(0.31f, 0.5f)
+                    },
             )
             content(
-                Modifier.graphicsLayer {
-                    clip = true
-                    shape = HalfShape(left = false)
-                    translationX = 30.dp.toPx() * f
-                    translationY = 90.dp.toPx() * f
-                    rotationZ = 24f * f
-                    alpha = 1f - f * 0.6f
-                    transformOrigin = TransformOrigin(0.81f, 0.5f)
-                },
+                Modifier
+                    .clearAndSetSemantics { }
+                    .graphicsLayer {
+                        clip = true
+                        shape = HalfShape(left = false)
+                        translationX = 30.dp.toPx() * f
+                        translationY = 90.dp.toPx() * f
+                        rotationZ = 24f * f
+                        alpha = 1f - f * 0.6f
+                        transformOrigin = TransformOrigin(0.81f, 0.5f)
+                    },
             )
         }
     }

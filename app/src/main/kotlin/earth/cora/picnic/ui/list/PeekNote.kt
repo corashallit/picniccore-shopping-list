@@ -38,8 +38,9 @@ internal fun PeekNote(section: SectionUi, modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val inBasket = androidx.compose.ui.res.stringResource(earth.cora.picnic.R.string.list_peek_in_basket, "%s")
+    val name = spokenAisleName(section)
     val spoken = buildString {
-        append(section.fullName)
+        append(name)
         append(": ")
         append(section.rows.joinToString(", ") { r -> if (r.checked) inBasket.replace("%s", r.name) else r.name })
     }

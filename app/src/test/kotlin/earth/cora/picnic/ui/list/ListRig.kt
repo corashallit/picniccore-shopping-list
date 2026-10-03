@@ -19,7 +19,12 @@ import earth.cora.picnic.platform.FakeAnnouncer
 import earth.cora.picnic.platform.FakeFeedback
 import earth.cora.picnic.settings.InMemorySettingsRepository
 import earth.cora.picnic.ui.add.AddViewModel
-import earth.cora.picnic.ui.add.RecordingSurprises
+import earth.cora.picnic.core.model.GroceryItem
+import earth.cora.picnic.core.model.Rarity
+import earth.cora.picnic.ui.eggs.SurpriseEngine
+import earth.cora.picnic.ui.eggs.SurpriseState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import earth.cora.picnic.ui.common.FakeAssistant
 import earth.cora.picnic.ui.common.FakePhotos
 import earth.cora.picnic.ui.common.FakeRecorder
@@ -41,6 +46,50 @@ class CountingIcons(val inner: RecordingIconRepository = RecordingIconRepository
     override fun resumePending() {
         resumed++
     }
+}
+
+/** The egg hooks the list calls (§19.2; WP9 implements the engine): every call recorded, nothing else happens. */
+class ListSurprises : SurpriseEngine {
+    val stampTaps = mutableListOf<Int>()
+    val basketHolds = mutableListOf<Pair<String, Long>>()
+    val committed = mutableListOf<List<GroceryItem>>()
+    var lcdHolds = 0
+    var sunTaps = 0
+    var moonTaps = 0
+
+    override val state: StateFlow<SurpriseState> = MutableStateFlow(SurpriseState())
+
+    override fun interceptText(text: String): Boolean = false
+
+    override fun rollRarity(): Rarity = Rarity.NONE
+
+    override fun onCommitted(items: List<GroceryItem>) {
+        committed += items
+    }
+
+    override fun onSunTap() {
+        sunTaps++
+    }
+
+    override fun onMoonTap() {
+        moonTaps++
+    }
+
+    override fun onStampTap(position: Int) {
+        stampTaps += position
+    }
+
+    override fun onLcdHold() {
+        lcdHolds++
+    }
+
+    override fun onBasketHold(sectionId: String, heldMs: Long) {
+        basketHolds += sectionId to heldMs
+    }
+
+    override fun onShake() = Unit
+
+    override fun onIconDrawn(item: GroceryItem): Rarity = Rarity.NONE
 }
 
 /** Where the list's navigation went (the overflow menu, item 121). */
@@ -71,7 +120,7 @@ class ListRig(
     val assistant = FakeAssistant()
     val announcer = FakeAnnouncer()
     val feedback = FakeFeedback()
-    val surprises = RecordingSurprises()
+    val surprises = ListSurprises()
     val nav = RecordingNav()
     val aisles = mutableListOf<String>()
     val settingsOpened = mutableListOf<Unit>()
@@ -79,11 +128,12 @@ class ListRig(
     private val newId: () -> String = { "new-${next++}" }
     val aisleSync = AisleSync(store, assistant, ListFixture.catalog.baskets) { now }
     val engine = MotionChoreographer(feedback, announcer)
+    val settings = InMemorySettingsRepository(storedToken = "sk-test-0123456789abcdef")
     val vm = ListViewModel(
         store = store,
         album = this.album,
         icons = icons,
-        settings = InMemorySettingsRepository(storedToken = "sk-test-0123456789abcdef"),
+        settings = settings,
         catalog = ListFixture.catalog,
         clock = { now },
         newId = newId,
