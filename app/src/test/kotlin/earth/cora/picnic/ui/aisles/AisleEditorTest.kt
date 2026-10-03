@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -87,6 +88,18 @@ class AisleEditorTest {
     }
 
     private fun InMemoryStateStore.now(): AppState = runBlocking { current() }
+
+    /**
+     * One frame with the clock held (autoAdvance off). State written outside composition (the drag handle's pointer
+     * input) reaches the recomposer only through the global snapshot's apply notifications; Compose schedules those on
+     * a process-wide dispatcher that an earlier Robolectric test in the same JVM can leave stuck, so they are sent here
+     * explicitly, as the add tests do. Without this the drag tests pass alone and fail after some other tests.
+     */
+    private fun frame() {
+        Snapshot.sendApplyNotifications()
+        shadowOf(Looper.getMainLooper()).idle()
+        compose.mainClock.advanceTimeByFrame()
+    }
 
     /** Runs the TalkBack custom action labelled [label]. */
     private fun SemanticsNodeInteraction.customAction(label: String) {
@@ -286,8 +299,7 @@ class AisleEditorTest {
         }
         // Hold still: the page scrolls on its own, the label with it.
         repeat(300) {
-            shadowOf(Looper.getMainLooper()).idle()
-            compose.mainClock.advanceTimeByFrame()
+            frame()
         }
         // The page scrolled to its end under the held label: the last label is now near the top of the screen.
         assertTrue(compose.onNodeWithTag(AislesTags.label(14)).getUnclippedBoundsInRoot().bottom < root.bottom)
@@ -312,8 +324,7 @@ class AisleEditorTest {
             repeat(10) { moveBy(Offset(0f, (slot - 12f) / 10f)) }
         }
         repeat(120) {
-            shadowOf(Looper.getMainLooper()).idle()
-            compose.mainClock.advanceTimeByFrame()
+            frame()
         }
         handle.performTouchInput { up() }
         compose.mainClock.autoAdvance = true
@@ -429,8 +440,7 @@ class AisleEditorTest {
         compose.mainClock.autoAdvance = false
         gate.complete(Unit)
         repeat(20) {
-            shadowOf(Looper.getMainLooper()).idle()
-            compose.mainClock.advanceTimeByFrame()
+            frame()
         }
         val report = vm.state.value.lastReport!!
         assertEquals(15 to 2, report.recategorized to report.leftUnsorted)
