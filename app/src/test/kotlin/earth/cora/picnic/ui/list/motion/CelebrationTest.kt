@@ -14,6 +14,9 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -24,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.TripStats
+import earth.cora.picnic.core.model.addItems
 import earth.cora.picnic.core.model.list
 import earth.cora.picnic.core.model.updateList
 import earth.cora.picnic.core.store.Album
@@ -89,6 +93,67 @@ class CelebrationTest {
         assertBeat("thunk", c + 450, rig.feedback.times(Cue.PERFECT).lastOrNull())
         assertTrue(rig.engine.eventLog.contains(MotionEvent.BookPerfect))
         assertEquals("the LCD's ready wiggle", c + 450, frames.last().second.lcdWiggleT0)
+    }
+
+    /** §7.1, §8.3: an un-check in the 450 ms after the scene closes re-opens the trip: PERFECT is not pressed. */
+    @Test
+    fun uncheckAfterCloseCancelsPerfect() {
+        val rig = HarnessRig(compose, lastOne()).start()
+        val s = rig.finish()
+        rig.advanceTo(s + 3000)
+        compose.runOnIdle { rig.engine.closeCelebration() }
+        rig.frame()
+        val c = rig.p.celebration!!.closingT0!!
+        rig.advanceTo(c + 272)
+        val cues = rig.feedback.count(Cue.PERFECT)
+        rig.tap("toothpaste")
+        val frames = rig.sampleTo(c + 1400)
+        assertEquals("no PERFECT after the close", cues, rig.feedback.count(Cue.PERFECT))
+        assertTrue("no BookPerfect event", rig.engine.eventLog.none { it == MotionEvent.BookPerfect })
+        assertTrue("never pressed on the spine", frames.all { it.second.bookFx.perfectT0 == null && it.second.lcdWiggleT0 == null })
+    }
+
+    /** A re-open that arrives while the scene is up (an item added from another device): its close presses no PERFECT. */
+    @Test
+    fun reopenDuringSceneSkipsPerfect() {
+        val rig = HarnessRig(compose, lastOne()).start()
+        val s = rig.finish()
+        rig.advanceTo(s + 4000)
+        var change: ListChange? = null
+        compose.runOnIdle { change = rig.model.apply(ChangeCause.SYNC) { st -> st.addItems(MotionFixture.LIST_ID, listOf(MotionFixture.item("sugar").copy(id = "vanilla", name = "Vanilla", aisleId = "aisle-2-baking", icon = "vanilla")), rig.model.now).first } }
+        rig.frame()
+        assertTrue("the trip re-opened", change!!.tripReopened)
+        assertNotNull("the scene stays until she closes it", rig.p.celebration)
+        compose.runOnIdle { rig.engine.closeCelebration() }
+        rig.frame()
+        val c = rig.p.celebration!!.closingT0!!
+        val frames = rig.sampleTo(c + 1200)
+        assertEquals("closed", null, frames.last().second.celebration)
+        // The scene's own PERFECT beat (4.30 s) sounded; the book's is never pressed.
+        assertTrue(rig.engine.eventLog.none { it == MotionEvent.BookPerfect })
+        assertTrue(frames.all { it.second.bookFx.perfectT0 == null })
+        // Completing the trip again presses it as a re-completion (L + 1800), not on the old close.
+        compose.runOnIdle { rig.model.delete("vanilla") }
+        rig.frame()
+        val d0 = rig.now
+        rig.advanceTo(d0 + 1350 + 450 + 32)
+        assertEquals(1, rig.engine.eventLog.count { it == MotionEvent.BookPerfect })
+    }
+
+    /** §11.3: with nothing to show (the list is gone at L + 1350), no scene: no empty node takes her tap or Back. */
+    @Test
+    fun noContentNoScene() {
+        val rig = HarnessRig(compose, lastOne()).start()
+        rig.engine.celebrationSource = { null }
+        val t0 = rig.tap("toothpaste")
+        val L = t0 + 620
+        val frames = rig.sampleTo(L + 2400)
+        assertTrue("no scene", frames.all { it.second.celebration == null })
+        assertTrue(compose.onAllNodesWithTag(CELEBRATION_TAG).fetchSemanticsNodes().isEmpty())
+        assertTrue(rig.engine.eventLog.contains(MotionEvent.TripComplete(MotionFixture.LIST_ID, scene = false)))
+        assertTrue(rig.engine.eventLog.contains(MotionEvent.FinaleMarked(MotionFixture.LIST_ID)))
+        assertTrue(rig.engine.eventLog.none { it is MotionEvent.CelebrationStarted })
+        assertBeat("PERFECT at L + 1800", L + 1800, rig.feedback.times(Cue.PERFECT).firstOrNull())
     }
 
     /** Item 154: an owed finale plays when the list opens within 30 min of completion; later it is marked, PERFECT in place. */
@@ -217,26 +282,166 @@ class CelebrationTest {
     }
 
     /**
-     * §11.2: the page curl peels the scene's bottom-right 150 dp corner "beside the bonus card, never over text": the
-     * bonus card (and every other text plate) stays clear of that corner, at font scale 1.0 and 2.0.
+     * §11.2: the page curl peels the scene's bottom-right corner "beside the bonus card, never over text". The peeled
+     * corner covers its whole leg × leg square (the album page in one half, the folded-back flap in the other), so every
+     * text plate must end above it or left of it. Checked on the fixture's scene at h760 (150 dp leg), and at the summary
+     * for 8, 12, 20 and 24 stops × font scale 1.0, 1.3 and 2.0 × a 360 × 640 and a 360 × 760 dp screen: the leg is never
+     * under 96 dp (the content column fits itself to keep that room), and no plate reaches into it.
      */
     @Test
-    fun curlNeverCoversText() = curlClear(1f)
-
-    @Test
-    fun curlNeverCoversTextAtFontScale200() = curlClear(2f)
-
-    private fun curlClear(fontScale: Float) {
-        val rig = HarnessRig(compose, lastOne(), fontScale = fontScale).start()
+    fun curlNeverCoversText() {
+        // The fixture, played: the full 150 dp corner beside the bonus card.
+        val rig = HarnessRig(compose, lastOne()).start()
         val s = rig.finish()
         rig.advanceTo(s + 12600)
         val scene = rig.bounds(CelebrationTags.SCENE)
+        val curl = rig.probe.overlaysAt(rig.now).single { it.tag == "cele_curl" }.bounds!!
+        assertEquals("the fixture's curl is 150 dp", 150f, curl.width / compose.density.density, 0.5f)
         val corner = androidx.compose.ui.unit.DpRect(scene.right - 150.dp, scene.bottom - 150.dp, scene.right, scene.bottom)
-        for (tag in listOf(CelebrationTags.BONUS, CelebrationTags.BANNER, CelebrationTags.CLOSING_LABEL, CelebrationTags.PERFECT)) {
+        for (tag in CURL_PLATES) {
             val b = rig.bounds(tag)
-            val clear = b.bottom <= corner.top || b.right <= corner.left
-            assertTrue("font scale $fontScale: $tag $b reaches into the curl's corner $corner", clear)
+            assertTrue("$tag $b reaches into the curl's corner $corner", b.bottom <= corner.top || b.right <= corner.left)
         }
+    }
+
+    @Test
+    fun curlNeverCoversTextMatrix() {
+        data class Case(val stops: Int, val fontScale: Float, val height: Int)
+        val cases = listOf(8, 12, 20, 24).flatMap { n -> listOf(1f, 1.3f, 2f).flatMap { fs -> listOf(640, 760).map { h -> Case(n, fs, h) } } }
+        var case by androidx.compose.runtime.mutableStateOf(cases.first())
+        val clock = MotionClock()
+        val probe = StillnessProbe()
+        compose.setContent {
+            val c = case
+            val content = remember(c.stops) {
+                val state = if (c.stops == 8) MotionFixture.allBut(emptyList()) else MotionFixture.many(c.stops * 2, c.stops)
+                CelebrationContent.from(state, MotionFixture.LIST_ID, Album(), MotionFixture.catalog)!!
+            }
+            val plan = remember(content) { CelebrationTimeline.plan(content.listName, content.stats, false, total = content.total) }
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, c.fontScale),
+                LocalMotionProbe provides probe,
+            ) {
+                PicnicTheme {
+                    androidx.compose.runtime.key(c) {
+                        Box(Modifier.size(360.dp, c.height.dp)) {
+                            CelebrationScene(CelebrationPresentation(MotionFixture.LIST_ID, 0, content, plan, null, false, false), clock, CelebrationCopy.English)
+                        }
+                    }
+                }
+            }
+        }
+        val d = compose.density.density
+        for (c in cases) {
+            compose.runOnIdle {
+                probe.clear()
+                case = c
+            }
+            compose.waitForIdle()
+            // Well into the summary, the curl fully out (the scene holds its last frame until the engine closes it).
+            compose.runOnIdle { clock.now = 30_000 }
+            compose.waitForIdle()
+            // One more scene frame once the column has fitted itself (the first layout measures the bonus card).
+            compose.runOnIdle { clock.now = 30_016 }
+            compose.waitForIdle()
+            val curl = probe.overlaysAt(clock.now).lastOrNull { it.tag == "cele_curl" }?.bounds
+            assertNotNull("$c: no curl reported", curl)
+            val leg = curl!!.width / d
+            assertTrue("$c: the curl's leg is $leg dp", leg >= 96f - 0.5f && leg <= 150f + 0.5f)
+            for (tag in CURL_PLATES) {
+                val b = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                assertTrue("$c: $tag $b reaches into the curl $curl", b.bottom <= curl.top + 0.5f || b.right <= curl.left + 0.5f)
+                assertTrue("$c: $tag $b is off the screen", b.top >= -0.5f && b.bottom <= c.height * d + 0.5f)
+            }
+            // Nothing on the scene is clipped.
+            val clipped = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.expectValue(earth.cora.picnic.ui.a11y.TextOverflowed, true), useUnmergedTree = true).fetchSemanticsNodes()
+            assertTrue("$c: clipped text", clipped.isEmpty())
+        }
+    }
+
+    /**
+     * §15 ("names wrap, never clip"), §9 (a beat counts the words newly on screen): the list-name chip shows a long name
+     * whole on its lines (3 at font scale 2.0), never clipped; a name longer than CHIP_NAME_MAX is cut at a word with "…",
+     * and the title beat counts exactly the words the chip shows. A name of words too wide for the chip's lines ends in
+     * "…" and is marked TextOverflowed (never a silent clip).
+     */
+    @Test
+    fun longListNameNeverClips() {
+        val sixty = "Thanksgiving dinner and cottage weekend groceries for everyone"
+        assertTrue(sixty.length in 60..CelebrationContent.CHIP_NAME_MAX)
+        val long = "$sixty plus the neighbours, the cousins from Kingston and the dog"
+        val wide = List(8) { "WWWWWWWW" }.joinToString(" ")
+        assertEquals("cut at a word", "Thanksgiving dinner and cottage weekend groceries for everyone…", CelebrationContent.chipName(long))
+        data class Case(val name: String, val fontScale: Float)
+        val cases = listOf(Case(sixty, 1f), Case(sixty, 1.3f), Case(sixty, 2f), Case(long, 1f), Case(long, 1.3f), Case(long, 2f), Case(wide, 2f))
+        var case by androidx.compose.runtime.mutableStateOf(cases.first())
+        val clock = MotionClock()
+        compose.setContent {
+            val c = case
+            val content = remember(c) {
+                CelebrationContent.from(MotionFixture.allBut(emptyList(), title = c.name), MotionFixture.LIST_ID, Album(), MotionFixture.catalog)!!
+            }
+            val plan = remember(content) { CelebrationTimeline.plan(content.listName, content.stats, false, total = content.total) }
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, c.fontScale)) {
+                PicnicTheme {
+                    androidx.compose.runtime.key(c) {
+                        Box(Modifier.size(360.dp, 760.dp)) {
+                            CelebrationScene(CelebrationPresentation(MotionFixture.LIST_ID, 0, content, plan, null, false, false), clock, CelebrationCopy.English)
+                        }
+                    }
+                }
+            }
+        }
+        compose.runOnIdle { clock.now = 3000 }
+        for (c in cases) {
+            compose.runOnIdle { case = c }
+            compose.waitForIdle()
+            val shown = texts(CelebrationTags.CHIP).single()
+            val overflowed = compose.onAllNodes(
+                androidx.compose.ui.test.SemanticsMatcher.expectValue(earth.cora.picnic.ui.a11y.TextOverflowed, true) and
+                    androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(CelebrationTags.CHIP)).or(androidx.compose.ui.test.hasTestTag(CelebrationTags.CHIP)),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().isNotEmpty()
+            val plan = CelebrationTimeline.plan(CelebrationContent.chipName(c.name), TripStats.of(MotionFixture.allBut(emptyList()).list(MotionFixture.LIST_ID)!!, 8), false)
+            val titleWords = plan.beat(BeatName.Title).words
+            when (c.name) {
+                wide -> assertTrue("$c: a name too wide for its lines is marked, never silently clipped", overflowed)
+                else -> {
+                    assertFalse("$c: the chip clipped its name", overflowed)
+                    assertEquals("$c: what TalkBack and the chip carry", CelebrationContent.chipName(c.name), shown)
+                    // "List complete!" (2) + the chip + "24/24★" (1) + "tap to skip" (3).
+                    assertEquals("$c: the title beat counts the chip's words", 2 + earth.cora.picnic.ui.theme.words("♡ $shown") + 1 + 3, titleWords)
+                }
+            }
+        }
+    }
+
+    /**
+     * §11.2 "No glint on the bonus card", §9 (glints never inside a hold): with a 5-word list name the bonus card's hold
+     * runs 10.33 to 12.13 s, across the 12.0 s phase of the shiny glint loop (500 ms every 4 s) that holo stickers run.
+     * The bonus sticker's foil runs no loop, so the card stays still for its whole hold: no glint, nor anything else, is
+     * reported over it on any frame (the scene reports every glint that remains, the hamper's minis', as an overlay).
+     */
+    @Test
+    fun noGlintOnTheBonusCardDuringItsHold() {
+        val rig = HarnessRig(compose, lastOne(title = "Cottage weekend picnic and barbecue")).start()
+        val s = rig.finish()
+        val bonus = rig.p.celebration!!.plan!!.beat(BeatName.Bonus)
+        val settle = bonus.settle!!
+        assertEquals(10_330L, settle)
+        assertEquals(1800L, bonus.hold)
+        assertTrue("the hold spans the loop's 12.0 s glint", settle < 12_000L && settle + bonus.hold > 12_000L)
+        rig.advanceTo(s + settle + bonus.hold + 100)
+        var why = ""
+        val still = rig.probe.stillFrom(CelebrationTags.BONUS, s + settle) { why = it }
+        assertTrue("the bonus card is still $still ms of ${bonus.hold} ($why)", still >= bonus.hold - 16)
+        val glints = (s + settle..s + settle + bonus.hold).flatMap { t -> rig.probe.overlaysAt(t) }.filter { "glint" in it.tag }
+        val plate = rig.probe.frames(CelebrationTags.BONUS).last().bounds
+        assertTrue("a glint over the bonus card: $glints", glints.none { it.bounds?.overlaps(plate) == true })
+        // The hamper's holo minis do glint, as an overlay away from every plate.
+        assertTrue(rig.probe.overlaysAt(rig.now).any { it.tag == "cele_hamper_glint" } || rig.p.celebration!!.content!!.riders.none { it.holo })
     }
 
     /** Item 183: confetti draws behind every text plate. */
@@ -543,6 +748,12 @@ class CelebrationTest {
     }
 
     // ---- helpers ----
+
+    /** The text plates the album corner must never cover (§11.2). */
+    private val CURL_PLATES = listOf(
+        CelebrationTags.BONUS, CelebrationTags.BANNER, CelebrationTags.CLOSING_LABEL, CelebrationTags.PERFECT,
+        CelebrationTags.SUMMARY_CARD, CelebrationTags.TITLE, CelebrationTags.CHIP, CelebrationTags.LCD,
+    )
 
     private fun texts(tag: String): List<String> {
         fun walk(n: SemanticsNode): List<String> = (n.config.getOrNull(SemanticsProperties.Text)?.map { it.text } ?: emptyList()) + n.children.flatMap { walk(it) }

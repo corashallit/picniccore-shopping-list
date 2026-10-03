@@ -1,10 +1,16 @@
 package earth.cora.picnic.ui.list.motion
 
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import org.junit.Assert.assertTrue
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -42,5 +48,33 @@ class ListInteractionTest {
         compose.onNodeWithTag(HarnessTags.chevron("produce")).performClick()
         rig.advance(260)
         compose.onNodeWithTag(HarnessTags.strip("produce")).assertIsFocused()
+    }
+
+    /**
+     * §15 Focus ("the Next card and celebration never steal focus"), item 193: the folds and opens an aisle-done chain
+     * makes by itself (the finished tray folding at L + 1100, the next stop opening at L + 1300) never move focus; only
+     * her own toggles do. Focus sits on the Produce strip and stays there on every frame of the chain.
+     */
+    @Test
+    fun chainNeverMovesFocus() {
+        val rig = HarnessRig(compose, MotionFixture.state()).start()
+        compose.onNodeWithTag(HarnessTags.strip("produce")).performSemanticsAction(SemanticsActions.RequestFocus)
+        rig.frame()
+        compose.onNodeWithTag(HarnessTags.strip("produce")).assertIsFocused()
+        val t0 = rig.tap("baking-powder")
+        val L = t0 + 620
+        rig.sampleTo(L + 2200) { now ->
+            val focused = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Focused, true)).fetchSemanticsNodes()
+            assertTrue(
+                "focus moved at L + ${now - L}: ${focused.map { it.config.getOrNull(SemanticsProperties.TestTag) }}",
+                // On the Produce strip (or nowhere, if the list's own scroll took that item away), never on another node.
+                focused.all { it.config.getOrNull(SemanticsProperties.TestTag) == HarnessTags.strip("produce") },
+            )
+        }
+        assertEquals("breakfast", rig.p.openSection(rig.model.grouped().openSectionId))
+        // Her own toggle still hands focus off: she taps Breakfast's chevron to fold it; focus goes to its strip.
+        compose.onNodeWithTag(HarnessTags.chevron("breakfast")).performClick()
+        rig.advance(260)
+        compose.onNodeWithTag(HarnessTags.strip("breakfast")).assertIsFocused()
     }
 }

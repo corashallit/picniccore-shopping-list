@@ -17,6 +17,9 @@ import kotlinx.coroutines.flow.asStateFlow
  *   form of §8.4), `finaleShown` (a re-completion only re-presses the book's PERFECT, §7.1).
  * - [ListChange]: `openSectionId`, `finaleShown`, `finaleStale` (§7.1: owed but older than 30 min).
  * - [Choreographer.keepCelebration] (§0.4 Q7: tapping the summary keeps it open).
+ * - [Choreographer.onUserOpen] (§6.1: her own tap on a strip or chevron always wins over an aisle-done chain).
+ * - [ToggleEvent.newBook] and [ChangeCause.NEW_BOOK_UNDO] with [ListChange.slot] (§0.4 Q9, §7.6: the automatic new
+ *   sticker book and its Undo).
  */
 interface Choreographer {
     /** What the list shows right now, per row, basket, book spot and stamp, plus the LCD, Next card and celebration. */
@@ -36,6 +39,15 @@ interface Choreographer {
 
     /** A tap on the celebration's summary: the auto-close stops, the progress bar goes and a Done button shows (§0.4 Q7). */
     fun keepCelebration() = Unit
+
+    /**
+     * She opened [sectionId] herself (a tap on its strip), or folded everything (null: a tap on the open tray's chevron),
+     * AFTER the store update. Her choice wins at once over any aisle-done chain (§6.1 "Tapping a folded strip opens it
+     * and folds the others"): the chain stops holding its finished tray open (and stops holding everything folded until
+     * the Next card), its pending scroll is dropped, and a Next card (shown or waiting) naming another aisle leaves. WP5
+     * calls it from the strip and chevron click handlers; programmatic opens (the next stop, D2) never call it.
+     */
+    fun onUserOpen(sectionId: String?) = Unit
 }
 
 /** One check-off or un-check, as the ViewModel saw it in the committed state (WP5 builds it). */
@@ -64,6 +76,13 @@ data class ToggleEvent(
     val aisleWasOpen: Boolean = true,
     /** The trip's finale was already shown (Trip.finaleShownAt != null): a re-completion re-presses PERFECT only (§7.1). */
     val finaleShown: Boolean = false,
+    /**
+     * This check-off started a new sticker book on its own (§0.4 Q9: the first check-off more than 12 h after the trip's
+     * last activity): the old book was filed and the item lands in the fresh book. The book turns its page (3 frames,
+     * 240 ms) to the fresh page at the tap, so the old book's twins leave with the turn; the twin then magic-appears in
+     * the fresh book at its usual beat (§7.6 "New trip"). Under reduced motion the book simply shows the fresh page.
+     */
+    val newBook: Boolean = false,
 )
 
 /** What changed between two successive GroupedLists without a check-off tap (§8.4; WP5 compares them). */
@@ -83,9 +102,19 @@ data class ListChange(
      * marked shown and PERFECT is pressed in place, no scene (§7.1, item 154).
      */
     val finaleStale: Boolean = false,
+    /**
+     * [ChangeCause.NEW_BOOK_UNDO] only: the book spot the tapped item takes again in the restored old book. The book
+     * turns back to the old book's page (240 ms) and the twin fades into this spot (120 ms) once the turn has shown it.
+     */
+    val slot: Int? = null,
 )
 
-enum class ChangeCause { DELETE, MOVE, SYNC, AISLES_EDIT, UNDO, ADD, RESUME }
+/**
+ * Why a [ListChange] happened. [NEW_BOOK_UNDO]: Undo on the "New sticker book for today" toast (§0.4 Q9) restored the
+ * old book and checked the tapped item into it: the old book shows again with a page turn back. Its aisles come back as
+ * they were (done ones stamped, lids shut), so WP5 sends it with empty aisle sets and no trip flags, and [ListChange.slot].
+ */
+enum class ChangeCause { DELETE, MOVE, SYNC, AISLES_EDIT, UNDO, ADD, RESUME, NEW_BOOK_UNDO }
 
 /**
  * No choreography: the list shows the state as it is ([ListPresentation.Identity]). What WP5 uses until

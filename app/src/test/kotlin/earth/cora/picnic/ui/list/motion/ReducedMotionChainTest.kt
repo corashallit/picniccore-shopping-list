@@ -37,6 +37,15 @@ class ReducedMotionChainTest {
         assertEquals(1f, RowMotion.hankoScale(true, RowPhase.Slam, t0, t0, reduced = true), 0f)
         assertEquals(0.5f, RowMotion.hankoAlpha(true, RowPhase.Slam, t0, t0 + 60, reduced = true), 0.01f)
         assertBeat("hanko", t0, rig.feedback.times(Cue.HANKO).firstOrNull())
+        // §8.8: the hanko fades in at 0, then nothing else moves: its alpha (as the row draws it, from the presentation's
+        // phase and start) never drops on any frame to 900 ms, through the landing's ghost cross-fade at 620.
+        var last = 0f
+        for ((t, p) in frames.filter { it.first <= t0 + 900 }) {
+            val a = RowMotion.hankoAlpha(true, p.rows["baking-powder"], p.rowStarts["baking-powder"], t, reduced = true)
+            assertTrue("hanko alpha drops at +${t - t0}: $last -> $a", a >= last - 1e-4f)
+            last = a
+        }
+        assertEquals("fully shown by the landing", 1f, last, 1e-4f)
         // The mini at 620: the sticker cross-fades to its ghost and the mini fades into the basket, in place.
         assertBeat("mini", t0 + 620, frames.firstTime { it.baskets[baking]?.squashT0 != null })
         val atLand = frames.first { it.second.baskets[baking]?.squashT0 != null }.second

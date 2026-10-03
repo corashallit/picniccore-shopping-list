@@ -385,6 +385,61 @@ class NextStopTest {
         assertTrue(compose.onAllNodesWithTag(HarnessTags.tray("aisle-2-baking")).fetchSemanticsNodes().isEmpty())
     }
 
+    /**
+     * §6.1 ("Tapping a folded strip opens it and folds the others"): her own tap during the aisle-done chain wins at once.
+     * Dairy opens within one frame; the finished tray does not curl or fold over it; no card rises, no "Next:" is said and
+     * nothing scrolls for the chain's next stop (Breakfast); "Baking done" is still said.
+     */
+    @Test
+    fun userOpenDuringChainWins() {
+        val rig = HarnessRig(compose, MotionFixture.state()).start()
+        val L = rig.completeBaking()
+        rig.advanceTo(L + 400)
+        assertEquals("the finished tray is held open", "aisle-2-baking", rig.p.openSection(rig.model.grouped().openSectionId))
+        compose.runOnIdle { rig.model.tapStrip("dairy-eggs") }
+        rig.frame()
+        val tap = rig.now
+        assertEquals("hers shows open within one frame", "dairy-eggs", rig.p.openSection(rig.model.grouped().openSectionId))
+        assertTrue(compose.onAllNodesWithTag(HarnessTags.tray("dairy-eggs")).fetchSemanticsNodes().isNotEmpty())
+        val frames = rig.sampleTo(L + 4800)
+        assertTrue("hers stays open", frames.all { it.second.openSection("dairy-eggs") == "dairy-eggs" })
+        assertTrue("no card", frames.all { it.second.nextCard == null })
+        assertTrue("no scroll", frames.all { it.second.scroll == null })
+        assertTrue("no curl or fold after her tap", frames.all { (t, p) -> t < tap || p.aisles["aisle-2-baking"]?.let { it.curlT0 == null && it.foldT0 == null } ?: true })
+        assertTrue(rig.announcer.messages.none { it.startsWith("Next:") })
+        assertTrue(rig.announcer.messages.contains("Baking done"))
+        assertTrue(rig.engine.eventLog.none { it is MotionEvent.NextShown })
+        assertEquals("dairy-eggs", rig.model.grouped().openSectionId)
+    }
+
+    /** She opens the chain's next stop herself: the card still names it at L + 1300, but nothing scrolls the list. */
+    @Test
+    fun userOpensTheNextStopHerself() {
+        val rig = HarnessRig(compose, MotionFixture.state()).start()
+        val L = rig.completeBaking()
+        rig.advanceTo(L + 500)
+        compose.runOnIdle { rig.model.tapStrip("breakfast") }
+        rig.frame()
+        assertEquals("breakfast", rig.p.openSection(rig.model.grouped().openSectionId))
+        val frames = rig.sampleTo(L + 2000)
+        assertBeat("the card for Breakfast", L + 1300, frames.firstTime { it.nextCard?.sectionId == "breakfast" })
+        assertTrue("no scroll", frames.all { it.second.scroll == null })
+        assertTrue(frames.all { it.second.openSection("breakfast") == "breakfast" })
+    }
+
+    /** A tap on another aisle while the card holds: the card names an aisle she is not going to, so it leaves at once. */
+    @Test
+    fun userOpenDuringCardExitsIt() {
+        val rig = HarnessRig(compose, MotionFixture.state()).start()
+        val L = rig.completeBaking()
+        rig.advanceTo(L + 2000)
+        assertNull(rig.p.nextCard!!.exitT0)
+        compose.runOnIdle { rig.model.tapStrip("frozen") }
+        rig.frame()
+        assertEquals("leaves at once", rig.now, rig.p.nextCard?.exitT0)
+        assertEquals("frozen", rig.p.openSection(rig.model.grouped().openSectionId))
+    }
+
     // ---- helpers ----
 
     /** The 14 default aisles' display names. */

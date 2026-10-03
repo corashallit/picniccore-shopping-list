@@ -236,6 +236,47 @@ class CheckOffChoreographyTest {
         assertEquals(0, rig.feedback.count(Cue.CELEBRATION))
     }
 
+    /**
+     * §7.1 (PERFECT only for a complete trip), §8.3: with the celebration switched off, PERFECT is due at L + 1800; an
+     * un-check at L + 1500 re-opens the trip and cancels it: no cue, no event, no press on the spine, no LCD wiggle.
+     */
+    @Test
+    fun revertBeforePerfect() {
+        val rig = HarnessRig(compose, MotionFixture.allBut(listOf("toothpaste"), open = "household"), celebration = false).start()
+        val t0 = rig.tap("toothpaste")
+        val L = t0 + 620
+        rig.advanceTo(L + 1500)
+        assertTrue("the finale ran (switched off)", rig.engine.eventLog.contains(MotionEvent.TripComplete(MotionFixture.LIST_ID, scene = false)))
+        assertEquals("PERFECT not pressed yet", 0, rig.feedback.count(Cue.PERFECT))
+        val u0 = rig.tap("toothpaste")
+        assertNull("the trip re-opened", rig.model.state.list(MotionFixture.LIST_ID)!!.trip?.completedAt)
+        val frames = rig.sampleTo(u0 + 1500)
+        assertEquals("no PERFECT cue", 0, rig.feedback.count(Cue.PERFECT))
+        assertTrue("no BookPerfect event", rig.engine.eventLog.none { it == MotionEvent.BookPerfect })
+        assertTrue("never pressed on the spine", frames.all { it.second.bookFx.perfectT0 == null && it.second.lcdWiggleT0 == null })
+        assertFalse("nothing still in flight", rig.engine.busy())
+    }
+
+    /** The same on a re-completion (the finale already shown): its PERFECT at L + 1800 goes when the trip re-opens first. */
+    @Test
+    fun revertBeforeRecompletionPerfect() {
+        val rig = HarnessRig(compose, MotionFixture.allBut(listOf("toothpaste"), open = "household"), celebration = false).start()
+        val t0 = rig.tap("toothpaste")
+        rig.advanceTo(t0 + 620 + 2400)
+        assertEquals("the first PERFECT", 1, rig.feedback.count(Cue.PERFECT))
+        // Un-check and check again: a re-completion (finale shown) re-presses PERFECT at L + 1800 ...
+        rig.tap("toothpaste")
+        rig.advance(400)
+        val c0 = rig.tap("toothpaste")
+        rig.advanceTo(c0 + 620 + 1500)
+        // ... unless the trip re-opens before it.
+        rig.tap("toothpaste")
+        val frames = rig.sampleTo(rig.now + 1200)
+        assertEquals("no second PERFECT", 1, rig.feedback.count(Cue.PERFECT))
+        assertEquals(1, rig.engine.eventLog.count { it == MotionEvent.BookPerfect })
+        assertTrue(frames.all { it.second.bookFx.perfectT0 == null })
+    }
+
     @Test
     fun revertDuringAisleDoneByMove() {
         // (c) Moving an unchecked item into the finished aisle at L + 700 re-opens it: no fold, no Next card.

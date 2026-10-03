@@ -220,6 +220,8 @@ class MotionChoreographer(
 
     override fun keepCelebration() = enqueue { t -> keep(t) }
 
+    override fun onUserOpen(sectionId: String?) = enqueue { t -> userOpen(sectionId?.takeIf { it.isNotEmpty() }, t) }
+
     /**
      * Drops every chain and override at once: the list shows its committed state. The engine's owner calls it when the
      * list screen is really gone (its ViewModel is cleared) or another list is shown; never on a configuration change,
@@ -238,6 +240,8 @@ class MotionChoreographer(
         queuedCard = null
         celebration = null
         scroll = null
+        bookTurns.clear()
+        sceneTripReopened = false
         snapshot.value = ListPresentation.Identity
         state.value = ListPresentation.Identity
     }
@@ -262,7 +266,7 @@ class MotionChoreographer(
     /** True while a chain, a beat or a queued event needs frames. */
     fun busy(): Boolean = pending.isNotEmpty() || !timeline.isEmpty || checks.isNotEmpty() || unchecks.isNotEmpty() ||
         aisleChains.isNotEmpty() || reopens.isNotEmpty() || perfect != null || nextCard != null || queuedCard != null || scroll != null ||
-        (trip != null) || celebrationMoving()
+        (trip != null) || bookTurns.isNotEmpty() || celebrationMoving()
 
     private fun celebrationMoving(): Boolean {
         val c = celebration ?: return false
@@ -315,7 +319,12 @@ class MotionChoreographer(
         val personality: Personality = if (resumeFrom != null) Personality.NONE else event.personality
         val hopAt: Long = if (resumeFrom != null) t0 else t0 + Beats.HOP
         val land: Long = hopAt + Beats.hopMillis(personality)
-        val page: Int? = event.slot?.let { s -> bookPaging?.takeIf { it.pageOf(s) != it.shownPage }?.pageOf(s) }
+        /** A new sticker book (§0.4 Q9): the book turns to the fresh page at the tap; its twin then appears on that page. */
+        val freshTurn: Boolean = event.newBook && !reduced
+
+        /** The new book was undone before this twin appeared (§0.4 Q9): the book shows the old book; no twin here. */
+        var bookMoot: Boolean = false
+        val page: Int? = if (event.newBook) null else event.slot?.let { s -> bookPaging?.takeIf { it.pageOf(s) != it.shownPage }?.pageOf(s) }
         val turn: Boolean = page != null && !reduced
         val turnAt: Long = land + Beats.MAGIC_AFTER_LAND
         val magic: Long = turnAt + if (turn) Beats.PAGE_TURN else 0
@@ -328,7 +337,7 @@ class MotionChoreographer(
         init {
             val center = anchors.bounds(AnchorRegistry.checkKey(id))?.center
             burst = if (center != null && !reduced && resumeFrom == null) Burst("burst-${burstSeq++}", center, t0, id.hashCode()) else null
-            endsAt = maxOf(magic + Beats.TWIN, if (full) glintAt + PicnicMotion.glint.durationMillis else 0L, t0 + HankoBurst.DURATION)
+            endsAt = maxOf(magic + Beats.TWIN, if (full) glintAt + PicnicMotion.glint.durationMillis else 0L, t0 + HankoBurst.DURATION, if (freshTurn) t0 + Beats.PAGE_TURN else 0L)
         }
     }
 
@@ -354,12 +363,16 @@ class MotionChoreographer(
         cue(Cue.HANKO)
         // The peel's "tk" sounds under reduced motion too: it silences movement, never sound or haptics (§14.3).
         if (resumeFrom == null) timeline.at(t + Beats.PEEL, g) { cue(Cue.PEEL) }
+        // The fresh page's turn sounds like any page turn ("peel", §14.3), under reduced motion too (it silences movement only).
+        if (e.newBook) cue(Cue.UNCHECK)
         timeline.at(chain.hopAt, g) { launchHop(chain) }
         timeline.at(chain.land, g) { land(chain) }
         if (chain.turn) timeline.at(chain.turnAt, g) { cue(Cue.UNCHECK) }
         timeline.at(chain.magic, g) {
-            cue(Cue.MAGIC_APPEAR)
-            e.slot?.let { emit(MotionEvent.MagicAppeared(e.itemId, it)) }
+            if (!chain.bookMoot) {
+                cue(Cue.MAGIC_APPEAR)
+                e.slot?.let { emit(MotionEvent.MagicAppeared(e.itemId, it)) }
+            }
         }
         val origin = checkCentre(e.itemId)
         if (e.aisleCompleted) {
@@ -535,6 +548,15 @@ class MotionChoreographer(
         val nextAt: Long = L + if (folded) Beats.FOLDED_NEXT else Beats.NEXT_CARD
         val tripAt: Long = L + if (folded) Beats.FOLDED_NEXT else Beats.CELEBRATION
         val endsAt: Long = if (open) L + Beats.BOW + 300 else L + Beats.STAMP + StampMotion.THUNK
+
+        /**
+         * She opened (or folded) a section herself at this time (§6.1): from then on the chain no longer holds the tray
+         * open or the list folded, and a curl or fold not yet started does not play (her tap folded the tray already).
+         */
+        var userOpenAt: Long? = null
+
+        /** The section she opened last (null: she folded everything). */
+        var userSection: String? = null
     }
 
     private fun startAisleDone(
@@ -564,7 +586,14 @@ class MotionChoreographer(
         if (tripDone) {
             startTrip(L, chain.tripAt - L, finaleShown, origin, created)
         } else if (next != null) {
-            timeline.at(chain.nextAt, g) { openNext(next, chain.nextAt) }
+            timeline.at(chain.nextAt, g) {
+                // Her own open since the aisle finished wins (§6.1): the next stop opens behind its card only if she has
+                // not opened another section; if she opened this very stop herself, the card still names it, unscrolled.
+                when {
+                    chain.userOpenAt == null -> openNext(next, chain.nextAt)
+                    chain.userSection == next -> openNext(next, chain.nextAt, scrollTo = false)
+                }
+            }
         }
     }
 
@@ -626,6 +655,7 @@ class MotionChoreographer(
 
     private fun startTrip(L: Long, offset: Long, finaleShown: Boolean, origin: Offset?, created: Long) {
         timeline.cancel(TRIP)
+        sceneTripReopened = false
         val chain = TripChain(L, L + offset, finaleShown, origin, created)
         trip = chain
         timeline.at(chain.at, TRIP) { finale(chain) }
@@ -633,33 +663,52 @@ class MotionChoreographer(
 
     private fun finale(chain: TripChain) {
         val at = chain.at
-        when {
-            chain.finaleShown -> {
-                // A re-completion: PERFECT again at L + 1800, no scene (§7.1).
-                trip = null
-                pressPerfect(at + Beats.PERFECT_AFTER_CLOSE, inPlace = settings.reducedMotion)
-            }
-            settings.celebration -> startCelebration(at, chain.origin)
-            else -> {
-                // Switched off: no scene; the announcement and PERFECT still happen (§11.3).
-                trip = null
-                announceComplete(celebrationSource?.invoke())
-                emit(MotionEvent.TripComplete(listId, scene = false))
-                emit(MotionEvent.FinaleMarked(listId))
-                pressPerfect(at + Beats.PERFECT_AFTER_CLOSE, inPlace = settings.reducedMotion)
-            }
+        if (chain.finaleShown) {
+            trip = null
+            // A re-completion while the scene is still up: its close presses PERFECT (+450 ms), as for the first one.
+            if (celebration?.closingT0 == null && celebration != null) return
+            // A re-completion: PERFECT again at L + 1800, no scene (§7.1).
+            pressPerfect(at + Beats.PERFECT_AFTER_CLOSE, inPlace = settings.reducedMotion)
+            return
+        }
+        // What the scene shows; null when the list is gone or nothing is wired: then no scene, as when it is switched off
+        // (an empty scene would only swallow her first tap and Back, §11.3).
+        val content = celebrationSource?.invoke()
+        if (settings.celebration && content != null) {
+            startCelebration(at, chain.origin, content)
+        } else {
+            // Switched off: no scene; the announcement and PERFECT still happen (§11.3).
+            trip = null
+            announceComplete(content)
+            emit(MotionEvent.TripComplete(content?.listId ?: listId, scene = false))
+            emit(MotionEvent.FinaleMarked(content?.listId ?: listId))
+            pressPerfect(at + Beats.PERFECT_AFTER_CLOSE, inPlace = settings.reducedMotion)
         }
     }
 
+    /**
+     * The trip stopped being complete (an un-check, a delete, a move, an add, a sync): the pending finale and a PERFECT
+     * not pressed yet are cancelled, each on its own (§7.1: PERFECT only for a complete trip; §8.3). A scene already up
+     * stays until she closes it, but its close then presses no PERFECT.
+     */
     private fun reopenTrip(t: Long) {
-        val chain = trip ?: return
-        // Cancelled only before the scene starts (L + 1350); a scene already up stays until she closes it.
-        if (t < chain.at) {
-            trip = null
-            timeline.cancel(TRIP)
+        trip?.let {
+            if (t < it.at) {
+                trip = null
+                timeline.cancel(TRIP)
+            }
         }
-        perfect?.let { if (t < it.t0) perfect = null }
+        perfect?.let {
+            if (t < it.t0) {
+                perfect = null
+                timeline.cancel(PERFECT)
+            }
+        }
+        celebration?.let { if (it.closingT0 == null) sceneTripReopened = true }
     }
+
+    /** The trip re-opened while the scene was up (and has not completed again since): its close presses no PERFECT. */
+    private var sceneTripReopened = false
 
     private inner class PerfectChain(val t0: Long, val inPlace: Boolean) {
         val endsAt: Long = t0 + 260 + HankoBurst.DURATION + PicnicMotion.glint.durationMillis
@@ -679,17 +728,14 @@ class MotionChoreographer(
         say(strings.listComplete(stats.stickers, stats.minutes))
     }
 
-    private fun startCelebration(at: Long, origin: Offset?) {
-        val content = celebrationSource?.invoke()
-        val id = content?.listId ?: listId ?: ""
+    private fun startCelebration(at: Long, origin: Offset?, content: CelebrationContent) {
+        val id = content.listId
         val reduced = settings.reducedMotion
         val talkBack = settings.talkBack
-        val plan = content?.let {
-            CelebrationTimeline.plan(it.listName, it.stats, it.petHatched, reduced, strings.celebration, it.total, closingBar = !talkBack)
-        }
+        val plan = CelebrationTimeline.plan(content.listName, content.stats, content.petHatched, reduced, strings.celebration, content.total, closingBar = !talkBack)
         // The summary carries an action ("tap to keep it"): its hold follows "Time to take action" (§9, §15).
-        val summaryHold = timeouts.recommended(plan?.summaryHold ?: CelebrationTimeline.SUMMARY_FLOOR_RM, controls = true)
-        val summarySettle = plan?.beat(BeatName.Summary)?.settle ?: Beats.RM_FADE
+        val summaryHold = timeouts.recommended(plan.summaryHold, controls = true)
+        val summarySettle = plan.beat(BeatName.Summary).settle ?: plan.summaryAt
         celebration = CelebrationPresentation(
             listId = id,
             t0 = at,
@@ -701,11 +747,12 @@ class MotionChoreographer(
             summaryHoldMs = summaryHold,
         )
         trip = null
+        sceneTripReopened = false
         cue(Cue.CELEBRATION)
         announceComplete(content)
         emit(MotionEvent.TripComplete(id, scene = true))
-        emit(MotionEvent.CelebrationStarted(id, content?.bonus))
-        if (plan != null && !reduced) {
+        emit(MotionEvent.CelebrationStarted(id, content.bonus))
+        if (!reduced) {
             plan.beatOrNull(BeatName.Perfect)?.let { b -> timeline.at(at + b.at, CELEBRATION) { cue(Cue.PERFECT) } }
             plan.beatOrNull(BeatName.CapsulePop)?.let { b -> timeline.at(at + b.at, CELEBRATION) { cue(Cue.CAPSULE_POP) } }
             plan.beatOrNull(BeatName.Curl)?.let { b -> timeline.at(at + b.at, CELEBRATION) { cue(Cue.UNCHECK) } }
@@ -717,7 +764,7 @@ class MotionChoreographer(
             timeline.at(closeAt, CELEBRATION) { startClose(closeAt) }
         } else {
             // Keep the beats running to the summary so the scene settles, then sleep until a tap.
-            plan?.let { p -> timeline.at(at + p.summaryAt, CELEBRATION) { } }
+            timeline.at(at + plan.summaryAt, CELEBRATION) { }
         }
     }
 
@@ -744,16 +791,44 @@ class MotionChoreographer(
             celebration = null
             emit(MotionEvent.CelebrationClosed(c.listId))
         }
-        pressPerfect(t + Beats.PERFECT_AFTER_CLOSE, inPlace = settings.reducedMotion)
+        // PERFECT only for a complete trip (§7.1): not when it re-opened while the scene was up.
+        if (!sceneTripReopened) pressPerfect(t + Beats.PERFECT_AFTER_CLOSE, inPlace = settings.reducedMotion)
+        sceneTripReopened = false
+    }
+
+    // =============================================================================================
+    // Her own open (§6.1): it always wins over an aisle-done chain.
+    // =============================================================================================
+
+    private fun userOpen(sectionId: String?, t: Long) {
+        for (a in aisleChains.values) {
+            if (a.userOpenAt == null) a.userOpenAt = t
+            a.userSection = sectionId
+        }
+        // No programmatic scroll away from what she opened.
+        if (scroll != null && scroll?.sectionId != sectionId) {
+            scroll = null
+            timeline.cancel(SCROLL)
+        }
+        // A card naming another aisle leaves (or never rises): it would point away from the aisle she chose.
+        queuedCard?.let {
+            if (it.sectionId != sectionId) {
+                timeline.cancel(nextGroup(it.t0))
+                queuedCard = null
+            }
+        }
+        nextCard?.let { if (it.sectionId != sectionId) exitNextCard(t) }
     }
 
     // =============================================================================================
     // The Next card (§10).
     // =============================================================================================
 
-    private fun openNext(next: String, at: Long) {
-        scroll = ScrollRequest(next, at)
-        timeline.at(at + SCROLL_HOLD, SCROLL) { if (scroll?.t0 == at) scroll = null }
+    private fun openNext(next: String, at: Long, scrollTo: Boolean = true) {
+        if (scrollTo) {
+            scroll = ScrollRequest(next, at)
+            timeline.at(at + SCROLL_HOLD, SCROLL) { if (scroll?.t0 == at) scroll = null }
+        }
         val stop = sections[next]
         if (stop != null) say(strings.nextStop(stop))
         if (!settings.nextStopCard || stop == null) {
@@ -827,6 +902,7 @@ class MotionChoreographer(
     // =============================================================================================
 
     private fun startChange(c: ListChange, t: Long) {
+        if (c.cause == ChangeCause.NEW_BOOK_UNDO) startBookTurnBack(c.slot, t)
         for (s in c.aisleReopened) reopenAisle(s, t, inPlace = true)
         if (c.tripReopened) reopenTrip(t)
         if (c.finaleStale) {
@@ -857,6 +933,32 @@ class MotionChoreographer(
     }
 
     // =============================================================================================
+    // The automatic new book's Undo (§0.4 Q9, §7.6).
+    // =============================================================================================
+
+    /**
+     * Undo on "New sticker book for today": the old book shows again with a page turn back (3 frames, 240 ms), and the
+     * tapped item's twin fades into its old spot [slot] (120 ms) once the turn has shown the page. Reduced motion: no
+     * turn; the twin fades in at once.
+     */
+    private inner class BookTurnBack(val t0: Long, val slot: Int?, val reduced: Boolean) {
+        val turn: Boolean = !reduced
+        val fadeAt: Long = t0 + if (turn) Beats.PAGE_TURN else 0
+        val endsAt: Long = fadeAt + Beats.RM_FADE
+    }
+
+    private val bookTurns = ArrayList<BookTurnBack>()
+
+    private fun startBookTurnBack(slot: Int?, t: Long) {
+        // A check chain still waiting to show its twin in the fresh book is moot now: the item is in the old book.
+        for (c in checks.values) if (c.event.newBook) c.bookMoot = true
+        bookTurns.clear()
+        val chain = BookTurnBack(t, slot, settings.reducedMotion)
+        bookTurns += chain
+        cue(Cue.UNCHECK)
+    }
+
+    // =============================================================================================
     // Expiry and the presentation.
     // =============================================================================================
 
@@ -865,6 +967,7 @@ class MotionChoreographer(
         unchecks.values.removeAll { t >= it.endsAt }
         aisleChains.values.removeAll { t >= it.endsAt && !timeline.has(aisleGroup(it.sectionId)) }
         reopens.values.removeAll { t >= it.endsAt }
+        bookTurns.removeAll { t >= it.endsAt }
         perfect?.let { if (t >= it.endsAt) perfect = null }
     }
 
@@ -943,8 +1046,14 @@ class MotionChoreographer(
                 }
                 if (t < l + 300) b.badgePop(l)
             }
+            // A new sticker book (§0.4 Q9): the book turns to the fresh page at the tap (the old twins leave with it).
+            if (c.freshTurn && !c.bookMoot && t < c.t0 + Beats.PAGE_TURN) {
+                val fresh = e.slot?.let { s -> bookPaging?.pageOf(s) } ?: 0
+                pageTurn = PageTurn(fresh, c.t0)
+                showPage = fresh
+            }
             // The book: the spot waits empty (still the holo "next") until the magic, then the twin appears.
-            val slot = e.slot
+            val slot = if (c.bookMoot) null else e.slot
             if (slot != null) {
                 if (t < c.magic) {
                     spots[slot] = SpotPhase.Empty
@@ -1018,13 +1127,21 @@ class MotionChoreographer(
             if (a.next != null && t < stampAt) stamps.putIfAbsent(a.next, StampPhase.Waiting)
             // The tray: open until the fold, curls at L + 800, folds at L + 1100; the next opens at L + 1300.
             if (a.open) {
-                when {
-                    t < L + Beats.FOLD -> open = OpenOverride(a.sectionId)
-                    t < a.nextAt && (a.next != null || a.trip) -> open = OpenOverride(null)
+                // Her own open (§6.1) ends the chain's hold on which section shows open, at once.
+                val mine = a.userOpenAt
+                if (mine == null) {
+                    when {
+                        t < L + Beats.FOLD -> open = OpenOverride(a.sectionId)
+                        t < a.nextAt && (a.next != null || a.trip) -> open = OpenOverride(null)
+                    }
                 }
                 var ap = AislePresentation(inPlace = a.inPlace)
-                if (a.curl && t >= L + Beats.CURL && t < L + Beats.FOLD) ap = ap.copy(curlT0 = L + Beats.CURL)
-                if (t >= L + Beats.FOLD && t < L + Beats.FOLD + FoldMotion.DURATION) ap = ap.copy(foldT0 = L + Beats.FOLD)
+                // A curl or fold that had not started when she opened a section herself does not play: her tap folded
+                // the tray already (one already under way finishes).
+                val curlAt = L + Beats.CURL
+                val foldAt = L + Beats.FOLD
+                if (a.curl && t >= curlAt && t < foldAt && (mine == null || mine > curlAt)) ap = ap.copy(curlT0 = curlAt)
+                if (t >= foldAt && t < foldAt + FoldMotion.DURATION && (mine == null || mine > foldAt)) ap = ap.copy(foldT0 = foldAt)
                 ap = when {
                     t < L + Beats.RIBBON -> ap.copy(ribbon = false)
                     t < L + Beats.BOW + 300 -> ap.copy(ribbon = true, ribbonT0 = L + Beats.RIBBON, bowT0 = L + Beats.BOW)
@@ -1035,6 +1152,24 @@ class MotionChoreographer(
                 aisles[a.sectionId] = AislePresentation(ribbon = false, inPlace = a.inPlace)
             } else if (t < L + Beats.LID + 300) {
                 aisles[a.sectionId] = AislePresentation(ribbon = true, ribbonT0 = L + Beats.LID, bowT0 = L + Beats.LID + 100, inPlace = a.inPlace)
+            }
+        }
+
+        for (b in bookTurns) {
+            val slot = b.slot
+            val page = slot?.let { s -> bookPaging?.pageOf(s) } ?: 0
+            if (b.turn && t < b.t0 + Beats.PAGE_TURN) {
+                pageTurn = PageTurn(page, b.t0)
+                showPage = page
+            }
+            if (slot != null) {
+                if (t < b.fadeAt) {
+                    spots[slot] = SpotPhase.Empty
+                    holdNext = minOf(holdNext ?: slot, slot)
+                } else {
+                    spots[slot] = SpotPhase.Appearing(b.fadeAt, inPlace = true)
+                    if (bookPaging?.let { it.pageOf(slot) != it.shownPage } == true) showPage = page
+                }
             }
         }
 

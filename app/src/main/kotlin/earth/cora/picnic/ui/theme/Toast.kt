@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import earth.cora.picnic.platform.Timeouts
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
@@ -91,6 +93,13 @@ class ToastHostState {
 
     /** True once the current toast has started to leave (a merge then queues instead). */
     internal var leaving by mutableStateOf(false)
+
+    /**
+     * True while something covers the toasts (the celebration, §11): the current toast's hold waits, and once it is
+     * false again the toast holds its full hold from then (§4.15: an Undo toast is never cut short, not even by a
+     * scene it sat under unseen). A toast already lifting off finishes. The host that draws the cover sets it.
+     */
+    var paused: Boolean by mutableStateOf(false)
 
     private val waiting = mutableStateListOf<ToastMessage>()
 
@@ -158,7 +167,11 @@ fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset:
                 drop.animateTo(1f, if (reduced) tween(PicnicMotion.rmFade.durationMillis) else tween(PicnicMotion.toastIn.durationMillis, easing = PicnicMotion.toastIn.easing))
                 dropped = m.id
             }
-            holdOnFrameClock(toastHold(m, timeouts))
+            // The hold, on the frame clock; a pause (a cover over the toast) waits, then the full hold starts again.
+            val hold = toastHold(m, timeouts)
+            while (!holdUnlessPaused(hold) { state.paused }) {
+                snapshotFlow { state.paused }.first { !it }
+            }
             state.leaving = true
             lift.animateTo(1f, if (reduced) tween(PicnicMotion.rmFade.durationMillis) else tween(PicnicMotion.toastOut.durationMillis, easing = PicnicMotion.toastOut.easing))
             dropped = null
@@ -213,6 +226,17 @@ const val TOAST_TAG: String = "picnic_toast"
 suspend fun holdOnFrameClock(millis: Long) {
     val start = withFrameMillis { it }
     while (withFrameMillis { it } - start < millis) Unit
+}
+
+/** Holds [millis] on the frame clock like [holdOnFrameClock]; returns false as soon as [paused] is true (start over). */
+private suspend fun holdUnlessPaused(millis: Long, paused: () -> Boolean): Boolean {
+    if (paused()) return false
+    val start = withFrameMillis { it }
+    while (true) {
+        val now = withFrameMillis { it }
+        if (paused()) return false
+        if (now - start >= millis) return true
+    }
 }
 
 /**

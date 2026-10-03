@@ -60,7 +60,8 @@ fun BookTwin(
     Box(modifier.size(size).decorative(), contentAlignment = Alignment.Center) {
         when (phase) {
             is SpotPhase.Appearing -> {
-                if (!reduced) {
+                val fade = reduced || phase.inPlace
+                if (!fade) {
                     // The kira bloom and the six sparks, behind the twin.
                     DecorSticker(
                         "kira",
@@ -81,11 +82,11 @@ fun BookTwin(
                     icon, null, size = size, aisleIndex = aisleIndex, holo = holo, pixel = pixel,
                     modifier = Modifier
                         .offset {
-                            val pose = if (reduced) MotionPose.Rest else BookMotion.twin(clock.now - phase.t0, slot)
+                            val pose = if (fade) MotionPose.Rest else BookMotion.twin(clock.now - phase.t0, slot)
                             IntOffset((pose.dx * density).roundToInt(), (pose.dy * density).roundToInt())
                         }
                         .graphicsLayer {
-                            if (reduced) {
+                            if (fade) {
                                 alpha = fadeIn(clock.now - phase.t0)
                                 rotationZ = BookMotion.tilt(slot)
                             } else {

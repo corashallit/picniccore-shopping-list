@@ -159,4 +159,43 @@ class OverlayStackingTest {
             }
         }
     }
+
+    /**
+     * §4.15 ("An Undo toast is never cut short"), §11: she tears off the trip's last unchecked item (out of stock): the
+     * trip completes and the celebration covers the screen 1.35 s later, over her "… torn out · Undo" toast. The toast's
+     * hold waits under the scene; once the scene has gone it is still there, with its Undo, and holds its full hold.
+     */
+    @Test
+    fun undoToastOutlivesTheCelebration() {
+        val rig = HarnessRig(compose, MotionFixture.allBut(listOf("toothpaste"), open = "household")).start()
+        var change: ListChange? = null
+        var undone = false
+        compose.runOnIdle {
+            change = rig.model.delete("toothpaste")
+            rig.toasts.show(ToastMessage("Toothpaste torn out", kind = "tear", actionLabel = "Undo", onAction = { undone = true }))
+        }
+        rig.frame()
+        assertTrue("the tear-off completed the trip", change!!.tripCompleted)
+        val toast = rig.toasts.current!!
+        val d0 = rig.now
+        rig.advanceTo(d0 + Beats.CELEBRATION + 16)
+        assertNotNull("the scene covers the toast", rig.p.celebration)
+        assertTrue("held under the scene", rig.toasts.paused)
+        val limit = rig.now + 30_000
+        while (rig.p.celebration != null && rig.now < limit) rig.frame()
+        assertTrue("the scene closed by itself", rig.p.celebration == null)
+        val gone = rig.now
+        assertEquals("her toast is still there", toast.id, rig.toasts.current?.id)
+        assertEquals("with its Undo", "Undo", rig.toasts.current?.actionLabel)
+        assertTrue(!rig.toasts.paused)
+        // Its full hold from the moment the scene has gone, then it lifts off.
+        rig.advanceTo(gone + 4000 - 32)
+        assertEquals("holds its whole hold", toast.id, rig.toasts.current?.id)
+        var why = ""
+        val still = rig.probe.stillFrom(earth.cora.picnic.ui.theme.TOAST_TAG, gone + 16) { why = it }
+        assertTrue("still $still ms after the scene ($why)", still >= 4000 - 80)
+        rig.advanceTo(gone + 4000 + 400)
+        assertEquals("then it leaves", null, rig.toasts.current)
+        assertTrue("never acted on", !undone)
+    }
 }

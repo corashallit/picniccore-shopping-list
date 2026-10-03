@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
@@ -270,40 +271,67 @@ internal fun DrawScope.drawInSquare(s: Float, alpha: Float = 1f, block: DrawScop
     }
 }
 
+/**
+ * The "+n" tag on the basket's right shoulder (§4.12): a 30 × 20 dp white pill with a periwinkle ring and the 13 sp
+ * numeral, centred on its manifest point. Like the badge it is sized from the measured numeral, so at large font
+ * scales (to 200 %, §15) the pill grows round the numeral instead of the numeral spilling over its ring.
+ */
 @Composable
 private fun PlusTag(extra: Int, art: BasketArt, unit: Dp) {
     val c = PicnicTheme.colors
     val shadow = PicnicTheme.shadows
     val measurer = rememberTextMeasurer(cacheSize = 2)
     val style = PicnicTheme.type.badgeNumeral.copy(color = c.ballpoint, fontSize = 13.sp)
+    val layout = measurer.measure("+$extra", style)
+    val (w, h) = pillSize(layout.size.width, layout.size.height, minW = 30.dp, minH = 20.dp, padH = 10.dp)
     Canvas(
         Modifier
-            .offset(unit * BasketManifest.PLUS_TAG_CENTRE_X - 15.dp, unit * BasketManifest.PLUS_TAG_CENTRE_Y - 10.dp)
-            .size(30.dp, 20.dp),
+            .offset(unit * BasketManifest.PLUS_TAG_CENTRE_X - w / 2, unit * BasketManifest.PLUS_TAG_CENTRE_Y - h / 2)
+            .size(w, h),
     ) {
         val r = androidx.compose.ui.geometry.CornerRadius(size.height / 2f)
         drawRoundRect(shadow.color, Offset(shadow.hs.x.toPx(), shadow.hs.y.toPx()), size, r)
         drawRoundRect(Color.White, Offset.Zero, size, r)
         drawRoundRect(Families.periwinkle.mid, Offset(2.dp.toPx(), 2.dp.toPx()), Size(size.width - 4.dp.toPx(), size.height - 4.dp.toPx()), r, style = Stroke(1.2.dp.toPx()))
-        val layout = measurer.measure("+$extra", style)
         drawText(layout, topLeft = Offset((size.width - layout.size.width) / 2f, (size.height - layout.size.height) / 2f))
     }
 }
 
 /**
+ * A pill's size round a measured numeral ([textW] × [textH] px): at least [minW] × [minH], else the text plus 4 dp of
+ * height and [padH] of width (never narrower than it is tall).
+ */
+@Composable
+private fun pillSize(textW: Int, textH: Int, minW: Dp, minH: Dp, padH: Dp): Pair<Dp, Dp> {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    return with(density) {
+        val h = maxOf(minH, textH.toDp() + 4.dp)
+        val w = maxOf(minW, h, textW.toDp() + padH)
+        w to h
+    }
+}
+
+/**
  * The 22 dp count sticker (§4.12): white, 2 dp aisle-trace border, DynaPuff 13 sp trace numeral, hs; never on the art.
- * [still]: no pop (reduced motion, or a change played in place).
+ * It is sized from the measured numeral (§2.7: the 13 sp floor scales with the font, to 200 %, §15): a 22 dp circle
+ * while the numeral fits, else a pill round it (height = numeral + 4 dp, width = numeral + 10 dp), its right edge and
+ * top kept on the flag slot, so the numeral never runs over the ring. It pops about its centre. [still]: no pop
+ * (reduced motion, or a change played in place).
  */
 @Composable
 private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, popT0: Long?, clock: MotionClock, still: Boolean) {
     val measurer = rememberTextMeasurer(cacheSize = 4)
     val style = PicnicTheme.type.badgeNumeral.copy(color = look.family.trace, fontSize = 13.sp)
     val shadow = PicnicTheme.shadows
+    val label = if (count > 99) "99+" else count.toString()
+    val layout = measurer.measure(label, style)
     val d = BasketManifest.BADGE_SIZE_DP.dp
+    val (w, h) = pillSize(layout.size.width, layout.size.height, minW = d, minH = d, padH = 10.dp)
     Canvas(
         Modifier
-            .offset(basket.width + BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp - d, (if (tray) BasketManifest.BADGE_TOP_TRAY_DP else BasketManifest.BADGE_TOP_STRIP_DP).dp)
-            .size(d)
+            .offset(basket.width + BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp - w, (if (tray) BasketManifest.BADGE_TOP_TRAY_DP else BasketManifest.BADGE_TOP_STRIP_DP).dp)
+            .size(w, h)
+            .testTag(BADGE_TAG)
             .graphicsLayer {
                 if (popT0 != null && !still) {
                     val s = BasketMotion.badgePop(clock.now - popT0)
@@ -312,15 +340,23 @@ private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, po
                 }
             },
     ) {
-        val r = size.minDimension / 2f
-        drawCircle(shadow.color, r, center + Offset(shadow.hs.x.toPx(), shadow.hs.y.toPx()))
-        drawCircle(Color.White, r)
-        drawCircle(look.family.trace, r - 1.dp.toPx(), style = Stroke(2.dp.toPx()))
-        val label = if (count > 99) "99+" else count.toString()
-        val layout = measurer.measure(label, style)
+        val r = androidx.compose.ui.geometry.CornerRadius(size.height / 2f)
+        val ring = 2.dp.toPx()
+        drawRoundRect(shadow.color, Offset(shadow.hs.x.toPx(), shadow.hs.y.toPx()), size, r)
+        drawRoundRect(Color.White, Offset.Zero, size, r)
+        drawRoundRect(
+            look.family.trace,
+            Offset(ring / 2f, ring / 2f),
+            Size(size.width - ring, size.height - ring),
+            androidx.compose.ui.geometry.CornerRadius((size.height - ring) / 2f),
+            style = Stroke(ring),
+        )
         drawText(layout, topLeft = Offset((size.width - layout.size.width) / 2f, (size.height - layout.size.height) / 2f))
     }
 }
+
+/** The badge's test tag (in the unmerged tree; the basket is decorative): its bounds are the pill's white face. */
+const val BADGE_TAG: String = "picnic_basket_badge"
 
 /* ------------------------------------------------------------------------------------------------
  * The stamp page's circle (§4.13) and its thunk (§8.4).

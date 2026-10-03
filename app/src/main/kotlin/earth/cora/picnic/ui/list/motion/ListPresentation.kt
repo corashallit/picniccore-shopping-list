@@ -145,8 +145,11 @@ sealed interface SpotPhase {
     /** The next free spot (holo). */
     data object Next : SpotPhase
 
-    /** The magic appear, started at [t0]. */
-    data class Appearing(val t0: Long) : SpotPhase
+    /**
+     * The magic appear, started at [t0]; [inPlace]: a 120 ms fade in place instead (no bloom, no sparks, no poses), as
+     * when the new book's Undo puts the twin back into its old spot (§0.4 Q9).
+     */
+    data class Appearing(val t0: Long, val inPlace: Boolean = false) : SpotPhase
 
     data object Shown : SpotPhase
 

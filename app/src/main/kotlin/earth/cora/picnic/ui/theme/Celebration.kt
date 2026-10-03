@@ -56,9 +56,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import earth.cora.picnic.ui.a11y.textOverflowed
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -220,10 +223,10 @@ fun CelebrationScene(
                 BurstStar(sc)
                 Confetti(sc, w, h)
                 SceneContent(sc, content, copy, anchors, onSummaryCard)
-                AlbumCorner(sc, content.bonus, w, h)
+                AlbumCorner(sc, content.bonus, anchors)
                 BottomBand(sc, copy, anchors, onDone)
             }
-            if (probe != null) ProbeReports(sc, probe, anchors, origin, sceneSize)
+            if (probe != null) ProbeReports(sc, content, probe, anchors, origin, sceneSize)
         }
         Flash(sc)
     }
@@ -439,8 +442,18 @@ private class SceneAnchors {
         return if (st != null && st.isAttached) st.localBoundingBoxOf(coords, clipBounds = false).translate(stageOrigin) else coords.boundsInRoot()
     }
 
-    /** Every text plate's laid-out bounds (root px, before its own motion), by tag. */
-    val plates: MutableMap<String, Rect> = LinkedHashMap()
+    /**
+     * Every text plate's laid-out bounds (root px, before its own motion), by tag. Snapshot state: the album corner's
+     * leg and pockets follow it (it changes only when the layout does, never per frame).
+     */
+    val plates: MutableMap<String, Rect> = androidx.compose.runtime.mutableStateMapOf()
+
+    /** The content column (inside its fit layer), and the bonus card's bottom in it (px, unscaled; 0 = not measured). */
+    var column: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var bonusBottom: Float by mutableFloatStateOf(0f)
+
+    /** The content column's fit scale (1 = as laid out; below 1 on a short screen, FitColumn). */
+    var fit: Float = 1f
 
     /** The summary card and its closing bar (root px): together they are "the summary" a tap keeps open. */
     var content: Rect? = null
@@ -472,10 +485,12 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
             },
     ) {
         Ribbon(sc, anchors)
+        FitColumn(anchors, Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.statusBars)) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.statusBars)
+                // Its own coordinates, outside its padding: the bonus card's bottom is measured from its top.
+                .onPlaced { anchors.column = it }
                 .padding(top = 10.dp, start = 12.dp, end = 12.dp, bottom = BAND)
                 .testTag(CelebrationTags.CONTENT),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -509,7 +524,7 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.plate(anchors, CelebrationTags.CHIP).graphicsLayer { alpha = textBeatAlpha(sc, BeatName.Title) }) {
-                SceneChip("♡ ${content.listName}", t.label.copy(color = c.ballpoint), maxLines = 2)
+                SceneChip("♡ ${content.listName}", t.label.copy(color = c.ballpoint), maxLines = chipLines())
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.plate(anchors, CelebrationTags.LCD).graphicsLayer { alpha = textBeatAlpha(sc, BeatName.Title) }) {
@@ -525,8 +540,39 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
             }
             PicnicSpread(sc, content, copy, anchors)
         }
+        }
         Riders(sc, content, anchors)
         KiraStars(sc, anchors)
+    }
+}
+
+/**
+ * The content column, fitted to the screen (§11.2 "never over text", §15 font scale to 200 %): it is laid out at its
+ * natural height (nothing in it is ever squeezed or clipped), and when the bonus card would end less than [CURL_FLOOR] +
+ * [CURL_GAP] above the scene's bottom (a short screen, many stops, a large font scale) the whole column is scaled down
+ * about its top centre, never up, just enough that it does: the album corner then always peels back beside the bonus
+ * card, at least [CURL_FLOOR] deep, without covering text (AlbumCorner measures its leg from the plates). What hangs
+ * below the bonus card (the blanket, 42 dp at most) then still ends above "tap to skip" and Done in the bottom band. The
+ * fixture is never scaled at 360 × 640 or taller. The bonus card's place is read back from the first layout (it lies
+ * inside the picnic spread); the scene opens under its white flash, so that one frame never shows.
+ */
+@Composable
+private fun FitColumn(anchors: SceneAnchors, modifier: Modifier, content: @Composable () -> Unit) {
+    androidx.compose.ui.layout.Layout(content, modifier) { measurables, c ->
+        val p = measurables.single().measure(c.copy(minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity))
+        val h = c.maxHeight.toFloat()
+        var s = 1f
+        val bonus = anchors.bonusBottom
+        val curl = (CURL_FLOOR + CURL_GAP).toPx()
+        if (bonus > 0f && bonus > h - curl) s = ((h - curl) / bonus).coerceIn(0.5f, 1f)
+        anchors.fit = s
+        layout(c.maxWidth, c.maxHeight) {
+            p.placeWithLayer(0, 0) {
+                scaleX = s
+                scaleY = s
+                transformOrigin = TransformOrigin(0.5f, 0f)
+            }
+        }
     }
 }
 
@@ -633,30 +679,53 @@ private fun SummaryBarRow(sc: SceneClock, copy: CelebrationCopy, anchors: SceneA
 
 /**
  * A white chip sticker on the scene (the list name, "tap to skip"): 32 dp tall at least, and taller when the font scale
- * or a long name needs a second line, so its text never clips (ChipFace keeps a fixed height).
+ * or a long name needs more lines (ChipFace keeps a fixed height). It never clips silently: a text that does not fit
+ * its [maxLines] first steps down to the 13 sp floor (§2.7), then ends in "…" and is marked [textOverflowed] (the
+ * list name is cut to CelebrationContent.CHIP_NAME_MAX first, so that only happens to a name of unusually wide words).
  */
 @Composable
-private fun SceneChip(text: String, style: androidx.compose.ui.text.TextStyle, maxLines: Int) {
+private fun SceneChip(text: String, style: androidx.compose.ui.text.TextStyle, maxLines: Int, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(16.dp)
+    // One step down to the floor, decided from the first layout (the scene opens under the flash, so it never shows).
+    var stepped by remember(text, maxLines, style) { mutableStateOf(false) }
+    var overflowed by remember(text, maxLines, style) { mutableStateOf(false) }
+    val floor = 13.sp
+    val st = if (stepped && style.fontSize > floor) {
+        style.copy(fontSize = floor, lineHeight = if (style.lineHeight.isSp) style.lineHeight * (floor.value / style.fontSize.value) else style.lineHeight)
+    } else {
+        style
+    }
+    val onLayout: (androidx.compose.ui.text.TextLayoutResult) -> Unit = { r ->
+        if (r.hasVisualOverflow && !stepped && style.fontSize > floor) stepped = true else overflowed = r.hasVisualOverflow
+    }
     Box(
-        Modifier
+        modifier
             .widthIn(max = 312.dp)
             .heightIn(min = 32.dp)
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
             .background(PicnicTheme.colors.stickerWhite)
-            .padding(horizontal = 14.dp, vertical = 5.dp),
+            .padding(horizontal = 14.dp, vertical = 5.dp)
+            .semantics { if (overflowed) textOverflowed = true },
         contentAlignment = Alignment.Center,
     ) {
         val center = androidx.compose.ui.text.style.TextAlign.Center
+        val ellipsis = androidx.compose.ui.text.style.TextOverflow.Ellipsis
         // PicnicText draws the inline glyphs (♡); plain words keep the plain Text.
-        if (text.any { it in "♡♥☆★✦♪" }) {
-            PicnicText(text, style = style, textAlign = center, maxLines = maxLines)
+        if (text.any { it in INLINE_GLYPHS }) {
+            PicnicText(text, style = st, textAlign = center, maxLines = maxLines, overflow = ellipsis, onTextLayout = onLayout)
         } else {
-            androidx.compose.material3.Text(text, style = style, textAlign = center, maxLines = maxLines)
+            androidx.compose.material3.Text(text, style = st, textAlign = center, maxLines = maxLines, overflow = ellipsis, onTextLayout = onLayout)
         }
     }
 }
+
+/**
+ * The list-name chip's lines (§15: names wrap, never clip): two at the default size, where they hold the longest name it
+ * shows (CelebrationContent.CHIP_NAME_MAX), and three from font scale 1.15 up (1.3 needs them already).
+ */
+@Composable
+private fun chipLines(): Int = if (LocalDensity.current.fontScale >= 1.15f) 3 else 2
 
 /** The bottom band's height (the "tap to skip" chip, the progress bar or Done; the album corner beside it). */
 private val BAND: Dp = 74.dp
@@ -972,7 +1041,7 @@ private fun DrawScope.drawBanner(shadow: Color) {
 private fun PicnicSpread(sc: SceneClock, content: CelebrationContent, copy: CelebrationCopy, anchors: SceneAnchors) {
     val shadow = PicnicTheme.shadows.color
     val cloth = PicnicTheme.colors.stickerWhite
-    Box(Modifier.fillMaxWidth().height(196.dp)) {
+    Box(Modifier.fillMaxWidth().heightIn(min = 196.dp)) {
         // The gingham blanket.
         Canvas(
             Modifier
@@ -1071,7 +1140,8 @@ private const val HAMPER_FILLS: Long = 2100
 @Composable
 private fun BonusCard(sc: SceneClock, bonus: BonusSticker?, copy: CelebrationCopy, anchors: SceneAnchors, modifier: Modifier) {
     val c = PicnicTheme.colors
-    Box(modifier.size(132.dp, 150.dp)) {
+    // 132 × 150 dp, taller when the font scale needs it (the card's text never clips).
+    Box(modifier.width(132.dp).heightIn(min = 150.dp)) {
         // The gold capsule wobbles twice, then pops behind the card.
         ItemIcon(
             IconRef("_capsule"), null, size = 52.dp, jackpot = true,
@@ -1107,6 +1177,11 @@ private fun BonusCard(sc: SceneClock, bonus: BonusSticker?, copy: CelebrationCop
             Modifier
                 .align(Alignment.TopCenter)
                 .plate(anchors, CelebrationTags.BONUS)
+                .onGloballyPositioned { b ->
+                    // Its bottom in the content column, unscaled (FitColumn keeps the album corner's room under it).
+                    val col = anchors.column
+                    if (col != null && col.isAttached) anchors.bonusBottom = col.localBoundingBoxOf(b, clipBounds = false).bottom
+                }
                 .graphicsLayer {
                     val e = sc.since(BeatName.Bonus)
                     if (sc.reduced) return@graphicsLayer
@@ -1139,20 +1214,28 @@ private fun BonusCard(sc: SceneClock, bonus: BonusSticker?, copy: CelebrationCop
                 style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint, fontSize = 15.sp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
     }
 }
 
-/** The bonus sticker: a library sticker (holo) or a picnic-sheet decor sticker. */
+/**
+ * The bonus sticker: a library sticker (holo) or a picnic-sheet decor sticker. Its foil stays still (no shiny glint
+ * loop): on the bonus card a glint would cross "bonus sticker!" during its hold, and in the album pocket it would move
+ * during the summary's hold (§9, §11.2 "No glint on the bonus card").
+ */
 @Composable
 private fun BonusArt(bonus: BonusSticker?, size: Dp, ghost: Boolean, modifier: Modifier = Modifier) {
     when {
-        bonus?.icon != null -> ItemIcon(bonus.icon, null, modifier, size = size, holo = !ghost, ghost = ghost)
+        bonus?.icon != null -> ItemIcon(bonus.icon, null, modifier, size = size, holo = !ghost, ghost = ghost, glint = BONUS_GLINTS)
         bonus?.decor != null -> DecorSticker(bonus.decor, modifier.graphicsLayer { alpha = if (ghost) 0.28f else 1f }, size = size)
         else -> DecorSticker("star", modifier.graphicsLayer { alpha = if (ghost) 0.28f else 1f }, size = size)
     }
 }
+
+/** The bonus sticker's holo foil runs no glint loop, on the card or in the pocket (ProbeReports follows this). */
+private const val BONUS_GLINTS: Boolean = false
 
 /* ------------------------------------------------------------------------------------------------
  * The ribbon ride: a sakura ribbon from the shelf into the hamper; up to 24 riders, 45 ms apart from 0.85 s.
@@ -1330,10 +1413,33 @@ private fun kiraRect(anchors: SceneAnchors, k: Int, density: Float): Rect {
  * card, revealing the album page (pink pinstripe vinyl, two pockets); a kira bloom, then the bonus magic-appears.
  * ------------------------------------------------------------------------------------------------ */
 
+/** The curl's leg (§11.2: a 150 dp triangle), where the plates leave that much room. */
 private val CORNER: Dp = 150.dp
 
+/** The shortest leg the content column keeps room for (FitColumn), and the gap the curl keeps from every plate. */
+private val CURL_FLOOR: Dp = 96.dp
+private val CURL_GAP: Dp = 8.dp
+
+/**
+ * The curl's leg (px) on a stage of [w] × [h] px at [stageOrigin] (root px): 150 dp, or less where a text plate comes
+ * nearer the corner. The peeled corner covers the whole leg × leg square (the album page in its bottom-right half, the
+ * folded-back flap in the other), so every plate must end above it or left of it: leg ≤ max(W − right, H − bottom) − 8 dp
+ * for each. "tap to skip" fades out as the curl starts and is not counted. FitColumn keeps this at least [CURL_FLOOR].
+ */
+private fun curlLeg(anchors: SceneAnchors, stageOrigin: Offset, w: Float, h: Float, density: Float): Float {
+    var leg = CORNER.value * density
+    val gap = CURL_GAP.value * density
+    for ((tag, p) in anchors.plates) {
+        if (tag == CelebrationTags.SKIP || p.isEmpty) continue
+        val right = p.right - stageOrigin.x
+        val bottom = p.bottom - stageOrigin.y
+        leg = min(leg, max(w - right, h - bottom) - gap)
+    }
+    return leg.coerceAtLeast(0f)
+}
+
 @Composable
-private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
+private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, anchors: SceneAnchors) {
     val c = PicnicTheme.colors
     val vinyl = c.albumVinyl
     val stripe = c.albumStripe
@@ -1351,9 +1457,10 @@ private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
                 else -> 1f
             }
             if (f <= 0f) return@Canvas
-            val leg = CORNER.toPx() * f
             val W = size.width
             val H = size.height
+            val full = curlLeg(anchors, anchors.stageOrigin, W, H, density)
+            val leg = full * f
             val corner = Path().apply {
                 moveTo(W - leg, H)
                 lineTo(W, H)
@@ -1368,7 +1475,7 @@ private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
                     drawRect(stripe, Offset(x, 0f), Size(2.dp.toPx(), H))
                     x += 10.dp.toPx()
                 }
-                for (p in pocketRects(W, H, this)) {
+                for (p in pocketRects(W, H, this, full)) {
                     drawRoundRect(Color.White.copy(alpha = 0.55f), p.topLeft, p.size, androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()))
                     drawRoundRect(Color.White.copy(alpha = 0.7f), Offset(p.left, p.top), Size(p.width, 9.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.dp.toPx()))
                     drawRoundRect(Families.periwinkle.mid.copy(alpha = 0.5f), p.topLeft, p.size, androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()), style = Stroke(1.5.dp.toPx()))
@@ -1386,11 +1493,15 @@ private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
             drawPath(flap, Families.periwinkle.mid, style = Stroke(1.dp.toPx()))
             drawLine(Color.White, Offset(W - leg, H), Offset(W, H - leg), 1.5.dp.toPx())
         }
-        // The kira bloom at the pocket, then the bonus sticker magic-appears in it (4 poses, 320 ms).
+        // The kira bloom at the pocket, then the bonus sticker magic-appears in it (4 poses, 320 ms), scaled with the leg.
         val density = LocalDensity.current
-        val pocket = with(density) { pocketRects(w.toPx(), h.toPx(), this).first() }
+        var stage by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+        val legPx = if (stage == androidx.compose.ui.unit.IntSize.Zero) 0f else curlLeg(anchors, anchors.stageOrigin, stage.width.toFloat(), stage.height.toFloat(), density.density)
+        val k = legPx / (CORNER.value * density.density)
+        val pocket = with(density) { pocketRects(stage.width.toFloat(), stage.height.toFloat(), this, legPx).first() }
         val pocketDp = with(density) { DpSize(pocket.width.toDp(), pocket.height.toDp()) }
-        Box(
+        Box(Modifier.fillMaxSize().onSizeChanged { stage = it })
+        if (legPx > 0f) Box(
             Modifier
                 .offset(with(density) { pocket.left.toDp() }, with(density) { pocket.top.toDp() })
                 .size(pocketDp),
@@ -1398,7 +1509,7 @@ private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
         ) {
             DecorSticker(
                 "kira",
-                size = 40.dp,
+                size = 40.dp * k,
                 shadow = false,
                 modifier = Modifier.graphicsLayer {
                     val pose = BookMotion.bloom(sc.since(BeatName.PocketKira))
@@ -1410,7 +1521,7 @@ private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
                 },
             )
             BonusArt(
-                bonus, 40.dp, ghost = false,
+                bonus, 40.dp * k, ghost = false,
                 modifier = Modifier.graphicsLayer {
                     val e = sc.since(BeatName.PocketMagic)
                     val pose = BookMotion.twin(e, 3)
@@ -1428,11 +1539,12 @@ private fun AlbumCorner(sc: SceneClock, bonus: BonusSticker?, w: Dp, h: Dp) {
     }
 }
 
-/** The two album pockets inside the 150 dp corner (scene px): the bonus goes into the first. */
-private fun pocketRects(w: Float, h: Float, density: androidx.compose.ui.unit.Density): List<Rect> = with(density) {
+/** The two album pockets inside the corner of [leg] px (scene px), drawn for a 150 dp leg and scaled with it: the bonus goes into the first. */
+private fun pocketRects(w: Float, h: Float, density: androidx.compose.ui.unit.Density, leg: Float): List<Rect> = with(density) {
+    val k = leg / CORNER.toPx()
     listOf(
-        Rect(Offset(w - 66.dp.toPx(), h - 78.dp.toPx()), Size(50.dp.toPx(), 52.dp.toPx())),
-        Rect(Offset(w - 112.dp.toPx(), h - 40.dp.toPx()), Size(40.dp.toPx(), 30.dp.toPx())),
+        Rect(Offset(w - 66.dp.toPx() * k, h - 78.dp.toPx() * k), Size(50.dp.toPx() * k, 52.dp.toPx() * k)),
+        Rect(Offset(w - 112.dp.toPx() * k, h - 40.dp.toPx() * k), Size(40.dp.toPx() * k, 30.dp.toPx() * k)),
     )
 }
 
@@ -1495,7 +1607,12 @@ private fun ClosingBar(sc: SceneClock, copy: CelebrationCopy, summaryAt: Long, a
                 .background(Families.lemon.pastel)
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         ) {
-            PicnicText(copy.closing, style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 17.sp), maxLines = 2)
+            PicnicText(
+                copy.closing,
+                style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 17.sp),
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
         }
         Canvas(
             Modifier
@@ -1525,7 +1642,7 @@ internal fun closingFill(elapsed: Long, hold: Long, reduced: Boolean): Float {
  * ------------------------------------------------------------------------------------------------ */
 
 @Composable
-private fun ProbeReports(sc: SceneClock, probe: MotionProbe, anchors: SceneAnchors, origin: Offset, size: Size) {
+private fun ProbeReports(sc: SceneClock, content: CelebrationContent, probe: MotionProbe, anchors: SceneAnchors, origin: Offset, size: Size) {
     // Read the clock in composition (tests only) so every frame reports.
     val now = sc.clock.now
     val density = LocalDensity.current.density
@@ -1567,7 +1684,8 @@ private fun ProbeReports(sc: SceneClock, probe: MotionProbe, anchors: SceneAncho
         // Overlays that could cross a text: the shake, the curl, the glints, the ink ring, the kira stars.
         if (dx != 0f) probe.overlay("cele_shake", now, Rect(origin, size))
         if (sc.since(BeatName.Curl) >= 0) {
-            val leg = CORNER.value * density
+            // The whole leg × leg square: the album page and the folded-back flap.
+            val leg = curlLeg(anchors, anchors.stageOrigin, size.width, size.height, density)
             probe.overlay("cele_curl", now, Rect(origin.x + size.width - leg, origin.y + size.height - leg, origin.x + size.width, origin.y + size.height))
         }
         if (sc.since(BeatName.TitleGlint) in 0 until Holo.glint.durationMillis) probe.overlay("cele_title_glint", now, anchors.plates[CelebrationTags.TITLE])
@@ -1577,6 +1695,12 @@ private fun ProbeReports(sc: SceneClock, probe: MotionProbe, anchors: SceneAncho
             val r = kiraRect(anchors, s, density)
             if (r != Rect.Zero && sc.since(BeatName.Kira) - s * 50L >= 0) probe.overlay("cele_kira_$s", now, r)
         }
+        // The shiny glint loop of holo stickers (500 ms every 4 s from when each is composed): the bonus card's never
+        // runs (BONUS_GLINTS); the hamper's holo minis glint from 2.1 s, away from every plate.
+        if (BONUS_GLINTS && sc.t() % PicnicMotion.shinyGlintPeriod < Holo.shinyGlint.durationMillis) {
+            probe.overlay("cele_bonus_glint", now, anchors.plates[CelebrationTags.BONUS])
+        }
+        if (content.riders.any { it.holo } && sc.t() >= HAMPER_FILLS) probe.overlay("cele_hamper_glint", now, anchors.hamper)
         if (sc.since(BeatName.Confetti) >= 0) probe.overlay("cele_confetti", now, Rect(origin, size), behind = true)
         probe.overlay("cele_rays", now, Rect(origin, size), behind = true)
     }

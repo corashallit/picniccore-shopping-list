@@ -4,7 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -144,11 +146,19 @@ object RowMotion {
         }
     }
 
-    /** The hanko's alpha: a 120 ms fade in on a check (out on an un-check) under reduced motion. */
+    /**
+     * The hanko's alpha: a 120 ms fade in on a check (out on an un-check) under reduced motion. Only the Slam phase fades
+     * it in: from the landing on (Away, the ghost's cross-fade, whose start is the landing) it simply stays (§8.8: the
+     * hanko at 0, then nothing else moves).
+     */
     fun hankoAlpha(checked: Boolean, phase: RowPhase?, rowStart: Long?, now: Long, reduced: Boolean): Float {
         if (!reduced || rowStart == null || phase == null) return 1f
         val e = now - rowStart
-        return if (liftsHanko(phase)) fadeOut(e) else if (checked) fadeIn(e) else 1f
+        return when {
+            liftsHanko(phase) -> fadeOut(e)
+            checked && phase == RowPhase.Slam -> fadeIn(e)
+            else -> 1f
+        }
     }
 }
 
@@ -173,17 +183,38 @@ fun Modifier.rowHanko(checked: Boolean, phase: RowPhase?, rowStart: Long?, clock
     }
 
 /**
- * The fold's focus hand-off (§8.5, item 193): when a section opens or folds ([open] changes; not on first composition),
- * focus moves once the 240 ms fold ([FoldMotion.DURATION], on the frame clock under the fixed motion scale) has run: to
- * the opened tray's chevron ([chevron]), or, when this section folded and no other opened ([anyOpen] false), to its
- * strip ([strip]). A section that folds because another opened leaves the focus to that one. WP5's list puts one in
- * each section's item.
+ * Her own fold and unfold taps, counted per section (item 193). WP5's list keeps one and bumps a section from its
+ * strip's and its chevron's click handlers (and their TalkBack and keyboard equivalents), the same handlers that call
+ * [Choreographer.onUserOpen]; folds and opens the presentation makes by itself (an aisle-done chain's [OpenOverride],
+ * the next stop opening behind the Next card, a [ScrollRequest]) never bump it.
+ */
+@Stable
+class FoldToggles {
+    private val counts = mutableStateMapOf<String, Int>()
+
+    /** How many times she toggled [sectionId] herself. */
+    fun of(sectionId: String): Int = counts[sectionId] ?: 0
+
+    /** She tapped [sectionId]'s strip (to open it) or its chevron (to fold it). */
+    fun bump(sectionId: String) {
+        counts[sectionId] = of(sectionId) + 1
+    }
+}
+
+/**
+ * The fold's focus hand-off (§8.5, §15, item 193): when she toggles a section herself ([userToggles] changes: her tap
+ * on its strip or chevron, [FoldToggles]), focus moves once the 240 ms fold ([FoldMotion.DURATION], on the frame clock
+ * under the fixed motion scale) has run: to the opened tray's chevron ([chevron]) when the section is then [open], or,
+ * when it folded and no other section is open ([anyOpen] false), to its strip ([strip]). Opens and folds that the
+ * chains make by themselves (the aisle-done fold, the next stop opening) never move focus: with TalkBack on, focus
+ * stays on the row she checked and the polite "Next: …" is not interrupted. WP5's list puts one in each section's item.
  */
 @Composable
-fun FoldFocusEffect(open: Boolean, anyOpen: Boolean, chevron: FocusRequester, strip: FocusRequester) {
+fun FoldFocusEffect(open: Boolean, anyOpen: Boolean, userToggles: Int, chevron: FocusRequester, strip: FocusRequester) {
     val first = remember { booleanArrayOf(true) }
+    val isOpen by androidx.compose.runtime.rememberUpdatedState(open)
     val others by androidx.compose.runtime.rememberUpdatedState(anyOpen)
-    LaunchedEffect(open) {
+    LaunchedEffect(userToggles) {
         if (first[0]) {
             first[0] = false
             return@LaunchedEffect
@@ -192,7 +223,7 @@ fun FoldFocusEffect(open: Boolean, anyOpen: Boolean, chevron: FocusRequester, st
         // The requester may not be attached (the item scrolled away): then focus stays where it is.
         runCatching {
             when {
-                open -> chevron.requestFocus()
+                isOpen -> chevron.requestFocus()
                 !others -> strip.requestFocus()
             }
         }

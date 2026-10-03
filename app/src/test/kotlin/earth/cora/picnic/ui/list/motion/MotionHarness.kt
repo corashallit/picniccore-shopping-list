@@ -277,7 +277,7 @@ fun HarnessList(model: HarnessModel, p: ListPresentation, state: LazyListState, 
             val chevron = remember { FocusRequester() }
             val strip = remember { FocusRequester() }
             val isOpen = s.id == open
-            FoldFocusEffect(isOpen, anyOpen = !open.isNullOrEmpty(), chevron, strip)
+            FoldFocusEffect(isOpen, anyOpen = !open.isNullOrEmpty(), userToggles = model.toggles.of(s.id), chevron = chevron, strip = strip)
             if (isOpen) HarnessTray(model, s, p, current = true, chevron = chevron) else HarnessStrip(model, s, p, strip)
         }
     }
@@ -301,7 +301,7 @@ private fun HarnessStrip(model: HarnessModel, s: AisleSection, p: ListPresentati
             .unfoldMotion(ap?.foldT0, clock, reduced)
             .focusRequester(focus)
             .focusProperties { canFocus = true }
-            .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, role = Role.Button) { model.open(s.id) },
+            .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, role = Role.Button) { model.tapStrip(s.id) },
     ) {
         Box(
             Modifier
@@ -406,7 +406,7 @@ private fun HarnessTray(model: HarnessModel, s: AisleSection, p: ListPresentatio
                     .focusRequester(chevron)
                     .focusProperties { canFocus = true }
                     // A stand-in target with no drawn indication (WP5 draws the real chevron and its focus ring).
-                    .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = "Fold") { model.open("") },
+                    .clickable(remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = "Fold") { model.tapChevron(s.id) },
             )
             with(model.engine.anchors) {
                 MotionBasket(

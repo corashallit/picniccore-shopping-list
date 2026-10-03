@@ -26,6 +26,9 @@ import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.core.model.setOpenAisle
 import earth.cora.picnic.core.model.setRarity
 import earth.cora.picnic.core.model.toggleChecked
+import earth.cora.picnic.core.model.toggleCheckedStartingNewBook
+import earth.cora.picnic.core.model.undoNewBook
+import earth.cora.picnic.core.model.AutoNewBook
 import earth.cora.picnic.core.store.Album
 import earth.cora.picnic.ui.theme.AisleLooks
 
@@ -241,7 +244,10 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
         val before = state
         val beforeGrouped = before.grouped(listId)
         now += 1000
-        val after = before.toggleChecked(listId, itemId, now)
+        // The check-off tap goes through the idle rule (§0.4 Q9): more than 12 h after the trip's last activity, it
+        // files the old book and checks the item into a fresh one.
+        val (after, auto) = before.toggleCheckedStartingNewBook(listId, itemId, now)
+        lastAutoNewBook = auto
         state = after
         val afterGrouped = after.grouped(listId)
         engine.setSections(afterGrouped.motionSections())
@@ -269,6 +275,7 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
             aisleIndex = if (position > 0) position - 1 else -1,
             aisleWasOpen = beforeGrouped.openSectionId == sectionId,
             finaleShown = beforeList.trip?.finaleShownAt != null,
+            newBook = auto != null,
         )
         // D2 / item 90: the next stop opens automatically behind the Next card (the VM sets it; the engine holds the
         // finished aisle open until its fold, then keeps everything folded until the Next card shows).
@@ -279,6 +286,38 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
         if (!checked && aisleChanged) state = state.setOpenAisle(listId, sectionId)
         engine.onToggle(event)
         return event
+    }
+
+    /** The last check-off's automatic new book (§0.4 Q9), for the toast's Undo; null when it started none. */
+    var lastAutoNewBook: AutoNewBook? = null
+        private set
+
+    /**
+     * Undo on "New sticker book for today" (§0.4 Q9): the old book and its items come back and the tapped item is
+     * checked into the old book; the engine turns the page back and fades the twin into its old spot.
+     */
+    fun undoNewBook(): ListChange? {
+        val auto = lastAutoNewBook ?: return null
+        lastAutoNewBook = null
+        syncFinale()
+        now += 1000
+        state = state.undoNewBook(auto.undo, now)
+        engine.setSections(grouped().motionSections())
+        // The old book's aisles come back as they were (done ones stamped, lids shut): nothing completes or re-opens
+        // by the Undo itself, so the change carries only the turn back and the tapped item's spot.
+        val c = ListChange(
+            aisleCompleted = emptySet(),
+            aisleReopened = emptySet(),
+            tripCompleted = false,
+            tripReopened = false,
+            nextSectionId = null,
+            cause = ChangeCause.NEW_BOOK_UNDO,
+            openSectionId = grouped().openSectionId,
+            finaleShown = state.list(listId)!!.trip?.finaleShownAt != null,
+            slot = state.list(listId)!!.items.first { it.id == auto.undo.itemId }.bookSlot,
+        )
+        engine.onChange(c)
+        return c
     }
 
     /** Deletes [itemId] (a tear-off or the Edit sheet's Delete): a ListChange when it finishes an aisle or the trip. */
@@ -293,9 +332,26 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
     /** Any other change through [op] (a re-sort, an aisle-text edit, an Undo), reported with [cause]. */
     fun apply(cause: ChangeCause, op: (AppState) -> AppState): ListChange? = change(cause) { op(it) }
 
-    /** Opens [sectionId] (a tap on its strip). */
+    /** Sets the open section without telling anyone (setting a scene up; "" = all folded). Not a tap: see [tapStrip]. */
     fun open(sectionId: String?) {
         state = state.setOpenAisle(listId, sectionId)
+    }
+
+    /** Her own fold and unfold taps (FoldFocusEffect hands focus off only for these). */
+    val toggles = FoldToggles()
+
+    /** She taps [sectionId]'s strip: it opens and the others fold (§6.1); her choice wins over any chain at once. */
+    fun tapStrip(sectionId: String) {
+        toggles.bump(sectionId)
+        open(sectionId)
+        engine.onUserOpen(sectionId)
+    }
+
+    /** She taps the open tray [sectionId]'s chevron: everything folds. */
+    fun tapChevron(sectionId: String) {
+        toggles.bump(sectionId)
+        open("")
+        engine.onUserOpen(null)
     }
 
     /**

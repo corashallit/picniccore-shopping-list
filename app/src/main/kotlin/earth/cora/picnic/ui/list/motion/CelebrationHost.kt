@@ -44,6 +44,8 @@ const val CELEBRATION_TAG: String = "picnic_celebration"
 @Composable
 fun CelebrationHost(engine: MotionChoreographer, presentation: ListPresentation, modifier: Modifier = Modifier) {
     val cele = presentation.celebration ?: return
+    // Nothing to show (the engine never starts a scene without content, §11.3): no empty node may take a tap or Back.
+    if (cele.content == null || cele.plan == null) return
     val copy = rememberCelebrationCopy()
     val label = stringResource(R.string.motion_celebration)
     val closeLabel = stringResource(R.string.motion_celebration_close)

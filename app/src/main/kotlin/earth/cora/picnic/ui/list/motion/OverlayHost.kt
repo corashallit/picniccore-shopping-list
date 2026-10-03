@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +73,12 @@ fun MotionOverlay(
     eggs: @Composable BoxScope.() -> Unit = {},
 ) {
     val density = LocalDensity.current
+    // A toast's hold waits while the celebration covers it, then restarts in full: an Undo is never cut short, not even
+    // by a scene she never saw it under (§4.15, §9).
+    val covered = presentation.celebration != null
+    SideEffect { toasts.paused = covered }
+    // The toasts may outlive this screen (a host higher up): never leave them paused.
+    DisposableEffect(toasts) { onDispose { toasts.paused = false } }
     val card = presentation.nextCard
     val toastId = toasts.current?.id
     val stack = remember { StackState() }

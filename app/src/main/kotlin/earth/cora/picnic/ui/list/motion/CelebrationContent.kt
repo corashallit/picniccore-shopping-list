@@ -59,6 +59,7 @@ data class BonusSticker(
 @Immutable
 data class CelebrationContent(
     val listId: String,
+    /** The list's name as the scene's chip shows it ([chipName]: a very long one is cut at a word, with "…"). */
     val listName: String,
     val stats: TripStatsValue,
     /** Items on the list (the LCD's denominator: every one is checked). */
@@ -70,6 +71,21 @@ data class CelebrationContent(
     val bonus: BonusSticker?,
 ) {
     companion object {
+        /**
+         * The longest list name the chip shows whole: at 200 % its three lines hold it (§15), so the title beat counts
+         * exactly the words on screen (§9). A longer name is cut at the last word that fits, with "…".
+         */
+        const val CHIP_NAME_MAX: Int = 64
+
+        /** [title] as the chip shows it (see [CHIP_NAME_MAX]). */
+        fun chipName(title: String): String {
+            val t = title.trim().replace(Regex("\\s+"), " ")
+            if (t.length <= CHIP_NAME_MAX) return t
+            val room = t.substring(0, CHIP_NAME_MAX - 1)
+            val cut = room.lastIndexOf(' ').takeIf { it >= CHIP_NAME_MAX / 2 } ?: room.length
+            return room.substring(0, cut).trimEnd(' ', ',', '·', '-', '–', '—', '&', '/', '+', ':') + "…"
+        }
+
         /**
          * The content for [listId]'s complete trip in [state]: stops in the list's order ("Everything else" first when
          * it is a stop), riders by [RideRules], the bonus by [BonusRule] against [album]. Null without that list.
@@ -90,7 +106,7 @@ data class CelebrationContent(
             val gottenByStop = grouped.sections.map { it.gotten }
             return CelebrationContent(
                 listId = list.id,
-                listName = list.title,
+                listName = chipName(list.title),
                 stats = TripStats.of(list, grouped.stops),
                 total = list.items.size,
                 petHatched = eggs && list.trip?.pet == true,
