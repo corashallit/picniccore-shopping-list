@@ -233,6 +233,7 @@ internal fun HankoVariantsKit() {
  * A row harness (the list's row is WP5's; this shows the theme pieces it is built from): sticker, name over detail, the
  * 48 dp checkbox target. States: unchecked with flags, pressed (the highlighter band behind the text), checked.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun RowHarness(
     name: String,
@@ -275,7 +276,12 @@ internal fun RowHarness(
                     }
                 },
             )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // The chip wraps under the detail when a large font leaves it no room beside it.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(detail, style = t.itemDetail.copy(color = c.inkSoft))
                 if (holo) RarityChip(jackpot = false)
             }

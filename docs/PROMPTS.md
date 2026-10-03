@@ -284,6 +284,10 @@ Item 22 comes from the WP7 audit (DESIGN_STICKER §6.2 rule 4, checklist 201; 20
 
 22. **A plain list needs no message.** The v-C rule asked for "one short, friendly sentence saying what you added" on every answer, so almost every answer carried a message that was not an echo of the note, and the app's quick add (≤ 3 items, nothing skipped, no message worth showing) almost never happened. The message is now empty for a plain list added exactly as named, and present only when there is something to explain: a skipped or left-out row and why, a guess, or nothing to buy. The eval checks the message only when something needs explaining, and its language only when there is one.
 
+Item 23 comes from the polish package (2026-10-03, measured in §10.3):
+
+23. **A correction she made is worth a message.** Item 22's wording ("nothing skipped, guessed or left out") let a voice note that changed its mind ("two kilos of potatoes, no wait, just one kilo", "scratch the paper towels") come back as a plain list with an empty message, so the app added it without showing that the correction was heard. The rule now lists what earns a message: a dish, meal or recipe, a skipped item, a guess, a correction it applied (a scratched item or a changed amount), or nothing to buy; a plain list added as asked stays silent. The eval asks for a message on the cases tagged `self-correction` too.
+
 ### Live results with the shipped prompts (2026-10-01, `./gradlew -p core test -Plive=true`, prompts v1)
 
 | Case | Result | Latency |
@@ -409,6 +413,8 @@ Every row is re-scored against the final `cases.json`, so the rows are comparabl
 | **pantry-final** | **5 pantry × 3** | **14/15** | **100%** | **100%** | **100%** | **97.8%** | **96.7%** | **100%** | **3.7 / 6.5 s** | **$0.12** |
 
 **Message rule (2026-10-03, §8 item 22), one run each on the shipped `ModelDefaults`:** `recipe-pancakes`, `list-canadian-shorthand`, `list-french`, `list-vague-sam`, `list-already-on-list`, `list-learned-corrections`, `nothing-to-buy`, `pantry-plain-list`: **8/8 clean**, recall, precision, aisle and icon 100%, checks 46/46, latency median 2.7 s, US$0.067 in all. The four plain lists answered with an empty message; the recipe ("Butter is already on your list."), the duplicates, the vague item ("check with Sam") and the small talk each said why.
+
+**Message rule, corrections (2026-10-03, §8 item 23), one run each on the shipped `ModelDefaults`:** `voice-feta-oatly`, `voice-cat-food` (the two `self-correction` cases), `list-canadian-shorthand`, `list-french`, `pantry-plain-list`, `recipe-pancakes`, `list-already-on-list`, `nothing-to-buy`: **6/8 clean**, recall and precision 97.4% (37/38), aisle and icon 100%, checks 63/64, ingest latency median 3.3 s, US$0.074 in all. Every message check passed: the three plain lists answered with an empty message; the two voice notes said what they corrected ("Skipped paper towels—you said you already have some.", "Updated the potatoes to 1 kg."); the recipe, the duplicates and the small talk each said why. The two unclean runs are not about the message: the known transcription miss (§10.6) and "Cat wet food" for the expected "cat food".
 
 **Pantry gate (pantry-final, 3 runs):** pantry-covered worked-out items skipped **18/18** (flour, sugar, salt and baking powder in every pancake run; cinnamon and nutmeg in every spiced banana bread run); named items skipped for the pantry **0/21** ("flour, milk" and the photographed salt were kept every time); almond flour kept 3/3. The one unclean run was "Ground cinnamon" / "Ground nutmeg" answered approximate (fixed afterwards in the catalog, §8 item 21). pantry-v1 and v2 misses were eval gaps (macarons with a pinch of salt and a buttercream, brown sugar in a spiced loaf), fixed in `cases.json`. The art pass spent about **US$0.42** (the runs above and one CLI probe).
 

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
@@ -438,7 +439,12 @@ internal object PuffyPinholes {
 /** Where a drawn puffy text's ink starts inside its box (the stroke's half-width). */
 internal fun PuffyFit.textOrigin(): Offset = Offset(half, half)
 
-/** The wordmark (§2.7): "Kirakira" strawberry mid, "Basket" ramune mid, a 7 dp white stroke, hs2, twinkling stars beside it. */
+/**
+ * The wordmark (§2.7): "Kirakira" strawberry mid, "Basket" ramune mid, a 7 dp white stroke, hs2, twinkling stars beside
+ * it. It shrinks to fit one line (down to 80 % of the compact size); when a large font leaves it no room even then, it
+ * stacks, "Basket" under "Kirakira", in a box as wide as its longer word, so the stars stay beside it: the app's name
+ * is never ellipsized.
+ */
 @Composable
 fun Wordmark(text: String, modifier: Modifier = Modifier, compact: Boolean = false) {
     val split = text.indexOf(' ').let { if (it < 0) text.length else it }
@@ -451,20 +457,41 @@ fun Wordmark(text: String, modifier: Modifier = Modifier, compact: Boolean = fal
         pop()
     }
     val t = PicnicTheme.type
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        PuffyText(
-            annotated,
-            style = if (compact) t.wordmarkCompact else t.wordmarkLarge,
-            stroke = 7.dp,
-            strokeColor = Color.White,
-            shadow = PicnicTheme.shadows.hs2,
-            heading = true,
-            minFontSize = t.wordmarkCompact.fontSize * 0.8f,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        Box(Modifier.size(width = 34.dp, height = 44.dp)) {
+    val style = if (compact) t.wordmarkCompact else t.wordmarkLarge
+    val minSize = t.wordmarkCompact.fontSize * 0.8f
+    val stroke = 7.dp
+    val shadow = PicnicTheme.shadows.hs2
+    val stars = 34.dp
+    val measurer = rememberTextMeasurer(cacheSize = 4)
+    val density = LocalDensity.current
+    BoxWithConstraints(modifier) {
+        val room = with(density) { (stroke + shadow.x).toPx() }
+        val textRoom = constraints.maxWidth - with(density) { stars.roundToPx() }
+        // One line at the smallest size it may shrink to, or the widest word at full size when it has to stack.
+        val stackWidth: Int? = remember(annotated, style, density, textRoom) {
+            fun width(s: String, size: TextUnit) = measurer.measure(s, style.copy(fontSize = size), maxLines = 1, softWrap = false).size.width
+            when {
+                constraints.maxWidth == Constraints.Infinity -> null
+                width(annotated.text, minSize) + room <= textRoom -> null
+                else -> kotlin.math.ceil(annotated.text.split(' ').maxOf { width(it, style.fontSize) } + room).toInt().coerceAtMost(textRoom)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PuffyText(
+                annotated,
+                style = style,
+                stroke = stroke,
+                strokeColor = Color.White,
+                shadow = shadow,
+                heading = true,
+                minFontSize = minSize,
+                maxLines = if (stackWidth == null) 1 else 2,
+                modifier = if (stackWidth == null) Modifier.weight(1f, fill = false) else Modifier.width(with(density) { stackWidth.toDp() }),
+            )
+            Box(Modifier.size(width = stars, height = 44.dp)) {
             TwinkleSparkle(Modifier.size(if (compact) 21.dp else 28.dp).align(Alignment.TopStart), color = Families.lemon.mid, trace = Families.lemon.trace)
             DecorSticker("star", Modifier.align(Alignment.BottomEnd), size = if (compact) 15.dp else 20.dp)
+            }
         }
     }
 }

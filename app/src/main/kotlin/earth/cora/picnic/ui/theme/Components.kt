@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -73,7 +74,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -978,27 +981,40 @@ fun StoreAisleChip(number: Int, modifier: Modifier = Modifier) {
     ChipFace(
         fill = Families.lemon.pastel,
         modifier = modifier.clearAndSetSemantics { contentDescription = label },
-        height = labelChipHeight(22.dp, style, border = 2.dp),
+        height = labelChipHeight(22.dp, "A$number", style, border = 2.dp),
         border = 2.dp,
         horizontal = 7.dp,
         grows = false,
     ) {
         Glyph(PicnicGlyph.Basket, null, tint = PicnicTheme.colors.ballpoint, size = 13.dp)
-        Text("A$number", style = style, maxLines = 1)
+        Text("A$number", style = style, maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFitWidth())
     }
 }
 
 /**
- * A small chip's height for a one-line [style] label: [min], or the label's line ([lineHeightPx]) with [border] and
- * 1 dp of room above and below it when a large font needs more. Zen Maru's and DynaPuff's own ascent and descent are
- * taller than these chips' 15 sp line; that leading may overhang the line inside the face (as it always has at 1.0),
- * the letters never do.
+ * A small chip's height for its one-line [label] in [style]: [min] at font scale 1.0, and under a larger font [min]
+ * scaled as the label's text box grew from 1.0, so the face keeps its drawn proportions and the label its place in it
+ * (never sinking onto the border). It is always at least that text box (Zen Maru's and DynaPuff's ascent and descent,
+ * taller than these chips' 15 sp line) inside [border], so the box is never cut; at 1.0 the box may overhang the
+ * face's inside by up to [CHIP_LEADING] of blank leading, as it always has.
  */
 @Composable
-internal fun labelChipHeight(min: Dp, style: TextStyle, border: Dp): Dp {
-    val line = with(LocalDensity.current) { lineHeightPx(style.lineHeight, style.fontSize).toDp() }
-    return maxOf(min, line + border * 2 + CHIP_LABEL_ROOM * 2)
+internal fun labelChipHeight(min: Dp, label: String, style: TextStyle, border: Dp): Dp {
+    val measurer = rememberTextMeasurer(cacheSize = 4)
+    val density = LocalDensity.current
+    return remember(label, style, density, measurer, min, border) {
+        fun box(at: Density) = measurer.measure(label, style, maxLines = 1, softWrap = false, density = at).size.height.toFloat()
+        val now = box(density)
+        val atOne = box(Density(density.density, 1f))
+        with(density) {
+            val needed = maxOf(min.toPx() * now / atOne, now + border.toPx() * 2)
+            if (needed <= (min + CHIP_LEADING).toPx()) min else needed.toDp()
+        }
+    }
 }
+
+/** The blank leading a small chip's label box may overhang its face by before the chip grows. */
+private val CHIP_LEADING = 1.dp
 
 /**
  * The "shiny!" / "jackpot!" chip (§4.7): DynaPuff 13 sp ballpoint on a holo pill with a 1.5 dp white border, 22 dp tall
@@ -1011,7 +1027,7 @@ fun RarityChip(jackpot: Boolean, modifier: Modifier = Modifier) {
     val style = PicnicTheme.type.counter.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp)
     Box(
         modifier
-            .height(labelChipHeight(22.dp, style, border = 1.5.dp))
+            .height(labelChipHeight(22.dp, text, style, border = 1.5.dp))
             .clearAndSetSemantics { }
             .clip(shape)
             .background(Color.White)
@@ -1021,7 +1037,30 @@ fun RarityChip(jackpot: Boolean, modifier: Modifier = Modifier) {
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = style, maxLines = 1)
+        Text(text, style = style, maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFitWidth())
+    }
+}
+
+/**
+ * Lays its content out at its natural width and, when the slot is narrower (a large font in a crowded row), draws it
+ * scaled down, centred, to the slot's width: a badge's word stays whole instead of being cut ("shin" for "shiny!").
+ */
+internal fun Modifier.shrinkToFitWidth(): Modifier = layout { measurable, constraints ->
+    val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
+    if (!constraints.hasBoundedWidth || p.width <= constraints.maxWidth) {
+        layout(constraints.constrainWidth(p.width), constraints.constrainHeight(p.height)) {
+            p.place(0, (constraints.constrainHeight(p.height) - p.height) / 2)
+        }
+    } else {
+        val w = constraints.maxWidth
+        val h = constraints.constrainHeight(p.height)
+        val scale = w.toFloat() / p.width
+        layout(w, h) {
+            p.placeWithLayer((w - p.width) / 2, (h - p.height) / 2) {
+                scaleX = scale
+                scaleY = scale
+            }
+        }
     }
 }
 

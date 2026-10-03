@@ -156,7 +156,10 @@ class PuffyTextBoundsTest {
         }
     }
 
-    /** The titles in their real callers: nothing that holds them clips into their boxes, at 1.0 and 2.0. */
+    /**
+     * The titles in their real callers: nothing that holds them clips into their boxes, at 1.0 and 2.0. The wordmark is
+     * the app's name: it stacks rather than ellipsize, at any scale.
+     */
     @Test
     fun realCallersNeverClipTheirTitles() {
         val puffy = SemanticsMatcher.keyIsDefined(PuffyFontSize)
@@ -180,6 +183,8 @@ class PuffyTextBoundsTest {
                 earth.cora.picnic.ui.common.SecondaryScreen("Sticker album", onBack = {}, subtitle = "★ 64 of 216 collected · 3 holo") {}
             },
             "wordmark" to { Column(Modifier.padding(16.dp)) { Wordmark("Kirakira Basket") } },
+            // About on a 320 dp phone: 288 dp between its margins.
+            "wordmark" to { Column(Modifier.padding(16.dp).width(288.dp)) { Wordmark("Kirakira Basket") } },
             "next card" to {
                 Box(Modifier.size(360.dp, 400.dp)) {
                     NextStopCard(4, "Baking", storeAisle = 2, look = AisleLooks.of(4), nextLabel = "NEXT")
@@ -204,6 +209,7 @@ class PuffyTextBoundsTest {
                 assertTrue("$what: an ancestor clips its box ${n.clippedAndWhole()}", n.isWhole())
                 val (_, whole) = n.clippedAndWhole()
                 assertTrue("$what: box $whole leaves the window $root", whole.left >= root.left - 0.5f && whole.right <= root.right + 0.5f)
+                if (name == "wordmark") assertTrue("$what: the wordmark is ellipsized", !n.config.contains(earth.cora.picnic.ui.a11y.TextOverflowed))
             }
         }
     }

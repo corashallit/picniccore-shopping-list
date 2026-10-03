@@ -273,7 +273,7 @@ The status and navigation bar icon styles follow the resolved variant (dark icon
 
 | Role | Family / weight | Size | Colour | Treatment |
 |---|---|---|---|---|
-| Wordmark ("Kirakira Basket") | DynaPuff 700 | 40 sp (splash, empty state, About), 30 sp compact | "Kirakira" strawberry mid, "Basket" ramune mid (logotype, exempt from contrast) | puffy: 7 dp white stroke first, then fill, hard shadow hs2 under the whole word; a 28 dp 4-point star and a 20 dp 5-point star twinkle beside it, never on a glyph; no crescent anywhere in the letterforms |
+| Wordmark ("Kirakira Basket") | DynaPuff 700 | 40 sp (splash, empty state, About), 30 sp compact | "Kirakira" strawberry mid, "Basket" ramune mid (logotype, exempt from contrast) | puffy: 7 dp white stroke first, then fill, hard shadow hs2 under the whole word; a 28 dp 4-point star and a 20 dp 5-point star twinkle beside it, never on a glyph; no crescent anywhere in the letterforms; when a large font leaves it no room on one line it stacks ("Basket" under "Kirakira"), never ellipsized |
 | Screen title | DynaPuff 700 | 24 sp expanded, 20 sp collapsed; shrinks to 20 sp to fit one line, then ellipsis | ballpoint (Glow: ink) | puffy stroke 6 dp white (Glow `#3A438A`), shadow hs |
 | App-bar subtitle | Zen Maru 700 | 13 sp | ballpointSoft | 13 dp lemon star vector leads ("★ Hillcrest Market · 8 stops"); sits on a pad patch, never straight on the pinstripes (§4.1) |
 | Aisle tab label | DynaPuff 700 | 20 sp; shrinks to 16 sp to fit, then ellipsizes (§4.10) | aisle trace on folded strips; **ballpoint** on the open tray's tab, the pinned plate and the Next card | no stroke. Trace on its own pastel is 3.79–5.73 (large-text rule), so the label she reads walking under store lights, the current aisle's, is ballpoint (≥7.85), the strongest text on the list |
@@ -506,8 +506,8 @@ Semantics: the row is the toggle (`Role.Checkbox`, `toggleableState` on/off); Sp
 | Kiss-cut label | 32 dp face in a 48 dp target, pastel fill, 3 dp white border, hs, Zen Maru 700 13.5 sp ballpoint |
 | Selected | mid fill, ballpoint text, a leading 13 dp puffy star |
 | Aisle chip | leads with a 20 dp number circle in the aisle trace (DynaPuff 11 sp, one of the two exemptions from the 13 sp floor, §2.7; the number repeats the label) |
-| Store-aisle chip "A2" | 22 dp lemon-pastel pill (taller when a large font needs it), 2 dp white border, hs, a small basket glyph + "A2"; TalkBack "store aisle 2" |
-| "shiny!" / "jackpot!" | after the detail text, DynaPuff 13 sp ballpoint on a holo pill with a 1.5 dp white border; decorative (the row's TalkBack label says "shiny") |
+| Store-aisle chip "A2" | 22 dp lemon-pastel pill (under a large font it scales with its label, keeping its proportions), 2 dp white border, hs, a small basket glyph + "A2"; TalkBack "store aisle 2" |
+| "shiny!" / "jackpot!" | after the detail text, DynaPuff 13 sp ballpoint on a holo pill with a 1.5 dp white border, 22 dp tall (scaling with its label under a large font); in a slot too narrow for it the word is drawn smaller, never cut; decorative (the row's TalkBack label says "shiny") |
 | Source chip (web results) | kiss-cut label with a link glyph; opens the URL |
 | Filter chips (Album: Groceries · Picnic · Seasonal; List switcher) | as label; selected as above |
 
@@ -1698,7 +1698,8 @@ class ToastHostState { …; var paused: Boolean }              // (+ WP6) true w
 @Composable fun ChipFace(fill: Color, modifier: Modifier = Modifier, height: Dp = 32.dp, border: Dp, horizontal: Dp = 11.dp,
     grows: Boolean = true, content: @Composable RowScope.() -> Unit)   // (polish) height is a minimum: the face grows
     // with its label at large font scales; NumberCircle's size, the pills' 52 / 48 dp and the store and rarity chips'
-    // 22 dp are minimums too (they grow from their label's line), so no label clips at font scale 2.0
+    // 22 dp are minimums too (those two scale with their label's text box, keeping their 1.0 proportions, and draw
+    // their word smaller rather than cut it in a slot too narrow for it), so no label clips at font scale 2.0
 // TripProgress is removed (replaces): its slot is now the sticker book (WP5)
 
 // icons/StickerArt.kt (owner WP1) — replaces IconImages (consumers: ItemIcon, IconRepository)
@@ -2244,8 +2245,8 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 
 ### 20.23 Polish (3 October)
 
-337. **[WP4 · POLISH]** Nothing in the theme kit clips at font scale 2.0, and at 1.0 everything keeps its drawn size: the number circle (24 / 20 dp) grows until its ring clears its numeral; label, aisle and source chips (32 dp), the store-aisle and rarity chips (22 dp) and the pills (52 / 48 dp) grow with their labels; a ruled multi-line field's rules follow its lines (pitch = the text's line height); the LCD star's blink moves no dot; a disabled round sticker (More, Back, the add-bar buttons) is a flat `backing` disc with a ballpointSoft glyph, no gloss or shadow. Local workarounds go (the recipe card's fixed-size badges, the Next card's own store chip). — *Test:* `LargeTextComponentsTest.numberCircleGrowsWithItsNumeral`, `.chipsAndPillsGrowInsteadOfClipping`, `.ruledFieldRulesFollowTheLines`, `.lcdStarBlinkNeverMovesADot`, `ButtonGlossTest.allowedWhiteOnly` (disabled faces), goldens `button_round_disabled_*`, `addbar_waiting`, `field_multiline`
-338. **[WP4 · POLISH]** Puffy lettering has no pinholes or hairline cracks where its glyphs' halos nearly meet (the NEXT "XT" speck), and an ellipsized title drops the space before its "…" and ends its box at it. — *Test:* `PuffyTextBoundsTest.strokeHasNoPinholes`, `.pinholeFinder`, `.ellipsisDropsTheSpace`, goldens `puffy_title_ellipsized`, `nextcard_*`
+337. **[WP4 · POLISH]** Nothing in the theme kit clips at font scale 2.0, and at 1.0 everything keeps its drawn size: the number circle (24 / 20 dp) grows until its ring clears its numeral; label, aisle and source chips (32 dp), the store-aisle and rarity chips (22 dp, keeping their proportions, the word drawn smaller rather than cut in a narrow slot) and the pills (52 / 48 dp) grow with their labels; a ruled multi-line field's rules follow its lines (pitch = the text's line height); the LCD star's blink moves no dot; a disabled round sticker (More, Back, the add-bar buttons) is a flat `backing` disc with a ballpointSoft glyph, no gloss or shadow. Local workarounds go (the recipe card's fixed-size badges, the Next card's own store chip). — *Test:* `LargeTextComponentsTest.numberCircleGrowsWithItsNumeral`, `.chipsAndPillsGrowInsteadOfClipping`, `.ruledFieldRulesFollowTheLines`, `.lcdStarBlinkNeverMovesADot`, `ButtonGlossTest.allowedWhiteOnly` (disabled faces), goldens `button_round_disabled_*`, `addbar_waiting`, `field_multiline`
+338. **[WP4 · POLISH]** Puffy lettering has no pinholes or hairline cracks where its glyphs' halos nearly meet (the NEXT "XT" speck), and an ellipsized title drops the space before its "…" and ends its box at it; the wordmark is never ellipsized (it stacks under a large font on a small phone). — *Test:* `PuffyTextBoundsTest.strokeHasNoPinholes`, `.pinholeFinder`, `.ellipsisDropsTheSpace`, `.realCallersNeverClipTheirTitles` (the wordmark at 288 dp), goldens `puffy_title_ellipsized`, `puffy_title_{day,glow}_long`, `nextcard_*`
 
 ## 21. Work packages
 

@@ -133,10 +133,15 @@ class LargeTextComponentsTest {
 
     /**
      * Chips (§4.7) and pills (§4.6): at 1.0 the label chip's face is 32 dp, the store chip 22 dp and the primary pill
-     * 52 dp; at larger scales they grow and no label is cut (by its own box or a clip), up to 3.0.
+     * 52 dp; at larger scales they grow and no label is cut (by its own box or a clip), up to 3.0. The two small chips
+     * keep their label's place as they grow: the gap under the letters keeps its share of the gap over them. Squeezed
+     * into a slot narrower than its word (a crowded row at a large font), the rarity chip draws the whole word smaller
+     * instead of cutting it ("shin" for "shiny!").
      */
     @Test
+    @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
     fun chipsAndPillsGrowInsteadOfClipping() {
+        val placeAtOne = mutableMapOf<String, Float>()
         for (scale in listOf(1f, 1.3f, 2f, 3f)) {
             show(scale) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -146,6 +151,7 @@ class LargeTextComponentsTest {
                     Box(Modifier.testTag("source")) { SourceChip("pancake recipe", onClick = {}) }
                     Box(Modifier.testTag("storeChip")) { StoreAisleChip(12) }
                     Box(Modifier.testTag("rarity")) { RarityChip(jackpot = true) }
+                    Box(Modifier.width(56.dp)) { RarityChip(jackpot = true, modifier = Modifier.testTag("rarityNarrow")) }
                     // The two chips' words drawn on their own, to compare their ink with.
                     Box(Modifier.testTag("storeBare").background(Color.White)) {
                         Text("A12", style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp), maxLines = 1)
@@ -184,7 +190,19 @@ class LargeTextComponentsTest {
                 val inChip = requireNotNull(inkOf(chip, skip)) { "$chip at $scale: no letters" }
                 val alone = requireNotNull(inkOf(bare, 0f)) { "$bare at $scale: no letters" }
                 assertTrue("$chip at $scale: letters cut (${inChip.width()}×${inChip.height()} for ${alone.width()}×${alone.height()})", inChip.width() >= alone.width() - 1 && inChip.height() >= alone.height() - 1)
+                // ...and they keep their place as the chip grows: never sinking onto the bottom border.
+                val below = node(chip).boundsInRoot.height - inChip.bottom
+                val place = below / inChip.top
+                if (scale == 1f) placeAtOne[chip] = place
+                assertTrue("$chip at $scale: letters sink (gap under / over ${"%.2f".format(place)}, at 1.0 ${"%.2f".format(placeAtOne[chip])})", place >= placeAtOne.getValue(chip) * 0.85f)
             }
+            val narrow = node("rarityNarrow").boundsInRoot
+            assertTrue("narrow rarity chip stays in its 56 dp slot at $scale (${narrow.width / px} dp)", narrow.width <= 56f * px + 0.5f)
+            val squeezed = requireNotNull(inkOf("rarityNarrow", 0f)) { "rarityNarrow at $scale: no letters" }
+            val word = requireNotNull(inkOf("rarityBare", 0f))
+            val shape = squeezed.width().toFloat() / squeezed.height()
+            val whole = word.width().toFloat() / word.height()
+            assertTrue("narrow rarity chip at $scale shows the whole word (ink ${"%.2f".format(shape)} wide per tall, the word ${"%.2f".format(whole)})", abs(shape - whole) <= whole * 0.08f)
             if (scale == 1f) {
                 assertEquals("label chip face 32 dp", 32f * px, node("face").boundsInRoot.height, 0.5f)
                 assertEquals("store chip 22 dp", 22f * px, store.height, 0.5f)
