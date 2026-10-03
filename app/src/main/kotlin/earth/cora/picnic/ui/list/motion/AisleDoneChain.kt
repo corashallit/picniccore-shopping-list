@@ -406,11 +406,11 @@ fun StampCircle(
     val turn by rememberLoopTime(enabled = isNow && !reduced)
     val measurer = rememberTextMeasurer(cacheSize = 4)
     val numeral = (if (size <= 20.dp) PicnicTheme.type.stampNumeral.copy(fontSize = 11.sp) else PicnicTheme.type.stampNumeral)
-        .copy(color = if (isNow) Families.strawberry.trace else c.ballpointSoft)
+        .copy(color = if (isNow) Families.strawberry.trace else c.inkSoft)
     Box(modifier.size(size).decorative(), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {
             val r = this.size.minDimension / 2f - 1.dp.toPx()
-            val ringColor = if (isNow) Families.strawberry.trace else c.ballpointSoft
+            val ringColor = if (isNow) Families.strawberry.trace else c.inkSoft
             rotate(if (isNow) (turn % 6000L) * 360f / 6000f else 0f) {
                 drawDashedCircle(ringColor, center, r, 2.dp.toPx(), 3.4.dp.toPx(), 2.6.dp.toPx())
             }

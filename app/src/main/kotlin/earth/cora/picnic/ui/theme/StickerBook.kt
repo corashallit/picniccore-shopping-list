@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -230,104 +231,108 @@ private fun BookPages(
     var tag by remember { mutableStateOf<StampTag?>(null) }
     var boing by remember { mutableStateOf<String?>(null) }
     val resources = LocalResources.current
-    Row(Modifier.fillMaxSize()) {
-        // ---- The stamp page (left) ----
-        Box(
-            Modifier
-                .width(layout.leftWidth.dp)
-                .fillMaxHeight()
-                .testTag(BookTags.LEFT)
-                .then(if (perfect) Modifier.drawBehind { drawRect(holoBrush(center)) } else Modifier)
-                .pointerInput(state.stamps, layout) {
-                    detectTapGestures { pos ->
-                        val hit = nearestStamp(state.stamps, layout, Offset(pos.x / density, pos.y / density), dateOnPage) ?: return@detectTapGestures
-                        val s = state.stamps[hit]
-                        boing = s.sectionId
-                        tag = StampTag(s.sectionId, stampTagText(resources, s), System.nanoTime())
-                        onStampTap(hit)
-                    }
-                },
-        ) {
-            if (dateOnPage) DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = (-1).dp))
-            StampGrid(state.stamps, layout, presentation, clock, anchors, boing, top = if (dateOnPage) DATE_ROOM else STAMP_TOP_NO_DATE)
-            if (perfect) SpinePerfect(fx, clock, Modifier.align(Alignment.TopEnd).offset(x = 24.dp, y = 6.dp))
-        }
-        // ---- The spine ----
-        Spine(Modifier.width(BookLayout.SPINE.dp).fillMaxHeight())
-        // ---- The sticker page (right) ----
-        val paging = remember { PagingState() }
-        val shownPage = layout.shownPage(state.takenSlots)
-        LaunchedEffect(paging.userPage, paging.touchedAt) {
-            if (paging.userPage == null) return@LaunchedEffect
-            withContext(FixedMotionScale) { holdOnFrameClock(PAGE_IDLE_MS) }
-            paging.userPage = null
-        }
-        val page = (fx.showPage ?: paging.userPage ?: shownPage).coerceIn(0, layout.pages - 1)
-        val pageCount = layout.pages
-        Box(
-            Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .testTag(BookTags.RIGHT)
-                .bookPageLift(fx, clock)
-                .graphicsLayer {
-                    // The page turns about the spine: the engine's (a twin on another page, a new book) or New trip's.
-                    val engineTurn = fx.pageTurn
-                    val rotY = when {
-                        engineTurn != null -> BookMotion.pageTurn(clock.now - engineTurn.t0).first
-                        freshTurnElapsed != null -> BookMotion.pageTurn(freshTurnElapsed).first
-                        else -> 0f
-                    }
-                    rotationY = rotY
-                    cameraDistance = 12f * density
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-                }
-                .pointerInput(pageCount) {
-                    var dx = 0f
-                    detectHorizontalDragGestures(
-                        onDragStart = { dx = 0f },
-                        onDragEnd = {
-                            val cur = paging.userPage ?: page
-                            val to = when {
-                                dx < -SWIPE_PX * density -> cur + 1
-                                dx > SWIPE_PX * density -> cur - 1
-                                else -> cur
-                            }.coerceIn(0, pageCount - 1)
-                            if (to != cur || paging.userPage != null) {
-                                paging.userPage = to
-                                paging.touchedAt++
-                            }
-                        },
-                    ) { _, amount -> dx += amount }
-                }
-                .pointerInput(Unit) { detectTapGestures { onOpen() } },
-        ) {
-            ReleasePaper(state, fx, clock)
-            Spots(state, presentation, clock, layout, page, anchors, fresh = freshTurnElapsed != null)
-            // The fore-edge: plain periwinkle mid until the book is full or PERFECT, then holo (§2.6, §2.11).
-            val holo = BookRules.foreEdgeHolo(state, fx)
+    Box(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxSize()) {
+            // ---- The stamp page (left) ----
             Box(
                 Modifier
-                    .align(Alignment.CenterEnd)
-                    .width(5.dp)
+                    .width(layout.leftWidth.dp)
                     .fillMaxHeight()
-                    .drawBehind { if (holo) drawRect(holoBrush(center)) else drawRect(c.book.foreEdge) },
-            )
-            if (pageCount > 1) PageLcd("${page + 1}/$pageCount", Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 2.dp))
-            val t = tag
-            if (t != null) {
-                NameTag(t.text, Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 6.dp))
-                LaunchedEffect(t) {
-                    val hold = timeouts.recommended(readHold(words(t.text), PicnicMotion.floorCard), controls = false)
-                    withContext(FixedMotionScale) {
-                        holdOnFrameClock(BOING_MS)
-                        boing = null
-                        holdOnFrameClock(hold)
+                    .testTag(BookTags.LEFT)
+                    .then(if (perfect) Modifier.drawBehind { drawRect(holoBrush(center)) } else Modifier)
+                    .pointerInput(state.stamps, layout) {
+                        detectTapGestures { pos ->
+                            val hit = nearestStamp(state.stamps, layout, Offset(pos.x / density, pos.y / density), dateOnPage) ?: return@detectTapGestures
+                            val s = state.stamps[hit]
+                            boing = s.sectionId
+                            tag = StampTag(s.sectionId, stampTagText(resources, s), System.nanoTime())
+                            onStampTap(hit)
+                        }
+                    },
+            ) {
+                if (dateOnPage) DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = (-1).dp))
+                StampGrid(state.stamps, layout, presentation, clock, anchors, boing, top = if (dateOnPage) DATE_ROOM else STAMP_TOP_NO_DATE)
+            }
+            // ---- The spine ----
+            Spine(Modifier.width(BookLayout.SPINE.dp).fillMaxHeight())
+            // ---- The sticker page (right) ----
+            val paging = remember { PagingState() }
+            val shownPage = layout.shownPage(state.takenSlots)
+            LaunchedEffect(paging.userPage, paging.touchedAt) {
+                if (paging.userPage == null) return@LaunchedEffect
+                withContext(FixedMotionScale) { holdOnFrameClock(PAGE_IDLE_MS) }
+                paging.userPage = null
+            }
+            val page = (fx.showPage ?: paging.userPage ?: shownPage).coerceIn(0, layout.pages - 1)
+            val pageCount = layout.pages
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .testTag(BookTags.RIGHT)
+                    .bookPageLift(fx, clock)
+                    .graphicsLayer {
+                        // The page turns about the spine: the engine's (a twin on another page, a new book) or New trip's.
+                        val engineTurn = fx.pageTurn
+                        val rotY = when {
+                            engineTurn != null -> BookMotion.pageTurn(clock.now - engineTurn.t0).first
+                            freshTurnElapsed != null -> BookMotion.pageTurn(freshTurnElapsed).first
+                            else -> 0f
+                        }
+                        rotationY = rotY
+                        cameraDistance = 12f * density
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
                     }
-                    if (tag == t) tag = null
+                    .pointerInput(pageCount) {
+                        var dx = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { dx = 0f },
+                            onDragEnd = {
+                                val cur = paging.userPage ?: page
+                                val to = when {
+                                    dx < -SWIPE_PX * density -> cur + 1
+                                    dx > SWIPE_PX * density -> cur - 1
+                                    else -> cur
+                                }.coerceIn(0, pageCount - 1)
+                                if (to != cur || paging.userPage != null) {
+                                    paging.userPage = to
+                                    paging.touchedAt++
+                                }
+                            },
+                        ) { _, amount -> dx += amount }
+                    }
+                    .pointerInput(Unit) { detectTapGestures { onOpen() } },
+            ) {
+                ReleasePaper(state, fx, clock)
+                Spots(state, presentation, clock, layout, page, anchors, fresh = freshTurnElapsed != null)
+                // The fore-edge: plain periwinkle mid until the book is full or PERFECT, then holo (§2.6, §2.11).
+                val holo = BookRules.foreEdgeHolo(state, fx)
+                Box(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .width(5.dp)
+                        .fillMaxHeight()
+                        .drawBehind { if (holo) drawRect(holoBrush(center)) else drawRect(c.book.foreEdge) },
+                )
+                if (pageCount > 1) PageLcd("${page + 1}/$pageCount", Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 2.dp))
+                val t = tag
+                if (t != null) {
+                    NameTag(t.text, Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 6.dp))
+                    LaunchedEffect(t) {
+                        val hold = timeouts.recommended(readHold(words(t.text), PicnicMotion.floorCard), controls = false)
+                        withContext(FixedMotionScale) {
+                            holdOnFrameClock(BOING_MS)
+                            boing = null
+                            holdOnFrameClock(hold)
+                        }
+                        if (tag == t) tag = null
+                    }
                 }
             }
         }
+        // PERFECT (§7.3): the 40 dp PER-FECT! hanko pressed across the spine, its right edge 24 dp past the stamp page's,
+        // 6 dp from the top; drawn over the spine and the sticker page.
+        if (perfect) SpinePerfect(fx, clock, Modifier.offset(x = (layout.leftWidth + 24f - 40f).dp, y = 6.dp))
     }
 }
 
@@ -631,7 +636,9 @@ private fun CollapsedBook(state: BookUi, presentation: BookPresentation, clock: 
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
     val shape = shapes.bookOuter
-    Row(
+    val variant = PicnicTheme.variant
+    val newestFirst = remember(state.stickers) { state.stickers.sortedByDescending { it.slot } }
+    androidx.compose.ui.layout.SubcomposeLayout(
         modifier
             .fillMaxWidth()
             .height(BookLayout.COLLAPSED.dp)
@@ -642,42 +649,84 @@ private fun CollapsedBook(state: BookUi, presentation: BookPresentation, clock: 
             .clip(shapes.bookPage)
             .background(c.book.page)
             .padding(horizontal = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (dateOnPage) DateTag(state.dateLabel)
-        Row(Modifier.padding(start = 6.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            for (s in state.stamps.take(12)) {
-                val variant = PicnicTheme.variant
-                Canvas(Modifier.size(12.dp).decorative()) {
-                    val r = size.minDimension / 2f - 0.75.dp.toPx()
-                    if (s.stamped) {
-                        drawCircle(s.look.stampInk(variant), r)
-                    } else {
-                        drawDashedCircle(if (s.now) Families.strawberry.trace else c.ballpointSoft, center, r, 1.5.dp.toPx(), 2.4.dp.toPx(), 1.8.dp.toPx())
+    ) { constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val h = constraints.maxHeight
+        val w = constraints.maxWidth
+        val gap = 6.dp.roundToPx()
+        val date = if (dateOnPage) subcompose("date") { DateTag(state.dateLabel) }.map { it.measure(loose) } else emptyList()
+        val dots = subcompose("dots") {
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                for (s in state.stamps.take(12)) {
+                    Canvas(Modifier.size(12.dp).decorative()) {
+                        val r = size.minDimension / 2f - 0.75.dp.toPx()
+                        if (s.stamped) {
+                            drawCircle(s.look.stampInk(variant), r)
+                        } else {
+                            drawDashedCircle(if (s.now) Families.strawberry.trace else c.inkSoft, center, r, 1.5.dp.toPx(), 2.4.dp.toPx(), 1.8.dp.toPx())
+                        }
                     }
                 }
             }
-        }
-        Spacer(Modifier.weight(1f))
-        val newest = state.stickers.sortedBy { it.slot }.takeLast(COLLAPSED_TWINS)
-        val more = state.stickers.size - newest.size
-        if (more > 0) {
-            Box(
-                Modifier
-                    .padding(end = 4.dp)
-                    .clip(CircleShape)
-                    .background(Color.White)
-                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                    .decorative(),
-            ) {
-                Text("+$more", style = PicnicTheme.type.counter.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 14.sp), maxLines = 1)
+        }.map { it.measure(loose) }
+        val dateW = date.sumOf { it.width }
+        val dotsX = dateW + if (dateW > 0) gap else 0
+        val dotsW = dots.sumOf { it.width }
+        // The newest stickers, right-aligned: as many 22 dp twins (overlapping 3 dp) as fit after the dots and the
+        // "+n" pearl, at most six (§7.4).
+        val twinStep = (22 - 3).dp.roundToPx()
+        val pearlRoom = 34.dp.roundToPx()
+        val room = w - dotsX - dotsW - gap - pearlRoom
+        val fit = ((room - 3.dp.roundToPx()) / twinStep).coerceIn(0, COLLAPSED_TWINS).coerceAtMost(newestFirst.size)
+        val shown = newestFirst.take(fit).asReversed()
+        val more = state.stickers.size - shown.size
+        val twins = subcompose("twins") {
+            Row(horizontalArrangement = Arrangement.spacedBy((-3).dp)) {
+                for (t in shown) {
+                    BookTwin(t.icon, t.slot, presentation.spots[t.slot], clock, Modifier.testTag(BookTags.twin(t.slot)), size = 22.dp, holo = t.holo, pixel = state.pixel, aisleIndex = t.aisleIndex)
+                }
+            }
+        }.map { it.measure(loose) }
+        val pearl = if (more > 0) subcompose("pearl") { MorePearl(more) }.map { it.measure(loose) } else emptyList()
+        layout(w, h) {
+            date.forEach { it.place(0, (h - it.height) / 2) }
+            dots.forEach { it.place(dotsX, (h - it.height) / 2) }
+            val twinsW = twins.sumOf { it.width }
+            var x = w - twinsW
+            twins.forEach { it.place(x, (h - it.height) / 2) }
+            pearl.forEach {
+                x -= it.width + 4.dp.roundToPx()
+                it.place(x, (h - it.height) / 2)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy((-3).dp)) {
-            for (t in newest) {
-                BookTwin(t.icon, t.slot, presentation.spots[t.slot], clock, Modifier.testTag(BookTags.twin(t.slot)), size = 22.dp, holo = t.holo, pixel = state.pixel, aisleIndex = t.aisleIndex)
+    }
+}
+
+/** The collapsed book's "+n" (§4.12): a white pill with a periwinkle inner ring, DynaPuff 13 sp. Decorative. */
+@Composable
+private fun MorePearl(n: Int) {
+    Box(
+        Modifier
+            .height(20.dp)
+            .widthIn(min = 30.dp)
+            .clip(CircleShape)
+            .background(Color.White)
+            .drawBehind {
+                val sw = 1.5.dp.toPx()
+                val inset = 1.5.dp.toPx() + sw / 2f
+                drawRoundRect(
+                    Families.periwinkle.mid,
+                    topLeft = Offset(inset, inset),
+                    size = Size(size.width - inset * 2, size.height - inset * 2),
+                    cornerRadius = CornerRadius((size.height - inset * 2) / 2f),
+                    style = Stroke(sw),
+                )
             }
-        }
+            .padding(horizontal = 6.dp)
+            .decorative(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("+$n", style = PicnicTheme.type.counter.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 14.sp), maxLines = 1)
     }
 }
 

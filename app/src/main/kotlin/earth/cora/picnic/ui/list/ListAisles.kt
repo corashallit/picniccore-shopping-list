@@ -58,6 +58,8 @@ import earth.cora.picnic.ui.theme.ChevronFace
 import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.IndexTab
+import earth.cora.picnic.ui.theme.LocalPieceProbe
+import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.LocalTimeouts
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -149,6 +151,7 @@ internal fun FoldedStrip(
     val open by rememberUpdatedState(onOpen)
     val peek by rememberUpdatedState(onPeek)
     val threshold = LocalTimeouts.current.holdThresholdMs
+    val probe = LocalPieceProbe.current
     val metaText = buildAnnotatedString {
         section.storeAisle?.let { append(stringResource(R.string.list_strip_store_prefix, it)) }
         if (toGet == 0) {
@@ -189,20 +192,20 @@ internal fun FoldedStrip(
                     look = section.look,
                     size = TabSize.Strip,
                     ballpoint = false,
-                    maxWidth = Dp.Infinity,
                     modifier = Modifier.testTag(ListTags.stripTab(section.id)),
+                    probeKey = "tab:${section.id}",
                 )
                 Text(
                     metaText,
                     style = t.stripMeta.copy(color = c.inkSoft),
-                    modifier = Modifier.padding(start = 3.dp).testTag(ListTags.stripMeta(section.id)),
+                    modifier = Modifier.padding(start = 3.dp).testTag(ListTags.stripMeta(section.id)).probe(probe, "meta:${section.id}"),
                 )
             }
             if (complete || aisle?.untieT0 != null) {
-                Box(Modifier.layoutId("ribbon").testTag(ListTags.ribbon(section.id))) {
+                Box(Modifier.layoutId("ribbon").testTag(ListTags.ribbon(section.id)).probe(probe, "ribbon:${section.id}")) {
                     StripRibbon(complete, aisle, clock, height = 56.dp)
                 }
-                Box(Modifier.layoutId("bow").testTag(ListTags.ribbon(section.id) + "_bow")) {
+                Box(Modifier.layoutId("bow").testTag(ListTags.ribbon(section.id) + "_bow").probe(probe, "bow:${section.id}")) {
                     StripRibbon(complete, aisle, clock, height = 30.dp, bowOnly = true)
                 }
             }
@@ -210,6 +213,7 @@ internal fun FoldedStrip(
                 Modifier
                     .layoutId("basket")
                     .testTag(ListTags.basket(section.id))
+                    .probe(probe, "basket:${section.id}")
                     .pointerInput(section.id, threshold) {
                         // Press and hold for the hold threshold: the lid opens and the peek note shows; the click is
                         // swallowed so the strip does not open (§5.3). A shorter tap falls through to the strip.
@@ -299,10 +303,12 @@ internal fun TrayHeader(
     chevronFocus: FocusRequester,
     onFold: () -> Unit,
     modifier: Modifier = Modifier,
+    current: Boolean = true,
 ) {
     val c = PicnicTheme.colors
     val shadows = PicnicTheme.shadows
-    val ring = if (c.variant == ThemeVariant.Glow) c.glowStar else Families.lemon.mid
+    val ring = currentRing(current)
+    val probe = LocalPieceProbe.current
     val collapse = stringResource(R.string.list_tray_collapse, earth.cora.picnic.ui.list.motion.MotionStrings.spoken(section.fullName))
     val fold by rememberUpdatedState(onFold)
     Layout(
@@ -319,10 +325,10 @@ internal fun TrayHeader(
                 look = section.look,
                 size = TabSize.Tray,
                 ballpoint = true,
-                maxWidth = Dp.Infinity,
                 modifier = Modifier.layoutId("tab").testTag(ListTags.headerTab(section.id)),
+                probeKey = "trayTab:${section.id}",
             )
-            section.storeAisle?.let { StoreAisleChip(it, Modifier.layoutId("chip").testTag(ListTags.storeChip(section.id))) }
+            section.storeAisle?.let { StoreAisleChip(it, Modifier.layoutId("chip").testTag(ListTags.storeChip(section.id)).probe(probe, "chip:${section.id}")) }
             section.doodle?.let {
                 Text(
                     it,
@@ -342,7 +348,7 @@ internal fun TrayHeader(
                     clock = clock,
                     size = BasketSize.Tray.size,
                     tray = true,
-                    modifier = Modifier.layoutId("basket").testTag(ListTags.basket(section.id)).basketAnchor(section.id, section.basket, priority = 1),
+                    modifier = Modifier.layoutId("basket").testTag(ListTags.basket(section.id)).probe(probe, "trayBasket:${section.id}").basketAnchor(section.id, section.basket, priority = 1),
                 )
             }
             Box(
@@ -362,7 +368,7 @@ internal fun TrayHeader(
                     .clickable(remember { MutableInteractionSource() }, indication = null, role = Role.Button) { fold() },
                 contentAlignment = Alignment.Center,
             ) { ChevronFace(up = true) }
-            Bee(Modifier.layoutId("bee"))
+            if (current) Bee(Modifier.layoutId("bee"))
         },
     ) { measurables, constraints ->
         val w = constraints.maxWidth
@@ -381,7 +387,7 @@ internal fun TrayHeader(
         val tabMax = (basketX - px(8.dp) - chipRoom - start).coerceAtLeast(px(60.dp))
         val tab = measurables.first { it.layoutId == "tab" }.measure(Constraints(maxWidth = tabMax))
         val doodle = measurables.firstOrNull { it.layoutId == "doodle" }?.measure(Constraints())
-        val bee = measurables.first { it.layoutId == "bee" }.measure(Constraints())
+        val bee = measurables.firstOrNull { it.layoutId == "bee" }?.measure(Constraints())
         layout(w, h) {
             val tabY = bandTop + (bandH - tab.height) / 2
             tab.place(start, tabY)
@@ -393,8 +399,9 @@ internal fun TrayHeader(
             doodle?.let { d -> if (x + d.width <= basketX - px(4.dp)) d.place(x, bandTop + (bandH - d.height) / 2 - px(6.dp)) }
             basketM.place(basketX, bandTop + (bandH - basketM.height) / 2)
             chevron.place(chevronX, bandTop + (bandH - chevron.height) / 2)
-            // The bee hovers over the band's top edge, left of the basket: an edge sticker, never over text.
-            bee.place(basketX - bee.width - px(2.dp), 0 - px(10.dp))
+            // The bee hovers over the band's top edge, left of the basket: an edge sticker, never over text. Pinned, the
+            // list's top edge would cut it in half, so it rides just inside the plate's ring.
+            bee?.place(basketX - bee.width - px(2.dp), if (pinned) px(1.dp) else -px(10.dp))
         }
     }
 }
@@ -423,10 +430,10 @@ private fun Bee(modifier: Modifier) {
  * border, ring and shadow; the ladybug strolls on it (14 dp hops; still under reduced motion).
  */
 @Composable
-internal fun TrayCap(section: SectionUi, modifier: Modifier = Modifier) {
+internal fun TrayCap(section: SectionUi, modifier: Modifier = Modifier, current: Boolean = true) {
     val c = PicnicTheme.colors
     val shadows = PicnicTheme.shadows
-    val ring = if (c.variant == ThemeVariant.Glow) c.glowStar else Families.lemon.mid
+    val ring = currentRing(current)
     val tile = rememberPatternBrush(section.look.pattern)
     Box(
         modifier
@@ -435,7 +442,18 @@ internal fun TrayCap(section: SectionUi, modifier: Modifier = Modifier) {
             .testTag(ListTags.cap(section.id))
             .traySlice(TrayPart.Cap, section.look, ring, shadows.color, c.pad, c.rule, patternTile = tile),
     ) {
-        Ladybug(Modifier.offset(x = 40.dp, y = 1.dp))
+        if (current) Ladybug(Modifier.offset(x = 40.dp, y = 1.dp))
+    }
+}
+
+/** The current aisle's ring colour (§4.10: lemon mid; Glow's glow-star mint), or null for an open tray that is not current. */
+@Composable
+internal fun currentRing(current: Boolean): androidx.compose.ui.graphics.Color? {
+    val c = PicnicTheme.colors
+    return when {
+        !current -> null
+        c.variant == ThemeVariant.Glow -> c.glowStar
+        else -> Families.lemon.mid
     }
 }
 

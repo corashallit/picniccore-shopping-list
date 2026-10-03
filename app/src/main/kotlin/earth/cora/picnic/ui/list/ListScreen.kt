@@ -622,6 +622,9 @@ private fun AisleList(
     val anchors = engine.anchors
     val openId = p.openSection(state.openSectionId)
     val entries = remember(state.sections, openId) { planEntries(state.sections, openId) }
+    // The current aisle wears the lemon ring, the bee and the ladybug (§4.10, D2). While a chain holds a finished aisle
+    // open (the engine's override), it keeps them until it folds; a finished aisle she reopens herself is not current.
+    val currentId = if (openId != null && openId != state.openSectionId) openId else state.currentSectionId
     val scope = rememberCoroutineScope()
     val act by rememberUpdatedState(actions)
     val rowActions = remember(actions) {
@@ -782,6 +785,7 @@ private fun AisleList(
                             clock = clock,
                             anchors = anchors,
                             pinned = pinned,
+                            current = s.id == currentId,
                             chevronFocus = chevron,
                             onFold = {
                                 screen.toggles.bump(s.id)
@@ -804,6 +808,7 @@ private fun AisleList(
                             pop = screen.pops[e.row.id],
                             sweepT0 = beat?.sweepT0.takeIf { beat?.sweepItem == e.row.id },
                             ambientClock = ambient.clock,
+                            current = e.s.id == currentId,
                             modifier = Modifier
                                 .itemMotion(this, reduced, placementMs = SLOT_CLOSE_MS)
                                 .unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced)
@@ -811,7 +816,7 @@ private fun AisleList(
                         )
                     }
                     is Entry.Cap -> item(key = e.key, contentType = "cap") {
-                        TrayCap(e.s, Modifier.itemMotion(this, reduced, placementMs = SLOT_CLOSE_MS).unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced))
+                        TrayCap(e.s, current = e.s.id == currentId, modifier = Modifier.itemMotion(this, reduced, placementMs = SLOT_CLOSE_MS).unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced))
                     }
                     // One pixel tall: the list ignores zero-size items when it picks the header to pin; this pushes the
                     // plate off as its tray ends.

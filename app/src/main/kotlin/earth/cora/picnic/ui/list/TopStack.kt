@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -179,7 +180,10 @@ private fun AppBar(
                 with(anchors) {
                     SunSticker(
                         onTap = if (moon) actions.onMoonTap else actions.onSunTap,
-                        modifier = Modifier.anchor(AnchorRegistry.SUN).graphicsLayer { rotationZ = spin.value },
+                        modifier = Modifier
+                            .overhang(SUN_ROOM_W, SUN_ROOM_H)
+                            .anchor(AnchorRegistry.SUN)
+                            .graphicsLayer { rotationZ = spin.value },
                     )
                 }
             }
@@ -218,6 +222,23 @@ private fun AppBar(
         }
     }
 }
+
+/**
+ * Lays out a 48 dp target as [w] × [h] dp, centred on it, so the 22 dp sun sits by the title without taking the
+ * title's room: the target still receives touches over its full 48 dp (it is placed after the title, and before the LCD
+ * and More, so those keep their own touches where they overlap).
+ */
+private fun Modifier.overhang(w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp): Modifier =
+    layout { measurable, _ ->
+        val p = measurable.measure(androidx.compose.ui.unit.Constraints())
+        val lw = w.roundToPx()
+        val lh = h.roundToPx()
+        layout(lw, lh) { p.place((lw - p.width) / 2, (lh - p.height) / 2) }
+    }
+
+/** The sun's layout room by the title (its face is 22 dp, its target 48 dp). */
+private val SUN_ROOM_W = 30.dp
+private val SUN_ROOM_H = 32.dp
 
 /** The LCD word while the list re-syncs (§6.1). */
 private const val SYNC: String = "SYNC"

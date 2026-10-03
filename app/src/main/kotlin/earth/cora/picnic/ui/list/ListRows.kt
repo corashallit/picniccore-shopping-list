@@ -137,10 +137,11 @@ internal fun TrayRow(
     pop: PopRequest? = null,
     sweepT0: Long? = null,
     ambientClock: MotionClock? = null,
+    current: Boolean = true,
 ) {
     val c = PicnicTheme.colors
     val shadows = PicnicTheme.shadows
-    val ring = if (c.variant == ThemeVariant.Glow) c.glowStar else Families.lemon.mid
+    val ring = currentRing(current)
     val reduced = LocalReducedMotion.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()

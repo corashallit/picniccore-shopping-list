@@ -25,6 +25,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -84,6 +86,20 @@ fun fitTabName(measurer: TextMeasurer, name: String, style: TextStyle, maxWidthP
     return TabFit(toSp, true)
 }
 
+/**
+ * A test hook for the list's layout rules (items 76, 79, 92): when provided, list pieces report where they were laid
+ * out (in the root) under a key, with the tab's fitted size. Null in the app, where it costs nothing.
+ */
+fun interface PieceProbe {
+    fun report(key: String, bounds: Rect, fontSp: Float?)
+}
+
+val LocalPieceProbe = androidx.compose.runtime.staticCompositionLocalOf<PieceProbe?> { null }
+
+/** Reports this element's bounds to [probe] under [key] (no-op without a probe). */
+fun Modifier.probe(probe: PieceProbe?, key: String?, fontSp: Float? = null): Modifier =
+    if (probe == null || key == null) this else onGloballyPositioned { probe.report(key, it.boundsInRoot(), fontSp) }
+
 /** The tab's height (§2.9): 38 dp in a tray header, 32 dp on a folded strip. */
 enum class TabSize(val height: Dp, val circle: Dp, val numeralSp: Float) {
     Tray(38.dp, 24.dp, 14f),
@@ -104,9 +120,20 @@ fun IndexTab(
     look: AisleLook,
     size: TabSize,
     ballpoint: Boolean,
-    maxWidth: Dp,
+    maxWidth: Dp = Dp.Infinity,
     modifier: Modifier = Modifier,
+    probeKey: String? = null,
 ) {
+    // The room is the smaller of [maxWidth] and what the parent offers (a strip's text column, a band's tab slot).
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val offered = if (constraints.hasBoundedWidth) this.maxWidth else Dp.Infinity
+        TabFace(position, displayName, look, size, ballpoint, minOf(maxWidth, offered), probeKey)
+    }
+}
+
+@Composable
+private fun TabFace(position: Int, displayName: String, look: AisleLook, size: TabSize, ballpoint: Boolean, maxWidth: Dp, probeKey: String?) {
+    val probe = LocalPieceProbe.current
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
     val density = LocalDensity.current
@@ -115,10 +142,11 @@ fun IndexTab(
     val end = tabEnd(look)
     // What the name may take: the tab's width less its border, padding, circle and gap.
     val fixed = 3.dp * 2 + 6.dp + size.circle + 6.dp + end
-    val room = with(density) { (maxWidth - fixed).roundToPx().coerceAtLeast(1) }
+    val room = if (maxWidth == Dp.Infinity) Int.MAX_VALUE else with(density) { (maxWidth - fixed).roundToPx().coerceAtLeast(1) }
     val fit = remember(displayName, base, room) { fitTabName(measurer, displayName, base, room) }
     Row(
-        modifier
+        Modifier
+            .probe(probe, probeKey, fit.fontSizeSp)
             .widthIn(max = maxWidth)
             .heightIn(min = size.height)
             .clearAndSetSemantics {
@@ -201,6 +229,9 @@ object TrayMetrics {
     /** The current aisle's offset shadow (§4.10: 2.6, 3.6). */
     val shadow: DpOffset = DpOffset(2.6.dp, 3.6.dp)
 
+    /** Any other open tray's hard shadow (hs, §2.10). */
+    val hs: DpOffset = DpOffset(1.6.dp, 2.2.dp)
+
     val outerRadius: Dp = 12.dp
     val innerRadius: Dp = 9.dp
     val panelRadius: Dp = 8.dp
@@ -233,7 +264,8 @@ enum class TrayPart { Header, Row, Cap }
 fun Modifier.traySlice(
     part: TrayPart,
     look: AisleLook,
-    ring: Color,
+    /** The current aisle's ring (lemon mid; Glow's glow-star mint), or null for an open tray that is not current. */
+    ring: Color?,
     shadow: Color,
     pad: Color,
     rule: Color,
@@ -257,7 +289,7 @@ private fun DrawScope.trayOutline(part: TrayPart): Rect {
 internal fun DrawScope.drawTraySlice(
     part: TrayPart,
     look: AisleLook,
-    ring: Color,
+    ring: Color?,
     shadow: Color,
     pad: Color,
     rule: Color,
@@ -276,10 +308,16 @@ internal fun DrawScope.drawTraySlice(
     val pastel = Rect(white.left + borderPx, white.top + borderPx, white.right - borderPx, white.bottom - borderPx)
     // Clip vertically to the slice only: the shadow and ring may run past the sides into the list's gutter.
     clipRect(left = -size.width, top = 0f, right = size.width * 2f, bottom = size.height) {
-        val sx = TrayMetrics.shadow.x.toPx()
-        val sy = TrayMetrics.shadow.y.toPx()
-        drawRoundRect(shadow, Offset(outer.left + sx, outer.top + sy), outer.size, CornerRadius(rOuter))
-        drawRoundRect(ring, outer.topLeft, outer.size, CornerRadius(rOuter))
+        if (ring != null) {
+            // The current aisle: the ring outside the white border and the (2.6, 3.6) offset shadow under it.
+            val sx = TrayMetrics.shadow.x.toPx()
+            val sy = TrayMetrics.shadow.y.toPx()
+            drawRoundRect(shadow, Offset(outer.left + sx, outer.top + sy), outer.size, CornerRadius(rOuter))
+            drawRoundRect(ring, outer.topLeft, outer.size, CornerRadius(rOuter))
+        } else {
+            // Any other open tray: the plain hard shadow (hs) under its white border, no ring.
+            drawRoundRect(shadow, Offset(white.left + TrayMetrics.hs.x.toPx(), white.top + TrayMetrics.hs.y.toPx()), white.size, CornerRadius(rWhite))
+        }
         drawRoundRect(Color.White, white.topLeft, white.size, CornerRadius(rWhite))
         drawRoundRect(look.family.pastel, pastel.topLeft, pastel.size, CornerRadius(rInner))
         when (part) {
@@ -369,9 +407,12 @@ fun StruckText(text: String, style: TextStyle, struck: Boolean, strike: Color, m
         style = style,
         onTextLayout = { layout = it },
         modifier = modifier.drawWithContent {
-            drawContent()
-            val l = layout ?: return@drawWithContent
-            if (!struck) return@drawWithContent
+            // The strike is drawn under the glyphs (§4.11: custom-drawn under the text layout, not LineThrough).
+            val l = layout
+            if (!struck || l == null) {
+                drawContent()
+                return@drawWithContent
+            }
             val w = 2.dp.toPx()
             for (i in 0 until l.lineCount) {
                 val top = l.getLineTop(i)
@@ -381,6 +422,7 @@ fun StruckText(text: String, style: TextStyle, struck: Boolean, strike: Color, m
                 val x1 = l.getLineRight(i)
                 if (x1 - x0 > 1f) drawLine(strike, Offset(x0 - 1.dp.toPx(), y), Offset(x1 + 1.dp.toPx(), y), w, cap = StrokeCap.Round)
             }
+            drawContent()
         },
     )
 }
@@ -408,7 +450,7 @@ fun ChevronFace(up: Boolean, modifier: Modifier = Modifier, rotation: Float = if
                 lineTo(center.x, center.y + h)
                 lineTo(center.x + w, center.y - h / 1.4f)
             }
-            drawPath(p, c.ballpoint, style = Stroke(2.2.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            drawPath(p, c.onPad, style = Stroke(2.2.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
         }
     }
 }
