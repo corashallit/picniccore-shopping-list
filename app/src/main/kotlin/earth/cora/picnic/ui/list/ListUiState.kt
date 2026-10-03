@@ -13,7 +13,7 @@ import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.currentList
 import earth.cora.picnic.core.model.iconRef
 import earth.cora.picnic.core.model.normalizeName
-import earth.cora.picnic.ui.common.storeAisleNumber
+import earth.cora.picnic.core.model.storeAisleNumber
 
 /*
  * UI state of the List screen. Names are binding (docs/ARCHITECTURE.md §10.3); fields may be added.

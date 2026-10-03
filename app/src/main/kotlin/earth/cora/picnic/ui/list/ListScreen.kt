@@ -71,6 +71,7 @@ import earth.cora.picnic.ui.add.toastText
 import earth.cora.picnic.ui.common.HintText
 import earth.cora.picnic.ui.common.ScreenScaffold
 import earth.cora.picnic.ui.edit.EditItemSheet
+import earth.cora.picnic.ui.nav.LocalAppNav
 import earth.cora.picnic.ui.theme.AisleHeader
 import earth.cora.picnic.ui.theme.AisleSectionRow
 import earth.cora.picnic.ui.theme.EmptyState
@@ -216,14 +217,13 @@ fun ListRoute(
 
     ListScreen(state = state, actions = actions, snackbarHostState = snackbar, showLists = showLists)
 
+    // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet, and
+    // after a key error "Try again" picks up the photo or recording once the key is fixed (so no closeSheet() here).
     AddSheetHost(
         addFlows,
         addState,
-        onOpenSettings = {
-            addVm.closeSheet()
-            onOpenSettings()
-        },
-        onEditPantry = null,
+        onOpenSettings = onOpenSettings,
+        onEditPantry = LocalAppNav.current.onEditPantry,
     )
 }
 
