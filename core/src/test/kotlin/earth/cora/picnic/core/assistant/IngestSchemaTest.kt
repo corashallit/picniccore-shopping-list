@@ -193,6 +193,12 @@ class PromptsContractTest {
         assertTrue("message: \"\" (empty) when the request is a plain list" in rules, "the empty message for a plain list")
         assertTrue("Never just repeat the items you added." in rules)
         assertTrue("saying what you added" !in rules, "the old always-a-message rule is gone")
+        // ...and keeps it for what she should know: a dish, a skip, a guess, a correction she made, nothing to buy.
+        val message = rules.substringAfter("message: ")
+        for (reason in listOf("a dish, meal or recipe", "a skipped item", "a guess", "a correction you applied", "nothing to buy")) {
+            assertTrue(reason in message, "the message keeps explaining: $reason")
+        }
+        assertTrue("nothing skipped, guessed, corrected or left out" in message, "only an untouched plain list is silent")
     }
 
     @Test

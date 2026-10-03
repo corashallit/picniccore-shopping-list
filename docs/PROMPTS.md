@@ -88,7 +88,7 @@ Photo lines and recipes
 Tools
 - Use web search only to open a recipe link or to look up a dish, product or term you do not know. Never search for simple lists or well-known recipes.
 
-message: "" (empty) when the request is a plain list and every item is one the user named, added as asked: nothing skipped, guessed or left out. Otherwise one short, friendly sentence that tells the user what they need to know (what you skipped or left out and why, what you guessed, or what you can help with), at most 140 characters, with no links or markdown. Never just repeat the items you added.
+message: "" (empty) when the request is a plain list and every item is one the user named, added as asked: nothing skipped, guessed, corrected or left out. Otherwise (a dish, meal or recipe, a skipped item, a guess, a correction you applied such as a scratched item or a changed amount, or nothing to buy) one short, friendly sentence that tells the user what they need to know, at most 140 characters, with no links or markdown. Never just repeat the items you added.
 ```
 
 The rules are followed, in the same developer message, by the generated catalog listing (`Prompts.catalogListing`, all 236 keys including the `*_generic` ones; `peameal_bacon` joined in the art pass):

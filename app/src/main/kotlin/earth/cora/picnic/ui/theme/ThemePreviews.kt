@@ -539,11 +539,34 @@ internal fun PuffyKit(long: Boolean = false) {
         PuffyText("NEXT", t.nextLabel, fill = c.ballpoint, stroke = 6.dp, strokeColor = Color.White, shadow = PicnicTheme.shadows.hs)
         PuffyText("List complete!", t.celebrationTitle, fill = Families.strawberry.mid, stroke = 9.dp, strokeColor = Color.White, shadow = PicnicTheme.shadows.hs2)
     } else {
-        Box(Modifier.width(240.dp)) {
-            PuffyText("Saturday shop at Hillcrest", t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp)
-        }
-        Box(Modifier.width(200.dp)) {
-            PuffyText("Saturday shop at Hillcrest Market", t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp)
+        // Checklist 334: every stroked title at its longest real text, at font scale 1.0 and then 2.0, in the width its
+        // caller gives it: a long list name in the binder top (shrunk to 20 sp, then cut), the wordmark, a tab label,
+        // NEXT and the celebration title (two lines). Every stroke and shadow whole, every "…" after a whole word part.
+        val base = androidx.compose.ui.platform.LocalDensity.current
+        for (scale in listOf(1f, 2f)) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, scale),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.width(290.dp)) {
+                        PuffyText("Thanksgiving dinner at the cottage", t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp)
+                    }
+                    Box(Modifier.width(290.dp)) { Wordmark("Kirakira Basket") }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Box(Modifier.width(150.dp)) {
+                            PuffyText("Everything else", t.aisleTab.copy(color = c.ink), fill = c.ink, stroke = 6.dp)
+                        }
+                        PuffyText("NEXT", t.nextLabel, fill = c.ballpoint, stroke = 6.dp, strokeColor = Color.White, shadow = PicnicTheme.shadows.hs)
+                    }
+                    Box(Modifier.width(290.dp)) {
+                        PuffyText(
+                            "List complete!", t.celebrationTitle, fill = Families.strawberry.mid, stroke = 9.dp, strokeColor = Color.White,
+                            shadow = PicnicTheme.shadows.hs2, minFontSize = 26.sp, maxLines = 2,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+                }
+            }
         }
     }
 }

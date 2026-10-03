@@ -277,7 +277,7 @@ The status and navigation bar icon styles follow the resolved variant (dark icon
 | Screen title | DynaPuff 700 | 24 sp expanded, 20 sp collapsed; shrinks to 20 sp to fit one line, then ellipsis | ballpoint (Glow: ink) | puffy stroke 6 dp white (Glow `#3A438A`), shadow hs |
 | App-bar subtitle | Zen Maru 700 | 13 sp | ballpointSoft | 13 dp lemon star vector leads ("★ Hillcrest Market · 8 stops"); sits on a pad patch, never straight on the pinstripes (§4.1) |
 | Aisle tab label | DynaPuff 700 | 20 sp; shrinks to 16 sp to fit, then ellipsizes (§4.10) | aisle trace on folded strips; **ballpoint** on the open tray's tab, the pinned plate and the Next card | no stroke. Trace on its own pastel is 3.79–5.73 (large-text rule), so the label she reads walking under store lights, the current aisle's, is ballpoint (≥7.85), the strongest text on the list |
-| Tab number | DynaPuff 700 | 14 sp in a 24 dp circle | trace | white circle, 2 dp trace ring |
+| Tab number | DynaPuff 700 | 14 sp in a 24 dp circle (the circle grows when a large font needs it) | trace | white circle, 2 dp trace ring |
 | Item name | Zen Maru 700 | 17 sp (16 sp compact rows) | ballpoint; checked: ballpointSoft + 2 dp hanko strike | wraps to more lines, never ellipsized; ≥16 sp always |
 | Item detail | Zen Maru 500 | 13.5 sp (13 sp compact) | ballpointSoft (on pastel: ballpoint) | metric size + context, "1 L basket · produce" |
 | Strip meta | Zen Maru 500 / 700 for the count | 13 sp | ballpointSoft / ballpoint | "**2 left** of 5", "**5 of 5** in the basket" |
@@ -299,7 +299,7 @@ The status and navigation bar icon styles follow the resolved variant (dark icon
 
 **Three families per surface.** DynaPuff + Zen Maru + **one** of Klee One / Hachi Maru Pop. LCD text is vector, so it never counts. A bottom sheet is its own surface. The list uses Hachi Maru (doodles); the Add sheet uses Klee One (transcripts) and no doodles. `FontFamilyBudgetTest` walks every screen's text nodes and fails on a fourth family.
 
-**Puffy text never clips** (Cora, 2 October: in mockup r9 the white stroke of "Saturday shop" was cut off at its right edge). Every stroked or shadowed title (screen titles, the wordmark, NEXT, the celebration title, tab labels with a stroke) measures and lays out its box from the **stroke pass**, not the fill: it reserves half the stroke width on every side plus the hard-shadow offset on the right and bottom, and nothing that draws it clips to the fill's bounds (no `clipToBounds`, no `graphicsLayer { clip = true }`, no parent `clipRect` tighter than that box). The last glyph's overhang (DynaPuff's rounded terminals and italic-like tails) is included through the text layout's `getBoundingBox`, not the advance width. An ellipsized title clips to that padded box, never to the fill's box (the r9 cause: `overflow: hidden` for the ellipsis on a box only 4 px wider than the fill, so a 6 px stroke lost its right side). `PuffyText` owns this, so every caller gets it.
+**Puffy text never clips** (Cora, 2 October: in mockup r9 the white stroke of "Saturday shop" was cut off at its right edge). Every stroked or shadowed title (screen titles, the wordmark, NEXT, the celebration title, tab labels with a stroke) measures and lays out its box from the **stroke pass**, not the fill: it reserves half the stroke width on every side plus the hard-shadow offset on the right and bottom, and nothing that draws it clips to the fill's bounds (no `clipToBounds`, no `graphicsLayer { clip = true }`, no parent `clipRect` tighter than that box). The last glyph's overhang (DynaPuff's rounded terminals and italic-like tails) is included through the text layout's `getBoundingBox`, not the advance width. An ellipsized title clips to that padded box, never to the fill's box (the r9 cause: `overflow: hidden` for the ellipsis on a box only 4 px wider than the fill, so a 6 px stroke lost its right side). An ellipsized title is the longest start that fits, the space before its "…" dropped ("Everything…"), and its box ends at its "…", so it never trails a gap. Each glyph's stroke is its own halo, so where two glyphs nearly touch (DynaPuff kerns NEXT's "XT" that tight) the halos leave a pinhole or a hairline crack the hard shadow shows through; like a die-cut, which leaves no hole or slit narrower than its blade, the stroke is closed there (holes no bigger than the pen, cracks behind a neck of 2 px or less), while larger counters and the gaps between words stay open. `PuffyText` owns all of this, so every caller gets it.
 
 **Never**: Unicode circled digits (numbers sit in drawn circles), glyph stars or hearts, DynaPuff / Klee One / Hachi Maru for item names, monospace anywhere.
 
@@ -345,8 +345,8 @@ The status and navigation bar icon styles follow the resolved variant (dark icon
 | `addBar` / `fab` | 84 / 64 | docked add bar, collapsed FAB |
 | `roundButton` | 40 face in 48 target | More, Back |
 | `addBarButton` | 52 | camera, cassette, send |
-| `primary` / `secondary` | 52 / 48 tall | buttons |
-| `chip` | 32 face in 48 target | chips |
+| `primary` / `secondary` | 52 / 48 tall (minimums: a taller label grows the face) | buttons |
+| `chip` | 32 face in 48 target (a minimum: the face grows with a large font) | chips |
 | `field` | 56 | ruled text field |
 | `toast` | 220 wide | sticky note, 14 dp from the left, 20 dp above the add bar |
 | `nextCard` | 236 wide | 20 dp above the add bar |
@@ -466,7 +466,7 @@ Every component is a theme composable (ARCHITECTURE §11); screens never hand-ro
 
 ### 4.3 LCD chip
 
-See §13.1 for the glyphs and modes. Face `lcd`, 3 dp white border, radius 9, hs, padding 7 × 8 dp, faint 1 dp grid at 50 %. Digits tick on change (−2 → +1 → 0 dp, 2 steps, 160 ms). The star blinks to 12 % for 3 % of every 4 s (0.25 Hz). Press and hold for the **hold threshold**: §13.
+See §13.1 for the glyphs and modes. Face `lcd`, 3 dp white border, radius 9, hs, padding 7 × 8 dp, faint 1 dp grid at 50 %. Digits tick on change (−2 → +1 → 0 dp, 2 steps, 160 ms). The star blinks to 12 % for 3 % of every 4 s (0.25 Hz); the line keeps one layout through the blink, so no dot moves. Press and hold for the **hold threshold**: §13.
 
 **Hold threshold** (every press-and-hold in the app: the LCD, peeking a basket): `max(440 ms, ViewConfiguration.longPressTimeout)`, so Android's "Touch & hold delay" (up to 1.5 s) lengthens it. The ladybug (egg 2) fires at the hold threshold + 560 ms (1 s by default).
 
@@ -494,7 +494,7 @@ Semantics: the row is the toggle (`Role.Checkbox`, `toggleableState` on/off); Sp
 | **Primary** ("candy pill") | 52 dp tall, strawberry mid `#FF6F8E`, 3 dp white border, hs2; padding 0 24 0 30 dp; optional leading 18 dp star, a **flat** lemon-pastel vector that is part of the label (no die-cut border, no gloss) | DynaPuff 700 18 sp white, 4 dp `#C3264F` stroke | **Pressed**: shadow gone, face translates (+2.4, +3.4) dp in 2 steps of 80 ms. **Disabled**: `backing` fill, ballpointSoft label, no stroke, no shadow, no gloss; an optional 4-point star spinner (8 steps per 2 s) leads ("Reading… 6 of 9"). **Focused**: 2 dp ballpoint ring 3 dp outside. |
 | **Secondary** | 48 dp white pill, 3 dp white border, inset 2 dp periwinkle-trace outline, hs | DynaPuff 700 16 sp ballpoint, optional 18 dp glyph | pressed (+1.6, +2.2) flat; disabled as above |
 | **Text** | none; 48 dp min height | Zen Maru 700 15 sp ballpoint | hand-drawn wavy underline, 2 dp sakura mid, 12 × 5 dp wave tile, 13 dp under the baseline; pressed = highlighter band behind the label |
-| **Round sticker** (More, Back, add-bar buttons) | 40 dp pad-white circle (add bar: 52 dp in its family pastel: camera ramune, cassette sakura, send strawberry), 3 dp white border, hs | 24 dp ballpoint **line glyph** (add bar: polaroid camera, cassette, envelope with a heart seal, §3.4); never sticker art, which would bring a second gloss | pressed flat; disabled 50 % |
+| **Round sticker** (More, Back, add-bar buttons) | 40 dp pad-white circle (add bar: 52 dp in its family pastel: camera ramune, cassette sakura, send strawberry), 3 dp white border, hs | 24 dp ballpoint **line glyph** (add bar: polaroid camera, cassette, envelope with a heart seal, §3.4); never sticker art, which would bring a second gloss | pressed flat; disabled: the pills' disabled tokens, a flat `backing` disc (its border too) with a ballpointSoft glyph, no gloss and no shadow (a 50 % fade read muddy on the Glow navy) |
 | **FAB** | 64 dp strawberry-mid circle sticker, white border, hs2; a 22 dp lemon star **badge** sticker centred on the 45° point of the white border's outer edge, so it sits outside the face outline (its own die-cut and gloss belong to the badge, not the face); bobs −4 dp, 2.4 s ease-in-out, while visible | white plus over a 4 dp `#C3264F` stroke | pressed flat |
 
 **Gloss (R3).** Exactly one gloss per face: a crescent hugging the inside of the **left cap** (a 36 dp ring arc with a 3.5 dp white top edge rotated −45° at (5, 5)) and one 3.6 dp white dot at (27, 5). Round buttons and the FAB: one crescent at the upper-left inside the circle + one dot. 100 % white, never blurred, never on the border, never within 4 dp of the label's bounds. If a label starts at the left edge, the gloss moves to the right cap. **Allowed white on a face**, exactly: one crescent, one dot, and the face's own label or glyph (the primary's white label, the FAB's white plus). The 3 dp white border is the die-cut around the face, not on it, and badge stickers sit outside the face outline. `ButtonGlossTest` checks the geometry for every kind (pills, round, the three add-bar buttons, the FAB); the goldens check the look.
@@ -506,7 +506,7 @@ Semantics: the row is the toggle (`Role.Checkbox`, `toggleableState` on/off); Sp
 | Kiss-cut label | 32 dp face in a 48 dp target, pastel fill, 3 dp white border, hs, Zen Maru 700 13.5 sp ballpoint |
 | Selected | mid fill, ballpoint text, a leading 13 dp puffy star |
 | Aisle chip | leads with a 20 dp number circle in the aisle trace (DynaPuff 11 sp, one of the two exemptions from the 13 sp floor, §2.7; the number repeats the label) |
-| Store-aisle chip "A2" | 22 dp lemon-pastel pill, 2 dp white border, hs, a small basket glyph + "A2"; TalkBack "store aisle 2" |
+| Store-aisle chip "A2" | 22 dp lemon-pastel pill (taller when a large font needs it), 2 dp white border, hs, a small basket glyph + "A2"; TalkBack "store aisle 2" |
 | "shiny!" / "jackpot!" | after the detail text, DynaPuff 13 sp ballpoint on a holo pill with a 1.5 dp white border; decorative (the row's TalkBack label says "shiny") |
 | Source chip (web results) | kiss-cut label with a link glyph; opens the URL |
 | Filter chips (Album: Groceries · Picnic · Seasonal; List switcher) | as label; selected as above |
@@ -519,7 +519,7 @@ There is no "On sale" chip (no prices) and no "Pantry" filter chip (the pantry h
 - **Focus**: underline becomes 3 dp strawberry trace `#C3264F` with a 13 dp puffy heart sticker at its left end.
 - **Error**: `hanko` underline, helper text in hanko 13 sp with a 16 dp torn-paper glyph. Copy is key/network wording, never proxy wording ("That key didn't work. Check it?", "Couldn't reach OpenAI. Check your connection?").
 - **Disabled**: underline dotted, value ballpointSoft.
-- **Multi-line**: the rule lines continue under every line (24 dp pitch); the aisles text field uses Klee One 16 / 24 sp.
+- **Multi-line**: the rule lines continue under every line; their pitch is the text's own line height (24 sp, so the rules scale with the font and never cut through a line at a large font scale); the aisles text field uses Klee One 16 / 24 sp.
 - **Key field**: masked ("sk-•••••••••• 3f9a" after save, never pre-filled), an eye round button (reveal while typing) and a paste round button.
 - **Add-bar field**: ruled, placeholder "Write a note…" with the example line "“pancakes from scratch”" (13.5 sp, ballpointSoft) under it.
 
@@ -1680,12 +1680,25 @@ enum class ThemeVariant { Day, Glow, Dusk, Golden }
 @Composable fun CheckMark(checked: Boolean, seed: String, stampText: HankoText = HankoText.GotIt, modifier: Modifier = Modifier)
 @Composable fun ItemIcon(icon: IconRef, contentDescription: String?, modifier: Modifier = Modifier, size: Dp = 52.dp,
     aisleIndex: Int = -1, ghost: Boolean = false, holo: Boolean = false, pixel: Boolean = false,
-    flags: Set<StickerFlag> = emptySet(), drawing: Boolean = false, lifted: Boolean = false)
+    flags: Set<StickerFlag> = emptySet(), drawing: Boolean = false, lifted: Boolean = false,
+    jackpot: Boolean = false, mono: Boolean = false, face: Boolean = false, shadow: Boolean = true,
+    glint: Boolean = true)   // (+ WP6) glint = false keeps the holo foil still: a holo sticker on a text plate whose hold
+                             // no glint may cross (§9, the celebration's bonus card)
 @Composable fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)? = null)
 @Composable fun LcdText(text: String, pitch: Dp, modifier: Modifier = Modifier)
 @Composable fun LcdPetSprite(pose: PetPose, modifier: Modifier = Modifier)          // drawn by WP4; WP6 and WP9 animate it
 @Composable fun PuffyText(text: String, style: TextStyle, fill: Color, stroke: Dp, modifier: Modifier = Modifier)
 // PuffyText and LcdText set the TextOverflowed semantics key when their text does not fit (NoClippedTextTest)
+@Composable fun PicnicText(text: String, style: TextStyle, modifier: Modifier = Modifier, color: Color = style.color,
+    textAlign: TextAlign? = null, maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,              // (+ WP6) a maxLines text that may not fit passes Ellipsis
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null)      // (+ WP6) a caller that hides it from TalkBack still reports a cut
+class ToastHostState { …; var paused: Boolean }              // (+ WP6) true while something covers the toasts (the celebration):
+    // the current hold waits and, once uncovered, runs whole again (§4.15: an Undo toast is never cut short)
+@Composable fun ChipFace(fill: Color, modifier: Modifier = Modifier, height: Dp = 32.dp, border: Dp, horizontal: Dp = 11.dp,
+    grows: Boolean = true, content: @Composable RowScope.() -> Unit)   // (polish) height is a minimum: the face grows
+    // with its label at large font scales; NumberCircle's size, the pills' 52 / 48 dp and the store and rarity chips'
+    // 22 dp are minimums too (they grow from their label's line), so no label clips at font scale 2.0
 // TripProgress is removed (replaces): its slot is now the sticker book (WP5)
 
 // icons/StickerArt.kt (owner WP1) — replaces IconImages (consumers: ItemIcon, IconRepository)
@@ -1716,14 +1729,56 @@ interface Choreographer {
     fun onToggle(event: ToggleEvent)        // a check-off tap (or its TalkBack / keyboard / swipe equivalent), after the store update
     fun onChange(change: ListChange)        // any other change that completes or re-opens an aisle or the trip (§8.4)
     fun skipNextCard(); fun closeCelebration()
+    fun keepCelebration()                   // (+) §0.4 Q7: a tap on the summary stops the auto-close; a Done button closes it
+    fun onUserOpen(sectionId: String?)      // (+) her own tap on a strip (null: the open tray's chevron), after the store update:
+        // it wins at once over any aisle-done chain (the chain stops holding its tray, drops its scroll, and a Next card
+        // naming another aisle leaves, §6.1). WP5 calls it from the strip and chevron handlers, never for programmatic opens.
 }
 data class ToggleEvent(val itemId: String, val sectionId: String, val checked: Boolean, val slot: Int?,
-    val aisleCompleted: Boolean, val tripCompleted: Boolean, val nextSectionId: String?, val personality: Personality)
+    val aisleCompleted: Boolean, val tripCompleted: Boolean, val nextSectionId: String?, val personality: Personality,
+    val icon: IconRef? = null, val holo: Boolean = false, val aisleIndex: Int = -1,   // (+) what the hop's overlay copy draws
+    val aisleWasOpen: Boolean = true,       // (+) false plays the folded-aisle form (§8.4)
+    val finaleShown: Boolean = false,       // (+) a re-completion only re-presses PERFECT (§7.1)
+    val newBook: Boolean = false)           // (+) §0.4 Q9: this check-off started a new sticker book on its own; the book turns
+        // to the fresh page at the tap (3 frames, 240 ms) and the twin appears there at its usual beat
 data class ListChange(val aisleCompleted: Set<String>, val aisleReopened: Set<String>, val tripCompleted: Boolean,
-    val tripReopened: Boolean, val nextSectionId: String?, val cause: ChangeCause)
-enum class ChangeCause { DELETE, MOVE, SYNC, AISLES_EDIT, UNDO, ADD, RESUME }
+    val tripReopened: Boolean, val nextSectionId: String?, val cause: ChangeCause,
+    val openSectionId: String? = null, val finaleShown: Boolean = false, val finaleStale: Boolean = false,   // (+) §7.1, item 154
+    val slot: Int? = null)                  // (+) NEW_BOOK_UNDO only: the spot the item takes again in the restored old book
+enum class ChangeCause { DELETE, MOVE, SYNC, AISLES_EDIT, UNDO, ADD, RESUME,
+    NEW_BOOK_UNDO }                         // (+) Undo on "New sticker book for today": the old book returns with a page turn
+        // back and the twin fades into ListChange.slot; WP5 sends it with empty aisle sets and no trip flags
+sealed interface SpotPhase { Empty; Next; Appearing(val t0: Long, val inPlace: Boolean = false); Shown; … }
+    // (+) inPlace: a 120 ms fade in place, no bloom, sparks or poses (the new book's Undo puts the twin back)
+@Stable class FoldToggles { fun of(sectionId: String): Int; fun bump(sectionId: String) }   // (+) her own fold and unfold
+    // taps per section (item 193): WP5 bumps it from the strip and chevron handlers (and their TalkBack and keyboard
+    // equivalents), never for the presentation's own folds
+@Composable fun FoldFocusEffect(open: Boolean, anyOpen: Boolean, userToggles: Int, chevron: FocusRequester, strip: FocusRequester)
+    // (+) focus follows her fold once the 240 ms fold has played (§8.5, §15)
 class AnchorRegistry { fun Modifier.anchor(key: String): Modifier; fun bounds(key: String): Rect? }
 object CelebrationTimeline { fun of(listName: String, stats: TripStatsValue, petHatched: Boolean): List<Beat> }   // §11.2
+
+// ui/add (owner WP7) — replaces ARCHITECTURE §10.3's v1 add shapes (consumers: WP5's list, WP9's commit hooks)
+sealed interface AddPhase { Idle; Recording(elapsedMs: Long, level: Float, levels: List<Float>); Transcribing;
+    Thinking(kind: ItemSource); Preview;
+    Failed(val problem: AddProblem, val message: String? = null, val retryable: Boolean = false,   // replaces Failed(message, …)
+        val canUsePlainLines: Boolean = false, val needsSettings: Boolean = false) }
+enum class AddProblem { AI, PHOTO_UNREADABLE, CAMERA_UNAVAILABLE, MIC_UNAVAILABLE, MIC_DENIED, TOO_SHORT, NOTHING_HEARD,
+    SAVE_FAILED }                           // the app's own copy per problem; an AI error carries core's friendly message
+sealed interface AddEvent {                 // redesigned: one-off events for the List screen, which shows the toasts
+    data class Committed(val commit: AddCommit); data class Undone(val commitId: Long); data object SaveFailed
+    data class SortFailed(val friendlyMessage: String, val leftUnsorted: Int); data object FocusField }
+data class AddCommit(val id: Long, val listId: String, val listTitle: String, val added: List<GroceryItem>,
+    val alreadyThere: List<GroceryItem>, val revived: List<GroceryItem>, val aisleTitle: String? = null,
+    val asTypedNoKey: Boolean = false) { val canUndo: Boolean; val empty: Boolean; val shiny: Boolean; fun popDelayMillis(index: Int): Long }
+class AddViewModel {
+    fun requireKey(mode: AddMode, capture: () -> Unit)   // (+) Snap and Speak need the key before anything is captured: without
+        // one the sheet opens on [mode] with "Add your OpenAI key in Settings first." and capture never runs
+    suspend fun needsKey(): Boolean }        // (+)
+@Stable class AddFlows {                    // rememberAddFlows(vm): the VM, the platform launchers, the bar's fold and focus
+    fun takePhoto(); fun pickPhoto(); fun recordVoice()   // (+) the camera, the picker and the microphone, through requireKey
+    fun focusField(); val dockHeight: Dp }
+class AddActions(…, val onOpenAppSettings: () -> Unit = {})   // (+) "Open phone settings" after the microphone was refused for good
 
 // ui/eggs (owner WP9)
 interface SurpriseEngine {
@@ -1778,7 +1833,7 @@ Every item is testable by one of:
 - **CI / scan**: a build step or a source/resource scan;
 - **device**: the two items that need a real phone (performance, the recorded walkthrough).
 
-Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's rule (R1–R6) or request (BOOK, WORKS, READ, POLISH). A package is done when every item tagged with it passes; the art pass is done when all 312 pass. The work-package acceptance lists (§21) and the rule and request columns of §0.1 and §0.2 are exactly the items carrying that tag.
+Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's rule (R1–R6) or request (BOOK, WORKS, READ, POLISH). A package is done when every item tagged with it passes; the art pass is done when every item not marked Retired passes. The work-package acceptance lists (§21) and the rule and request columns of §0.1 and §0.2 are exactly the items carrying that tag.
 
 **Review.** Items and goldens marked "reviewed" are approved by **Cora** when first recorded and whenever they change, against five criteria: (1) it matches the mockup's look for that state; (2) rules R1–R6 hold; (3) every text is readable at arm's length (contrast, size, nothing over it); (4) no artefacts (half dashes, seams, clipped strokes, stray white); (5) nothing reads as a placeholder or a Material default. The full list of required golden names is Appendix C.
 
@@ -2187,6 +2242,11 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 335. **[WP9]** Egg 3's produce spins with its travel: clockwise moving right, anticlockwise moving left, one turn per 138 dp (θ = Δx ⁄ r). — *Test:* `EggRollingTest.spinMatchesTravel`
 336. **[WP4]** The postage-edged recipe card shows its bites on all four sides on the white letter-set sheet: a 1 dp 55 % periwinkle rim follows the whole cut shape; the hard shadow stays on the right and bottom. — *Test:* goldens `recipe_card_*` and the paper kit (`PaperDayPreview`, `PaperGlowPreview`), read at full size
 
+### 20.23 Polish (3 October)
+
+337. **[WP4 · POLISH]** Nothing in the theme kit clips at font scale 2.0, and at 1.0 everything keeps its drawn size: the number circle (24 / 20 dp) grows until its ring clears its numeral; label, aisle and source chips (32 dp), the store-aisle and rarity chips (22 dp) and the pills (52 / 48 dp) grow with their labels; a ruled multi-line field's rules follow its lines (pitch = the text's line height); the LCD star's blink moves no dot; a disabled round sticker (More, Back, the add-bar buttons) is a flat `backing` disc with a ballpointSoft glyph, no gloss or shadow. Local workarounds go (the recipe card's fixed-size badges, the Next card's own store chip). — *Test:* `LargeTextComponentsTest.numberCircleGrowsWithItsNumeral`, `.chipsAndPillsGrowInsteadOfClipping`, `.ruledFieldRulesFollowTheLines`, `.lcdStarBlinkNeverMovesADot`, `ButtonGlossTest.allowedWhiteOnly` (disabled faces), goldens `button_round_disabled_*`, `addbar_waiting`, `field_multiline`
+338. **[WP4 · POLISH]** Puffy lettering has no pinholes or hairline cracks where its glyphs' halos nearly meet (the NEXT "XT" speck), and an ellipsized title drops the space before its "…" and ends its box at it. — *Test:* `PuffyTextBoundsTest.strokeHasNoPinholes`, `.pinholeFinder`, `.ellipsisDropsTheSpace`, goldens `puffy_title_ellipsized`, `nextcard_*`
+
 ## 21. Work packages
 
 Ten packages, each with exclusive file ownership so agents can work in parallel without merge conflicts. ARCHITECTURE §3 ownership rules still apply inside them: add to a contract freely; rename or change meaning only with a note to the consumers named here. `docs/ARCHITECTURE.md`, this file and `README.md` belong to the **lead** (integration), who merges the amendments each package drafts.
@@ -2237,8 +2297,8 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Owns**: `ui/theme/Tokens.kt`, `Theme.kt`, `Components.kt`, `Decor.kt`, `Drawing.kt`, `Glyphs.kt`, `ItemIcon.kt`, `ThemePreviews.kt`, `ThemeSampler.kt`, new `MotionSpec.kt` (every §8.2 token, `readHold`, `words`, `FixedMotionScale`; `PicnicMotion` moves here from `Tokens.kt` / `Theme.kt`; a phase-0 stub), `PuffyText.kt`, `Holo.kt`, `Hanko.kt`, `Washi.kt`, `Lcd.kt` (`LcdText`, `LcdChip`, `LcdPetSprite`), `Dashes.kt` (`DashSpec.forCircle`, `forPath`), `Patterns.kt`, `Stepped.kt`; `res/values/strings_theme.xml`; `MainActivity.kt` (variant from `ThemeVariantSource`, bar styles, both animation scales); deletes `PlaceholderArt.kt` once WP5 stops using it; tests under `app/src/test/…/ui/theme/**` and component goldens.
 - **Provides**: `PicnicTheme(variant, reducedMotion)`, the tokens, `MotionSpec` (to WP6 and every package with a toast, sheet, button, LCD or switch timing), every component signature in §19.2, `ItemIcon` variants, `CheckMark(seed, stampText)`, `LcdChip`, `LcdText`, `LcdPetSprite` (to WP6 and WP9), `DashSpec`, `Modifier.groundBacking()`, `Modifier.hardShadow()`, the pad patch.
 - **Consumes**: WP1 and WP2 manifests (falls back to a neutral capsule until they land), WP9 `ThemeVariantSource` (stubbed to system dark until then).
-- **Tests**: `TokensTest`, `TokensContrastTest`, `TextColourUsageTest`, `TypographyTest`, `DashSpecTest`, `HankoTest`, `ButtonGlossTest`, `ButtonTest`, `ToastTest`, `SheetTest`, `LcdGlyphsTest`, `LcdChipTest`, `GroundTest`, `HoloTest`, `ShaderCacheTest`, `ReducedMotionTest`, `MotionSpecTest`, `ReadHoldTest`, `MainActivityBarsTest`, component goldens.
-- **Acceptance**: 1–17, 22–25, 27, 36–41, 51–57, 59–74, 81, 166, 192, 195, 262–264, 306, 334, 336
+- **Tests**: `TokensTest`, `TokensContrastTest`, `TextColourUsageTest`, `TypographyTest`, `DashSpecTest`, `HankoTest`, `ButtonGlossTest`, `ButtonTest`, `ToastTest`, `SheetTest`, `LcdGlyphsTest`, `LcdChipTest`, `GroundTest`, `HoloTest`, `ShaderCacheTest`, `ReducedMotionTest`, `MotionSpecTest`, `ReadHoldTest`, `MainActivityBarsTest`, `PuffyTextBoundsTest`, `LargeTextComponentsTest`, component goldens.
+- **Acceptance**: 1–17, 22–25, 27, 36–41, 51–57, 59–74, 81, 166, 192, 195, 262–264, 306, 334, 336–338
 
 #### WP5 · list-screen + sticker book + baskets
 *The List screen in C: the top stack and the trip sticker book, folded strips and the open tray, rows in place, baskets with their states, peek, swipes, pull to refresh, the docked add bar's placement and the FAB, the New trip and Trip book sheets.*
@@ -2437,6 +2497,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 15 | `washi_all`, `perforation_addbar`, `postage_recipe_card`, `padcard_punchholes` | — |
 | 21 | `about_licences_day` | — |
 | 23 | `puffy_title_day`, `puffy_title_glow`, `wordmark_day` | — |
+| 334 | `puffy_title_{day,glow}_long`, `puffy_title_ellipsized` | — |
 | 33 | `stickers_calibration_contact`, `stickers_ontario_contact` | — |
 | 34 | `stickers_contact_<category>` | — |
 | 36 | `itemicon_shadow_day`, `itemicon_shadow_glow`, `itemicon_shadow_golden` | — |
@@ -2546,5 +2607,5 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | Add (§6.2) | `addbar_focused`, `addbar_typing`, `add_thinking`, `add_snap_speak_merged`, `toast_after_commit` |
 | Edit, switcher, sheets (§6.3–§6.6) | `edit_renamed`, `newtrip_sheet`, `newtrip_sheet_idle_prompt`, `deletelist_sheet_with_book` |
 | My store, Settings, About (§6.7–§6.9) | `mystore_text_focused`, `mystore_error`, `settings_save_error`, `surprise_lab`, `surprise_lab_practice_list` |
-| Album (§6.10, §6.12) | `album_early`, `album_full`, `album_holo_glint`, `album_face_blink`, `album_back_pocket`, `album_empty` |
+| Album (§6.10, §6.12) | `album_early`, `album_full`, `album_holo_glint`, `album_face_blink`, `album_back_pocket`, `album_empty`, `album_tripbook_open` (a filed book's sheet), `album_receipt_full` (its receipt at full size), `album_pocket_lift` (§4.25 pocket interaction) |
 | Book (§7.5) | `book_dusk`, `book_golden`, `book_bonus_stage`, `book_empty_list_hidden` |
