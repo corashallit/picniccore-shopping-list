@@ -263,34 +263,50 @@ class AislesViewModel(
         textDraft.compareAndSet(text, null)
     }
 
-    private fun build(s: AppState, draft: String?, preview: String?, u: Ui): AislesUiState {
-        val previewing = draft != null && preview != null && preview != s.store.aislesText
-        val aisles = if (previewing) Aisles.parse(preview!!) else s.store.aisles()
-        val labels = aisles.map { aisle ->
-            val style = s.store.aisleStyles[aisle.id]
-            AisleLabelUi(
-                aisle = aisle,
-                style = style,
-                storeAisle = style?.storeAisle ?: storeAisleNumber(aisle.name),
-                basket = s.store.aisleBaskets[aisle.id] ?: baskets.guess(aisle),
-            )
-        }
-        return AislesUiState(
-            storeName = u.name ?: s.store.name,
-            text = draft ?: s.store.aislesText,
-            labels = labels,
-            dirty = draft != null && draft != s.store.aislesText,
-            previewing = previewing,
-            editing = u.editing?.takeIf { id -> !previewing && labels.any { it.aisle.id == id } },
-            syncing = u.syncing,
-            lastReport = u.report,
-            loading = false,
-        )
-    }
+    private fun build(s: AppState, draft: String?, preview: String?, u: Ui): AislesUiState =
+        stateOf(s, baskets, draft, preview, u.name, u.editing, u.syncing, u.report)
 
     companion object {
         /** The labels preview the text 400 ms after she stops typing (§6.7). */
         const val PREVIEW_MILLIS: Long = 400
+
+        /**
+         * The screen's state for [s] (pure: the ViewModel, the goldens and the tests build it the same way): the labels of
+         * the saved aisles, or of the [preview] of the [draft] text while she types.
+         */
+        fun stateOf(
+            s: AppState,
+            baskets: BasketCatalog,
+            draft: String? = null,
+            preview: String? = draft,
+            name: String? = null,
+            editing: String? = null,
+            syncing: Boolean = false,
+            report: AisleSyncReport? = null,
+        ): AislesUiState {
+            val previewing = draft != null && preview != null && preview != s.store.aislesText
+            val aisles = if (previewing) Aisles.parse(preview!!) else s.store.aisles()
+            val labels = aisles.map { aisle ->
+                val style = s.store.aisleStyles[aisle.id]
+                AisleLabelUi(
+                    aisle = aisle,
+                    style = style,
+                    storeAisle = style?.storeAisle ?: storeAisleNumber(aisle.name),
+                    basket = s.store.aisleBaskets[aisle.id] ?: baskets.guess(aisle),
+                )
+            }
+            return AislesUiState(
+                storeName = name ?: s.store.name,
+                text = draft ?: s.store.aislesText,
+                labels = labels,
+                dirty = draft != null && draft != s.store.aislesText,
+                previewing = previewing,
+                editing = editing?.takeIf { id -> !previewing && labels.any { it.aisle.id == id } },
+                syncing = syncing,
+                lastReport = report,
+                loading = false,
+            )
+        }
 
         fun factory(c: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer { AislesViewModel(c.store, c.aisleSync, c.baskets, c.appScope, c.clock) }

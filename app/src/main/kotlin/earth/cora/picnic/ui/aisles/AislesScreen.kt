@@ -68,7 +68,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -296,7 +299,9 @@ private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDr
     var dragging by remember { mutableIntStateOf(initialDrag?.index ?: -1) }
     var offset by remember { mutableFloatStateOf((initialDrag?.offsetSlots ?: 0f) * slot) }
     val count = state.labels.size
-    val target = if (dragging < 0) -1 else (dragging + (offset / slot).roundToInt()).coerceIn(0, (count - 1).coerceAtLeast(0))
+    // Read at call time (the drop can come before any recomposition of the drag).
+    fun targetNow(): Int = if (dragging < 0) -1 else (dragging + (offset / slot).roundToInt()).coerceIn(0, (count - 1).coerceAtLeast(0))
+    val target = targetNow()
     val newName = stringResource(R.string.aisles_new_name)
 
     PicnicSurface(Modifier.fillMaxWidth(), color = c.backing, large = true) {
@@ -338,7 +343,7 @@ private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDr
                     },
                     onDrag = { dy -> offset += dy },
                     onDragEnd = {
-                        val to = target
+                        val to = targetNow()
                         val from = dragging
                         dragging = -1
                         offset = 0f
@@ -353,18 +358,16 @@ private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDr
                     modifier = Modifier.padding(start = 6.dp, bottom = 6.dp),
                 )
             }
-            Row(
-                Modifier.fillMaxWidth().padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                DashedAddSpot(
-                    stringResource(R.string.aisles_add),
-                    onClick = { actions.onAdd(newName) },
-                    modifier = Modifier.weight(1f),
-                    onBacking = true,
-                )
-                ResortButton(state.syncing, actions.onResort, Modifier.weight(1.25f))
+            // "Add aisle" is the empty sticker spot where the next label goes (the end of the column); "Re-sort my list"
+            // sits under it, its whole label always readable (side by side they don't both fit at 360 dp).
+            DashedAddSpot(
+                stringResource(R.string.aisles_add),
+                onClick = { actions.onAdd(newName) },
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                onBacking = true,
+            )
+            Box(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 6.dp), contentAlignment = Alignment.Center) {
+                ResortButton(state.syncing, actions.onResort)
             }
             if (state.syncing) {
                 Text(
@@ -392,7 +395,6 @@ private fun ResortButton(syncing: Boolean, onClick: () -> Unit, modifier: Modifi
             style = PicnicButtonStyle.Secondary,
             glyph = PicnicGlyph.Refresh,
             enabled = !syncing,
-            modifier = Modifier.fillMaxWidth(),
         )
         if (syncing) {
             val dash = Families.periwinkle.mid
@@ -561,30 +563,40 @@ private fun AisleLabel(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    // One line: the name first, then "store aisle 2" in 13 sp; a long name pushes the number out
+                    // (the label's TalkBack text always has both).
+                    val storeAisle = label.storeAisle?.let { stringResource(R.string.aisles_store_aisle, it) }
+                    val caption = PicnicTheme.type.caption
+                    val line = remember(name, storeAisle, caption) {
+                        buildAnnotatedString {
+                            append(name)
+                            if (storeAisle != null) {
+                                append("  ")
+                                withStyle(SpanStyle(fontSize = caption.fontSize, fontWeight = caption.fontWeight, fontFamily = caption.fontFamily)) {
+                                    append(storeAisle)
+                                }
+                            }
+                        }
+                    }
                     Text(
-                        name,
+                        line,
                         style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 16.sp, lineHeight = 20.sp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (label.storeAisle != null) {
-                        Text(
-                            stringResource(R.string.aisles_store_aisle, label.storeAisle),
-                            style = PicnicTheme.type.caption.copy(color = c.ballpoint),
-                            maxLines = 1,
-                        )
-                    }
                 }
                 Swatch(look, Modifier.size(26.dp))
-                RoundStickerButton(
-                    glyph = if (editing) PicnicGlyph.Check else PicnicGlyph.Edit,
-                    contentDescription = if (editing) stringResource(R.string.aisles_edit_done, name) else stringResource(R.string.aisles_edit, name),
-                    onClick = { if (editing) actions.onStopEditing() else actions.onEdit(label.aisle.id) },
-                    enabled = enabled,
-                    faceSize = 32.dp,
-                    modifier = Modifier.padding(end = 2.dp),
-                )
+                // The round button keeps the page's own colours (its face is the pad: white in Day, navy in Glow).
+                CompositionLocalProvider(LocalPicnicColors provides c) {
+                    RoundStickerButton(
+                        glyph = if (editing) PicnicGlyph.Check else PicnicGlyph.Edit,
+                        contentDescription = if (editing) stringResource(R.string.aisles_edit_done, name) else stringResource(R.string.aisles_edit, name),
+                        onClick = { if (editing) actions.onStopEditing() else actions.onEdit(label.aisle.id) },
+                        enabled = enabled,
+                        faceSize = 32.dp,
+                        modifier = Modifier.padding(end = 2.dp),
+                    )
+                }
             }
             if (editing) LabelEditor(label, look, actions)
         }
