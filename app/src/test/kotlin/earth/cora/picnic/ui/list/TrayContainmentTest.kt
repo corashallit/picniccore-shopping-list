@@ -3,6 +3,7 @@ package earth.cora.picnic.ui.list
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToKey
@@ -36,6 +37,9 @@ class TrayContainmentTest {
     private fun rowSlots(): List<String> = compose.onAllNodes(hasTagPrefix("picnic_row_slot_")).fetchSemanticsNodes()
         .mapNotNull { it.config.getOrNull(SemanticsProperties.TestTag)?.removePrefix("picnic_row_slot_") }
 
+    /** The node's laid-out bounds in the root, not clipped by the list's viewport (a row half under its edge is whole). */
+    private fun laidOut(tag: String): Rect = compose.onNodeWithTag(tag).fetchSemanticsNode().let { Rect(it.positionInRoot, it.size.toSize()) }
+
     private fun containment(fontScale: Float?, variant: ThemeVariant) {
         val rig = ListRig(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, "produce"))
         compose.show(rig, variant = variant, fontScale = fontScale)
@@ -48,7 +52,7 @@ class TrayContainmentTest {
         // floating cards (R1).
         val visible = produce.filter { compose.exists(ListTags.rowSlot(it)) }
         assertTrue("rows on screen at font scale ${fontScale ?: 1f}", visible.size >= 2)
-        val rows = visible.map { it to compose.boundsOf(ListTags.rowSlot(it)) }
+        val rows = visible.map { it to laidOut(ListTags.rowSlot(it)) }
         for ((id, r) in rows) {
             assertEquals("$id spans the tray's width", header.left, r.left, 0.5f)
             assertEquals("$id spans the tray's width", header.right, r.right, 0.5f)
@@ -56,7 +60,16 @@ class TrayContainmentTest {
             last = r.bottom
         }
         if (visible.size == produce.size) {
-            val cap = compose.boundsOf(ListTags.cap("produce"))
+            var cap = if (compose.exists(ListTags.cap("produce"))) laidOut(ListTags.cap("produce")) else null
+            if (cap == null) {
+                // Large text: the last row runs under the viewport's edge and the cap waits below it. The last row
+                // scrolls to the top with the cap after it; the shift maps the cap back into the rows' frame.
+                val before = rows.last().second
+                compose.onNodeWithTag(ListTags.LIST).performScrollToKey(produce.last())
+                compose.waitForIdle()
+                val after = laidOut(ListTags.rowSlot(produce.last()))
+                cap = laidOut(ListTags.cap("produce")).translate(0f, before.top - after.top)
+            }
             assertTrue("the cap closes the tray under its last row", abs(cap.top - last) <= 0.5f)
             val tray = Rect(header.left, header.top, header.right, cap.bottom)
             for ((id, r) in rows) assertTrue("$id inside the tray $tray: $r", tray.contains(r.topLeft) && r.right <= tray.right + 0.5f && r.bottom <= tray.bottom + 0.5f)

@@ -51,6 +51,9 @@ import earth.cora.picnic.ui.theme.FlatStar
 import earth.cora.picnic.ui.theme.LcdChip
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.NAME_TAG_PAD_X
+import earth.cora.picnic.ui.theme.NAME_TAG_PAD_Y
+import earth.cora.picnic.ui.theme.NAME_TAG_RIM
 import earth.cora.picnic.ui.theme.NameTag
 import earth.cora.picnic.ui.theme.PadPatch
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -61,6 +64,7 @@ import earth.cora.picnic.ui.theme.PuffyText
 import earth.cora.picnic.ui.theme.StickerBook
 import earth.cora.picnic.ui.theme.SunSticker
 import earth.cora.picnic.ui.theme.ThemeVariant
+import earth.cora.picnic.ui.theme.nameTagStyle
 import kotlin.math.ceil
 import kotlinx.coroutines.withContext
 
@@ -108,7 +112,7 @@ internal fun TopStack(
                 var captionTag by remember { mutableStateOf<String?>(null) }
                 BookWithCaption(
                     caption = if (dateOnPage) null else { { BookDateCaption(book.dateLabel, season = book.season) } },
-                    tag = captionTag?.let { text -> @Composable { NameTag(text) } },
+                    tag = captionTag,
                     book = {
                         StickerBook(
                             state = book,
@@ -131,17 +135,20 @@ internal fun TopStack(
 }
 
 /**
- * The book under its date caption (large text, §7.4), and the stamp name tag while it holds: in the caption row after
+ * The book under its date caption (large text, §7.4), and the stamp name [tag] while it holds: in the caption row after
  * the date, growing down over the book's right side as far as the book goes, never past it (so never over the list).
- * The tag lies over the caption and the book; it moves nothing.
+ * When the column after the date cannot hold every word, the tag widens leftwards over the caption, up to the book's
+ * width, rather than lose one. The tag lies over the caption and the book; it moves nothing.
  */
 @Composable
-private fun BookWithCaption(caption: (@Composable () -> Unit)?, tag: (@Composable () -> Unit)?, book: @Composable () -> Unit) {
+private fun BookWithCaption(caption: (@Composable () -> Unit)?, tag: String?, book: @Composable () -> Unit) {
+    val measurer = rememberTextMeasurer()
+    val tagStyle = nameTagStyle()
     Layout(
         content = {
             if (caption != null) Box(Modifier.layoutId("caption")) { caption() }
             Box(Modifier.layoutId("book")) { book() }
-            if (tag != null) Box(Modifier.layoutId("tag")) { tag() }
+            if (tag != null) Box(Modifier.layoutId("tag")) { NameTag(tag) }
         },
     ) { measurables, constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
@@ -151,10 +158,20 @@ private fun BookWithCaption(caption: (@Composable () -> Unit)?, tag: (@Composabl
         val bookY = captionP?.let { it.height + gap } ?: 0
         val width = maxOf(bookP.width, captionP?.width ?: 0)
         val height = bookY + bookP.height
-        val tagX = captionP?.let { it.width + 8.dp.roundToPx() } ?: 0
+        val afterDate = captionP?.let { it.width + 8.dp.roundToPx() } ?: 0
+        // Does every word fit in the column after the date, within the height the tag may take? (The text's own height:
+        // the round face's first and last lines stand taller than its line height.)
+        val frameX = 2 * (NAME_TAG_RIM + NAME_TAG_PAD_X).roundToPx()
+        val frameY = 2 * (NAME_TAG_RIM + NAME_TAG_PAD_Y).roundToPx()
+        val fitsAfterDate = tag == null || run {
+            val column = (width - afterDate - frameX).coerceAtLeast(1)
+            measurer.measure(tag, tagStyle, constraints = Constraints(maxWidth = column)).size.height <= height - frameY
+        }
+        val tagWidth = if (fitsAfterDate) width - afterDate else width
         val tagP = measurables.firstOrNull { it.layoutId == "tag" }?.measure(
-            Constraints(maxWidth = (width - tagX).coerceAtLeast(0), maxHeight = height.coerceAtLeast(0)),
+            Constraints(maxWidth = tagWidth.coerceAtLeast(0), maxHeight = height.coerceAtLeast(0)),
         )
+        val tagX = if (fitsAfterDate) afterDate else width - (tagP?.width ?: 0)
         layout(width, height) {
             captionP?.place(0, 0)
             bookP.place(0, bookY)

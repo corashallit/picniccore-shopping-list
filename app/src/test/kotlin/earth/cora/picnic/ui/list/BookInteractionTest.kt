@@ -104,8 +104,8 @@ class BookInteractionTest {
     /**
      * Item 157 at large text, with the longest default aisle name ("7 · Pasta, rice & international · 1 left", stamp 7 of
      * the 14 default aisles): at 1.3 the tag stays on the right page at the page's art scale and wraps; at 2.0 it joins
-     * the date's caption row above the book and grows with the text. Never a lost word, never past the book's bottom
-     * (so never over the list).
+     * the date's caption row above the book and grows with the text, widening over the caption when the column after the
+     * date is too short for it. Never a lost word, never past the book's bottom (so never over the list).
      */
     @Test
     fun stampTagAtLargeText130() = longTagFits(1.3f)

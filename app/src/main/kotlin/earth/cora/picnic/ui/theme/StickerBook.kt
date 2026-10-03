@@ -59,6 +59,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -753,8 +754,7 @@ fun NameTag(text: String, modifier: Modifier = Modifier, onPage: Boolean = false
     val c = PicnicTheme.colors
     val shape = RoundedCornerShape(4.dp)
     val probe = LocalPieceProbe.current
-    val k = if (onPage) 1f / LocalDensity.current.fontScale.coerceAtLeast(1f) else 1f
-    val style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = (13f * k).sp, lineHeight = (15f * k).sp)
+    val style = nameTagStyle(onPage)
     BoxWithConstraints(
         modifier
             .testTag(BookTags.NAME_TAG)
@@ -763,10 +763,10 @@ fun NameTag(text: String, modifier: Modifier = Modifier, onPage: Boolean = false
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
             .background(c.stickerWhite)
-            .padding(2.dp)
+            .padding(NAME_TAG_RIM)
             .clip(shape)
             .background(Families.lemon.pastel)
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+            .padding(horizontal = NAME_TAG_PAD_X, vertical = NAME_TAG_PAD_Y),
     ) {
         val lineHeight = with(LocalDensity.current) { style.lineHeight.toDp() }
         val room = if (constraints.hasBoundedHeight) (maxHeight / lineHeight).toInt().coerceAtLeast(1) else Int.MAX_VALUE
@@ -780,6 +780,18 @@ fun NameTag(text: String, modifier: Modifier = Modifier, onPage: Boolean = false
         )
     }
 }
+
+/** The name tag's text: 13 sp on 15 sp lines, at the page's art scale on the page ([NameTag]). */
+@Composable
+fun nameTagStyle(onPage: Boolean = false): TextStyle {
+    val k = if (onPage) 1f / LocalDensity.current.fontScale.coerceAtLeast(1f) else 1f
+    return PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = (13f * k).sp, lineHeight = (15f * k).sp)
+}
+
+/** The name tag's white rim, and its label's padding across and down: the frame around its text ([NameTag]). */
+val NAME_TAG_RIM = 2.dp
+val NAME_TAG_PAD_X = 6.dp
+val NAME_TAG_PAD_Y = 2.dp
 
 /** The saved receipt's slip (§7.3): 26 × 32 dp cream paper with three ink lines, rotated −7°, behind the page. */
 @Composable
