@@ -16,9 +16,7 @@
     <string name="egg_receipt_save">save it to the sticker book</string>
 
     <!-- The Surprise lab's practice list (§6.9). -->
-    <string name="egg_lab_playing">Playing on the practice list</string>
     <string name="egg_lab_reset">Start the practice list over</string>
-    <string name="egg_lab_done">Practice list · %1$d of %2$d in the basket</string>
     <!-- The Unsorted section's tab on the practice list (§4.10). -->
     <string name="egg_practice_everything_else">Everything else</string>
 </resources>

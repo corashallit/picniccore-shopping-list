@@ -30,9 +30,9 @@ import earth.cora.picnic.ui.theme.ThemeVariant
 
 /*
  * WP9 test support: the Surprise lab's sandbox (the Appendix A fixture in memory, its own SurpriseEngine with a seeded
- * Random and a fake clock) rendered as the practice list, on the Compose test clock (autoAdvance off). The sandbox's
- * fake clock moves with the test clock frame by frame, so the eggs' wall-clock rules (1.5 s between sun taps, the 6 s
- * bonus limit, the 5.2 s petal cooldown) and the overlays' frame-clock beats run on one time line.
+ * Random and its own clock) rendered as the practice list, on the Compose test clock (autoAdvance off). The sandbox's
+ * clock runs with the test clock (as it runs with real time on the phone), so the eggs' wall-clock rules (1.5 s between
+ * sun taps, the 6 s bonus limit, the 5.2 s petal cooldown) and the overlays' frame-clock beats run on one time line.
  */
 
 /** Where goldens go (Roborazzi's outputDir). */
@@ -52,7 +52,8 @@ class EggRig(
 ) {
     val feedback: TimedFeedback = TimedFeedback { compose.mainClock.currentTime }
     val announcer: TimedAnnouncer = TimedAnnouncer { compose.mainClock.currentTime }
-    val clock = FakeClock(startAt)
+    /** The sandbox's clock runs with the test clock (as it runs with real time on the phone). */
+    val clock = SandboxClock(startAt) { compose.mainClock.currentTime }
     val sandbox = SurpriseLabSandbox(
         fixture = fixture,
         clock = clock,
@@ -60,6 +61,8 @@ class EggRig(
         announcer = announcer,
         timeouts = timeouts,
         seed = seed,
+        // The tests move the clock to the minute themselves (tickNow), so no tick waits on a real delay.
+        minuteTicks = false,
     )
     val engine: AppSurpriseEngine get() = sandbox.engine
     val model: PracticeModel get() = sandbox.model
@@ -88,13 +91,11 @@ class EggRig(
     /** The test clock's time. */
     val now: Long get() = compose.mainClock.currentTime
 
-    /** One frame; the sandbox clock moves with it. */
+    /** One frame (the sandbox clock follows the test clock by itself). */
     fun frame() {
         Snapshot.sendApplyNotifications()
         compose.waitForIdle()
-        val before = now
         compose.mainClock.advanceTimeByFrame()
-        clock.advance(now - before)
         Snapshot.sendApplyNotifications()
         compose.waitForIdle()
     }

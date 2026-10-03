@@ -66,7 +66,14 @@ class EggGoldensTest(private val variant: ThemeVariant) {
      */
     @Test
     fun practiceList() {
-        val lab = SurpriseLabViewModel { SurpriseLabSandbox(feedback = earth.cora.picnic.platform.NoOpFeedback, timeouts = earth.cora.picnic.platform.FakeTimeouts()) }
+        val lab = SurpriseLabViewModel {
+            SurpriseLabSandbox(
+                clock = SandboxClock(PracticeFixture.NOW) { compose.mainClock.currentTime },
+                feedback = earth.cora.picnic.platform.NoOpFeedback,
+                timeouts = earth.cora.picnic.platform.FakeTimeouts(),
+                minuteTicks = false,
+            )
+        }
         compose.mainClock.autoAdvance = false
         compose.setContent {
             androidx.compose.runtime.CompositionLocalProvider(earth.cora.picnic.ui.theme.LocalTimeouts provides earth.cora.picnic.platform.FakeTimeouts()) {

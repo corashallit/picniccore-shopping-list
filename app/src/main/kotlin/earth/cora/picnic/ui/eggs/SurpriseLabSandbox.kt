@@ -1,5 +1,6 @@
 package earth.cora.picnic.ui.eggs
 
+import android.os.SystemClock
 import earth.cora.picnic.core.calendar.PlaceSource
 import earth.cora.picnic.core.calendar.Seasons
 import earth.cora.picnic.core.calendar.SunClock
@@ -49,14 +50,35 @@ import java.time.LocalTime
 import java.time.ZoneId
 import kotlin.random.Random
 
-/** The sandbox's clock (§6.9: simulated conditions, a fake clock). Epoch ms. */
-class FakeClock(start: Long) {
-    @Volatile var nowMs: Long = start
+/**
+ * The sandbox's clock (§6.9), epoch ms: the fixture's Saturday 10:24 when the sandbox opens, then running with real time
+ * ([ticker]: elapsed ms, `SystemClock.elapsedRealtime` on the phone, the test clock in tests), so the eggs' time rules
+ * (1.5 s between sun taps, the 6 s bonus limit, the 5.2 s petal cooldown) expire on the practice list as they do on her
+ * list. A simulated condition (23:30, 20 min before sunset, a season's window) only moves the clock's offset ([nowMs],
+ * [advance]); time keeps running from there. A [ticker] that never moves gives a clock that moves only by hand.
+ */
+class SandboxClock(private val start: Long, private val ticker: () -> Long) {
+    private val tick0 = ticker()
 
-    fun now(): Long = nowMs
+    @Volatile private var offset = 0L
 
+    fun now(): Long = start + (ticker() - tick0) + offset
+
+    /** Moves the clock on by [ms] (a simulated condition; real time keeps running from there). */
     fun advance(ms: Long) {
-        nowMs += ms
+        offset += ms
+    }
+
+    /** The time now; setting it moves the clock there (real time keeps running from there). */
+    var nowMs: Long
+        get() = now()
+        set(value) {
+            offset += value - now()
+        }
+
+    companion object {
+        /** The phone's sandbox clock: [start], then real time. */
+        fun realTime(start: Long = PracticeFixture.NOW): SandboxClock = SandboxClock(start) { SystemClock.elapsedRealtime() }
     }
 }
 
@@ -69,7 +91,7 @@ class FakeClock(start: Long) {
  */
 class SurpriseLabSandbox(
     fixture: AppState = PracticeFixture.state(),
-    val clock: FakeClock = FakeClock(PracticeFixture.NOW),
+    val clock: SandboxClock = SandboxClock.realTime(),
     val catalog: IconCatalog = IconCatalog.default,
     dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
     feedback: Feedback = NoOpFeedback,
@@ -77,6 +99,8 @@ class SurpriseLabSandbox(
     val timeouts: Timeouts = DefaultTimeouts,
     seed: Int = 7,
     private val zone: ZoneId = ZoneId.of("America/Toronto"),
+    /** Re-read the clock once a minute (midnight arriving, golden hour's sun sinking), as her list does. */
+    minuteTicks: Boolean = true,
 ) {
     private val job = SupervisorJob()
     val scope: CoroutineScope = CoroutineScope(job + dispatcher)
@@ -130,9 +154,16 @@ class SurpriseLabSandbox(
         }
     }
 
-    /** The practice list's own variant (§2.5 on the sandbox clock and settings; the phone's dark mode still applies). */
-    val variants = ThemeVariantSource(settings, clock::now, SunClock, PlaceSource.Toronto, zone, duskShown = engine.state.map { it.dusk }).also {
-        it.start(scope, everyMinute = false)
+    /**
+     * The practice list's own variant (§2.5 on the sandbox clock and settings; the phone's dark mode still applies), and
+     * the minute tick that re-reads the clock for the engine too.
+     */
+    val variants = ThemeVariantSource(
+        settings, clock::now, SunClock, PlaceSource.Toronto, zone,
+        duskShown = engine.state.map { it.dusk },
+        onTick = { engine.refresh() },
+    ).also {
+        it.start(scope, everyMinute = minuteTicks)
     }
 
     /** A step an egg plays a little later (on the frame clock, by the lab screen): the cake's check-off, the jackpot. */
@@ -146,20 +177,23 @@ class SurpriseLabSandbox(
     val fired: StateFlow<Int?> = _fired.asStateFlow()
 
     private var firings = 0
-    private var rollToggle = false
     private var closed = false
 
     val listId: String get() = model.listId
 
-    /** Plays egg [egg] (1–18) on the practice copy (§12.3). */
-    fun fire(egg: Int) {
+    /**
+     * Plays egg [egg] (1–18) on the practice copy as it is now (§12.3). The lab gives every Try it a fresh sandbox
+     * (SurpriseLabViewModel), so each one starts from the fixture; [attempt] counts her tries of this egg (egg 3 hops
+     * strawberries on the first, rolls lemons on the next, and so on).
+     */
+    fun fire(egg: Int, attempt: Int = 0) {
         if (closed) return
         firings++
         _fired.value = egg
         when (egg) {
             1 -> dusk()
             2 -> ladybug()
-            3 -> rolling()
+            3 -> rolling(attempt)
             4 -> {
                 // The lab plays it as its practice list comes into view (a shake only counts on the list).
                 engine.onListShown(listId)
@@ -223,11 +257,10 @@ class SurpriseLabSandbox(
         engine.onBasketHold(strip.id, timeouts.holdThresholdMs + EggRules.LADYBUG_AFTER_THRESHOLD_MS)
     }
 
-    /** Egg 3: adds "Strawberries" (they hop); the next time, "Lemons" (they roll and spin). */
-    private fun rolling() {
+    /** Egg 3: adds "Strawberries" (they hop); the next try, "Lemons" (they roll and spin); and so on. */
+    private fun rolling(attempt: Int) {
         model.set { it.setOpenAisle(listId, PRODUCE) }
-        rollToggle = !rollToggle
-        if (rollToggle) {
+        if (attempt % 2 == 0) {
             replaceAndAdd("Strawberries", "1 L basket", "produce", "strawberry")
         } else {
             replaceAndAdd("Lemons", "3 lemons", "produce", "lemon")

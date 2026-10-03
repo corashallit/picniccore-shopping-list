@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,6 +43,8 @@ import earth.cora.picnic.ui.about.ShellSurpriseLab
 import earth.cora.picnic.ui.about.SurpriseLab
 import earth.cora.picnic.ui.theme.FixedMotionScale
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.PicnicButton
+import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.WashiPattern
 import earth.cora.picnic.ui.theme.WashiTape
@@ -57,11 +60,19 @@ import kotlinx.coroutines.withContext
  * it. Owner: WP9 (SurpriseLabTest).
  */
 
-/** The lab's state holder: one sandbox, made on the first Try it, discarded when she leaves. */
+/**
+ * The lab's state holder. Every Try it plays on a FRESH practice copy (§12.3 "on the sandbox"): the fixture at 10:24, an
+ * empty practice album, no forecast, an engine that has fired nothing yet, its clock running from there. So the eggs
+ * play as often as she likes and in any order: a second petal shake is never held back by the first one's cooldown, a
+ * second ant parade by "once per process", a second midnight by the SNACK? already shown, and "LCD pet" after "LCD
+ * receipt" finds a trip that is not complete. "Start the practice list over" gives a fresh copy with nothing playing.
+ * Leaving the lab discards the copy.
+ */
 class SurpriseLabViewModel(
     private val sandboxFactory: () -> SurpriseLabSandbox,
 ) : ViewModel(), SurpriseLab {
     private var sandboxHolder by mutableStateOf<SurpriseLabSandbox?>(null)
+    private val tries = IntArray(EGGS + 1)
 
     /** The sandbox while the lab is open and an egg has been tried (tests). */
     val sandbox: SurpriseLabSandbox? get() = sandboxHolder
@@ -72,14 +83,25 @@ class SurpriseLabViewModel(
     override val canFire: Boolean = true
 
     override fun fire(number: Int) {
-        val box = sandboxHolder ?: sandboxFactory().also { sandboxHolder = it }
-        box.fire(number)
+        if (number !in 1..EGGS) return
+        fresh().fire(number, attempt = tries[number]++)
+    }
+
+    /** "Start the practice list over": a fresh practice copy, nothing playing. */
+    fun startOver() {
+        fresh()
+    }
+
+    private fun fresh(): SurpriseLabSandbox {
+        sandboxHolder?.close()
+        return sandboxFactory().also { sandboxHolder = it }
     }
 
     @Composable
     override fun Practice(modifier: Modifier) {
         val box = sandboxHolder ?: return
-        PracticeFrame(box, modifier)
+        // A fresh copy is a fresh practice list: its scroll, its chains and its overlays start over with it.
+        key(box) { PracticeFrame(box, modifier, onStartOver = ::startOver) }
     }
 
     override fun close() {
@@ -92,6 +114,8 @@ class SurpriseLabViewModel(
     }
 
     companion object {
+        private const val EGGS = 18
+
         /** The phone's lab: the real Feedback (sounds and haptics follow her switches), timeouts and announcer. */
         fun factory(feedback: Feedback, announcer: Announcer, timeouts: Timeouts): () -> SurpriseLabViewModel = {
             SurpriseLabViewModel { SurpriseLabSandbox(feedback = feedback, announcer = announcer, timeouts = timeouts) }
@@ -103,9 +127,17 @@ class SurpriseLabViewModel(
 fun previewLab(factory: () -> SurpriseLabSandbox = { SurpriseLabSandbox(feedback = NoOpFeedback, announcer = NoOpAnnouncer, timeouts = DefaultTimeouts) }): SurpriseLabViewModel =
     SurpriseLabViewModel(factory)
 
-/** The practice list's frame in the lab: a phone-sized window under the ribbon, scrolled into view at each Try it. */
+/**
+ * The practice list's frame in the lab: a phone-sized window under the ribbon, scrolled into view at each Try it, with
+ * "Start the practice list over" under it ([onStartOver]; none in tests that show the frame alone).
+ */
 @Composable
-fun PracticeFrame(sandbox: SurpriseLabSandbox, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 640.dp) {
+fun PracticeFrame(
+    sandbox: SurpriseLabSandbox,
+    modifier: Modifier = Modifier,
+    height: androidx.compose.ui.unit.Dp = 640.dp,
+    onStartOver: (() -> Unit)? = null,
+) {
     val fired by sandbox.fired.collectAsState()
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(fired, sandbox) { if (fired != null) requester.bringIntoView() }
@@ -138,6 +170,14 @@ fun PracticeFrame(sandbox: SurpriseLabSandbox, modifier: Modifier = Modifier, he
                     modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
                 )
             }
+        }
+        if (onStartOver != null) {
+            PicnicButton(
+                stringResource(R.string.egg_lab_reset),
+                onClick = onStartOver,
+                style = PicnicButtonStyle.Secondary,
+                modifier = Modifier.padding(top = 14.dp).testTag(LAB_RESET_TAG),
+            )
         }
     }
 }
@@ -177,3 +217,6 @@ private fun LabRibbon() {
 
 /** The practice list's frame in the lab (tests). */
 const val LAB_PRACTICE_TAG: String = "lab_practice"
+
+/** "Start the practice list over" (tests). */
+const val LAB_RESET_TAG: String = "lab_reset"

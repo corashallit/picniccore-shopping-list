@@ -4,6 +4,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import android.os.Looper
+import earth.cora.picnic.platform.NoOpFeedback
+import org.robolectric.Shadows.shadowOf
+import java.time.Duration
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ApplicationProvider
@@ -112,24 +118,108 @@ class SurpriseLabTest {
         frame()
     }
 
+    /** A lab whose practice copies keep a clock that never moves by itself: only the lab's own actions move it. */
+    private fun stillLab() = SurpriseLabViewModel {
+        SurpriseLabSandbox(clock = FakeClock(PracticeFixture.NOW), feedback = NoOpFeedback, timeouts = FakeTimeouts(), minuteTicks = false)
+    }
+
     @Test
     fun everyEggFires() {
+        // One visit, never closed: each Try it plays on its own fresh practice copy.
         val lab = previewLab()
         show(lab)
+        var before: SurpriseLabSandbox? = null
         for (n in 1..18) {
             tryIt(n)
             val box = lab.sandbox
             assertNotNull("egg $n made its sandbox", box)
+            assertTrue("egg $n plays on a fresh practice copy", box !== before)
+            before = box
             assertEquals(n, box!!.fired.value)
             now.getValue(n).invoke(box.engine.state.value, box)
             later[n]?.let { check ->
                 frames(2_600)
                 check(box.engine.state.value, box)
             }
-            // Leaving the lab discards the sandbox; the next egg starts from a fresh practice copy.
-            lab.close()
-            frame()
-            assertNull(lab.sandbox)
+        }
+        lab.close()
+        frame()
+        assertNull(lab.sandbox)
+    }
+
+    /**
+     * Item 260 on a real phone: the same visit plays eggs again and in any order, with a clock that only the lab moves
+     * (so nothing here waits for a cooldown to run out): the receipt, then the pet on a trip that is no longer complete,
+     * the nap, the petals twice in a row, the ants twice (once per process holds per practice copy), midnight twice.
+     */
+    @Test
+    fun eggsPlayAgainInAnyOrder() {
+        val lab = stillLab()
+        show(lab)
+        var before: SurpriseLabSandbox? = null
+        for (n in listOf(18, 15, 8, 4, 4, 17, 17, 5, 5)) {
+            tryIt(n)
+            val box = lab.sandbox!!
+            assertTrue("egg $n: a fresh practice copy", box !== before)
+            before = box
+            val e = box.engine.state.value
+            now.getValue(n).invoke(e, box)
+            when (n) {
+                15 -> assertNull("the pet, not the receipt", e.receipt)
+                18 -> assertFalse("the receipt, not the pet", e.pet)
+                8 -> assertFalse(box.store.value.list(box.listId)!!.items.single { it.id == "peas" }.checked)
+                5 -> assertEquals("SNACK? on entering, every time", EggRules.SNACK, e.lcdWord?.text)
+            }
+            frames(300)
+        }
+        lab.close()
+    }
+
+    /** "Start the practice list over" (the egg_lab_reset button) gives the fixture back, with nothing playing. */
+    @Test
+    fun startOverGivesTheFixtureBack() {
+        val lab = stillLab()
+        show(lab)
+        tryIt(18)
+        val played = lab.sandbox!!
+        assertTrue(earth.cora.picnic.core.model.TripRules.isComplete(played.store.value.list(played.listId)!!))
+        compose.onNodeWithTag(LAB_RESET_TAG).performSemanticsAction(SemanticsActions.OnClick)
+        frame()
+        val fresh = lab.sandbox!!
+        assertTrue(fresh !== played)
+        assertEquals(PracticeFixture.state(), fresh.store.value)
+        assertEquals(PracticeFixture.NOW, fresh.clock.now())
+        assertNull(fresh.engine.state.value.receipt)
+        assertNull(fresh.fired.value)
+        compose.onNodeWithText("Start the practice list over").assertExists()
+        lab.close()
+    }
+
+    /** The phone's practice copy keeps real time: a second real shake 5.3 s later scatters petals again. */
+    @Test
+    fun theLabClockRunsWithRealTime() {
+        val clock = SandboxClock.realTime()
+        assertEquals(PracticeFixture.NOW, clock.now())
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1_500))
+        assertEquals(PracticeFixture.NOW + 1_500, clock.now())
+        // A simulated condition moves the clock; real time keeps running from there.
+        clock.nowMs = PracticeFixture.NOW + 13 * 3_600_000L
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(2_000))
+        assertEquals(PracticeFixture.NOW + 13 * 3_600_000L + 2_000, clock.now())
+
+        val box = SurpriseLabSandbox(feedback = NoOpFeedback, timeouts = FakeTimeouts(), minuteTicks = false)
+        try {
+            box.fire(4)
+            val first = box.engine.state.value.petalsId
+            assertNotNull(first)
+            box.engine.effectDone(first!!)
+            box.engine.onShake()
+            assertNull("inside the 5.2 s cooldown", box.engine.state.value.petalsId)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(5_300))
+            box.engine.onShake()
+            assertNotNull("the cooldown ran out on the practice copy's clock", box.engine.state.value.petalsId)
+        } finally {
+            box.close()
         }
     }
 
@@ -186,7 +276,8 @@ class SurpriseLabTest {
         assertNull(lab.sandbox)
         tryIt(4)
         val fresh = lab.sandbox!!
-        assertEquals(PracticeFixture.NOW, fresh.clock.now())
+        // The fixture's 10:24 again (its clock has run on for the frames since, as it does with real time on the phone).
+        assertTrue(fresh.clock.now() - PracticeFixture.NOW in 0L..1_000L)
         assertFalse(fresh.engine.state.value.dusk)
         assertFalse(fresh.engine.state.value.rain)
         assertFalse(fresh.engine.state.value.midnight)

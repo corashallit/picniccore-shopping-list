@@ -29,6 +29,10 @@ import java.time.ZoneId
 import java.util.Collections
 import kotlin.random.Random
 
+/** A sandbox clock that moves only by hand (engine tests with no frame clock). */
+@Suppress("TestFunctionName")
+fun FakeClock(start: Long): SandboxClock = SandboxClock(start) { 0L }
+
 /** A forecast source that counts its requests and answers what the test says (null = offline, or it throws). */
 class CountingWeather(var answer: (LocalDate) -> WeatherToday? = { null }) : WeatherSource {
     @Volatile var requests = 0
@@ -49,7 +53,7 @@ class CountingWeather(var answer: (LocalDate) -> WeatherToday? = { null }) : Wea
 class EngineRig(
     state: AppState = PracticeFixture.state(),
     settings: AppSettings = AppSettings(eggs = true, weather = false, sounds = false),
-    val clock: FakeClock = FakeClock(PracticeFixture.NOW),
+    val clock: SandboxClock = FakeClock(PracticeFixture.NOW),
     random: Random = Random(7),
     val weatherSource: CountingWeather? = null,
     forceEggs: Boolean = false,
