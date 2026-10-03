@@ -22,6 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import earth.cora.picnic.AppContainer
 import earth.cora.picnic.BuildConfig
 import earth.cora.picnic.ui.about.AboutViewModel
+import earth.cora.picnic.ui.about.LocalSurpriseLab
 import earth.cora.picnic.ui.about.SurpriseLabScreen
 import earth.cora.picnic.ui.add.AddViewModel
 import earth.cora.picnic.ui.aisles.AislesViewModel
@@ -156,7 +157,11 @@ fun PicnicAppRoot(
                 )
             }
             composable<SurpriseLabRoute> {
-                SurpriseLabScreen(onBack = appNav.back)
+                // WP9's lab: the sandbox lives in this destination's ViewModel (a rotation keeps it; leaving drops it).
+                val lab = viewModel { container.surpriseLab() }
+                CompositionLocalProvider(LocalSurpriseLab provides lab) {
+                    SurpriseLabScreen(onBack = appNav.back)
+                }
             }
         }
     }

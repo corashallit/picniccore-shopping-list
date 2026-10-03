@@ -283,8 +283,9 @@ private fun DrawScope.drawExtra(extra: LcdExtra, left: Float, p: Float, color: C
 /**
  * The app-bar LCD chip (§4.3): face `lcd`, 3 dp white border, radius 9, hs, padding 7 × 8 dp, a faint 1 dp grid at
  * 50 %. Digits tick on change (−2 → +1 → 0 dp, 2 steps, 160 ms); the star blinks to 12 % for 3 % of every 4 s (0.25 Hz)
- * and is a moon in Dusk and Glow. [onHold] fires after the hold threshold (`max(440 ms, longPressTimeout)`): the
- * receipt when the trip is complete, otherwise the pet (D21). TalkBack reads the count label in every mode.
+ * and is a moon in Dusk and Glow (the count's star only: the star in a word, BONUS★ or PRINT★, stays a star). [onHold]
+ * fires after the hold threshold (`max(440 ms, longPressTimeout)`): the receipt when the trip is complete, otherwise the
+ * pet (D21). TalkBack reads the count label in every mode.
  */
 @Composable
 fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)? = null, pitch: Dp = 1.9.dp) {
@@ -292,10 +293,11 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
     val shapes = PicnicTheme.shapes
     val variant = PicnicTheme.variant
     val reduced = LocalReducedMotion.current
-    val moon = variant == ThemeVariant.Dusk || variant == ThemeVariant.Glow
+    val moon = lcdShowsMoon(variant, state)
     val shown = when (state.mode) {
         LcdMode.Count -> "${state.count}/${state.total}★"
-        LcdMode.Pet -> "${state.count}/${state.total}"
+        // The pet's own words (egg 15's "FED") show beside it; otherwise the count.
+        LcdMode.Pet -> state.text.ifEmpty { "${state.count}/${state.total}" }
         else -> state.text
     }
     val label = pluralStringResource(R.plurals.theme_lcd_count, state.total, state.count, state.total)
@@ -384,6 +386,11 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
         }
     }
 }
+
+/** Only the count's star becomes the moon in Dusk and Glow (§13.1); the star inside a word (BONUS★, PRINT★) stays a star. */
+internal fun lcdShowsMoon(variant: ThemeVariant, state: LcdState): Boolean =
+    (variant == ThemeVariant.Dusk || variant == ThemeVariant.Glow) &&
+        (state.mode == LcdMode.Count || (state.mode == LcdMode.Pet && state.text.isEmpty()))
 
 private val RoundedLcdInner = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
 

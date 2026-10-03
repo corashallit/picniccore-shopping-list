@@ -45,6 +45,7 @@ class HoloUsageTest {
         "Celebration.kt", // WP6: title glint, stamp card back, bonus card
         "AlbumScreen.kt", "AlbumPieces.kt", // WP8: holo pockets, the perfect-week card
         "BonusStage.kt", "Jackpot.kt", // WP9
+        "PracticeBook.kt", // WP9: the Surprise lab's practice copy of the book's next spot and PERFECT page
     )
 
     @Test

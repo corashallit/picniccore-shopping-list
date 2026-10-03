@@ -1,5 +1,11 @@
 package earth.cora.picnic.ui.theme
 
+import androidx.compose.runtime.rememberUpdatedState
+
+import androidx.compose.ui.input.pointer.pointerInput
+
+import androidx.compose.foundation.gestures.detectTapGestures
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
@@ -32,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -104,6 +111,15 @@ fun BinderTopBar(
     onSunTap: (() -> Unit)? = null,
     /** Golden hour: minutes left before sunset (the sun sinks 0.5 dp per minute left). */
     goldenMinutesLeft: Int? = null,
+    /** Egg 7 (WP9): the title's fill while it is holo, read at draw time; null = ballpoint. */
+    titleBrush: (() -> Brush)? = null,
+    /** On the sun sticker's 48 dp box (WP5's `sun` anchor; egg 1's transition hides it while it plays). */
+    sunModifier: Modifier = Modifier,
+    /** On the LCD chip (WP5's `lcd` anchor: egg 18's receipt prints out of its slot). */
+    lcdModifier: Modifier = Modifier,
+    /** On the title's and the subtitle's words (WP9's `text:` keep-outs: egg bursts are never drawn over text). */
+    titleModifier: Modifier = Modifier,
+    subtitleModifier: Modifier = Modifier,
 ) {
     val reduced = LocalReducedMotion.current
     val collapsed = state.collapsed
@@ -130,20 +146,21 @@ fun BinderTopBar(
                     stroke = 6.dp,
                     minFontSize = 20.sp,
                     heading = true,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f, fill = false).then(titleModifier),
+                    fillBrush = titleBrush,
                 )
-                SunSticker(onTap = onSunTap, goldenMinutesLeft = goldenMinutesLeft)
+                SunSticker(sunModifier, onTap = onSunTap, goldenMinutesLeft = goldenMinutesLeft)
             }
             if (subtitle != null && !collapsed) {
                 PadPatch {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         FlatStar(Modifier.size(13.dp), fill = Families.lemon.mid)
-                        Text(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft))
+                        Text(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft), modifier = subtitleModifier)
                     }
                 }
             }
         }
-        if (lcd != null) LcdChip(lcd, Modifier.padding(horizontal = 2.dp), onHold = onLcdHold)
+        if (lcd != null) LcdChip(lcd, Modifier.padding(horizontal = 2.dp).then(lcdModifier), onHold = onLcdHold)
         if (onMore != null) PicnicIconButton(PicnicGlyph.More, stringResource(R.string.theme_more_options), onMore)
     }
 }
@@ -176,15 +193,16 @@ fun SunSticker(modifier: Modifier = Modifier, onTap: (() -> Unit)? = null, golde
     Box(
         modifier
             .size(48.dp)
-            .semantics(mergeDescendants = true) {
-                contentDescription = label
-                if (onTap != null) role = Role.Button
-            }
+            // TalkBack reads "Sun sticker" and nothing more (§4.2: it is an egg, not a feature): no role, no action.
+            .clearAndSetSemantics { contentDescription = label }
             .then(
                 if (onTap != null) {
-                    Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
-                        taps++
-                        onTap()
+                    val tap by rememberUpdatedState(onTap)
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures {
+                            taps++
+                            tap()
+                        }
                     }
                 } else {
                     Modifier

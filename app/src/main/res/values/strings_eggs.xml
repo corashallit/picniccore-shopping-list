@@ -1,5 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Easter eggs, Surprise lab, receipt strings: WP9 (docs/DESIGN_STICKER.md §21). Empty until the package adds its own. -->
+    <!-- Easter eggs, Surprise lab, receipt strings: WP9 (docs/DESIGN_STICKER.md §12, §13.2, §16). Say plain true things. -->
 
+    <!-- Toasts (§16). -->
+    <string name="egg_toast_rain">Rain on the way · bring the tote!</string>
+    <string name="egg_toast_bonus">BONUS STAGE! ♪</string>
+    <string name="egg_toast_back_pocket">Your album’s back pocket opened!</string>
+    <string name="egg_toast_look">Look</string>
+    <string name="egg_toast_receipt">Receipt saved to your sticker book ♡</string>
+
+    <!-- Egg 5: the doodle by the frozen aisle's tab (decorative). -->
+    <string name="egg_snack_doodle">snack?</string>
+
+    <!-- Egg 18: the printed receipt's TalkBack action (§13.2: "Double-tap to save it to the sticker book"). -->
+    <string name="egg_receipt_save">save it to the sticker book</string>
+
+    <!-- The Surprise lab's practice list (§6.9). -->
+    <string name="egg_lab_reset">Start the practice list over</string>
+    <!-- The Unsorted section's tab on the practice list (§4.10). -->
+    <string name="egg_practice_everything_else">Everything else</string>
+    <!-- The practice list's binder top, strips, tray, rows and book (§16, §15). -->
+    <plurals name="egg_practice_subtitle">
+        <item quantity="one">%1$s · %2$d stop</item>
+        <item quantity="other">%1$s · %2$d stops</item>
+    </plurals>
+    <!-- Strip meta: "**2 left** of 5" (the first argument is the bold part). -->
+    <string name="egg_practice_meta_left">%1$s of %2$d</string>
+    <string name="egg_practice_meta_left_count">%1$d left</string>
+    <!-- Strip meta: "**5 of 5** in the basket". -->
+    <string name="egg_practice_meta_done">%1$s in the basket</string>
+    <string name="egg_practice_meta_done_count">%1$d of %2$d</string>
+    <!-- TalkBack (§15): "Aisle 1, Produce: 2 left of 5. Expand". -->
+    <string name="egg_practice_strip">Aisle %1$d, %2$s: %3$s. Expand</string>
+    <string name="egg_practice_strip_unsorted">%1$s: %2$s. Expand</string>
+    <string name="egg_practice_strip_left">%1$d left of %2$d</string>
+    <string name="egg_practice_strip_done">%1$d of %2$d in the basket</string>
+    <string name="egg_practice_collapse">Collapse %1$s</string>
+    <string name="egg_practice_row_checked">got it</string>
+    <string name="egg_practice_row_unchecked">not checked</string>
+    <string name="egg_practice_check">Check</string>
+    <string name="egg_practice_uncheck">Uncheck</string>
+    <!-- TalkBack: "Trip sticker book, Saturday 3 October: 10 of 24 stickers, 1 of 8 aisles stamped". -->
+    <string name="egg_practice_book">Trip sticker book, %1$s: %2$s, %3$s</string>
+    <plurals name="egg_practice_book_stickers">
+        <item quantity="one">%1$d of %2$d sticker</item>
+        <item quantity="other">%1$d of %2$d stickers</item>
+    </plurals>
+    <plurals name="egg_practice_book_aisles">
+        <item quantity="one">%1$d of %2$d aisle stamped</item>
+        <item quantity="other">%1$d of %2$d aisles stamped</item>
+    </plurals>
 </resources>
