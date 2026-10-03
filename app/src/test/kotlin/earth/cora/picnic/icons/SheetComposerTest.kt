@@ -106,10 +106,19 @@ class SheetComposerTest {
         }
     }
 
+    /** The library's art lookup, as the composer sees it, with [without] standing for keys that have no art yet. */
+    private fun artExcept(without: Set<String>): (String) -> List<String>? = { k ->
+        if (k in without || k == StickerManifest.CAPSULE) null else StickerManifest.entry(k)?.families
+    }
+
     @Test
     fun aGenericWithoutArtIsSkippedAndTheCategoryFillsTheSheet() {
-        assertTrue("pantry_generic" in StickerManifest.missing)
-        val sheet = composer.compose("pantry_generic", "pantry", listOf("strawberry", "melon"), "Kimchi one squat glass jar of kimchi")!!
+        // Every catalog key has art since sticker batches 1-4, so the picker is handed a library without pantry_generic.
+        val art = artExcept(setOf("pantry_generic"))
+        val picked = NeighbourPicker.pick(catalog, art, "pantry_generic", "pantry", listOf("strawberry", "melon"), "Kimchi one squat glass jar of kimchi")
+        assertTrue("pantry_generic" !in picked)
+        val sheet = composer.compose(picked)!!
+        assertEquals(picked, sheet.neighbours)
         assertEquals(3, sheet.neighbours.size)
         sheet.neighbours.forEach { assertEquals(it, "pantry", catalog[it]!!.category) }
         // A jar wins over a can or a box: the shared packaging word counts triple.
@@ -118,10 +127,14 @@ class SheetComposerTest {
 
     @Test
     fun aThinCategoryBorrowsTheClosestStickersElsewhere() {
-        // Seafood has one sticker with art: the other two cells come from the rest of the library.
-        val sheet = composer.compose(null, "seafood", listOf("peach", "strawberry"), "Smoked salmon one pack of sliced smoked salmon")!!
+        // A seafood shelf with one sticker that has art: the other two cells come from the rest of the library.
+        val seafood = catalog.icons.filter { it.category == "seafood" }.map { it.key }.toSet()
+        val art = artExcept(seafood - "salmon_fillet")
+        val picked = NeighbourPicker.pick(catalog, art, null, "seafood", listOf("peach", "strawberry"), "Smoked salmon one pack of sliced smoked salmon")
+        val sheet = composer.compose(picked)!!
         assertEquals(3, sheet.neighbours.size)
-        assertEquals("seafood", catalog[sheet.neighbours.first()]!!.category)
+        assertEquals("salmon_fillet", sheet.neighbours.first())
+        sheet.neighbours.drop(1).forEach { assertTrue(it, catalog[it]!!.category != "seafood") }
         assertEquals(3, sheet.neighbours.toSet().size)
     }
 

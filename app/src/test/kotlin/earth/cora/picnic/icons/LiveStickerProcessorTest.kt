@@ -117,12 +117,14 @@ class LiveStickerProcessorTest {
         assertNull(art.load("c-missing"))
 
         // Library stickers: the drawable and its named groups; keys without art and the capsule sentinel have none.
+        // Every catalog key has art since sticker batches 1-4, so a name outside the library stands for "no art".
         val apple = art.vector("apple")!!
         assertEquals(StickerManifest.drawable("apple"), apple.id)
         assertEquals(setOf("cut", "fills", "lines", "gloss", "dominant"), apple.groups)
-        assertNull(art.vector("pantry_generic"))
+        assertNull(art.vector("dragon_fruit"))
         assertTrue(art.isBundled("apple"))
-        assertFalse(art.isBundled("pantry_generic"))
+        assertTrue(art.isBundled("pantry_generic"))
+        assertFalse(art.isBundled("dragon_fruit"))
         assertFalse(art.isBundled(StickerManifest.CAPSULE))
     }
 
