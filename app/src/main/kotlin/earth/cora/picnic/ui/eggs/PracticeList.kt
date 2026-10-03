@@ -258,6 +258,7 @@ private fun PracticeTopBar(
     val engine = model.engine
     val anchors = model.anchors
     val pose = rememberPetPose(eggs)
+    val variant = PicnicTheme.variant
     val base = LcdState(mode = LcdMode.Count, count = p.lcdCount(checked), total = total)
     val subtitle = "$store · " + if (stops == 1) "1 stop" else "$stops stops"
     with(anchors) {
@@ -266,7 +267,7 @@ private fun PracticeTopBar(
             subtitle = subtitle,
             lcd = eggs.lcd(base, pose),
             onLcdHold = if (eggs.enabled) engine::onLcdHold else null,
-            onSunTap = { if (eggs.dusk) engine.onMoonTap() else engine.onSunTap() },
+            onSunTap = { engine.onTitleStickerTap(eggs, variant) },
             goldenMinutesLeft = eggs.goldenMinutesLeft,
             titleBrush = rememberKirakiraBrush(eggs),
             sunModifier = Modifier
@@ -586,8 +587,16 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false)
                             val goal = threshold + EggRules.LADYBUG_AFTER_THRESHOLD_MS
-                            val released = withTimeoutOrNull(goal) { waitForUpOrCancellation() }
-                            if (released == null) engine.onBasketHold(s.id, goal)
+                            // A tap opens the strip (its clickable); a press past the threshold is a hold, never a tap.
+                            if (withTimeoutOrNull(threshold) { waitForUpOrCancellation() } != null) return@awaitEachGesture
+                            val early = withTimeoutOrNull(goal - threshold) { waitForUpOrCancellation() }
+                            if (early != null) {
+                                early.consume()
+                                return@awaitEachGesture
+                            }
+                            engine.onBasketHold(s.id, goal)
+                            // The ladybug walks on after the release; the release itself opens nothing.
+                            waitForUpOrCancellation()?.consume()
                         }
                     },
             ) {

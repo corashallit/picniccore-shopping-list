@@ -209,3 +209,16 @@ fun BoxScope.NapCatInBasket(state: SurpriseState, sectionId: String, kind: Baske
         NapCatPiece(sectionId, center, rimY, engine, origin)
     }
 }
+
+/**
+ * Egg 1: a tap on the sticker by the title in [variant]. The sun (Day, Golden) counts toward Dusk; the Dusk moon undoes
+ * it; the Glow moon (system dark, midnight) is static. Nothing with Easter eggs off. WP5's BinderTopBar `onSunTap`.
+ */
+fun SurpriseEngine.onTitleStickerTap(state: SurpriseState, variant: earth.cora.picnic.ui.theme.ThemeVariant) {
+    when {
+        !state.enabled -> Unit
+        variant == earth.cora.picnic.ui.theme.ThemeVariant.Glow -> Unit
+        state.dusk -> onMoonTap()
+        else -> onSunTap()
+    }
+}
