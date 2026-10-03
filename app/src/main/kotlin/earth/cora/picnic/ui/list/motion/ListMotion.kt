@@ -34,9 +34,11 @@ fun MotionEngineHost(
     nextStopCard: Boolean = true,
     celebration: Boolean = true,
     eggs: Boolean = true,
+    /** Forces TalkBack's behaviour on or off (tests); null follows the platform. */
+    talkBackOverride: Boolean? = null,
 ) {
     val reduced = LocalReducedMotion.current
-    val talkBack = isScreenReaderOn()
+    val talkBack = talkBackOverride ?: isScreenReaderOn()
     val density = LocalDensity.current.density
     val strings = rememberMotionStrings()
     SideEffect {

@@ -144,8 +144,8 @@ sealed interface SpotPhase {
 
     data object Shown : SpotPhase
 
-    /** The peel off (un-check), started at [t0]. */
-    data class Peeling(val t0: Long) : SpotPhase
+    /** The peel off (un-check), started at [t0]; [icon] is the twin peeling (the state no longer has it in this spot). */
+    data class Peeling(val t0: Long, val icon: IconRef? = null, val holo: Boolean = false) : SpotPhase
 }
 
 /** A stamp circle (§4.13, §8.4). */

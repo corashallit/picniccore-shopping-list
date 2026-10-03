@@ -898,7 +898,7 @@ class MotionChoreographer(
             if (since < 300) b.badgePop(u.t0)
             val slot = e.slot
             if (slot != null && u.peelTwin && since < (if (u.reduced) Beats.RM_FADE else Beats.PEEL_OFF)) {
-                spots[slot] = SpotPhase.Peeling(u.t0)
+                spots[slot] = SpotPhase.Peeling(u.t0, e.icon, e.holo)
                 bookPaging?.let { p -> if (p.pageOf(slot) != p.shownPage) showPage = p.pageOf(slot) }
             }
         }
