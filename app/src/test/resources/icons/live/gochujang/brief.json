@@ -1,0 +1,26 @@
+{
+ "name": "Gochujang",
+ "look": "One squat red tub of gochujang paste with a fitted lid; a small mound of thick deep-red paste is visible at the top",
+ "families": [
+  "strawberry",
+  "cocoa"
+ ],
+ "category": "condiments",
+ "approximate_key": "condiments_generic",
+ "neighbours": [
+  "ketchup",
+  "hot_sauce",
+  "soy_sauce"
+ ],
+ "neighbour_u2": [
+  661.6,
+  563.5,
+  849.0
+ ],
+ "target_u2": 691.4,
+ "model": "gpt-image-2.5-flare",
+ "draw_ms": 9797,
+ "raw_bytes": 66736,
+ "sticker_bytes": 10116,
+ "post": "Stats(deltaE=9.845298339790848, outlineRawU=2.1888432311194426, outlineU=2.3598366770784036, scale=1.031496892356841, targetAreaU2=691.4, areaU2=691.375, artLeftU=9.125, artTopU=10.625, artRightU=38.875, artBottomU=42.0, whiteSpecksRemoved=2, specksRemoved=96, glossLengthU=14.810074965135438, glossDot=true, rimmedU2=36.49171402266738, millis=184.788033, steps=cut 10.5, snap 12.8, white 24.2, specks 61.4, trace 16.7, render 20.4, gloss 12.0, diecut 6.7, path 19.6)"
+}

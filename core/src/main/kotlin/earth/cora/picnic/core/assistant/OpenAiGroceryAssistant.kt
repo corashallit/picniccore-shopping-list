@@ -1,6 +1,7 @@
 package earth.cora.picnic.core.assistant
 
 import earth.cora.picnic.core.catalog.IconCatalog
+import earth.cora.picnic.core.llm.ImagePart
 import earth.cora.picnic.core.llm.LlmError
 import earth.cora.picnic.core.llm.LlmTimeouts
 import earth.cora.picnic.core.llm.ModelDefaults
@@ -267,8 +268,14 @@ class OpenAiGroceryAssistant(
     }
 
     override suspend fun drawIcon(request: IconDrawRequest): DrawnIcon {
-        val prompt = Prompts.iconPrompt(request.itemName, request.hint)
-        val image = client.imageEdit(models.image, prompt, request.styleReference, request.styleReferenceFileName, LlmTimeouts.IMAGE)
+        val prompt = Prompts.iconPrompt(request.itemName, request.subject, request.families)
+        val image = client.imageEdit(
+            model = models.image,
+            prompt = prompt,
+            images = listOf(ImagePart(request.sheet, SHEET_FILE_NAME)),
+            mask = ImagePart(request.mask, MASK_FILE_NAME),
+            timeout = LlmTimeouts.IMAGE,
+        )
         return DrawnIcon(
             bytes = image.bytes,
             mimeType = "image/${models.image.outputFormat}",
@@ -301,6 +308,10 @@ class OpenAiGroceryAssistant(
         /** Sources chips shown under the preview (cited and opened pages come first). */
         const val MAX_SOURCES = 8
         val SUPPORTED_AUDIO = setOf("m4a", "mp4", "mp3", "mpeg", "mpga", "wav", "ogg", "oga", "webm", "flac")
+
+        /** drawIcon's multipart file names (the extension tells the API the format). */
+        const val SHEET_FILE_NAME = "sheet.png"
+        const val MASK_FILE_NAME = "mask.png"
     }
 }
 

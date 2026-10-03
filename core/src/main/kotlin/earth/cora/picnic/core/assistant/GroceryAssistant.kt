@@ -52,8 +52,10 @@ interface GroceryAssistant {
     suspend fun assignBaskets(aisles: List<Aisle>): Map<String, BasketKind>
 
     /**
-     * Icon cascade step 3: /images/edits with ModelDefaults.IMAGE and the bundled style reference sheet.
-     * Returns the raw image (webp, 1024 px, alpha); the app trims and downsizes it to 192 px.
+     * Icon cascade step 3, live stickers v4: one /images/edits call with ModelDefaults.IMAGE, the neighbour
+     * sheet as `image[]`, the mask and the v4 prompt (prompts/icon_prompt.txt with the subject and the
+     * families' colours). Returns the raw 1024 px image with alpha; the app cuts the fourth cell out and
+     * post-processes it into a 208 px sticker plus its cut path. Never retried here.
      * Image moderation (moderation_blocked) -> LlmError.Refusal.
      */
     suspend fun drawIcon(request: IconDrawRequest): DrawnIcon
@@ -189,20 +191,27 @@ data class Transcript(val text: String) {
 
 data class NamedItem(val id: String, val name: String)
 
+/**
+ * One live sticker drawing, v4 (docs/DESIGN_STICKER.md §18.3): the model fills the empty fourth cell of a 2 x 2
+ * sheet that already holds three finished library stickers, so it copies their line weight, size and gloss.
+ */
 class IconDrawRequest(
-    /** Display name of the item ("Gochujang"); the prompt names it. */
+    /** Display name of the item ("Kimchi"); logged and used when [subject] is blank. */
     val itemName: String,
+    /** The 1024 x 1024 PNG neighbour sheet on a transparent background (the app's SheetComposer). */
+    val sheet: ByteArray,
+    /** The bundled mask (app: assets/icons/mask.png): opaque everywhere except the empty bottom-right cell. */
+    val mask: ByteArray,
     /**
-     * Optional extra description, e.g. the item's note. The closest catalog icon's drawHint is
-     * deliberately NOT used: it would bias the drawing towards the wrong object.
+     * What to draw, one line: the IconDecider's `look` ("one squat glass jar of kimchi with a round screw lid; …").
+     * Blank: "one <itemName>, as it is sold in a Canadian grocery store".
      */
-    val hint: String? = null,
-    /** The bundled style sheet (app: assets/icons/_style_reference.png). */
-    val styleReference: ByteArray,
-    val styleReferenceFileName: String = "_style_reference.png",
+    val subject: String,
+    /** The sticker families to draw in, body first ([StickerPalette.FAMILIES]); unknown names are dropped. */
+    val families: List<String>,
 )
 
-/** Raw image as returned by the API (webp, 1024x1024, transparent). The app downsizes to 192 px. */
+/** Raw image as returned by the API (webp, 1024x1024, transparent). The app post-processes it (v4). */
 class DrawnIcon(val bytes: ByteArray, val mimeType: String = "image/webp", val meta: CallMeta)
 
 data class ConnectionCheck(val model: String, val meta: CallMeta)

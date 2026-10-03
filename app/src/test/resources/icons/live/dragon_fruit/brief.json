@@ -1,0 +1,26 @@
+{
+ "name": "Dragon fruit",
+ "look": "One whole oval dragon fruit with bright pink skin and green-tipped scales, beside one cut half showing white flesh dotted with tiny black seeds",
+ "families": [
+  "strawberry",
+  "melon"
+ ],
+ "category": "fruit",
+ "approximate_key": "fruit_generic",
+ "neighbours": [
+  "watermelon",
+  "lime",
+  "strawberry"
+ ],
+ "neighbour_u2": [
+  806.7,
+  837.1,
+  1009.7
+ ],
+ "target_u2": 884.5,
+ "model": "gpt-image-2.5-flare",
+ "draw_ms": 10418,
+ "raw_bytes": 85562,
+ "sticker_bytes": 18108,
+ "post": "Stats(deltaE=8.413851806640883, outlineRawU=1.5946460339053996, outlineU=2.044258501051127, scale=0.8703160185659563, targetAreaU2=884.5, areaU2=884.75, artLeftU=5.75, artTopU=5.375, artRightU=42.25, artBottomU=42.0, whiteSpecksRemoved=2, specksRemoved=1616, glossLengthU=12.840116949348312, glossDot=true, rimmedU2=35.22123878171154, millis=643.814131, steps=cut 75.5, snap 102.3, white 101.2, specks 107.2, trace 50.7, render 81.8, gloss 78.1, diecut 29.9, path 16.4)"
+}

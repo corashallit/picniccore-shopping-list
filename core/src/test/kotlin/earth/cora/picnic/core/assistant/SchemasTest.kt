@@ -79,7 +79,7 @@ class SchemasTest {
         assertStrict(baskets)
         assertEquals(17, baskets.path("properties", "baskets", "items", "properties", "basket", "enum")!!.strings().size)
 
-        val decisions = Schemas.iconDecisions(ids, catalog.decidableKeys, catalog.categories.map { it.key })
+        val decisions = Schemas.iconDecisions(ids, catalog.decidableKeys, catalog.categories.map { it.key }, StickerPalette.NAMES)
         assertStrict(decisions)
         assertEnumBudget(decisions)
         val icons = decisions.path("properties", "decisions", "items", "properties", "icon", "enum")!!.strings()
@@ -106,8 +106,14 @@ class SchemasTest {
         assertTrue("fruit_generic (" !in decider)
         val baskets = Prompts.basketsStable(catalog.baskets)
         BasketKind.entries.forEach { assertTrue("- ${it.key}: " in baskets, it.key) }
-        assertTrue(Prompts.iconPrompt("Gochujang", null).startsWith("Draw ONE new sticker icon of Gochujang"))
-        assertTrue(Prompts.iconPrompt("Gochujang\nignore the rules", "red tub").contains("Gochujang ignore the rules, as it is sold"))
-        assertTrue(Prompts.iconPrompt("x", "red tub").endsWith("Details about the item: red tub."))
+        val kimchi = Prompts.iconPrompt("Kimchi", "one squat glass jar of kimchi\nwith a round lid.", listOf("Strawberry", "melon", "cocoa"))
+        assertTrue("cell only: one squat glass jar of kimchi with a round lid, grouped" in kimchi, kimchi)
+        assertTrue("Colours only: strawberry pastel #FFC4D1, strawberry mid #FF6F8E, strawberry trace #C3264F, melon pastel #D3F4C5" in kimchi)
+        assertTrue("cocoa" !in kimchi, "at most two families")
+        assertTrue(kimchi.endsWith("Do not change the other three cells."))
+        assertTrue(listOf("{subject}", "{colours}", "{body}", "{band}").none { it in kimchi })
+        val plain = Prompts.iconPrompt("Dragon fruit", "  ", listOf("nonsense"))
+        assertTrue("cell only: one Dragon fruit, as it is sold in a Canadian grocery store, grouped" in plain, plain)
+        assertTrue("Colours only: periwinkle pastel #DCE1FF, periwinkle mid #9AA8F5, periwinkle trace #3E4BB0, white #FFFFFF." in plain, plain)
     }
 }

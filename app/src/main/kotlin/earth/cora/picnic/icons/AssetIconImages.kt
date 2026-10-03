@@ -38,9 +38,12 @@ class BundledIcons(private val context: Context) {
 
     fun open(key: String) = context.assets.open("$DIR/$key$EXT")
 
-    /** The live-drawing style sheet (assets/icons/_style_reference.png), or null if not bundled. */
-    fun styleReference(): ByteArray? = try {
-        context.assets.open("$DIR/$STYLE_REFERENCE").use { it.readBytes() }
+    /**
+     * The live-drawing mask (assets/icons/mask.png, live stickers v4): 1024 px, opaque except the empty bottom-right
+     * cell of the neighbour sheet, so the model may only draw there. Null if not bundled.
+     */
+    fun mask(): ByteArray? = try {
+        context.assets.open("$DIR/$MASK").use { it.readBytes() }
     } catch (e: IOException) {
         null
     }
@@ -48,7 +51,7 @@ class BundledIcons(private val context: Context) {
     companion object {
         const val DIR: String = "icons"
         const val EXT: String = ".webp"
-        const val STYLE_REFERENCE: String = "_style_reference.png"
+        const val MASK: String = "mask.png"
     }
 }
 

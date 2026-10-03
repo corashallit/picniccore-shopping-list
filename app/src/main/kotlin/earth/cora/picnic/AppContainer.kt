@@ -164,6 +164,7 @@ class AppContainer(private val app: Application) {
             appScope = appScope,
             clock = clock,
             bundled = bundledIcons,
+            album = album,
             onIconReplaced = assetIconImages::evictCustom,
         )
     }

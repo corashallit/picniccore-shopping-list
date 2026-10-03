@@ -411,15 +411,36 @@ class OpenAiGroceryAssistantTest {
     @Test
     fun drawIcon() = runTest {
         api.enqueueFixture(200, "other/image_edit.json", "x-request-id" to "req_draw")
-        val icon = assistant.drawIcon(IconDrawRequest("Gochujang", hint = "red tub", styleReference = byteArrayOf(1, 2, 3)))
+        val sheet = byteArrayOf(1, 2, 3)
+        val mask = byteArrayOf(4, 5)
+        val icon = assistant.drawIcon(
+            IconDrawRequest(
+                itemName = "Kimchi",
+                sheet = sheet,
+                mask = mask,
+                subject = "one squat glass jar of kimchi with a round screw lid",
+                families = listOf("strawberry", "melon"),
+            ),
+        )
         assertContentEquals(TestSupport.fixtureBytes("other/tiny.webp"), icon.bytes)
         assertEquals("image/webp", icon.mimeType)
         assertEquals("req_draw", icon.meta.requestId)
+        assertEquals("gpt-image-2.5-flare", icon.meta.model)
         val fields = api.take().formFields()
         assertEquals(listOf("gpt-image-2.5-flare"), fields["model"])
-        assertTrue(fields["prompt"]!!.single().startsWith("Draw ONE new sticker icon of Gochujang"))
-        assertTrue(fields["prompt"]!!.single().endsWith("Details about the item: red tub."))
-        assertEquals(listOf("filename:_style_reference.png"), fields["image[]"])
+        val prompt = fields["prompt"]!!.single()
+        assertTrue(prompt.startsWith("This is a 2 x 2 sticker sheet on a fully transparent background."), prompt)
+        assertTrue("in the empty bottom-right cell only: one squat glass jar of kimchi with a round screw lid, grouped" in prompt, prompt)
+        assertTrue(
+            "Colours only: strawberry pastel #FFC4D1, strawberry mid #FF6F8E, strawberry trace #C3264F, " +
+                "melon pastel #D3F4C5, melon mid #8EDB76, melon trace #2E8239, white #FFFFFF." in prompt,
+            prompt,
+        )
+        assertTrue("Main body #FFC4D1." in prompt && "flat #FF6F8E band" in prompt, prompt)
+        assertEquals(listOf("filename:sheet.png"), fields["image[]"])
+        assertEquals(listOf("filename:mask.png"), fields["mask"])
+        assertEquals(listOf("transparent"), fields["background"])
+        assertEquals(listOf("low"), fields["quality"])
     }
 
     @Test

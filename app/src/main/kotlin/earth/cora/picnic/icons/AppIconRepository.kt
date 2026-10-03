@@ -1,11 +1,14 @@
 package earth.cora.picnic.icons
 
 import android.app.Application
+import earth.cora.picnic.core.assistant.DrawOutcome
 import earth.cora.picnic.core.assistant.GroceryAssistant
 import earth.cora.picnic.core.assistant.IconDecider
 import earth.cora.picnic.core.assistant.IconDecision
 import earth.cora.picnic.core.assistant.IconDrawRequest
+import earth.cora.picnic.core.assistant.LiveIconDrawer
 import earth.cora.picnic.core.assistant.NamedItem
+import earth.cora.picnic.core.assistant.StickerPalette
 import earth.cora.picnic.core.assistant.resolve
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.llm.LlmError
@@ -16,9 +19,11 @@ import earth.cora.picnic.core.model.ResolvedIcon
 import earth.cora.picnic.core.model.applyIconDecisions
 import earth.cora.picnic.core.model.attachCustomIcon
 import earth.cora.picnic.core.model.normalizeName
+import earth.cora.picnic.core.store.AlbumStore
 import earth.cora.picnic.core.store.StateStore
 import earth.cora.picnic.platform.PicnicLog
 import earth.cora.picnic.settings.SettingsRepository
+import earth.cora.picnic.ui.theme.gen.StickerManifest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +42,7 @@ import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.milliseconds
 
 /** Knobs of the on-device icon cascade (docs/ARCHITECTURE.md §8.3). Tests shorten the delays. */
 data class IconQueueTuning(
@@ -48,45 +54,61 @@ data class IconQueueTuning(
     val drawWorkers: Int = 2,
     /** Pause before the single retry of a drawing that hit a rate limit, network error or timeout. */
     val retryDelayMs: Long = 3_000,
-    /** Automatic drawings per local day (a user "Draw a new icon" ignores it). */
+    /** Automatic drawings per local day, legacy redraws included (a user "Draw a new icon" ignores it). */
     val dailyCap: Int = 40,
 )
 
+/** Composes the neighbour sheet for a live drawing ([SheetComposer] on the device; a fake in tests). */
+fun interface SheetSource {
+    /** Null when live drawing is impossible (no mask bundled). CPU-bound: the repository calls it off main. */
+    fun compose(approximateKey: String?, category: String?, families: List<String>, text: String): LiveSheet?
+}
+
 /**
- * Production [IconRepository]: the device side of the icon cascade (docs/ARCHITECTURE.md §8).
+ * Production [IconRepository]: the device side of the icon cascade (docs/ARCHITECTURE.md §8) with live stickers v4
+ * (docs/DESIGN_STICKER.md §18.3 step 5).
  *
- * - [submit] attaches a cached bespoke icon when one exists for the item's normalized name; sends
- *   PENDING names to the IconDecider batcher (step 2); queues APPROXIMATE names for a live drawing
- *   (step 3) when "Draw new icons with AI" is on, a token is set, the name isn't blocked and the
- *   daily cap allows it.
- * - The batcher is one coroutine: 300 ms debounce, at most 40 names per call. LlmError leaves the
- *   items PENDING (retried by [resumePending] on the next start).
- * - Drawing runs on [IconQueueTuning.drawWorkers] coroutines reading one channel (so at most 2 at
- *   once), retries once on RateLimited/Network/Timeout, blocks the name on a moderation refusal and
- *   gives up silently otherwise. Results are trimmed to 192 px WebP, cached on disk by name and
- *   attached to every item with that name in every list.
+ * - [submit] attaches a cached bespoke icon when one exists for the item's normalized name; sends PENDING names to
+ *   the IconDecider batcher (step 2); queues APPROXIMATE names for a live drawing (step 3) when "Draw new icons with
+ *   AI" is on, a token is set, the name isn't blocked and the daily cap allows it.
+ * - The batcher is one coroutine: 300 ms debounce, at most 40 names per call. LlmError leaves the items PENDING
+ *   (retried by [resumePending] on the next start). A "none" answer carries the drawing's brief (the look and the two
+ *   sticker families), which travels with the drawing job.
+ * - A drawing (on [IconQueueTuning.drawWorkers] coroutines reading one channel, so at most 2 at once): the brief
+ *   ([LiveIconDrawer.brief]: the decider is asked once more only for a name that reached drawing without one), the
+ *   neighbour sheet ([SheetSource]: the approximate key and the two closest same-category stickers, with the bundled
+ *   mask), one `drawIcon` call retried once on RateLimited/Network/Timeout ([LiveIconDrawer.draw]), a moderation
+ *   refusal blocks the name, then [LiveStickerProcessor] (palette snap, specks, size, gloss, die-cut) and the 208 px
+ *   WebP plus its `.cut` file are cached by name and attached to every item with that name in every list.
+ * - Legacy icons (drawn before v4, no `.cut` file) are redrawn in v4 in the background from [resumePending], oldest
+ *   first, under the daily cap and only while a token is set and drawing is on. A replaced file is deleted only when
+ *   no item, pantry entry or `album.json` ([albumRefs]) references it.
  *
  * Every public method returns immediately and never throws; the work runs in [scope] (the app scope).
  */
 class AppIconRepository internal constructor(
     private val store: StateStore,
     private val settings: SettingsRepository,
-    private val assistant: GroceryAssistant,
+    assistant: GroceryAssistant,
     private val decider: IconDecider,
     private val catalog: IconCatalog,
     private val scope: CoroutineScope,
     private val clock: () -> Long,
     private val cache: BespokeIconCache,
     private val bundledKeys: () -> Set<String>,
-    private val styleReference: () -> ByteArray?,
-    private val processor: IconPostProcessor,
+    private val sheets: SheetSource,
+    private val processor: LiveStickerProcessor,
+    private val albumRefs: suspend () -> Set<String>,
     private val onIconReplaced: (String) -> Unit,
     private val tuning: IconQueueTuning,
     private val compute: CoroutineDispatcher,
     private val io: CoroutineDispatcher,
 ) : IconRepository {
 
-    /** Production wiring (AppContainer). [onIconReplaced] receives a bespoke id whose file a redraw deleted. */
+    /**
+     * Production wiring (AppContainer). [onIconReplaced] receives a bespoke id whose file a redraw deleted. [album]
+     * keeps the icons filed in the sticker album alive through sweeps and redraws.
+     */
     constructor(
         app: Application,
         store: StateStore,
@@ -97,6 +119,7 @@ class AppIconRepository internal constructor(
         appScope: CoroutineScope,
         clock: () -> Long,
         bundled: BundledIcons = BundledIcons(app),
+        album: AlbumStore? = null,
         onIconReplaced: (String) -> Unit = {},
     ) : this(
         store = store,
@@ -107,13 +130,21 @@ class AppIconRepository internal constructor(
         scope = appScope,
         clock = clock,
         cache = BespokeIconCache(iconsDir(app)),
-        bundledKeys = { bundled.keys },
-        styleReference = bundled::styleReference,
-        processor = BitmapIconPostProcessor(),
+        bundledKeys = { LIBRARY_KEYS },
+        sheets = SheetComposer(app.resources, catalog, MaskCache(bundled::mask)::get),
+        processor = BitmapLiveStickerProcessor(),
+        albumRefs = { album?.referencedCustomIconIds().orEmpty() },
         onIconReplaced = onIconReplaced,
         tuning = IconQueueTuning(),
         compute = Dispatchers.Default,
         io = Dispatchers.IO,
+    )
+
+    private val drawer = LiveIconDrawer(
+        assistant = assistant,
+        decider = decider,
+        retryDelay = tuning.retryDelayMs.milliseconds,
+        sleep = { delay(it) },
     )
 
     private val busyFlow = MutableStateFlow<Set<String>>(emptySet())
@@ -130,10 +161,18 @@ class AppIconRepository internal constructor(
     private val started = AtomicBoolean(false)
     private val swept = AtomicBoolean(false)
 
-    private val styleRefLock = Mutex()
-    private var styleRefBytes: ByteArray? = null
-
-    private data class DrawJob(val key: String, val name: String, val forced: Boolean, val day: String)
+    /**
+     * One drawing. [brief] is the decider's "none" answer when the batcher just gave it (look, families, category);
+     * [replaces] is the legacy icon id a background v4 redraw replaces.
+     */
+    private data class DrawJob(
+        val key: String,
+        val name: String,
+        val forced: Boolean,
+        val day: String,
+        val brief: IconDecision? = null,
+        val replaces: String? = null,
+    )
 
     override fun isBundled(key: String): Boolean = key in bundledKeys()
 
@@ -176,13 +215,16 @@ class AppIconRepository internal constructor(
             val items = state.lists.flatMap { it.items }
             submit(items.filter { it.iconFit == IconFit.PENDING && it.customIconId == null })
             if (swept.compareAndSet(false, true)) {
-                val referenced = items.mapNotNullTo(HashSet()) { it.customIconId }
                 try {
-                    val removed = cache.sweep(referenced, clock())
+                    val referenced = referencedIds(state)
+                    val removed = if (referenced == null) 0 else cache.sweep(referenced, clock())
                     if (removed > 0) PicnicLog.i("swept $removed orphaned icon files")
-                } catch (e: IOException) {
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
                     PicnicLog.w("icon sweep failed", e)
                 }
+                redrawLegacy()
             }
         }
     }
@@ -227,16 +269,16 @@ class AppIconRepository internal constructor(
             // Step 2 needs a token (no sparkle, no doomed NotConfigured call without one): the item
             // keeps its fallback icon and stays PENDING until resumePending() runs with a token set.
             IconFit.PENDING -> if (hasToken() && acquire(key, exclusive = true)) decideQueue.send(NamedItem(key, item.name.trim()))
-            IconFit.APPROXIMATE -> requestAutoDraw(key, item.name.trim(), alreadyBusy = false)
+            IconFit.APPROXIMATE -> requestAutoDraw(key, item.name.trim(), alreadyBusy = false, brief = null)
             IconFit.EXACT -> Unit
         }
     }
 
     /** Queues an automatic drawing if every gate passes. With [alreadyBusy] the caller hands over its busy mark. */
-    private suspend fun requestAutoDraw(key: String, name: String, alreadyBusy: Boolean) {
+    private suspend fun requestAutoDraw(key: String, name: String, alreadyBusy: Boolean, brief: IconDecision?, replaces: String? = null) {
         if (!alreadyBusy && isBusy(key)) return
         val day = today()
-        if (!autoDrawAllowed(key, day)) {
+        if (!autoDrawAllowed(key, day, legacy = replaces != null)) {
             if (alreadyBusy) release(key)
             return
         }
@@ -244,10 +286,10 @@ class AppIconRepository internal constructor(
             runCatching { cache.refundDaily(day) }
             return
         }
-        drawQueue.send(DrawJob(key, name, forced = false, day = day))
+        drawQueue.send(DrawJob(key, name, forced = false, day = day, brief = brief, replaces = replaces))
     }
 
-    private suspend fun autoDrawAllowed(key: String, day: String): Boolean {
+    private suspend fun autoDrawAllowed(key: String, day: String, legacy: Boolean): Boolean {
         val s = try {
             settings.current()
         } catch (e: IOException) {
@@ -255,7 +297,7 @@ class AppIconRepository internal constructor(
         }
         if (!s.drawIcons || !s.hasToken) return false
         return try {
-            !cache.isBlocked(key) && stillApproximate(key) && cache.tryConsumeDaily(day, tuning.dailyCap)
+            !cache.isBlocked(key) && (legacy || stillApproximate(key)) && cache.tryConsumeDaily(day, tuning.dailyCap)
         } catch (e: IOException) {
             false
         }
@@ -267,9 +309,12 @@ class AppIconRepository internal constructor(
         false
     }
 
-    /** No learned icon override for the name, and some item still shows a stand-in icon. */
-    private suspend fun stillWanted(key: String): Boolean =
-        store.current().iconOverrides.none { it.name == key } && stillApproximate(key)
+    /** Whether a finished automatic drawing is still wanted (the user may have chosen meanwhile: their choice wins). */
+    private suspend fun stillWanted(job: DrawJob): Boolean {
+        // A legacy redraw: the index still points at the icon it replaces (forgetBespoke drops it).
+        if (job.replaces != null) return (try { cache.lookup(job.key) } catch (e: IOException) { null }) == job.replaces
+        return store.current().iconOverrides.none { it.name == job.key } && stillApproximate(job.key)
+    }
 
     /** Some item with this name still shows a stand-in icon (a user choice made meanwhile wins). */
     private suspend fun stillApproximate(key: String): Boolean = store.current().lists.any { list ->
@@ -314,7 +359,7 @@ class AppIconRepository internal constructor(
                 for (item in batch) {
                     unreleased.remove(item.id)
                     if (resolved.getValue(item.id).fit == IconFit.APPROXIMATE) {
-                        requestAutoDraw(item.id, item.name, alreadyBusy = true)
+                        requestAutoDraw(item.id, item.name, alreadyBusy = true, brief = decisions[item.id])
                     } else {
                         release(item.id)
                     }
@@ -332,7 +377,27 @@ class AppIconRepository internal constructor(
         }
     }
 
-    /* ---------------- step 3: live drawing ---------------- */
+    /* ---------------- step 3: live drawing (v4) ---------------- */
+
+    /** Queues a v4 redraw of every legacy icon still in use, oldest first, under the daily cap. */
+    private suspend fun redrawLegacy() {
+        val legacy = try {
+            cache.legacyIcons()
+        } catch (e: IOException) {
+            return
+        }
+        if (legacy.isEmpty()) return
+        val state = store.current()
+        intake.withLock {
+            for ((key, id) in legacy) {
+                // The name shown on the items that carry it (the index key is only its normalized form).
+                val name = state.lists.asSequence().flatMap { it.items }.firstOrNull { it.customIconId == id }?.name?.trim()
+                    ?: state.pantry.firstOrNull { it.icon?.customIconId == id }?.name?.trim()
+                    ?: continue
+                requestAutoDraw(key, name, alreadyBusy = false, brief = null, replaces = id)
+            }
+        }
+    }
 
     private suspend fun drawLoop() {
         for (job in drawQueue) {
@@ -341,7 +406,7 @@ class AppIconRepository internal constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // Decode/encode/disk problems: the item keeps its catalog icon.
+                // Decode/encode/disk problems or an unusable answer: the item keeps its catalog icon.
                 PicnicLog.w("icon drawing failed", e)
             } finally {
                 release(job.key)
@@ -362,50 +427,77 @@ class AppIconRepository internal constructor(
                 return
             }
         }
-        val reference = styleReferenceBytes()
-        if (reference == null) {
-            PicnicLog.w("no style reference bundled; live drawing disabled")
+        // The brief: what to draw and in which two families (the decider's look, else the plain name).
+        val shown = shownIcon(job)
+        // The batcher's answer is used as it is, even without a look (asking the same question again rarely helps).
+        val brief = job.brief ?: drawer.brief(job.key, job.name, null)
+        val families = StickerPalette.normalize(
+            brief?.families.orEmpty().ifEmpty { shown?.let { StickerManifest.entry(it)?.families }.orEmpty() },
+        )
+        val subject = brief?.look ?: LiveIconDrawer.fallbackSubject(job.name)
+        val category = brief?.category ?: shown?.let { catalog[it]?.category }
+        val sheet = withContext(compute) { sheets.compose(shown, category, families, "${job.name} $subject") }
+        if (sheet == null) {
+            PicnicLog.w("no live-drawing mask bundled; live drawing disabled")
             if (!job.forced) cache.refundDaily(job.day)
             return
         }
-        val raw = drawWithOneRetry(job, reference) ?: return
-        // The user may have picked a catalog icon for this name while it was drawing (~10 s):
-        // their choice wins, so an automatic result is dropped rather than cached and attached.
-        if (!job.forced && !stillWanted(job.key)) return
-        val webp = withContext(compute) { processor.process(raw) }
-        val id = BespokeIconCache.newIconId(job.key, clock()) { cache.fileFor(it).exists() }
-        val previous = cache.put(job.key, id, webp)
-        if (!safeUpdate { it.attachCustomIcon(job.key, id, overwrite = job.forced) }) return
-        if (job.forced && previous != null && previous != id) {
-            // Every item with this name now points at the new id; the old file is unreferenced.
-            cache.deleteFile(previous)
-            onIconReplaced(previous)
-        }
-    }
-
-    private suspend fun drawWithOneRetry(job: DrawJob, reference: ByteArray): ByteArray? {
-        var retried = false
-        while (true) {
-            try {
-                return assistant.drawIcon(IconDrawRequest(itemName = job.name, styleReference = reference)).bytes
-            } catch (e: LlmError.Refusal) {
+        val raw = when (val outcome = drawer.draw(IconDrawRequest(job.name, sheet.png, sheet.mask, subject, families))) {
+            is DrawOutcome.Drawn -> outcome.icon.bytes
+            DrawOutcome.Refused -> {
                 PicnicLog.w("icon drawing refused by moderation; name blocked")
                 cache.block(job.key)
-                return null
-            } catch (e: LlmError) {
-                val transient = e is LlmError.RateLimited || e is LlmError.Network || e is LlmError.Timeout
-                if (!transient || retried) {
-                    PicnicLog.w("icon drawing gave up", e)
-                    return null
-                }
-                retried = true
-                delay(tuning.retryDelayMs)
+                return
             }
+            is DrawOutcome.Failed -> {
+                PicnicLog.w("icon drawing gave up", outcome.error)
+                return
+            }
+        }
+        // The user may have picked a catalog icon for this name while it was drawing (~10 s):
+        // their choice wins, so an automatic result is dropped rather than cached and attached.
+        if (!job.forced && !stillWanted(job)) return
+        val sticker = withContext(compute) { processor.process(raw, families, sheet.targetAreaU2) }
+        sticker.stats?.let { PicnicLog.i("live sticker v4 in ${"%.0f".format(it.millis)} ms (${sheet.neighbours.joinToString()})") }
+        val id = BespokeIconCache.newIconId(job.key, clock()) { cache.fileFor(it).exists() }
+        val previous = cache.put(job.key, id, sticker.webp, sticker.cut)
+        val attached = safeUpdate { state ->
+            if (job.replaces != null) state.replaceCustomIcon(job.replaces, id) else state.attachCustomIcon(job.key, id, overwrite = job.forced)
+        }
+        if (!attached) return
+        // The icon this one replaces (a redraw, a legacy redraw): its file goes only when nothing references it any
+        // more; an icon filed in the album keeps its file (§18.3 step 5).
+        for (old in setOfNotNull(previous, job.replaces)) {
+            if (old == id) continue
+            val referenced = referencedIds(store.current()) ?: break
+            if (cache.deleteIfUnreferenced(old, referenced)) onIconReplaced(old)
         }
     }
 
-    private suspend fun styleReferenceBytes(): ByteArray? = styleRefLock.withLock {
-        styleRefBytes ?: withContext(io) { styleReference() }?.also { styleRefBytes = it }
+    /** The catalog key the name's items show now (the approximate key the sheet starts from), if any. */
+    private suspend fun shownIcon(job: DrawJob): String? {
+        val items = store.current().lists.asSequence().flatMap { it.items }.filter { normalizeName(it.name) == job.key }.toList()
+        val pick = items.firstOrNull { it.iconFit == IconFit.APPROXIMATE } ?: items.firstOrNull()
+        return pick?.icon?.takeIf { it in catalog }
+    }
+
+    /**
+     * Every custom icon id something still shows: items, pantry entries and the album. Null when the album can't be
+     * read: then nothing is deleted (a filed sticker's art must never go).
+     */
+    private suspend fun referencedIds(state: AppState): Set<String>? {
+        val ids = HashSet<String>()
+        state.lists.forEach { list -> list.items.forEach { it.customIconId?.let(ids::add) } }
+        state.pantry.forEach { entry -> entry.icon?.customIconId?.let(ids::add) }
+        ids += try {
+            albumRefs()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            PicnicLog.w("album references unavailable; keeping every icon file", e)
+            return null
+        }
+        return ids
     }
 
     /* ---------------- helpers ---------------- */
@@ -444,8 +536,32 @@ class AppIconRepository internal constructor(
         IconFit.EXACT -> 2
     }
 
+    /** Reads the bundled mask once (it is the same 6 KB for every drawing). */
+    private class MaskCache(private val read: () -> ByteArray?) {
+        @Volatile private var bytes: ByteArray? = null
+
+        fun get(): ByteArray? = bytes ?: read()?.also { bytes = it }
+    }
+
     companion object {
-        /** filesDir/icons: index.json + custom/<customIconId>.webp. */
+        /** filesDir/icons: index.json + custom/<customIconId>.webp and .cut. */
         fun iconsDir(app: Application): File = File(app.filesDir, "icons")
+
+        /** Keys with library art (§19.3: isBundled reads StickerManifest, no longer assets/icons/<key>.webp). */
+        private val LIBRARY_KEYS: Set<String> by lazy {
+            StickerManifest.entries.mapNotNullTo(HashSet()) { e -> e.key.takeUnless { it == StickerManifest.CAPSULE } }
+        }
     }
 }
+
+/** Points every item and pantry entry that shows icon [old] at [new] (a legacy icon's v4 redraw). */
+internal fun AppState.replaceCustomIcon(old: String, new: String): AppState = copy(
+    lists = lists.map { list ->
+        if (list.items.none { it.customIconId == old }) list
+        else list.copy(items = list.items.map { if (it.customIconId == old) it.copy(customIconId = new) else it })
+    },
+    pantry = pantry.map { entry ->
+        val icon = entry.icon
+        if (icon?.customIconId == old) entry.copy(icon = icon.copy(customIconId = new)) else entry
+    },
+)
