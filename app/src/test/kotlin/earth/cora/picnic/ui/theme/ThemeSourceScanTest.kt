@@ -41,6 +41,7 @@ class HoloUsageTest {
         "Components.kt", // the "shiny!" / "jackpot!" chip
         "ThemePreviews.kt", // the holo reward-card sample (holo_card_frames)
         "StickerBook.kt", // WP5: the next sticker spot, the full book's release paper and fore-edge, the PERFECT page
+        "TripBookSheet.kt", // WP5: the same book at 2× (its PERFECT page and full release paper), shiny stickers
         "NextStopCard.kt", // WP6: the Next card's static foil
         "Celebration.kt", // WP6: title glint, stamp card back, bonus card
         "AlbumScreen.kt", "AlbumPieces.kt", // WP8: holo pockets, the perfect-week card
