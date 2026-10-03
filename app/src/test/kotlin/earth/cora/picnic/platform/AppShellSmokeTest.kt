@@ -1,5 +1,6 @@
 package earth.cora.picnic.platform
 
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -17,6 +18,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.GraphicsMode
@@ -29,6 +31,14 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AppShellSmokeTest {
+    /**
+     * The activity below is launched by the test itself; this rule gives its compositions the test recomposer. Without
+     * it, the list's ambient loops (the add bar's washi flutter, the LCD, the sparkles) run as ordinary frames, and
+     * Robolectric's looper idle in moveToState never ends (as in ReducedMotionTest).
+     */
+    @get:Rule
+    val compose = createEmptyComposeRule()
+
     @Test
     fun mainActivityLaunchesAndContainerResolves() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
