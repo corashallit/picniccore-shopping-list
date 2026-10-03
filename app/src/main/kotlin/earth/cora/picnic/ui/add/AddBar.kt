@@ -49,6 +49,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -165,8 +167,14 @@ fun AddBar(
     onFocusChange: (Boolean) -> Unit = {},
     /** Snap, Choose a photo and Speak can run (false: the Surprise lab's practice list, which has no camera or microphone). */
     captureEnabled: Boolean = true,
-    /** Where the washi sits along the top edge (egg 16's umbrella stands at the left end, so the tape moves along). */
+    /** Where the washi sits along the top edge. */
     tapeStart: androidx.compose.ui.unit.Dp = 4.dp,
+    /**
+     * Egg 16: the umbrella stands at the bar's left end, so the washi moves along, 8 dp after the doodle as it is laid
+     * out at this font scale; when the bar has no room for it there (very large text), no washi shows, rather than one
+     * over the doodle or under the umbrella.
+     */
+    tapeAfterDoodle: Boolean = false,
 ) {
     val c = PicnicTheme.colors
     val choose = stringResource(R.string.add_bar_choose_photo)
@@ -177,6 +185,10 @@ fun AddBar(
     val choosePhotoNow by rememberUpdatedState(onChoosePhoto)
     val choosePhoto = remember { { choosePhotoNow() } }
     val stacked = LocalDensity.current.fontScale >= VERY_LARGE_TEXT
+    // The doodle's end and the bar's width (px), for the washi that moves along the bar while the umbrella stands there.
+    var doodleEnd by remember { mutableStateOf<Float?>(null) }
+    var barLeft by remember { mutableStateOf(0f) }
+    var barWidth by remember { mutableStateOf(0) }
     LaunchedEffect(state.waiting) {
         // Read-only while waiting: the keyboard goes away (the capsule says what is happening).
         if (state.waiting) keyboard?.hide()
@@ -185,6 +197,10 @@ fun AddBar(
         modifier
             .fillMaxWidth()
             .testTag(ADD_BAR_TAG)
+            .onGloballyPositioned {
+                barLeft = it.positionInWindow().x
+                barWidth = it.size.width
+            }
             .drawBehind {
                 // The 12 dp pad fade above the bar (§6.1).
                 val fade = 12.dp.toPx()
@@ -234,7 +250,7 @@ fun AddBar(
                 }
             }
             DoodleOverBody(
-                doodle = { Doodle() },
+                doodle = { Doodle(Modifier.onGloballyPositioned { doodleEnd = it.positionInWindow().x + it.size.width }) },
                 body = {
                     if (stacked) {
                         Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp)) {
@@ -253,9 +269,22 @@ fun AddBar(
                 },
             )
         }
-        // The season's washi at the left end, over the perforation.
-        Box(Modifier.offset(x = tapeStart, y = (-5).dp).clearAndSetSemantics { this[Decorative] = Unit; testTag = ADD_BAR_WASHI_TAG }) {
-            WashiTape(tape, length = 56.dp, height = 18.dp, rotation = -4f, alpha = 0.9f, flutter = true)
+        // The season's washi at the left end, over the perforation (after the doodle while the umbrella stands there).
+        val density = LocalDensity.current
+        val tapeAt = if (!tapeAfterDoodle) {
+            tapeStart
+        } else {
+            doodleEnd?.let { end ->
+                with(density) {
+                    val at = (end - barLeft).toDp() + TAPE_AFTER_DOODLE
+                    at.takeIf { barWidth > 0 && it + TAPE_LENGTH + TAPE_END_ROOM <= barWidth.toDp() }
+                }
+            }
+        }
+        if (tapeAt != null) {
+            Box(Modifier.offset(x = tapeAt, y = (-5).dp).clearAndSetSemantics { this[Decorative] = Unit; testTag = ADD_BAR_WASHI_TAG }) {
+                WashiTape(tape, length = TAPE_LENGTH, height = 18.dp, rotation = -4f, alpha = 0.9f, flutter = true)
+            }
         }
     }
 }
@@ -265,10 +294,10 @@ fun AddBar(
  * clip and tells the clipped-text checks if it ever lost text.
  */
 @Composable
-private fun Doodle() {
+private fun Doodle(modifier: Modifier = Modifier) {
     var lost by remember { mutableStateOf(false) }
     // The wrapper clears everything under it: TalkBack never stops on the doodle (§15 "Decor").
-    Box(Modifier.decorativeText(ADD_BAR_DOODLE_TAG, lost).graphicsLayer { rotationZ = -4f }) {
+    Box(modifier.decorativeText(ADD_BAR_DOODLE_TAG, lost).graphicsLayer { rotationZ = -4f }) {
         PicnicText(
             stringResource(R.string.add_bar_doodle),
             style = PicnicTheme.type.doodle.copy(fontSize = PicnicTheme.type.caption.fontSize, lineHeight = PicnicTheme.type.caption.lineHeight),
@@ -302,6 +331,11 @@ private fun DoodleOverBody(doodle: @Composable () -> Unit, body: @Composable () 
 }
 
 private val DOODLE_START = 76.dp
+
+/** The washi (56 dp), its gap after the doodle while the umbrella stands at the left end, and its room at the right end. */
+private val TAPE_LENGTH = 56.dp
+private val TAPE_AFTER_DOODLE = 8.dp
+private val TAPE_END_ROOM = 8.dp
 private val DOODLE_TOP = 5.dp
 private val DOODLE_SLACK = 8.dp
 
@@ -671,6 +705,8 @@ fun BoxScope.AddDock(
     tape: WashiPattern = WashiPattern.SakuraStripe,
     /** Another sheet is up (WP5's Edit sheet, list switcher, Trip book): the bar never folds under it either. */
     otherSheetOpen: Boolean = false,
+    /** Egg 16: the umbrella stands at the bar's left end; the washi moves along after the doodle (AddBar). */
+    tapeAfterDoodle: Boolean = false,
 ) {
     val collapse = flows.collapse
     val reduced = LocalReducedMotion.current
@@ -705,6 +741,7 @@ fun BoxScope.AddDock(
                 tape = tape,
                 focusRequester = flows.focusRequester,
                 onFocusChange = { collapse.fieldFocused = it },
+                tapeAfterDoodle = tapeAfterDoodle,
             )
             // The pad under the bar, over the navigation bar or the keyboard's room (never behind the bar's bites).
             Spacer(Modifier.fillMaxWidth().windowInsetsBottomHeight(bottomInsets).background(c.pad))

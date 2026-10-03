@@ -69,9 +69,18 @@ class EggRig(
     val model: PracticeModel get() = sandbox.model
     val probe = EggProbe()
 
-    fun start(content: @Composable () -> Unit = { PracticeList(model, feedback = feedback, talkBack = talkBack) }): EggRig {
+    /**
+     * The keyboard as the list is told it is (EggListHost's test hook): null = the phone's own insets (none under
+     * Robolectric), true / false = open / closed.
+     */
+    val ime: androidx.compose.runtime.MutableState<Boolean?> = androidx.compose.runtime.mutableStateOf(null)
+
+    /** Shows [list] (the practice list by default) drawing this rig's sandbox. */
+    fun start(list: EggListUnderTest): EggRig = start { list.content(this) }
+
+    fun start(content: @Composable () -> Unit = { EggListUnderTest.Practice.content(this) }): EggRig {
         compose.mainClock.autoAdvance = false
-        sandbox.variants.onSystemDark(variant == ThemeVariant.Glow)
+        sandbox.onSystemDark(variant == ThemeVariant.Glow)
         compose.setContent {
             val base = LocalDensity.current
             val d = Density(base.density, fontScale ?: base.fontScale)
@@ -157,6 +166,25 @@ class EggRig(
     val v: String get() = if (variant == ThemeVariant.Glow) "glow" else "day"
 }
 
+/**
+ * A list screen the egg tests run on (§19.2 hand-off, SurpriseEngine.kt's checklist): it draws [EggRig]'s sandbox (its
+ * store, engine and anchors: `model.anchors`) with the eggs mounted through EggListHost. EggOverlayBoundsTest and
+ * DecorBudgetTest take it as a parameter: the practice list today; WP5's ListScreen joins [all] when it is merged.
+ */
+class EggListUnderTest(private val name: String, val content: @Composable (EggRig) -> Unit) {
+    override fun toString(): String = name
+
+    companion object {
+        /** The Surprise lab's practice list. */
+        val Practice: EggListUnderTest = EggListUnderTest("practice") { r ->
+            PracticeList(r.model, feedback = r.feedback, talkBack = r.talkBack, imeVisible = r.ime.value)
+        }
+
+        /** Every list the list-agnostic egg tests run on. */
+        val all: List<EggListUnderTest> get() = listOf(Practice)
+    }
+}
+
 /** Day and Glow, for ParameterizedRobolectricTestRunner. */
 fun dayAndGlow(): List<Array<Any>> = listOf(arrayOf(ThemeVariant.Day), arrayOf(ThemeVariant.Glow))
 
@@ -168,6 +196,9 @@ fun completedFixture(minutes: Long = 41): AppState {
         .foldIndexed(s) { i, acc, item -> acc.toggleChecked(PracticeFixture.LIST_ID, item.id, at - (13 - i).coerceAtLeast(0) * 1_000L) }
 }
 
+/** The docked add bar's test tags (the practice list's, and WP7's own on every AddBar). */
+private val ADD_BAR_TAGS = setOf(PracticeTags.ADD_BAR, earth.cora.picnic.ui.add.ADD_BAR_TAG)
+
 /**
  * Every text node on screen (unmerged), in root px: the visible part of each, since the list scrolls under the opaque
  * add bar (a row's words under the bar are hidden by it; the bar's own words are not). The printed receipt's own words
@@ -177,7 +208,7 @@ fun textBoxes(compose: ComposeContentTestRule): List<Pair<String, Rect>> {
     val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode()
     var barTop = Float.MAX_VALUE
     fun find(n: androidx.compose.ui.semantics.SemanticsNode) {
-        if (n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) == PracticeTags.ADD_BAR) barTop = n.boundsInRoot.top
+        if (n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) in ADD_BAR_TAGS) barTop = n.boundsInRoot.top
         n.children.forEach(::find)
     }
     find(root)
@@ -186,7 +217,7 @@ fun textBoxes(compose: ComposeContentTestRule): List<Pair<String, Rect>> {
         val tag = n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)
         // The printed receipt's own words are its own (the unmerged tree keeps the words its one node replaces).
         if (tag == EggTags.RECEIPT) return
-        val mine = inBar || tag == PracticeTags.ADD_BAR
+        val mine = inBar || tag in ADD_BAR_TAGS
         val text = n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
         val box = n.boundsInRoot.let { b -> if (mine) b else Rect(b.left, b.top, b.right, minOf(b.bottom, barTop)) }
         if (text != null && box.width > 0f && box.height > 0f) out += text.joinToString() to box

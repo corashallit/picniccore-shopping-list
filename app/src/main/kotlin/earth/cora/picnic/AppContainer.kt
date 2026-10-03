@@ -179,6 +179,8 @@ class AppContainer(private val app: Application) {
             places = places,
             // Midnight and golden hour are her local time (§12.2 eggs 5 and 12); the season calendar stays Toronto's.
             localZone = ZoneId.systemDefault(),
+            // Read at each tap (not at construction: themeVariants itself reads this engine's state).
+            variant = { themeVariants.variant.value },
         )
     }
 

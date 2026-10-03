@@ -215,11 +215,20 @@ class EggGoldenTest {
 
     @Test
     fun dayOnly() {
-        // The phone in dark mode: Glow wins; golden hour does not show.
+        // The phone in dark mode: Glow wins; golden hour does not show on her list.
         val r = EggRig(compose, variant = ThemeVariant.Glow).start()
+        r.act {
+            r.clock.nowMs = day.atTime(sunset.minusMinutes(20)).atZone(zone).toInstant().toEpochMilli()
+            r.engine.refresh()
+            runBlocking { r.sandbox.variants.tickNow() }
+        }
+        r.advance(300)
+        assertTrue("20 minutes before sunset", r.eggs.golden)
+        assertEquals(ThemeVariant.Glow, r.resolved)
+        // The Surprise lab's Try it forces Day (§12.3), so golden hour shows on a dark phone's practice list too.
         r.fire(12)
         r.advance(300)
-        assertEquals(ThemeVariant.Glow, r.resolved)
+        assertEquals(ThemeVariant.Golden, r.resolved)
     }
 
     @Composable

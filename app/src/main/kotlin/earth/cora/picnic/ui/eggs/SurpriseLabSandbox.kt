@@ -119,7 +119,7 @@ class SurpriseLabSandbox(
         zone = zone,
     )
 
-    val engine = AppSurpriseEngine(
+    val engine: AppSurpriseEngine = AppSurpriseEngine(
         store = store,
         album = album,
         settings = settings,
@@ -133,6 +133,8 @@ class SurpriseLabSandbox(
         places = PlaceSource.Toronto,
         zone = zone,
         forceEggs = true,
+        // The practice list's own variant (read at each tap; [variants] is built below).
+        variant = { variants.variant.value },
     )
 
     val model = PracticeModel(store, album, engine, catalog, clock::now, feedback, announcer, timeouts)
@@ -158,12 +160,29 @@ class SurpriseLabSandbox(
      * The practice list's own variant (§2.5 on the sandbox clock and settings; the phone's dark mode still applies), and
      * the minute tick that re-reads the clock for the engine too.
      */
-    val variants = ThemeVariantSource(
+    val variants: ThemeVariantSource = ThemeVariantSource(
         settings, clock::now, SunClock, PlaceSource.Toronto, zone,
         duskShown = engine.state.map { it.dusk },
         onTick = { engine.refresh() },
     ).also {
         it.start(scope, everyMinute = minuteTicks)
+    }
+
+    /** Eggs 1 and 12 force Day (§12.3): the Glow moon is static, and golden hour is Day-only. */
+    @Volatile var forcesDay: Boolean = false
+        private set
+
+    /**
+     * The phone's dark mode (PracticeFrame feeds it in): the practice list is Glow in dark mode, as her list is, except
+     * while an egg forces Day ([forcesDay]: Dusk binder, Golden hour). A fresh practice copy forces nothing.
+     */
+    fun onSystemDark(dark: Boolean) {
+        variants.onSystemDark(dark && !forcesDay)
+    }
+
+    private fun forceDay() {
+        forcesDay = true
+        variants.onSystemDark(false)
     }
 
     /** A step an egg plays a little later (on the frame clock, by the lab screen): the cake's check-off, the jackpot. */
@@ -240,8 +259,9 @@ class SurpriseLabSandbox(
 
     private fun moveClock(time: LocalTime) = setClock(today(), time)
 
-    /** Egg 1: forces Day (mid-morning, no Dusk), then taps the sun 7 times, 300 ms apart. */
+    /** Egg 1: forces Day (mid-morning, no Dusk, light even in dark mode), then taps the sun 7 times, 300 ms apart. */
     private fun dusk() {
+        forceDay()
         scope.launch { settings.setDuskBinder(false) }
         setClock(today(), LocalTime.of(10, 24))
         repeat(EggRules.SUN_TAPS) {
@@ -295,6 +315,8 @@ class SurpriseLabSandbox(
         model.set { it.setOpenAisle(listId, "aisle-2-baking") }
         _followUp.value = FollowUp(firings, 2200) {
             clock.advance(2200)
+            // Its row is brought wholly into view first (at large text the hanko lands where she can see it).
+            model.focus("aisle-2-baking", id, aisleFirst = false)
             model.toggle(id)
         }
     }
@@ -316,8 +338,9 @@ class SurpriseLabSandbox(
         setClock(Seasons.window(season to day).start, LocalTime.of(10, 24))
     }
 
-    /** Egg 12: sets the sandbox clock to 20 min before sunset (Day, no Dusk). */
+    /** Egg 12: sets the sandbox clock to 20 min before sunset (Day, no Dusk, light even in dark mode). */
     private fun goldenHour() {
+        forceDay()
         scope.launch { settings.setDuskBinder(false) }
         val date = today()
         val sunset = SunClock.sunset(date, PlaceSourceToronto.place, zone)
@@ -328,6 +351,8 @@ class SurpriseLabSandbox(
     private fun jackpot() {
         val item = store.value.list(listId)?.items?.firstOrNull { it.id == JACKPOT_ROW } ?: return
         model.set { it.setOpenAisle(listId, item.aisleId) }
+        // Its row comes wholly into view above the add bar, at any font scale.
+        item.aisleId?.let { model.focus(it, item.id, aisleFirst = false) }
         engine.forceJackpotNext = true
         engine.onIconDrawing(item)
         _followUp.value = FollowUp(firings, 1200) {

@@ -33,6 +33,7 @@ import earth.cora.picnic.platform.WeatherService
 import earth.cora.picnic.settings.AppSettings
 import earth.cora.picnic.settings.SettingsRepository
 import earth.cora.picnic.ui.list.motion.MotionEvent
+import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.isGoldenHour
 import earth.cora.picnic.ui.theme.isMidnight
 import kotlinx.coroutines.CancellationException
@@ -84,6 +85,12 @@ class AppSurpriseEngine(
     private val localZone: ZoneId = zone,
     /** The Surprise lab's sandbox: eggs on whatever the switch says (§6.9). */
     private val forceEggs: Boolean = false,
+    /**
+     * The theme variant the list shows now (ThemeVariantSource, read lazily at each tap): in Glow (the phone in dark
+     * mode, or midnight) the sticker by the title is the static Glow moon, so egg 1 neither counts nor undoes anything.
+     * AppContainer passes `{ themeVariants.variant.value }`; the lab's sandbox its own variants'.
+     */
+    private val variant: () -> ThemeVariant = { ThemeVariant.Day },
 ) : SurpriseEngine {
     private val ids = AtomicLong(0)
     private fun nextId(): Long = ids.incrementAndGet()
@@ -334,9 +341,11 @@ class AppSurpriseEngine(
     override fun onSunTap() {
         if (!eggsOn) return
         val s = _state.value
-        // In Dusk the sticker by the title is the moon: a tap undoes Dusk. Midnight's moon (Glow) is static.
+        // The Glow moon (the phone in dark mode, or midnight) is static (§12.2 egg 1): no tap counts, none undoes Dusk.
+        if (glowMoon(s)) return
+        // In Dusk the sticker by the title is the moon: a tap undoes Dusk.
         if (s.dusk) return onMoonTap()
-        if (s.midnight || s.duskFx != null) return
+        if (s.duskFx != null) return
         val now = clock()
         sunTaps = if (now - lastSunTap <= EggRules.SUN_TAP_GAP_MS) sunTaps + 1 else 1
         lastSunTap = now
@@ -357,8 +366,12 @@ class AppSurpriseEngine(
         derive()
     }
 
+    /** The sticker by the title is the static Glow moon: the phone is in dark mode, or it is midnight (§2.5, §12.2). */
+    private fun glowMoon(s: SurpriseState): Boolean = s.midnight || variant() == ThemeVariant.Glow
+
     override fun onMoonTap() {
-        if (!eggsOn || !_state.value.dusk) return
+        val s = _state.value
+        if (!eggsOn || !s.dusk || glowMoon(s)) return
         duskPending = false
         sunTaps = 0
         _state.update { it.copy(duskFx = DuskFx(nextId(), toDusk = false, reduced = reducedMotion)) }

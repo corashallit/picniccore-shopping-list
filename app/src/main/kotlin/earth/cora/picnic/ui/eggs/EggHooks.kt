@@ -42,6 +42,8 @@ import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.PetPose
+import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.binderGround
 import earth.cora.picnic.ui.theme.rememberLoopTime
 import kotlinx.coroutines.withContext
@@ -196,12 +198,77 @@ fun Modifier.basketHello(state: SurpriseState, sectionId: String): Modifier {
 
 /**
  * Egg 5: the snack-time star sticker and the "snack?" doodle, for the list to place right after [sectionId]'s tab (it
- * scrolls with its strip). Draws nothing unless it is midnight and [sectionId] is the frozen aisle. Decorative.
+ * scrolls with its strip). Draws nothing unless it is midnight and [sectionId] is the frozen aisle. Decorative. It never
+ * takes room from the tab (§4.10 tab fit, §12.1 "none hides information"): give it its own width after the tab's fitted
+ * one, as [TabMetaDoodle] does, never a share of the tab's row.
  */
 @Composable
 fun SnackDoodle(state: SurpriseState, sectionId: String, modifier: Modifier = Modifier) {
     if (!state.enabled || state.snackSectionId != sectionId) return
     SnackDoodleContent(modifier)
+}
+
+/** True when egg 5's snack doodle shows by [sectionId]'s tab. */
+fun SurpriseState.snackDoodleAt(sectionId: String): Boolean = enabled && snackSectionId == sectionId
+
+/**
+ * A folded strip's words with egg 5's doodle (§4.10, §12.2): the [tab] is laid out first at its own fitted width (§4.10
+ * Fit: 20 sp down to 16 sp, then an ellipsis), then the [meta] line under it; the [doodle] (null: none) goes beside the
+ * tab only in the room the tab leaves, else after the meta line, else on a line of its own under it. The doodle never
+ * shrinks the tab. The layout is as wide as the farthest of the three ends (the strip's ribbon is placed after it).
+ */
+@Composable
+fun TabMetaDoodle(
+    tab: @Composable () -> Unit,
+    meta: @Composable () -> Unit,
+    doodle: (@Composable () -> Unit)?,
+    modifier: Modifier = Modifier,
+    gap: androidx.compose.ui.unit.Dp = 4.dp,
+) {
+    androidx.compose.ui.layout.Layout(
+        contents = listOf(tab, meta, doodle ?: {}),
+        modifier = modifier,
+    ) { (tabM, metaM, doodleM), constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val t = tabM.map { it.measure(loose) }
+        val m = metaM.map { it.measure(loose) }
+        val d = doodleM.map { it.measure(androidx.compose.ui.unit.Constraints()) }
+        val tabW = t.maxOfOrNull { it.width } ?: 0
+        val tabH = t.maxOfOrNull { it.height } ?: 0
+        val metaW = m.maxOfOrNull { it.width } ?: 0
+        val metaH = m.maxOfOrNull { it.height } ?: 0
+        val dW = d.maxOfOrNull { it.width } ?: 0
+        val dH = d.maxOfOrNull { it.height } ?: 0
+        val g = gap.roundToPx()
+        val lift = 2.dp.roundToPx()
+        val max = constraints.maxWidth
+        var dx = 0
+        var dy = 0
+        if (d.isNotEmpty()) {
+            when {
+                tabW + g + dW <= max -> {
+                    dx = tabW + g
+                    dy = -lift
+                }
+                metaW + g + dW <= max -> {
+                    dx = metaW + g
+                    dy = tabH + metaH - dH
+                    if (dx < tabW) dy = maxOf(dy, tabH)
+                }
+                else -> {
+                    dx = g
+                    dy = tabH + metaH
+                }
+            }
+        }
+        val width = maxOf(tabW, metaW, if (d.isEmpty()) 0 else dx + dW).coerceIn(constraints.minWidth, max)
+        val height = maxOf(tabH + metaH, if (d.isEmpty()) 0 else dy + dH).coerceAtLeast(constraints.minHeight)
+        layout(width, height) {
+            t.forEach { it.place(0, 0) }
+            m.forEach { it.place(0, tabH) }
+            d.forEach { it.place(dx, dy) }
+        }
+    }
 }
 
 /**
@@ -234,13 +301,97 @@ fun BoxScope.NapCatInBasket(state: SurpriseState, sectionId: String, kind: Baske
 }
 
 /**
+ * Egg 2's walk, shared by the overlay and the list (§12.2: "never crossing item text", §4.1): the ladybug walks along its
+ * folded strip drawn by the STRIP itself ([StripLadybug]), so it scrolls with the strip, never lags it, and is clipped
+ * with the list (under the binder top, behind the add bar). The overlay keeps its time and ends it ([show]); a list that
+ * places no StripLadybug leaves the overlay to draw it. Provide one per list with [LocalLadybugHome] (EggListHost does).
+ */
+@androidx.compose.runtime.Stable
+class LadybugHome(internal val anchors: earth.cora.picnic.ui.list.motion.AnchorRegistry? = null) {
+    internal var fx by mutableStateOf<LadybugFx?>(null)
+    internal var time by mutableStateOf<androidx.compose.runtime.State<Long>?>(null)
+
+    /** The strips that can draw it (composed now). */
+    internal val strips: MutableSet<String> = androidx.compose.runtime.snapshots.SnapshotStateSet()
+
+    internal fun show(fx: LadybugFx, time: androidx.compose.runtime.State<Long>) {
+        if (this.fx != fx) this.fx = fx
+        if (this.time !== time) this.time = time
+    }
+
+    internal fun clear(id: Long) {
+        if (fx?.id != id) return
+        fx = null
+        time = null
+    }
+}
+
+/** The list's [LadybugHome] (null: the overlay draws the whole walk itself). */
+val LocalLadybugHome = androidx.compose.runtime.staticCompositionLocalOf<LadybugHome?> { null }
+
+/**
+ * Egg 2: the ladybug walking [sectionId]'s folded strip. Call it inside the strip's box whose bottom is the strip card's
+ * bottom edge and whose left is the card's left (the list's own strip box), after the strip's content. It walks the
+ * bottom edge from 22 dp in, in the gap under the card (past no words), then flies off the nearer side of the list.
+ * Decorative.
+ */
+@Composable
+fun BoxScope.StripLadybug(sectionId: String) {
+    val home = LocalLadybugHome.current ?: return
+    DisposableEffect(home, sectionId) {
+        home.strips += sectionId
+        onDispose { home.strips -= sectionId }
+    }
+    val fx = home.fx?.takeIf { it.sectionId == sectionId } ?: return
+    val t = home.time?.value ?: return
+    var origin by remember { mutableStateOf<Offset?>(null) }
+    var box by remember { mutableStateOf(IntSize.Zero) }
+    val width = androidx.compose.ui.platform.LocalView.current.width.toFloat()
+    val probe = LocalEggProbe.current
+    Box(
+        Modifier
+            .matchParentSize()
+            .onGloballyPositioned {
+                origin = it.positionInWindow()
+                box = it.size
+            },
+    ) {
+        val o = origin ?: return@Box
+        if (box == IntSize.Zero) return@Box
+        val d = LocalDensity.current.density
+        val list = home.anchors?.bounds(EggAnchors.LIST)
+        val left = (list?.left ?: 0f) - o.x
+        val right = (list?.right ?: width) - o.x
+        val (pose, flying) = LadybugMotion.at(Offset(22 * d, box.height + 2 * d), t, d, left, right) ?: return@Box
+        PlacedSticker(
+            if (flying) "ladybugfly" else "ladybug",
+            pose,
+            LadybugMotion.SIZE_DP.dp,
+            // Where it is drawn (window px), as laid out, for the test probe.
+            placed = Modifier.onGloballyPositioned { c ->
+                probe?.record("ladybug", t, Rect(c.positionInWindow(), c.size.let { androidx.compose.ui.geometry.Size(it.width.toFloat(), it.height.toFloat()) }), pose.rotation)
+            },
+        )
+    }
+}
+
+/**
+ * Egg 1: the sticker by the title (the sun, the Dusk moon) hides while the transition draws its own sun and moon over
+ * it. Not in Glow: the static Glow moon stays. WP5's SunSticker modifier.
+ */
+fun Modifier.eggTitleSticker(state: SurpriseState, variant: ThemeVariant): Modifier {
+    val hide = state.enabled && state.duskFx != null && variant != ThemeVariant.Glow
+    return graphicsLayer { alpha = if (hide) 0f else 1f }
+}
+
+/**
  * Egg 1: a tap on the sticker by the title in [variant]. The sun (Day, Golden) counts toward Dusk; the Dusk moon undoes
  * it; the Glow moon (system dark, midnight) is static. Nothing with Easter eggs off. WP5's BinderTopBar `onSunTap`.
  */
-fun SurpriseEngine.onTitleStickerTap(state: SurpriseState, variant: earth.cora.picnic.ui.theme.ThemeVariant) {
+fun SurpriseEngine.onTitleStickerTap(state: SurpriseState, variant: ThemeVariant) {
     when {
         !state.enabled -> Unit
-        variant == earth.cora.picnic.ui.theme.ThemeVariant.Glow -> Unit
+        variant == ThemeVariant.Glow -> Unit
         state.dusk -> onMoonTap()
         else -> onSunTap()
     }
@@ -378,11 +529,13 @@ fun BoxScope.RowRoller(itemId: String) {
  * first inside its PicnicBackground (beneath everything else): while the change plays, the ground it had (Day, or Golden
  * at golden hour) lies over the Dusk ground and fades out in 12 fps steps over the moon's rise (600 ms after the sun has
  * set), or over 120 ms under reduced motion (§12.3); the moon tapped, the Dusk ground lies over the Day ground and fades
- * out the same way. Decorative.
+ * out the same way. Nothing in Glow (the Glow moon is static). Decorative.
  */
 @Composable
 fun BoxScope.DuskWash(state: SurpriseState) {
     val fx = state.duskFx?.takeIf { state.enabled } ?: return
+    // In Glow (the phone turned dark mid-change) there is no Day or Dusk ground to wash between: the Glow ground stays.
+    if (PicnicTheme.variant == ThemeVariant.Glow) return
     val total = when {
         fx.reduced -> DuskMotion.FADE_MS
         fx.toDusk -> DuskMotion.DURATION
@@ -391,9 +544,9 @@ fun BoxScope.DuskWash(state: SurpriseState) {
     val t by rememberEffectTime("wash:${fx.id}", total)
     val from = remember(fx.id) {
         when {
-            !fx.toDusk -> earth.cora.picnic.ui.theme.ThemeVariant.Dusk
-            state.golden -> earth.cora.picnic.ui.theme.ThemeVariant.Golden
-            else -> earth.cora.picnic.ui.theme.ThemeVariant.Day
+            !fx.toDusk -> ThemeVariant.Dusk
+            state.golden -> ThemeVariant.Golden
+            else -> ThemeVariant.Day
         }
     }
     val a = duskWashAlpha(fx, t)

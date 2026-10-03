@@ -1,6 +1,10 @@
 package earth.cora.picnic.ui.eggs
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.platform.FakeTimeouts
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
@@ -62,6 +66,63 @@ class EggLadybugTest {
         }
         r.advanceTo(t0 + LadybugMotion.DURATION + 100)
         assertNull(r.eggs.ladybug)
+    }
+
+    /**
+     * It walks WITH its strip (§12.2 "never crossing item text"): she scrolls the list 120 dp mid-walk, and the ladybug
+     * stays on the strip's bottom edge, over no word, frame by frame.
+     */
+    @Test
+    fun itFollowsItsStripAsTheListScrolls() {
+        val r = EggRig(compose).start()
+        r.holdBasket("bakery", 1_040)
+        assertNotNull(r.eggs.ladybug)
+        val t0 = r.now
+        r.advanceTo(t0 + 1_500)
+        val before = r.anchor(EggAnchors.strip("bakery"))
+        compose.onNodeWithTag(PracticeTags.LIST).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 120f * 3) }
+        r.probe.clear()
+        // Frame by frame while the list scrolls, and after: the ladybug on the strip's bottom edge.
+        repeat(30) {
+            r.frame()
+            val strip = r.anchor(EggAnchors.strip("bakery"))
+            r.probe.frames.lastOrNull { it.tag == "ladybug" }?.let { f ->
+                assertEquals("on the strip's bottom edge while the list scrolls", strip.bottom + 2 * 3f, f.center.y, 4 * 3f)
+            }
+        }
+        val after = r.anchor(EggAnchors.strip("bakery"))
+        assertEquals("the list scrolled 120 dp", before.top - 120f * 3, after.top, 2f)
+        r.probe.clear()
+        var samples = 0
+        while (r.now < t0 + LadybugMotion.WALK_MS - 100) {
+            r.advance(48)
+            val strip = r.anchor(EggAnchors.strip("bakery"))
+            val f = r.probe.frames.lastOrNull { it.tag == "ladybug" } ?: continue
+            samples++
+            assertEquals("on the strip's bottom edge at ${r.now - t0} ms", strip.bottom + 2 * 3f, f.center.y, 4 * 3f)
+            val words = wordBoxes(compose, r.anchors)
+            words.forEach { (w, box) -> assertFalse("over \"$w\" at ${r.now - t0} ms", box.overlaps(f.bounds.deflate(2f))) }
+        }
+        assertTrue("it kept walking ($samples)", samples >= 5)
+    }
+
+    /** Its strip scrolled away out of the list: the walk ends (nothing walks on where the strip was). */
+    @Test
+    fun itGoesWithItsStrip() {
+        val r = EggRig(compose).start()
+        r.holdBasket("bakery", 1_040)
+        val fx = r.eggs.ladybug
+        assertNotNull(fx)
+        r.advance(600)
+        // Far down the list: the strip leaves the list's composition.
+        compose.onNodeWithTag(PracticeTags.LIST).performScrollToIndex(10)
+        r.advance(200)
+        assertNull("the walk ended with its strip", r.eggs.ladybug)
+        // Another hold sends a new one.
+        compose.onNodeWithTag(PracticeTags.LIST).performScrollToIndex(0)
+        r.advance(200)
+        r.holdBasket("bakery", 1_040)
+        assertNotNull(r.eggs.ladybug)
     }
 
     @Test

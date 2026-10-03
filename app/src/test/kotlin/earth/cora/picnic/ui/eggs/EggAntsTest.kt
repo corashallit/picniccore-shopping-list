@@ -2,6 +2,9 @@ package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.GroceryItem
@@ -88,6 +91,32 @@ class EggAntsTest {
         } finally {
             e.close()
         }
+    }
+
+    /**
+     * On the list itself (EggListHost's keyboard observer): she types three picnic things into the add bar and sends
+     * them with the keyboard still up: no ants while it shows; they set off once it closes.
+     */
+    @Test
+    fun notWhileTheKeyboardIsUpOnTheList() {
+        val r = EggRig(compose)
+        r.ime.value = false
+        r.start()
+        // The field focused, the keyboard reported up.
+        compose.onNodeWithTag(ADD_FIELD_TAG).performClick()
+        r.act { r.ime.value = true }
+        compose.onNodeWithTag(ADD_FIELD_TAG).performTextInput("watermelon, lemonade, potato chips")
+        r.frame()
+        compose.onNodeWithTag(ADD_FIELD_TAG).performImeAction()
+        r.advance(300)
+        assertTrue("three picnic things are on the list", EggRules.antsWanted(r.list, catalog))
+        assertNull("no ants with the keyboard up", r.eggs.antsId)
+        r.advance(1_000)
+        assertNull(r.eggs.antsId)
+        // The keyboard closes: they march.
+        r.act { r.ime.value = false }
+        r.advance(100)
+        assertNotNull("the ants set off once it closes", r.eggs.antsId)
     }
 
     @Test

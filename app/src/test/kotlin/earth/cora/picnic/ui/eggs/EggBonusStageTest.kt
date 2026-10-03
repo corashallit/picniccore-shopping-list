@@ -11,6 +11,10 @@ import earth.cora.picnic.core.model.list
 import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
+import earth.cora.picnic.ui.theme.LcdMode
+import earth.cora.picnic.ui.theme.LcdState
+import earth.cora.picnic.ui.theme.ThemeVariant
+import earth.cora.picnic.ui.theme.lcdShowsMoon
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -41,6 +45,21 @@ class EggBonusStageTest {
     private fun EngineRig.tap(positions: List<Int>, gapMs: Long = 250) = positions.forEach {
         clock.advance(gapMs)
         engine.onStampTap(it)
+    }
+
+    /**
+     * §13.1: in Dusk and Glow only the count's star becomes the full moon; the star inside a word stays a star, so the
+     * LCD reads BONUS★ (and PRINT★), never "BONUS●".
+     */
+    @Test
+    fun wordStarsStayStarsInGlow() {
+        for (v in listOf(ThemeVariant.Glow, ThemeVariant.Dusk)) {
+            assertTrue(lcdShowsMoon(v, LcdState(mode = LcdMode.Count, count = 10, total = 24)))
+            assertFalse("$v BONUS★", lcdShowsMoon(v, LcdState(mode = LcdMode.Text, text = EggRules.BONUS)))
+            assertFalse("$v PRINT★", lcdShowsMoon(v, LcdState(mode = LcdMode.Text, text = EggRules.PRINT)))
+        }
+        assertFalse(lcdShowsMoon(ThemeVariant.Day, LcdState(mode = LcdMode.Count, count = 10, total = 24)))
+        assertFalse(lcdShowsMoon(ThemeVariant.Golden, LcdState(mode = LcdMode.Count, count = 10, total = 24)))
     }
 
     @Test

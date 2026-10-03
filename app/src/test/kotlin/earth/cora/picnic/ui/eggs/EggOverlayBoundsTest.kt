@@ -5,6 +5,7 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
@@ -26,7 +27,8 @@ import org.robolectric.annotation.GraphicsMode
  * round the words, so nothing is ever cut out of them. The roll home along the new row's own line is drawn by the row
  * beneath its words (it may pass under that row's words only). The ants on the add bar's edge and the shiny row's burst
  * keep to their lanes and are clipped clear of any word all the same, so where one crosses words those words must be one
- * of the boxes their clip cuts out. Sampled over each egg's whole run on the practice list, Day and Glow.
+ * of the boxes their clip cuts out. Sampled over each egg's whole run on each list under test (the practice list; WP5's
+ * ListScreen on merge, [EggListUnderTest]), Day and Glow.
  *
  * The printed receipt is not decoration but an interactive card with its own words, which waits over the list until it
  * is tapped (§13.2), as the Next card and the toasts do: ReceiptTest.neverOverWords keeps it and its slot line off
@@ -35,7 +37,7 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h760dp-xxhdpi")
-class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVariant) {
+class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVariant, private val list: EggListUnderTest) {
     @get:Rule
     val compose = createComposeRule()
 
@@ -50,7 +52,7 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
 
     @Test
     fun neverOverText() {
-        val r = EggRig(compose, variant = variant).start()
+        val r = EggRig(compose, variant = variant).start(list)
         if (egg == 1 && variant == ThemeVariant.Glow) return // the Glow moon is static: no transition to check
         r.probe.clear()
         val t0 = r.fire(egg)
@@ -73,7 +75,7 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
                 } else if (tag == "rollhome") {
                     // Beneath its own row's words only.
                     val row = r.list.items.lastOrNull { it.name == "Strawberries" || it.name == "Lemons" }
-                    val line = row?.let { compose.onNodeWithTag(PracticeTags.row(it.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot }
+                    val line = row?.let { r.anchors.bounds(EggAnchors.line(it.id)) }
                     over.filterNot { (_, box) -> line != null && line.inflate(1f).contains(box.topLeft) && line.inflate(1f).contains(box.bottomRight) }
                         .forEach { (words, _) -> wrong += "the roll home under \"$words\", not its own row's words" }
                 } else if (clipped.any { tag.startsWith(it) }) {
@@ -92,9 +94,53 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
 
     companion object {
         @JvmStatic
-        @ParameterizedRobolectricTestRunner.Parameters(name = "egg {0} {1}")
-        fun params(): List<Array<Any>> = listOf(1, 2, 3, 4, 6, 8, 9, 13, 16, 17, 18).flatMap { n ->
-            listOf(arrayOf<Any>(n, ThemeVariant.Day), arrayOf<Any>(n, ThemeVariant.Glow))
+        @ParameterizedRobolectricTestRunner.Parameters(name = "egg {0} {1} {2}")
+        fun params(): List<Array<Any>> = EggListUnderTest.all.flatMap { list ->
+            listOf(1, 2, 3, 4, 6, 8, 9, 13, 16, 17, 18).flatMap { n ->
+                listOf(arrayOf<Any>(n, ThemeVariant.Day, list), arrayOf<Any>(n, ThemeVariant.Glow, list))
+            }
         }
+    }
+}
+
+/**
+ * Egg 16's raindrop washi (§12.2: "the raindrop washi replaces the tape"): while the umbrella stands at the bar's left
+ * end the tape moves along, after the doodle ("♡ picnic day ☆") as it is laid out at the font scale, so it never lies
+ * over the doodle, any word or the umbrella, at font scales 1.0, 1.3 and 2.0.
+ */
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w360dp-h760dp-xxhdpi")
+class EggRainTapeBoundsTest(private val scale: Float) {
+    @get:Rule
+    val compose = createComposeRule()
+
+    @Test
+    fun theTapeKeepsOffTheWords() {
+        val r = EggRig(compose, fontScale = scale).start()
+        val t0 = r.fire(16)
+        r.advanceTo(t0 + 600)
+        assertTrue(r.eggs.umbrella)
+        val doodle = compose.onNodeWithTag(earth.cora.picnic.ui.add.ADD_BAR_DOODLE_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val umbrella = r.probe.frames.last { it.tag == "umbrella" }.bounds
+        val bar = r.anchor(AnchorRegistry.ADD_BAR)
+        val tapes = compose.onAllNodesWithTag(earth.cora.picnic.ui.add.ADD_BAR_WASHI_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        if (tapes.isEmpty()) {
+            // No room after the doodle (very large text): no tape at all, rather than one over the doodle or the umbrella.
+            assertTrue("fs $scale: no tape only when there is no room after the doodle", doodle.right + (8 + 56 + 8) * 3f > bar.right)
+            return
+        }
+        assertTrue("fs $scale: the tape shows wherever there is room for it after the doodle", scale <= 1.3f || doodle.right + (8 + 56 + 8) * 3f <= bar.right)
+        val tape = tapes.single().boundsInRoot
+        assertTrue("fs $scale: the tape on the bar ($tape, bar $bar)", tape.left >= bar.left && tape.right <= bar.right)
+        assertTrue("fs $scale: clear of the doodle ($tape, doodle $doodle)", !tape.overlaps(doodle))
+        assertTrue("fs $scale: clear of the umbrella ($tape, umbrella $umbrella)", !tape.overlaps(umbrella.deflate(2f)))
+        textBoxes(compose).forEach { (w, box) -> assertTrue("fs $scale: the tape over \"$w\" ($tape, $box)", !tape.overlaps(box)) }
+    }
+
+    companion object {
+        @JvmStatic
+        @ParameterizedRobolectricTestRunner.Parameters(name = "fs {0}")
+        fun params(): List<Array<Any>> = listOf(1.0f, 1.3f, 2.0f).map { arrayOf<Any>(it) }
     }
 }

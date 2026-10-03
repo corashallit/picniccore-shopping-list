@@ -59,7 +59,8 @@ fun EggRig.decorWithSemantics(): List<String> {
 }
 
 /**
- * Item 73, the eggs' half (§4.1 decor taxonomy) on the practice list in every egg state (Day; Glow for the plain list,
+ * Item 73, the eggs' half (§4.1 decor taxonomy) on each list under test (the practice list; WP5's ListScreen on merge,
+ * [EggListUnderTest]) in every egg state (Day; Glow for the plain list,
  * midnight, the nap and the rain): at most 3 page
  * stickers on the screen at any time (the list's standing bee and ladybug, the nap cat, the umbrella), and no decorative
  * node carries anything TalkBack reads. (Transient bursts never over text: EggOverlayBoundsTest. The gutter-only texture
@@ -68,13 +69,13 @@ fun EggRig.decorWithSemantics(): List<String> {
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h760dp-xxhdpi")
-class DecorBudgetTest(private val egg: Int, private val variant: ThemeVariant) {
+class DecorBudgetTest(private val egg: Int, private val variant: ThemeVariant, private val list: EggListUnderTest) {
     @get:Rule
     val compose = createComposeRule()
 
     @Test
     fun atMostThreePageStickersAndNoneSpeaks() {
-        val r = EggRig(compose, variant = variant).start()
+        val r = EggRig(compose, variant = variant).start(list)
         if (egg > 0) r.fire(egg)
         var most = 0
         repeat(16) {
@@ -89,9 +90,10 @@ class DecorBudgetTest(private val egg: Int, private val variant: ThemeVariant) {
 
     companion object {
         @JvmStatic
-        @ParameterizedRobolectricTestRunner.Parameters(name = "egg {0} {1}")
-        fun params(): List<Array<Any>> =
-            (0..18).map { arrayOf<Any>(it, ThemeVariant.Day) } + listOf(0, 5, 8, 16).map { arrayOf<Any>(it, ThemeVariant.Glow) }
+        @ParameterizedRobolectricTestRunner.Parameters(name = "egg {0} {1} {2}")
+        fun params(): List<Array<Any>> = EggListUnderTest.all.flatMap { list ->
+            (0..18).map { arrayOf<Any>(it, ThemeVariant.Day, list) } + listOf(0, 5, 8, 16).map { arrayOf<Any>(it, ThemeVariant.Glow, list) }
+        }
     }
 }
 

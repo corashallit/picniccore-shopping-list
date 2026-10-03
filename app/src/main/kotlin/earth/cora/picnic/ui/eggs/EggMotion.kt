@@ -275,7 +275,10 @@ object LadybugMotion {
      * no words) in 12 fps poses, fading only in the last one. Rotation 90° = facing right (the sticker's head points up),
      * −90° = facing left. Null once gone.
      */
-    fun at(start: Offset, elapsed: Long, density: Float, width: Float): Pair<EggPose, Boolean>? {
+    fun at(start: Offset, elapsed: Long, density: Float, width: Float): Pair<EggPose, Boolean>? = at(start, elapsed, density, 0f, width)
+
+    /** As [at], flying off the nearer of the edges at x = [left] and x = [right] (the list's sides). */
+    fun at(start: Offset, elapsed: Long, density: Float, left: Float, right: Float): Pair<EggPose, Boolean>? {
         if (elapsed >= DURATION) return null
         if (elapsed < WALK_MS) {
             val x = start.x + hops(elapsed) * HOP_DP * density
@@ -286,8 +289,8 @@ object LadybugMotion {
         }
         val endX = start.x + 8 * HOP_DP * density
         val size = SIZE_DP * density
-        val leftward = endX < width - endX
-        val edgeX = if (leftward) -size else width + size
+        val leftward = endX - left < right - endX
+        val edgeX = if (leftward) left - size else right + size
         val flown = elapsed - WALK_MS
         val step = stepped(flown, POSE_MS)
         // The first pose has already lifted off; the last one is past the edge's line, half faded.

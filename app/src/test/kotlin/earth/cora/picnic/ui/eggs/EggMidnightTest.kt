@@ -52,23 +52,73 @@ class EggMidnightTest {
         // The doodle is decorative: TalkBack has no text node for it.
         assertEquals(0, compose.onAllNodesWithText("snack?").fetchSemanticsNodes().size)
         val t0 = r.now
-        // The frozen aisle comes into view, and the snack star and doodle sit in its tab row: right of the tab, within
-        // the strip's width, level with the tab, on screen above the add bar.
+        // The frozen aisle comes into view, and the snack star and doodle sit by its tab: right of the tab in its row
+        // when the tab leaves room for it, else right of the meta line ("2 left of 2"), never over either; within the
+        // strip's words (clear of the basket), on screen above the add bar.
         r.advance(800)
-        val snack = compose.onNodeWithTag(EggTags.SNACK, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        val tab = r.anchor(EggAnchors.tab("frozen"))
-        val strip = r.anchor(EggAnchors.strip("frozen"))
-        val bar = r.anchor(AnchorRegistry.ADD_BAR)
-        assertTrue("drawn ($snack)", snack.width > 20 * 3f && snack.height > 10 * 3f)
-        assertTrue("after the tab ($snack, tab $tab)", snack.left >= tab.right - 1f)
-        assertTrue("within the strip's width ($snack, strip $strip)", snack.left >= strip.left && snack.right <= strip.right)
-        assertTrue("in the tab's row ($snack, tab $tab)", snack.center.y in tab.top..tab.bottom && snack.top >= tab.top - 3 * 3f && snack.bottom <= strip.bottom)
-        assertTrue("on screen above the add bar ($snack, bar $bar)", snack.top >= 0f && snack.bottom <= bar.top)
+        assertSnackBesideTheWords(r)
         // "SNACK?" holds 2.6 s, then the count.
         r.advanceTo(t0 + EggRules.SNACK_MS - 100)
         assertEquals(EggRules.SNACK, r.eggs.lcdWord?.text)
         r.advanceTo(t0 + EggRules.SNACK_MS + 100)
         assertNull(r.eggs.lcdWord)
+    }
+
+    /** The snack doodle by the frozen tab, clear of the tab's and the meta line's words, and of the basket. */
+    private fun assertSnackBesideTheWords(r: EggRig) {
+        val snack = compose.onNodeWithTag(EggTags.SNACK, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val tab = r.anchor(EggAnchors.tab("frozen"))
+        val meta = r.anchor(EggAnchors.TEXT_PREFIX + "meta:frozen")
+        val strip = r.anchor(EggAnchors.strip("frozen"))
+        val basket = r.anchor(AnchorRegistry.basketKey("frozen"))
+        val bar = r.anchor(AnchorRegistry.ADD_BAR)
+        assertTrue("drawn ($snack)", snack.width > 20 * 3f && snack.height > 10 * 3f)
+        val besideTab = snack.left >= tab.right - 1f && snack.center.y in tab.top..tab.bottom
+        val afterMeta = snack.left >= meta.right - 1f && snack.top >= tab.bottom - 3 * 3f
+        val underMeta = snack.top >= meta.bottom - 1f && snack.left <= meta.left + 6 * 3f
+        assertTrue("by the tab ($snack, tab $tab, meta $meta)", besideTab || afterMeta || underMeta)
+        assertFalse("never over the tab ($snack, tab $tab)", snack.deflate(2f).overlaps(tab))
+        assertFalse("never over the meta line ($snack, meta $meta)", snack.deflate(2f).overlaps(meta))
+        assertTrue("clear of the basket ($snack, basket $basket)", snack.right <= basket.left + 2f)
+        assertTrue("within the strip ($snack, strip $strip)", snack.left >= strip.left && snack.bottom <= strip.bottom)
+        assertTrue("on screen above the add bar ($snack, bar $bar)", snack.top >= 0f && snack.bottom <= bar.top)
+    }
+
+    /**
+     * §4.10 tab fit, §12.1 "none hides information": the doodle never takes room from the frozen tab, at font scales 1.3
+     * and 2.0 as at 1.0: the tab's name has the same room at midnight as by day, and the full "Frozen" fits it (at 20 sp,
+     * or stepped down to no less than 16 sp, §4.10).
+     */
+    @Test
+    fun theDoodleNeverShrinksTheTabAt130() = tabKeepsItsRoom(1.3f)
+
+    @Test
+    fun theDoodleNeverShrinksTheTabAt200() = tabKeepsItsRoom(2.0f)
+
+    private fun tabKeepsItsRoom(scale: Float) {
+        var fits: ((String, Float) -> Int)? = null
+        val r = EggRig(compose, fontScale = scale)
+        r.start {
+            val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+            val style = earth.cora.picnic.ui.theme.PicnicTheme.type.aisleTab
+            androidx.compose.runtime.SideEffect {
+                fits = { text, sp -> measurer.measure(text, style.copy(fontSize = androidx.compose.ui.unit.TextUnit(sp, androidx.compose.ui.unit.TextUnitType.Sp)), maxLines = 1, softWrap = false).size.width }
+            }
+            EggListUnderTest.Practice.content(r)
+        }
+        // By day: bring Frozen into view, and read the room its name has.
+        r.act { r.model.focus("frozen") }
+        r.advance(1_200)
+        val day = r.anchor(EggAnchors.TEXT_PREFIX + "tab:frozen").width
+        // Midnight: the doodle by the tab.
+        r.fire(5)
+        r.advance(1_200)
+        val night = r.anchor(EggAnchors.TEXT_PREFIX + "tab:frozen").width
+        assertEquals("fs $scale: the tab's name keeps its room", day, night, 1f)
+        val need = fits!!("Frozen", TAB_MIN_SP)
+        assertTrue("fs $scale: the full \"Frozen\" fits at 16 sp or more ($need px in $night px)", need.toFloat() <= night + 1f)
+        assertSnackBesideTheWords(r)
+        r.sandbox.close()
     }
 
     @Test

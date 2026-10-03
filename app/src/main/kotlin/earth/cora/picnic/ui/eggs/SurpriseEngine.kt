@@ -34,6 +34,56 @@ import kotlinx.coroutines.flow.emptyFlow
  *   [SurpriseEngine.onBasketHello]: the overlays report when an effect has played out on the frame clock (and egg 3's
  *   bump), and the reduced-motion setting.
  * - [SurpriseState] gains the effects' fields below (ids are fresh per firing, so an overlay restarts on a new one).
+ * - The engine takes the resolved theme variant (`variant`): the Glow moon (dark mode, midnight) is static, so a tap on it
+ *   neither counts toward Dusk nor undoes it, whichever hook the list calls (onSunTap or onMoonTap).
+ *
+ * ---------------------------------------------------------------------------------------------------------------------
+ * THE LIST SCREEN'S CHECKLIST (WP5's ListScreen; the Surprise lab's PracticeList does every item, so the lab runs the
+ * code her list runs). Wrap the screen in [EggListHost] (EggListHost.kt): it calls onListShown / onListHidden (screen,
+ * list switch, app stop and start), runs the shake detector and the keyboard observer (onImeVisible), provides
+ * LocalRollHome and LocalListRoom, and scrolls each scene into the list's room above the add bar (the rolling item's
+ * aisle and row, the nap cat's strip, the frozen aisle's tab, the top under a printed receipt). Its [EggListScope] hands
+ * the content the rest:
+ *   - `Wash()` first inside PicnicBackground (egg 1's Dusk wash);
+ *   - `overlays` into MotionOverlay's `eggs` slot, with `bottomInset = overlayInset()` (the toasts sit above the bar's
+ *     MEASURED top, and above the umbrella's canopy while it rains);
+ *   - the lazy list's `contentPadding(top = listTop + listTopExtra, bottom = listBottomPadding())`: the measured bar +
+ *     26 dp (+ the umbrella's room), so the last strip always scrolls wholly above the bar at any font scale;
+ *   - `Modifier.eggAddBar()` on the docked add bar (it is measured), with `tape = AddRules.addBarTape(eggs)` and
+ *     `tapeAfterDoodle = tapeAfterDoodle` (AddBar / AddDock: the rain's tape goes after the doodle while the umbrella
+ *     stands at the bar's left end).
+ * Anchors (`with(anchors) { Modifier.anchor(key) }`; the overlays find everything through them):
+ *   - `sun` on the sticker by the title; `lcd` on the LCD chip; `addbar` on the docked add bar; `list` (EggAnchors.LIST)
+ *     on the LazyColumn (the list's viewport: the scenes' room, the receipt's room, where the ladybug may walk);
+ *   - `row:<item>` on each row's 52 dp sticker box, `check:<item>` on its check spot, `line:<item>` (EggAnchors.line)
+ *     on the whole row; `basket:<section>` (basketAnchor) on each strip's basket (priority 0) and the open tray's
+ *     (priority 1); `stamp:<section>` on the book's stamps;
+ *   - `strip:<section>` (EggAnchors.strip) on each folded strip's white card (the ladybug walks its bottom edge),
+ *     `tab:<section>` (EggAnchors.tab) on each tab, strip and tray header alike;
+ *   - `text:<anything>` (EggAnchors.TEXT_PREFIX) on EVERY word on the screen: the title, the subtitle, the LCD, each
+ *     tab's name and number, each strip's meta and store chip, each row's name, detail and rarity chip, the book's date,
+ *     and the whole add bar (`text:addbar`). Every never-over-text guarantee (the bursts' keep-out clip, the receipt's
+ *     placement, the confetti's ceiling) reads these.
+ * Pieces, where they go:
+ *   - binder top: `lcd = eggs.lcd(base, rememberPetPose(eggs))`; `onLcdHold = engine::onLcdHold` with eggs on; the sun
+ *     sticker's tap `engine.onTitleStickerTap(eggs, variant)` and `Modifier.eggTitleSticker(eggs, variant)`;
+ *     `goldenMinutesLeft = eggs.goldenMinutesLeft`; `titleBrush = rememberKirakiraBrush(eggs)`;
+ *   - book: `pixel = eggs.pixelStickers`; the holo stamp page while `eggs.perfectWeek`; the season's pictogram from
+ *     `eggs.season`; each stamp's tap `engine.onStampTap(position)` (0-based, the capsule stamp included);
+ *   - folded strip: `TabMetaDoodle(tab, meta, doodle = SnackDoodle when eggs.snackDoodleAt(section))` (the doodle never
+ *     shrinks the tab); the basket's `Modifier.basketHello(eggs, section)` and, inside the basket's box,
+ *     `NapCatInBasket(eggs, section, kind, engine, chainsDone)`; a hold on the basket `engine.onBasketHold(section, ms)`
+ *     at the hold threshold + 560 ms (a hold of the threshold alone only peeks);
+ *   - open tray: `SnackDoodle(eggs, section)` after its tab (its own width, after the tab's); the basket's
+ *     `basketHello` and `NapCatInBasket`; `TrayBee` over the current tray's basket; `EndCapLadybug(eggs)` on its cap;
+ *   - row: `RowRoller(item)` FIRST inside the row's box (egg 3 rolls home beneath the words); its sticker hidden while
+ *     `eggs.hidesRowSticker(item)`, else `Modifier.eggTwinkle(eggs, index)`, `pixel = eggs.pixelStickers`, the capsule
+ *     drawn gold while `eggs.goldCapsule(item)`; its empty check spot hidden while `eggs.hidesCheckSpot(item)`; the
+ *     hanko's words `eggs.hankoFor(item, catalog)`;
+ *   - add flows: `engine.interceptText(text)` before anything is added or sent (true: nothing happens, the field
+ *     clears); `engine.rollRarity()` for each new row; `engine.onCommitted(items)` after each commit.
+ * Tests a list runs on itself: EggOverlayBoundsTest.neverOverText and DecorBudgetTest take the list composable as a
+ * parameter (`EggListUnderTest`), so WP5's ListScreen can run them on merge.
  */
 interface SurpriseEngine {
     /** What the eggs currently show. */

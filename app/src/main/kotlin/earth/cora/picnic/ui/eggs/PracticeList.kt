@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,7 +99,6 @@ import earth.cora.picnic.core.model.iconRef
 import earth.cora.picnic.core.model.ingestContext
 import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.platform.NoOpFeedback
-import earth.cora.picnic.platform.ShakeEffect
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.a11y.spokenItemLabel
 import earth.cora.picnic.ui.add.AddBar
@@ -205,7 +205,9 @@ private fun entries(g: GroupedList, open: String?): List<PracticeEntry> = g.sect
 
 /**
  * The practice list for [model], under [ribbon] (the lab's "Surprise lab · practice list" strip, or nothing). [listState]
- * drives the lazy list (the rolling produce scrolls its aisle into view, §12.2 egg 3).
+ * drives the lazy list (the rolling produce scrolls its aisle into view, §12.2 egg 3). The eggs are mounted through
+ * [EggListHost], the same hand-off WP5's list uses, so the lab exercises the code her list runs. [imeVisible] is the
+ * keyboard test hook (null: the phone's own insets).
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -216,125 +218,108 @@ fun PracticeList(
     listState: LazyListState = rememberLazyListState(),
     ribbon: (@Composable () -> Unit)? = null,
     talkBack: Boolean = false,
+    imeVisible: Boolean? = null,
 ) {
     val engine = model.engine
     val state by model.store.states.collectAsState()
-    val eggs by engine.state.collectAsState()
+    val eggsNow by engine.state.collectAsState()
     val album by model.album.album.collectAsState(initial = null)
     model.albumNow = album
+    val everythingElse = stringResource(R.string.egg_practice_everything_else)
+    SideEffect { model.everythingElse = everythingElse }
     val motion = model.motion
     val p = motion.current.value
-    MotionEngineHost(motion, eggs = eggs.enabled, talkBackOverride = talkBack)
+    MotionEngineHost(motion, eggs = eggsNow.enabled, talkBackOverride = talkBack)
     // The finale's state (finaleShownAt, the bonus) on the practice copy.
     LaunchedEffect(motion) { FinaleKeeper(model.store, model.album).let { keeper -> motion.events.collect { keeper.handle(it) } } }
-    DisposableEffect(engine) {
-        engine.onListShown(model.listId)
-        onDispose { engine.onListHidden() }
-    }
     // The add flows' sticky note for each add (WP7's words and Undo).
     val resources = LocalResources.current
     LaunchedEffect(model, resources) {
         model.commits.collect { commit -> model.toasts.show(commit.toast(resources) { model.undo(commit) }) }
     }
-    // Egg 4 on the practice copy too: a shake while it shows.
-    ShakeEffect(enabled = eggs.enabled) { engine.onShake() }
     val list = model.list(state)
     val grouped = model.grouped(state)
     val open = p.openSection(grouped.openSectionId)
     val entries = remember(grouped, open) { entries(grouped, open) }
     val indexOf = { id: String -> entries.indexOfFirst { it.section.id == id } }
-    // An aisle scrolled to sits 7 dp under the list's top, so only the gap after the strip above it shows, never a
+    // An aisle scrolled to sits 4 dp under the list's top, so only the gap after the strip above it shows, never a
     // sliver of that strip.
-    val peek = with(LocalDensity.current) { (LIST_TOP - STRIP_GAP).roundToPx() }
-    // Egg 3: the list scrolls to the rolling item's aisle.
-    val rolling = eggs.rolling
-    LaunchedEffect(rolling?.id) {
-        val r = rolling ?: return@LaunchedEffect
-        val i = indexOf(r.sectionId)
-        if (i >= 0) listState.animateScrollToItem(i, peek)
-    }
-    // An add brings its aisle into view if it is not wholly on screen (egg 9's cake row, egg 6's shiny row).
+    val peek = LIST_TOP - STRIP_GAP
+    val density = LocalDensity.current
+    // An add brings its row into the list's room if it is not wholly there (egg 9's cake row, egg 6's shiny row, egg 13's
+    // jackpot row): its aisle first, then the row above the add bar, at any font scale.
     val focus = model.focus
     LaunchedEffect(focus) {
         val f = focus ?: return@LaunchedEffect
         val i = indexOf(f.sectionId)
         if (i < 0) return@LaunchedEffect
-        androidx.compose.runtime.withFrameNanos { } // the row the add made is laid out
-        val info = listState.layoutInfo
-        // The aisle's last slice (its rows, or the strip) must be wholly on screen.
+        // As ever, the aisle comes to the top when its last slice (its rows, or its strip) is not wholly in view.
         val last = entries.indexOfLast { it.section.id == f.sectionId && it !is PracticeEntry.End }
-        val seen = info.visibleItemsInfo.firstOrNull { it.index == last }
-        val bottom = info.viewportEndOffset - info.afterContentPadding
-        if (seen == null || seen.offset < 0 || seen.offset + seen.size > bottom) listState.animateScrollToItem(i, peek)
+        val sliceHidden = sliceHidden@{
+            if (!f.aisleFirst) return@sliceHidden false
+            val info = listState.layoutInfo
+            val seen = info.visibleItemsInfo.firstOrNull { it.index == last }
+            seen == null || seen.offset < 0 || seen.offset + seen.size > info.viewportEndOffset - info.afterContentPadding
+        }
+        bringIntoRoom(listState, model.anchors, i, with(density) { peek.roundToPx() }, with(density) { 6.dp.toPx() }, plateIndex = i, scrollFirst = sliceHidden) {
+            f.itemId?.let { id -> model.anchors.bounds(EggAnchors.line(id))?.let { it to true } }
+                ?: model.anchors.bounds(EggAnchors.strip(f.sectionId))?.let { it to false }
+        }
     }
-    // Egg 8: the basket the cat sleeps in comes into view (two strips above it stay on screen).
-    LaunchedEffect(eggs.napSectionId) {
-        val nap = eggs.napSectionId ?: return@LaunchedEffect
-        val i = indexOf(nap)
-        if (i >= 0) listState.animateScrollToItem((i - 2).coerceAtLeast(0), if (i >= 2) peek else 0)
-    }
-    // Egg 5: the frozen aisle, where the snack star and doodle sit by the tab, comes into view if it is not on screen.
-    LaunchedEffect(eggs.snackSectionId) {
-        val snack = eggs.snackSectionId ?: return@LaunchedEffect
-        val i = indexOf(snack)
-        if (i < 0) return@LaunchedEffect
-        androidx.compose.runtime.withFrameNanos { }
-        val info = listState.layoutInfo
-        val seen = info.visibleItemsInfo.firstOrNull { it.index == i }
-        val bottom = info.viewportEndOffset - info.afterContentPadding
-        if (seen == null || seen.offset < 0 || seen.offset + seen.size > bottom) listState.animateScrollToItem((i - 2).coerceAtLeast(0), if (i >= 2) peek else 0)
-    }
-    val rollHome = remember(model) { RollHome() }
-    val room = remember(model) { ListRoom() }
-    // Egg 18 at large text: the list makes room under a printed receipt that would lie over its words, from its top.
-    val receiptShift = with(LocalDensity.current) { room.receiptShift.toDp() }
-    LaunchedEffect(room.receiptShift > 0f) { if (room.receiptShift > 0f) listState.animateScrollToItem(0) }
-    androidx.compose.runtime.CompositionLocalProvider(LocalRollHome provides rollHome, LocalListRoom provides room) {
-    Box(modifier.fillMaxSize().testTag(PracticeTags.ROOT)) {
-        PicnicBackground {
-            // Egg 1: the ground being left fades out over the new one.
-            DuskWash(eggs)
-            Column(Modifier.fillMaxSize()) {
-                ribbon?.invoke()
-                PracticeTopBar(model, list.title, state.store.name, grouped.stops, list.items.count { it.checked }, list.items.size, eggs, p)
-                PracticeBook(model, state, grouped, eggs, p, Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp))
-                LazyColumn(
-                    with(model.anchors) { Modifier.weight(1f).fillMaxWidth().testTag(PracticeTags.LIST).anchor(EggAnchors.LIST) },
-                    state = listState,
-                    // Egg 16: while the umbrella stands on the bar, the list ends clear of its canopy.
-                    contentPadding = PaddingValues(top = LIST_TOP + receiptShift, bottom = 110.dp + if (eggs.umbrella) UMBRELLA_LIST_ROOM else 0.dp),
-                ) {
-                    entries.forEachIndexed { index, e ->
-                        val s = e.section
-                        val current = s.id == grouped.nowSectionId
-                        when (e) {
-                            is PracticeEntry.Strip -> item(key = e.key, contentType = "strip") { PracticeStrip(model, s, eggs, p) }
-                            is PracticeEntry.Header -> stickyHeader(key = e.key, contentType = "header") {
-                                val pinned by remember(listState, index) {
-                                    derivedStateOf {
-                                        listState.firstVisibleItemIndex > index ||
-                                            (listState.firstVisibleItemIndex == index && listState.firstVisibleItemScrollOffset > 0)
+    val host: @Composable EggListScope.() -> Unit = {
+        val eggs = this.eggs
+        Box(modifier.fillMaxSize().testTag(PracticeTags.ROOT)) {
+            PicnicBackground {
+                // Egg 1: the ground being left fades out over the new one.
+                Wash()
+                Column(Modifier.fillMaxSize()) {
+                    ribbon?.invoke()
+                    PracticeTopBar(model, list.title, state.store.name, grouped.stops, list.items.count { it.checked }, list.items.size, eggs, p)
+                    PracticeBook(model, state, grouped, eggs, p, Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp))
+                    LazyColumn(
+                        with(model.anchors) { Modifier.weight(1f).fillMaxWidth().testTag(PracticeTags.LIST).anchor(EggAnchors.LIST) },
+                        state = listState,
+                        // The add bar's measured height + 26 dp (+ the umbrella's room while it rains): the last strip
+                        // always scrolls wholly above the bar, at any font scale.
+                        contentPadding = PaddingValues(top = LIST_TOP + listTopExtra, bottom = listBottomPadding()),
+                    ) {
+                        entries.forEachIndexed { index, e ->
+                            val s = e.section
+                            val current = s.id == grouped.nowSectionId
+                            when (e) {
+                                is PracticeEntry.Strip -> item(key = e.key, contentType = "strip") { PracticeStrip(model, s, eggs, p) }
+                                is PracticeEntry.Header -> stickyHeader(key = e.key, contentType = "header") {
+                                    val pinned by remember(listState, index) {
+                                        derivedStateOf {
+                                            listState.firstVisibleItemIndex > index ||
+                                                (listState.firstVisibleItemIndex == index && listState.firstVisibleItemScrollOffset > 0)
+                                        }
                                     }
+                                    PracticeTrayHeader(model, s, eggs, p, current, pinned)
                                 }
-                                PracticeTrayHeader(model, s, eggs, p, current, pinned)
-                            }
-                            is PracticeEntry.Rows -> item(key = e.key, contentType = "rows") { PracticeTrayRows(model, s, eggs, p, current) }
-                            is PracticeEntry.Cap -> item(key = e.key, contentType = "cap") { PracticeTrayCap(model, s, eggs, current) }
-                            is PracticeEntry.End -> stickyHeader(key = e.key, contentType = "end") {
-                                Spacer(Modifier.fillMaxWidth().height(with(LocalDensity.current) { 1.toDp() }))
+                                is PracticeEntry.Rows -> item(key = e.key, contentType = "rows") { PracticeTrayRows(model, s, eggs, p, current) }
+                                is PracticeEntry.Cap -> item(key = e.key, contentType = "cap") { PracticeTrayCap(model, s, eggs, current) }
+                                is PracticeEntry.End -> stickyHeader(key = e.key, contentType = "end") {
+                                    Spacer(Modifier.fillMaxWidth().height(with(LocalDensity.current) { 1.toDp() }))
+                                }
                             }
                         }
                     }
                 }
+                PracticeAddBar(model, eggs, Modifier.align(Alignment.BottomCenter).eggAddBar())
             }
-            PracticeAddBar(model, eggs, Modifier.align(Alignment.BottomCenter))
+            // The toasts sit 20 dp above the bar's measured top (above the umbrella's canopy while it rains).
+            MotionOverlay(motion, p, model.toasts, bottomInset = overlayInset(), eggs = overlays)
+            CelebrationHost(motion, p)
         }
-        // Egg 16: while the umbrella stands on the bar's shoulder, toasts sit above its canopy.
-        MotionOverlay(motion, p, model.toasts, bottomInset = 84.dp + if (eggs.umbrella) UMBRELLA_LIST_ROOM else 0.dp) {
-            EggOverlays(engine, model.anchors, model.toasts, motion, feedback, listPlacesDecor = true)
-        }
-        CelebrationHost(motion, p)
     }
+    if (imeVisible != null) {
+        EggListHost(
+            engine, model.listId, model.anchors, listState, indexOf, model.toasts, motion, feedback,
+            peek = peek, imeVisible = imeVisible, content = host,
+        )
+    } else {
+        EggListHost(engine, model.listId, model.anchors, listState, indexOf, model.toasts, motion, feedback, peek = peek, content = host)
     }
 }
 
@@ -371,7 +356,7 @@ private fun PracticeTopBar(
             sunModifier = Modifier
                 .anchor(AnchorRegistry.SUN)
                 // Egg 1's transition draws the sun and the moon itself while it plays.
-                .graphicsLayer { alpha = if (eggs.duskFx != null) 0f else 1f },
+                .eggTitleSticker(eggs, variant),
             // The LCD's digits are words too: bursts are cut clear of them.
             lcdModifier = Modifier.anchor(AnchorRegistry.LCD).anchor(EggAnchors.TEXT_PREFIX + "lcd"),
             titleModifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "title"),
@@ -489,8 +474,7 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
     val label = if (s.position > 0) stringResource(R.string.egg_practice_strip, s.position, name, spokenCount) else stringResource(R.string.egg_practice_strip_unsorted, name, spokenCount)
     // The strip's height (it grows with large text) and where its words end, for the ribbon (§4.10 folded strip).
     var stripPx by remember { mutableIntStateOf(0) }
-    var tabPx by remember { mutableIntStateOf(0) }
-    var metaPx by remember { mutableIntStateOf(0) }
+    var wordsPx by remember { mutableIntStateOf(0) }
     with(anchors) {
         BoxWithConstraints(
             Modifier
@@ -516,29 +500,32 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
                     .background(c.pad),
             )
             // The words keep 8 dp clear of the basket (its 80 dp box sits 44 dp in from the end) at any font scale.
-            Column(Modifier.padding(start = 6.dp, top = 11.dp, bottom = 6.dp, end = STRIP_TEXT_END)) {
-                Row(Modifier.onSizeChanged { tabPx = it.width }) {
-                    PracticeTab(s, look, 32.dp, current = false, model = model, modifier = Modifier.weight(1f, fill = false))
-                    SnackDoodle(eggs, s.id, Modifier.padding(start = 4.dp).offset(y = (-2).dp))
-                }
-                FlowRow(
-                    Modifier.padding(start = 4.dp, top = 3.dp).onSizeChanged { metaPx = it.width },
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    itemVerticalAlignment = Alignment.CenterVertically,
-                ) {
-                    s.storeAisle?.let { StoreAisleChip(it, Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta-chip:" + s.id)) }
-                    Text(
-                        stripMeta(toGet, s.total),
-                        style = PicnicTheme.type.stripMeta.copy(color = c.inkSoft),
-                        modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + s.id),
-                    )
-                }
-            }
+            // The tab at its own fitted width, the meta line under it; egg 5's doodle only in the room the tab leaves (it
+            // never shrinks the tab), else after the meta line.
+            TabMetaDoodle(
+                tab = { PracticeTab(s, look, 32.dp, current = false, model = model) },
+                meta = {
+                    FlowRow(
+                        Modifier.padding(start = 4.dp, top = 3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        itemVerticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        s.storeAisle?.let { StoreAisleChip(it, Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta-chip:" + s.id)) }
+                        Text(
+                            stripMeta(toGet, s.total),
+                            style = PicnicTheme.type.stripMeta.copy(color = c.inkSoft),
+                            modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + s.id),
+                        )
+                    }
+                },
+                doodle = if (eggs.snackDoodleAt(s.id)) ({ SnackDoodle(eggs, s.id) }) else null,
+                modifier = Modifier.padding(start = 6.dp, top = 11.dp, bottom = 6.dp, end = STRIP_TEXT_END).onSizeChanged { wordsPx = it.width },
+            )
             if (s.complete && stripPx > 0) {
-                // The ribbon is placed from the words, never over them: 12 dp after the farther of the tab and the meta
-                // line, and at most 22 dp before the basket; with no such gap, the bow alone ties at the basket's left
-                // shoulder, tied behind it (§4.10).
-                val textEnd = with(density) { 6.dp + maxOf(tabPx, metaPx + 4.dp.roundToPx()).toDp() }
+                // The ribbon is placed from the words, never over them: 12 dp after the farthest of the tab, the meta
+                // line and the doodle, and at most 22 dp before the basket; with no such gap, the bow alone ties at the
+                // basket's left shoulder, tied behind it (§4.10).
+                val textEnd = with(density) { 6.dp + wordsPx.toDp() }
                 val basketLeft = maxWidth - 124.dp
                 val band = textEnd + 12.dp
                 val height = with(density) { stripPx.toDp() } - STRIP_TOP
@@ -586,6 +573,8 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
                 NapCatInBasket(eggs, s.id, s.basket, engine, chainsDone = p.chainsDone)
             }
             Chevron(Modifier.align(Alignment.BottomEnd).offset(y = (-4).dp), up = false)
+            // Egg 2: the ladybug walks this strip's bottom edge, scrolling with it.
+            StripLadybug(s.id)
         }
     }
 }
@@ -842,6 +831,7 @@ private fun PracticeRow(model: PracticeModel, item: GroceryItem, s: AisleSection
             .fillMaxWidth()
             .heightIn(min = if (LocalDensity.current.fontScale >= 1.3f) 64.dp else 56.dp)
             .testTag(PracticeTags.row(item.id))
+            .then(with(anchors) { Modifier.anchor(EggAnchors.line(item.id)) })
             .toggleable(value = item.checked, interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Checkbox) { toggle() }
             .clearAndSetSemantics {
                 contentDescription = spoken
@@ -953,8 +943,8 @@ private fun PracticeAddBar(model: PracticeModel, eggs: SurpriseState, modifier: 
             // The practice copy has no camera or microphone: Snap, Choose a photo and Speak are off here.
             captureEnabled = false,
             tape = AddRules.addBarTape(eggs),
-            // Egg 16: the umbrella stands at the bar's left end; the tape moves along.
-            tapeStart = if (eggs.umbrella) UMBRELLA_TAPE_START else 4.dp,
+            // Egg 16: the umbrella stands at the bar's left end; the tape moves along, past the doodle.
+            tapeAfterDoodle = eggs.umbrella,
             // The whole bar is a keep-out: its field, placeholder and doodle are words, and bursts fall behind it.
             modifier = modifier.anchor(AnchorRegistry.ADD_BAR).anchor(EggAnchors.TEXT_PREFIX + "addbar").testTag(PracticeTags.ADD_BAR),
         )

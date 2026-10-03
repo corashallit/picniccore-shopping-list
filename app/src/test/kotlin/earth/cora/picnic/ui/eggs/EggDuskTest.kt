@@ -126,14 +126,68 @@ class EggDuskTest {
         assertEquals(ThemeVariant.Dusk, r.resolved)
     }
 
+    /**
+     * The Glow moon is static (§12.2 egg 1), whoever passes the tap on: the practice list's sticker, or a list that calls
+     * the engine's onSunTap / onMoonTap straight away (WP5's ListViewModel). With the phone in dark mode, seven taps save
+     * nothing and start nothing; at midnight with Dusk saved, a tap on the midnight moon keeps Dusk.
+     */
     @Test
     fun glowMoonIsStatic() {
         val r = EggRig(compose, variant = ThemeVariant.Glow).start()
+        assertEquals(ThemeVariant.Glow, r.resolved)
+        // Her taps on the sticker by the title.
         r.tapSun(7, 300)
         r.advance(1500)
         assertNull(r.eggs.duskFx)
         assertFalse(r.duskSaved())
+        // The engine's own hooks, as a list that does not know the variant calls them.
+        r.act { repeat(EggRules.SUN_TAPS) { r.clock.advance(300); r.engine.onSunTap() } }
+        r.advance(1500)
+        assertNull("seven taps on the Glow moon start nothing", r.eggs.duskFx)
+        assertFalse("and save nothing", r.duskSaved())
         assertEquals(ThemeVariant.Glow, r.resolved)
+        // The phone goes light again: still Day, no Dusk waiting.
+        r.act { r.sandbox.onSystemDark(false) }
+        r.advance(200)
+        assertEquals(ThemeVariant.Day, r.resolved)
+    }
+
+    @Test
+    fun midnightMoonKeepsDusk() {
+        val r = EggRig(compose).start()
+        r.tapSun(7, 300)
+        r.advance(1500)
+        assertEquals(ThemeVariant.Dusk, r.resolved)
+        // 23:30: midnight forces Glow, with its static moon by the title.
+        r.fire(5)
+        r.advance(400)
+        assertEquals(ThemeVariant.Glow, r.resolved)
+        assertTrue(r.eggs.midnight)
+        r.act { r.engine.onSunTap() }
+        r.act { r.engine.onMoonTap() }
+        r.tapSun(1, 0)
+        r.advance(1500)
+        assertNull("a tap on the midnight moon plays nothing", r.eggs.duskFx)
+        assertTrue("Dusk stays saved", r.duskSaved())
+        assertTrue(r.eggs.dusk)
+    }
+
+    /** In dark mode the system is Glow: a Dusk binder saved earlier stays out of sight, and no wash plays. */
+    @Test
+    fun noWashInGlow() {
+        val r = EggRig(compose, variant = ThemeVariant.Glow).start()
+        val probe = groundProbe(r)
+        val before = r.grab().getPixel(probe.first, probe.second)
+        // A transition already under way when the phone turned dark (the engine's own taps in Day, then dark mode).
+        r.act { r.sandbox.onSystemDark(false) }
+        r.act { repeat(EggRules.SUN_TAPS) { r.clock.advance(300); r.engine.onSunTap() } }
+        assertNotNull(r.eggs.duskFx)
+        r.act { r.sandbox.onSystemDark(true) }
+        r.advance(300)
+        assertEquals(ThemeVariant.Glow, r.resolved)
+        assertEquals("the Glow ground, with no Day ground washed over it", before, r.grab().getPixel(probe.first, probe.second))
+        r.advance(1500)
+        assertNull(r.eggs.duskFx)
     }
 
     @Test

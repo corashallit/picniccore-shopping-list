@@ -94,7 +94,7 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         if (!day) {
             // Glow is the phone's dark mode, which the practice list follows as it does on the phone (the test's
             // Robolectric configuration is light, so the sandbox is told directly, after its frame has started).
-            compose.runOnIdle { lab.sandbox!!.variants.onSystemDark(true) }
+            compose.runOnIdle { lab.sandbox!!.onSystemDark(true) }
             frames(6)
         }
         compose.waitForIdle()

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -95,8 +96,14 @@ object EggAnchors {
     /** Every text the overlays must keep clear of: register each text node's box as `text:<anything>`. */
     const val TEXT_PREFIX: String = "text:"
 
-    /** The list's viewport (the printed receipt asks the list for room below it, [ListRoom]). */
+    /**
+     * The list's viewport (the printed receipt asks the list for room below it, [ListRoom]; the scenes are brought into
+     * it, above the add bar, [EggListHost]).
+     */
     const val LIST: String = "list"
+
+    /** An item's whole row (egg 3's roll home, and the lab's cake, shiny and jackpot rows are brought wholly into view). */
+    fun line(itemId: String): String = "line:$itemId"
 }
 
 /** Test hook: every frame, each overlay piece reports where it is drawn (window px) and how it is turned. */
@@ -297,12 +304,22 @@ internal fun Probe(tag: String, time: Long, localBounds: Rect, rotation: Float, 
 
 /** A sticker of [size] centred at [pose] (overlay px), decorative; a [page] sticker counts toward the §4.1 budget. */
 @Composable
-private fun PlacedSticker(name: String, pose: EggPose, size: Dp, modifier: Modifier = Modifier, page: String? = null, tag: String? = null) {
+internal fun PlacedSticker(
+    name: String,
+    pose: EggPose,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    page: String? = null,
+    tag: String? = null,
+    /** Applied where the sticker is placed (after its offset): it sees the sticker's own box. */
+    placed: Modifier = Modifier,
+) {
     val half = with(LocalDensity.current) { size.toPx() / 2f }
     DecorSticker(
         name,
         modifier
             .offset { IntOffset((pose.center.x - half).roundToInt(), (pose.center.y - half).roundToInt()) }
+            .then(placed)
             .graphicsLayer {
                 rotationZ = pose.rotation
                 scaleX = pose.scaleX
@@ -343,6 +360,8 @@ private fun DuskSun(fx: DuskFx, sun: Rect?, engine: SurpriseEngine, feedback: Fe
         }
     }
     val box = sun ?: return
+    // In Glow (the phone turned dark mid-change) the sticker by the title is the static Glow moon: no patch, no sun.
+    if (PicnicTheme.variant == earth.cora.picnic.ui.theme.ThemeVariant.Glow) return
     val d = LocalDensity.current
     val sizeDp = with(d) { box.width.toDp() }
     Box(
@@ -385,6 +404,7 @@ private fun DuskSun(fx: DuskFx, sun: Rect?, engine: SurpriseEngine, feedback: Fe
 private fun DuskBurst(fx: DuskFx, sun: Rect?) {
     if (!fx.toDusk || fx.reduced) return
     val box = sun ?: return
+    if (PicnicTheme.variant == earth.cora.picnic.ui.theme.ThemeVariant.Glow) return
     // The same frame-clock time as [DuskSun] (both start on the frame the effect shows).
     val t by rememberEffectTime(fx.id to "burst", DuskMotion.DURATION)
     val d = LocalDensity.current.density
@@ -418,15 +438,18 @@ private fun SnackStar(sectionId: String, anchors: AnchorRegistry, local: (Rect) 
     SnackDoodleContent(Modifier.offset { IntOffset(at.x.roundToInt(), at.y.roundToInt()) })
 }
 
-/** The snack-time star sticker and the "snack?" doodle (decorative). */
+/**
+ * The snack-time star sticker and the "snack?" doodle (decorative), measured at its real width (the star, a 2 dp gap and
+ * the word), so the list can tell whether it fits beside a tab.
+ */
 @Composable
 internal fun SnackDoodleContent(modifier: Modifier = Modifier) {
-    Box(modifier.testTag(EggTags.SNACK).decorative()) {
+    androidx.compose.foundation.layout.Row(modifier.testTag(EggTags.SNACK).decorative()) {
         DecorSticker("glowstar", Modifier.offset(y = 2.dp), size = 20.dp)
         Text(
             androidx.compose.ui.res.stringResource(R.string.egg_snack_doodle),
             style = PicnicTheme.type.doodle.copy(fontSize = 13.sp, color = PicnicTheme.colors.doodle, fontStyle = FontStyle.Normal),
-            modifier = Modifier.offset(x = 22.dp, y = 2.dp).graphicsLayer { rotationZ = -4f },
+            modifier = Modifier.padding(start = 2.dp).offset(y = 2.dp).graphicsLayer { rotationZ = -4f },
         )
     }
 }
@@ -448,7 +471,7 @@ private fun Umbrella(addBar: Rect) {
 /**
  * The 44 dp sakura umbrella stands on the bar's left shoulder (§12.2 egg 16, as the mockup's live phone has it: a big
  * umbrella at the bar's top-left, tilted −12°), over the perforation and the gutter: its handle in the bar's top band
- * (the tape moves along the bar while it shows, [UMBRELLA_TAPE_START]), its canopy above the bar, where the list keeps
+ * (the tape moves along the bar while it shows, after the doodle: AddBar's `tapeAfterDoodle`), its canopy above the bar, where the list keeps
  * clear room while it rains ([UMBRELLA_LIST_ROOM]). Reduced motion: it fades in (120 ms).
  */
 internal fun umbrellaPose(addBar: Rect, t: Long, reduced: Boolean, density: Float): EggPose {
@@ -462,9 +485,6 @@ internal fun umbrellaPose(addBar: Rect, t: Long, reduced: Boolean, density: Floa
 internal const val UMBRELLA_DP: Float = 44f
 
 private const val UMBRELLA_TILT: Float = -12f
-
-/** While the umbrella shows, the bar's washi sits this far in (dp), past the umbrella's handle. */
-val UMBRELLA_TAPE_START: androidx.compose.ui.unit.Dp = 196.dp
 
 /** While the umbrella shows, the list keeps this much more room at its end (dp), so no row ends under its canopy. */
 val UMBRELLA_LIST_ROOM: androidx.compose.ui.unit.Dp = 38.dp
@@ -569,22 +589,56 @@ private fun NapLeaving(fx: NapLeaveFx, anchors: AnchorRegistry, local: (Rect) ->
 
 @Composable
 private fun Ladybug(fx: LadybugFx, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine) {
-    val t by rememberEffectTime(fx.id, LadybugMotion.DURATION) { engine.effectDone(fx.id) }
+    val time = rememberEffectTime(fx.id, LadybugMotion.DURATION) { engine.effectDone(fx.id) }
+    val t by time
+    // The list walks it along the strip itself (StripLadybug), so it scrolls with its strip and never lags it: the
+    // overlay only keeps its time. Its strip gone from the list (scrolled far off, opened): so is the ladybug.
+    val home = LocalLadybugHome.current
+    if (home != null) {
+        SideEffect { home.show(fx, time) }
+        DisposableEffect(fx.id) { onDispose { home.clear(fx.id) } }
+        val placed = remember(fx.id) { mutableStateOf(false) }
+        if (fx.sectionId in home.strips) {
+            if (!placed.value) placed.value = true
+            return
+        }
+        if (placed.value) {
+            LaunchedEffect(fx.id) { engine.effectDone(fx.id) }
+            return
+        }
+    }
+    // A list that does not place it: the overlay walks it from where the strip was when it set off, following the strip.
     val d = LocalDensity.current.density
-    // Remember where the strip was when it set off: it keeps walking where it started (it keeps going after release).
+    val stripKey = EggAnchors.strip(fx.sectionId)
     val start = remember(fx.id) { mutableStateOf<Offset?>(null) }
+    val stripAtStart = remember(fx.id) { mutableStateOf<Offset?>(null) }
     if (start.value == null) {
-        val strip = anchors.bounds(EggAnchors.strip(fx.sectionId))?.let(local)
+        val strip = anchors.bounds(stripKey)?.let(local)
         val basket = anchors.bounds(AnchorRegistry.basketKey(fx.sectionId))?.let(local)
         start.value = when {
             strip != null -> Offset(strip.left + 22 * d, strip.bottom + 2 * d)
             basket != null -> Offset(14 * d + 22 * d, basket.bottom)
             else -> null
         }
+        stripAtStart.value = strip?.bottomLeft
     }
     val at = start.value ?: return
+    val from = stripAtStart.value
+    val stripNow = anchors.bounds(stripKey)?.let(local)
+    if (from != null) {
+        val list = anchors.bounds(EggAnchors.LIST)?.let(local)
+        val bar = anchors.bounds(AnchorRegistry.ADD_BAR)?.let(local)
+        val half = LadybugMotion.SIZE_DP * d / 2f
+        val y = stripNow?.bottom?.plus(2 * d)
+        // Its strip scrolled out of the list's room (under the binder top, under the add bar) or gone: so is the ladybug.
+        if (y == null || (list != null && (y - half < list.top || y + half > minOf(list.bottom, bar?.top ?: list.bottom)))) {
+            LaunchedEffect(fx.id) { engine.effectDone(fx.id) }
+            return
+        }
+    }
+    val shift = if (from != null && stripNow != null) stripNow.bottomLeft - from else Offset.Zero
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-        val (pose, flying) = LadybugMotion.at(at, t, d, constraints.maxWidth.toFloat()) ?: return@BoxWithConstraints
+        val (pose, flying) = LadybugMotion.at(at + shift, t, d, constraints.maxWidth.toFloat()) ?: return@BoxWithConstraints
         PlacedSticker(if (flying) "ladybugfly" else "ladybug", pose, LadybugMotion.SIZE_DP.dp)
         Probe("ladybug", t, Rect(Offset.Zero, Size.Zero).sized(pose.center, LadybugMotion.SIZE_DP * d), pose.rotation, origin())
     }

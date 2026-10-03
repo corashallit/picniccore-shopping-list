@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import android.os.Looper
 import earth.cora.picnic.platform.NoOpFeedback
 import org.robolectric.Shadows.shadowOf
@@ -100,11 +101,11 @@ class SurpriseLabTest {
         while (compose.mainClock.currentTime < until && guard++ < 5_000) frame()
     }
 
-    private fun show(lab: SurpriseLabViewModel) {
+    private fun show(lab: SurpriseLabViewModel, variant: ThemeVariant = ThemeVariant.Day) {
         compose.mainClock.autoAdvance = false
         compose.setContent {
             CompositionLocalProvider(LocalTimeouts provides FakeTimeouts()) {
-                PicnicTheme(variant = ThemeVariant.Day, reducedMotion = false) { SurpriseLabScreen(onBack = {}, lab = lab) }
+                PicnicTheme(variant = variant, reducedMotion = false) { SurpriseLabScreen(onBack = {}, lab = lab) }
             }
         }
         frame()
@@ -172,6 +173,109 @@ class SurpriseLabTest {
             }
             frames(300)
         }
+        lab.close()
+    }
+
+    /**
+     * §12.3: on a phone in dark mode, Try it for Dusk binder and Golden hour forces Day on the practice copy, so the sun
+     * (not the static Glow moon) takes the seven taps and the binder turns Dusk, and golden hour shows; any other egg
+     * plays in Glow, as her list is in dark mode.
+     */
+    @Test
+    @Config(qualifiers = "w360dp-h760dp-night-xxhdpi")
+    fun duskAndGoldenForceDayInDarkMode() {
+        val lab = stillLab()
+        show(lab, ThemeVariant.Glow)
+        tryIt(4)
+        frames(200)
+        assertEquals("the practice copy follows the phone's dark mode", ThemeVariant.Glow, lab.sandbox!!.variants.variant.value)
+
+        tryIt(1)
+        val dusk = lab.sandbox!!
+        assertTrue(dusk.forcesDay)
+        assertEquals(true, dusk.engine.state.value.duskFx?.toDusk)
+        frames(400)
+        assertEquals("the sun is setting over the Day binder", ThemeVariant.Day, dusk.variants.variant.value)
+        frames(2_200)
+        assertTrue(dusk.engine.state.value.dusk)
+        assertTrue(runBlocking { dusk.settings.current() }.duskBinder)
+        assertEquals(ThemeVariant.Dusk, dusk.variants.variant.value)
+
+        tryIt(12)
+        val golden = lab.sandbox!!
+        frames(600)
+        assertTrue(golden.engine.state.value.golden)
+        assertEquals(ThemeVariant.Golden, golden.variants.variant.value)
+
+        // A fresh copy forces nothing: Glow again.
+        compose.onNodeWithTag(LAB_RESET_TAG).performSemanticsAction(SemanticsActions.OnClick)
+        frames(200)
+        assertFalse(lab.sandbox!!.forcesDay)
+        assertEquals(ThemeVariant.Glow, lab.sandbox!!.variants.variant.value)
+        lab.close()
+    }
+
+    /**
+     * §15 large text, §12.3: at font scale 2.0 every Try it still shows its scene on the practice list (its 640 dp frame
+     * in the lab): the shiny Maple syrup row (egg 6), the nap cat in Frozen's basket (egg 8), the cake's HAPPY / B-DAY!
+     * hanko (egg 9) and JACK / POT! (egg 13) each lie wholly inside the list, above the add bar's top, on screen. The
+     * ribbon's washi never lies over its words.
+     */
+    @Test
+    fun largeTextScenesComeIntoView() {
+        val probe = EggProbe()
+        val lab = stillLab()
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, 2f),
+                LocalTimeouts provides FakeTimeouts(),
+                LocalEggProbe provides probe,
+            ) {
+                PicnicTheme(variant = ThemeVariant.Day, reducedMotion = false) { SurpriseLabScreen(onBack = {}, lab = lab) }
+            }
+        }
+        frame()
+        fun inView(what: String, piece: androidx.compose.ui.geometry.Rect?) {
+            assertNotNull("$what is drawn", piece)
+            val box = lab.sandbox!!
+            val list = box.model.anchors.bounds(EggAnchors.LIST)!!
+            val bar = box.model.anchors.bounds(earth.cora.picnic.ui.list.motion.AnchorRegistry.ADD_BAR)!!
+            val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+            val p = piece!!.deflate(1f)
+            assertTrue("$what inside the list ($p, list $list)", p.top >= list.top && p.left >= list.left && p.right <= list.right)
+            assertTrue("$what above the add bar's top ($p, bar $bar)", p.bottom <= bar.top)
+            assertTrue("$what on screen ($p, screen $screen)", p.top >= screen.top && p.bottom <= screen.bottom)
+        }
+
+        tryIt(6)
+        frames(1_600)
+        lab.sandbox!!.let { box ->
+            val maple = box.store.value.list(box.listId)!!.items.last { it.name == "Maple syrup" }
+            inView("egg 6: the shiny Maple syrup row", box.model.anchors.bounds(EggAnchors.line(maple.id)))
+        }
+        val washi = compose.onNodeWithTag(LAB_RIBBON_WASHI_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val words = compose.onNodeWithTag(LAB_RIBBON_TEXT_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertFalse("the ribbon's washi off its words ($washi, words $words)", washi.overlaps(words))
+
+        tryIt(8)
+        probe.clear()
+        frames(2_600)
+        inView("egg 8: the nap cat", probe.frames.lastOrNull { it.tag == "nap" }?.bounds)
+
+        tryIt(9)
+        frames(2_200 + 1_000 + 300)
+        lab.sandbox!!.let { box ->
+            val cake = box.store.value.list(box.listId)!!.items.single { it.name == "Birthday cake" }
+            assertTrue(cake.checked)
+            inView("egg 9: the HAPPY / B-DAY! hanko", compose.onNodeWithTag(PracticeTags.hanko(cake.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot)
+        }
+
+        tryIt(13)
+        probe.clear()
+        frames(1_200 + 1_200 + 200)
+        inView("egg 13: JACK / POT!", probe.frames.lastOrNull { it.tag == "jackpot" }?.bounds)
         lab.close()
     }
 
@@ -284,5 +388,47 @@ class SurpriseLabTest {
         assertFalse(fresh.store.value.list(fresh.listId)!!.trip!!.pet)
         assertTrue(runBlocking { fresh.album.current() }.books.isEmpty())
         lab.close()
+    }
+}
+
+/**
+ * §15 large text on the practice list itself (a 360 × 760 dp phone at font scale 2.0, where the binder top, the book
+ * and the add bar take most of the screen): each Try it's scene lies wholly inside the list and above the add bar's
+ * MEASURED top: the shiny Maple syrup row (egg 6), the nap cat (egg 8), the cake's HAPPY / B-DAY! hanko (egg 9) and
+ * JACK / POT! (egg 13).
+ */
+@RunWith(org.robolectric.ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w360dp-h760dp-xxhdpi")
+class LargeTextScenesTest(private val egg: Int) {
+    @get:Rule
+    val compose = createComposeRule()
+
+    @Test
+    fun theSceneLiesAboveTheBar() {
+        val r = EggRig(compose, fontScale = 2f).start()
+        val t0 = r.fire(egg)
+        r.advanceTo(t0 + mapOf(6 to 1_600L, 8 to 2_600L, 9 to 3_500L, 13 to 2_600L).getValue(egg))
+        val piece = when (egg) {
+            6 -> r.anchors.bounds(EggAnchors.line(r.list.items.last { it.name == "Maple syrup" }.id))
+            8 -> r.probe.frames.lastOrNull { it.tag == "nap" }?.bounds
+            9 -> r.list.items.single { it.name == "Birthday cake" }.let { cake ->
+                assertTrue(cake.checked)
+                compose.onNodeWithTag(PracticeTags.hanko(cake.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            }
+            else -> r.probe.frames.lastOrNull { it.tag == "jackpot" }?.bounds
+        }
+        assertNotNull("egg $egg's scene is drawn", piece)
+        val list = r.anchor(EggAnchors.LIST)
+        val bar = r.anchor(earth.cora.picnic.ui.list.motion.AnchorRegistry.ADD_BAR)
+        val p = piece!!.deflate(1f)
+        assertTrue("egg $egg inside the list ($p, list $list)", p.top >= list.top && p.left >= list.left && p.right <= list.right)
+        assertTrue("egg $egg above the add bar's top ($p, bar $bar)", p.bottom <= bar.top)
+    }
+
+    companion object {
+        @JvmStatic
+        @org.robolectric.ParameterizedRobolectricTestRunner.Parameters(name = "egg {0}")
+        fun params(): List<Array<Any>> = listOf(6, 8, 9, 13).map { arrayOf<Any>(it) }
     }
 }

@@ -1,7 +1,11 @@
 package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performSemanticsAction
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
+import earth.cora.picnic.ui.theme.TOAST_TAG
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.weather.WeatherToday
 import earth.cora.picnic.settings.AppSettings
@@ -172,5 +176,37 @@ class EggRainTest {
         textBoxes(compose).forEach { (w, box) -> assertFalse("over \"$w\"", box.overlaps(umbrella.bounds.deflate(2f))) }
         // The list keeps room at its end for the canopy.
         assertEquals(WashiPattern.Raindrop, AddRules.addBarTape(r.eggs))
+    }
+
+    /**
+     * Large text (§15; round 1's "toasts sit above the canopy"): the list and the toasts follow the add bar's MEASURED
+     * height (about 160 dp at font scale 2.0), not the 84 dp bar of font scale 1: the last strip scrolls wholly above
+     * the bar, the rain toast sits above the bar's top, clear of the umbrella, and the list keeps the canopy's room.
+     */
+    @Test
+    fun largeTextKeepsTheToastAndTheListClearOfTheBar() {
+        val r = EggRig(compose, fontScale = 2f).start()
+        val list = compose.onNodeWithTag(PracticeTags.LIST)
+        fun lastStripClearOfTheBar(what: String) {
+            list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+            r.advance(100)
+            val bar = r.anchor(AnchorRegistry.ADD_BAR)
+            val household = r.anchor(EggAnchors.strip("household"))
+            assertTrue("$what: the last strip wholly above the bar ($household, bar $bar)", household.bottom <= bar.top)
+        }
+        val bar = r.anchor(AnchorRegistry.ADD_BAR)
+        assertTrue("the bar grew with the text (${bar.height / 3f} dp)", bar.height > 120 * 3f)
+        lastStripClearOfTheBar("dry")
+        list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -100_000f) }
+        r.advance(100)
+        val t0 = r.fire(16)
+        r.advanceTo(t0 + 900)
+        val toast = compose.onNodeWithTag(TOAST_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("the toast sits above the bar's top ($toast, bar $bar)", toast.bottom <= bar.top)
+        val umbrella = r.probe.frames.last { it.tag == "umbrella" }
+        assertFalse("the umbrella clear of the toast (${umbrella.bounds}, toast $toast)", umbrella.bounds.deflate(2f).overlaps(toast))
+        lastStripClearOfTheBar("rain")
+        val household = r.anchor(EggAnchors.strip("household"))
+        assertTrue("the canopy's room kept under the last strip", household.bottom <= umbrella.bounds.top + 2f)
     }
 }

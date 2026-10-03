@@ -89,14 +89,28 @@ class PracticeModel(
     val anchors: AnchorRegistry get() = motion.anchors
     val toasts: ToastHostState = ToastHostState()
 
+    /**
+     * The "Everything else" section's name, from the app's strings (the practice list sets it from
+     * R.string.egg_practice_everything_else, the words its tab shows): the Next card and the TalkBack "done" words read it.
+     */
+    var everythingElse: String = ""
+        set(value) {
+            if (field == value) return
+            field = value
+            motion.setSections(sections(store.value, value))
+        }
+
     init {
         motion.listId = listId
-        motion.setSections(sections(store.value))
+        motion.setSections(sections(store.value, everythingElse))
         motion.celebrationSource = { albumNow?.let { CelebrationContent.from(store.value, listId, it, catalog) } }
     }
 
-    /** A section the practice list should bring into view (an add lands there), with a fresh [seq] per request. */
-    data class Focus(val sectionId: String, val seq: Int)
+    /**
+     * A section the practice list should bring into view (an add lands there), and the row in it ([itemId]: the row is
+     * brought wholly above the add bar), with a fresh [seq] per request; [aisleFirst]: see [focus].
+     */
+    data class Focus(val sectionId: String, val seq: Int, val itemId: String? = null, val aisleFirst: Boolean = true)
 
     /** The latest [Focus] request (the practice list scrolls to it if it is not fully on screen). */
     var focus: Focus? by androidx.compose.runtime.mutableStateOf(null)
@@ -104,9 +118,13 @@ class PracticeModel(
 
     private var focusSeq = 0
 
-    /** Asks the practice list to bring [sectionId] into view. */
-    fun focus(sectionId: String) {
-        focus = Focus(sectionId, ++focusSeq)
+    /**
+     * Asks the practice list to bring [sectionId] into view, and [itemId]'s row in it wholly above the add bar. With
+     * [aisleFirst] (an add) the aisle comes to the top when its rows are not wholly in view, as the add flows do;
+     * without it only the row moves, and only when it is not already above the bar (a scene on a row already there).
+     */
+    fun focus(sectionId: String, itemId: String? = null, aisleFirst: Boolean = true) {
+        focus = Focus(sectionId, ++focusSeq, itemId, aisleFirst)
     }
 
     /** The album as last read (the celebration's bonus rule reads it). */
@@ -134,7 +152,7 @@ class PracticeModel(
     /** Sets the practice copy up without telling anyone (a lab action preparing a scene). */
     fun set(transform: (AppState) -> AppState) {
         store.apply(transform)
-        motion.setSections(sections(store.value))
+        motion.setSections(sections(store.value, everythingElse))
     }
 
     /** She taps [sectionId]'s strip: it opens and the others fold (§6.1). */
@@ -152,7 +170,7 @@ class PracticeModel(
         val bg = grouped(before)
         val after = store.apply { it.toggleChecked(listId, itemId, now) }
         val ag = grouped(after)
-        motion.setSections(sections(after))
+        motion.setSections(sections(after, everythingElse))
         val item = list(after).items.firstOrNull { it.id == itemId } ?: return
         val section = ag.sections.firstOrNull { s -> s.rows.any { it.id == itemId } } ?: return
         val beforeSection = bg.sections.firstOrNull { it.id == section.id }
@@ -201,7 +219,7 @@ class PracticeModel(
         }
         val added = outcome.added
         val ag = grouped(after)
-        motion.setSections(sections(after))
+        motion.setSections(sections(after, everythingElse))
         val reopened = bg.sections.filter { s -> s.complete && ag.sections.firstOrNull { it.id == s.id }?.complete == false }.map { it.id }.toSet()
         val tripReopened = TripRules.isComplete(list(before)) && !TripRules.isComplete(list(after))
         if (reopened.isNotEmpty() || tripReopened) {
@@ -209,7 +227,7 @@ class PracticeModel(
         }
         val al = list(after)
         val committed = al.items.filter { it.id in added }
-        committed.firstOrNull()?.let { first -> ag.sections.firstOrNull { s -> s.rows.any { it.id == first.id } }?.let { focus(it.id) } }
+        committed.firstOrNull()?.let { first -> ag.sections.firstOrNull { s -> s.rows.any { it.id == first.id } }?.let { focus(it.id, first.id) } }
         // The add flows' sticky note (§6.2, §16: "Added Maple syrup to Breakfast ♡ ★ shiny!"), with its Undo.
         val home = committed.singleOrNull()?.let { one -> ag.sections.firstOrNull { s -> s.rows.any { it.id == one.id } } }
         _commits.tryEmit(
@@ -256,22 +274,23 @@ class PracticeModel(
             return null
         }
 
-        /** The engine's view of every section (the Next card's stop, the "done" announcement). */
-        fun sections(s: AppState): List<MotionSection> {
+        /**
+         * The engine's view of every section (the Next card's stop, the "done" announcement); [everythingElse] names the
+         * "Everything else" section.
+         */
+        fun sections(s: AppState, everythingElse: String): List<MotionSection> {
             val list = s.lists.firstOrNull { it.id == s.currentListId } ?: return emptyList()
             val g = ListGrouping.group(list, s.store.aisles(), { s.store.aisleBaskets[it.id] ?: IconCatalog.default.baskets.guess(it.name) }, { s.store.aisleStyles[it.id] })
             return g.sections.map { sec ->
                 MotionSection(
                     id = sec.id,
                     position = sec.position,
-                    displayName = if (sec.kind == SectionKind.UNSORTED) EVERYTHING_ELSE else sec.displayName,
-                    fullName = sec.aisle?.name ?: EVERYTHING_ELSE,
+                    displayName = if (sec.kind == SectionKind.UNSORTED) everythingElse else sec.displayName,
+                    fullName = sec.aisle?.name ?: everythingElse,
                     storeAisle = sec.storeAisle,
                     look = if (sec.kind == SectionKind.UNSORTED) AisleLooks.everythingElse else AisleLooks.of(sec.position, sec.aisle?.let { s.store.aisleStyles[it.id] }),
                 )
             }
         }
-
-        private const val EVERYTHING_ELSE = "Everything else"
     }
 }

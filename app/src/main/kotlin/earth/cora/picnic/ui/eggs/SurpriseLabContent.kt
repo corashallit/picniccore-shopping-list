@@ -24,10 +24,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -129,7 +135,9 @@ fun previewLab(factory: () -> SurpriseLabSandbox = { SurpriseLabSandbox(feedback
 
 /**
  * The practice list's frame in the lab: a phone-sized window under the ribbon, scrolled into view at each Try it, with
- * "Start the practice list over" under it ([onStartOver]; none in tests that show the frame alone).
+ * "Start the practice list over" under it ([onStartOver]; none in tests that show the frame alone). With large text the
+ * window grows by what the binder top, the book and the add bar grow (§15), so the list keeps room for each scene; an
+ * egg that plays in the list (not in the binder top or the book) brings the list and its add bar into view.
  */
 @Composable
 fun PracticeFrame(
@@ -140,17 +148,41 @@ fun PracticeFrame(
 ) {
     val fired by sandbox.fired.collectAsState()
     val requester = remember { BringIntoViewRequester() }
-    LaunchedEffect(fired, sandbox) { if (fired != null) requester.bringIntoView() }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val frameHeight = height + LARGE_TEXT_ROOM * ((density.fontScale - 1f) / (2f - 1f)).coerceIn(0f, 1f)
+    var columnTop by remember { mutableStateOf<Float?>(null) }
+    var columnWidth by remember { mutableStateOf(0) }
+    LaunchedEffect(fired, sandbox) {
+        val egg = fired ?: return@LaunchedEffect
+        requester.bringIntoView()
+        if (egg in TOP_STACK_EGGS) return@LaunchedEffect
+        // The list and its add bar, where the scene plays (its own scroll brings the scene above the bar).
+        androidx.compose.runtime.withFrameNanos { }
+        androidx.compose.runtime.withFrameNanos { }
+        val top = columnTop ?: return@LaunchedEffect
+        val list = sandbox.model.anchors.bounds(EggAnchors.LIST) ?: return@LaunchedEffect
+        val bottom = with(density) { frameHeight.toPx() }
+        requester.bringIntoView(androidx.compose.ui.geometry.Rect(0f, (list.top - top).coerceIn(0f, bottom), columnWidth.toFloat(), bottom))
+    }
     SandboxFollowUps(sandbox)
+    // The phone's dark mode, unless the egg forces Day (§12.3: Dusk binder, Golden hour).
     val dark = isSystemInDarkTheme()
-    LaunchedEffect(dark) { sandbox.variants.onSystemDark(dark) }
+    LaunchedEffect(dark, sandbox) { sandbox.onSystemDark(dark) }
     val variant by sandbox.variants.variant.collectAsState()
     val shape = RoundedCornerShape(18.dp)
-    Column(modifier.bringIntoViewRequester(requester), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier
+            .bringIntoViewRequester(requester)
+            .onGloballyPositioned {
+                columnTop = it.positionInWindow().y
+                columnWidth = it.size.width
+            },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(height)
+                .height(frameHeight)
                 .testTag(LAB_PRACTICE_TAG)
                 .hardShadow(shape, PicnicTheme.shadows, large = true)
                 .clip(shape)
@@ -182,6 +214,12 @@ fun PracticeFrame(
     }
 }
 
+/** At font scale 2.0 the practice window is this much taller (the binder top, the book and the add bar grow so much). */
+private val LARGE_TEXT_ROOM = 380.dp
+
+/** The eggs that play in the binder top or the book (the sun, the title, the stamps, the album card, the LCD). */
+private val TOP_STACK_EGGS = setOf(1, 7, 10, 12, 14, 15, 18)
+
 /** Runs the sandbox's follow-ups (the cake's check-off, the jackpot's arrival) on the frame clock. */
 @Composable
 fun SandboxFollowUps(sandbox: SurpriseLabSandbox) {
@@ -195,25 +233,48 @@ fun SandboxFollowUps(sandbox: SurpriseLabSandbox) {
     }
 }
 
-/** "Surprise lab · practice list": a lemon-dot washi ribbon across the practice list's top. */
+/**
+ * "Surprise lab · practice list": a lemon-dot washi ribbon across the practice list's top. The washi sits before the
+ * label's patch, its end tucked over the patch's border only (never over the words), at any font scale; a label too
+ * long for one line wraps beside it.
+ */
 @Composable
 private fun LabRibbon() {
     val c = PicnicTheme.colors
-    Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp), contentAlignment = Alignment.Center) {
-        Row(
-            Modifier
-                .clip(RoundedCornerShape(9.dp))
-                .background(c.patch)
-                .border(2.dp, c.stickerWhite, RoundedCornerShape(9.dp))
-                .padding(horizontal = 10.dp, vertical = 3.dp)
-                .semantics { heading() },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(stringResource(R.string.lab_ribbon), style = PicnicTheme.type.label.copy(color = c.onPad))
+    Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp, start = 8.dp, end = 8.dp), contentAlignment = Alignment.Center) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .zIndex(1f)
+                    .offset(x = RIBBON_TAPE_TUCK)
+                    .clearAndSetSemantics {
+                        this[earth.cora.picnic.ui.a11y.Decorative] = Unit
+                        testTag = LAB_RIBBON_WASHI_TAG
+                    },
+            ) {
+                WashiTape(WashiPattern.LemonDots, length = 40.dp, rotation = -6f)
+            }
+            Box(
+                Modifier
+                    .weight(1f, fill = false)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(c.patch)
+                    .border(2.dp, c.stickerWhite, RoundedCornerShape(9.dp))
+                    .padding(horizontal = 10.dp, vertical = 3.dp)
+                    .semantics { heading() },
+            ) {
+                Text(stringResource(R.string.lab_ribbon), style = PicnicTheme.type.label.copy(color = c.onPad), modifier = Modifier.testTag(LAB_RIBBON_TEXT_TAG))
+            }
         }
-        WashiTape(WashiPattern.LemonDots, Modifier.align(Alignment.CenterStart).padding(start = 18.dp), length = 40.dp, rotation = -6f)
     }
 }
+
+/** How far the ribbon's washi reaches over the patch's left edge: within its 2 dp border and 10 dp padding. */
+private val RIBBON_TAPE_TUCK = 7.dp
+
+/** The ribbon's washi and words (tests). */
+const val LAB_RIBBON_WASHI_TAG: String = "lab_ribbon_washi"
+const val LAB_RIBBON_TEXT_TAG: String = "lab_ribbon_text"
 
 /** The practice list's frame in the lab (tests). */
 const val LAB_PRACTICE_TAG: String = "lab_practice"
