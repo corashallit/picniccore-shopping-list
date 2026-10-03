@@ -116,6 +116,8 @@ class PantryScreenTest {
         assertEquals(4, stickersPerShelf(360.dp))
         assertEquals(4, stickersPerShelf(411.dp))
         assertEquals(5, stickersPerShelf(412.dp))
+        // Large text: one fewer, so the names keep their two lines.
+        assertEquals(3, stickersPerShelf(360.dp, fontScale = 2f))
     }
 
     @Test

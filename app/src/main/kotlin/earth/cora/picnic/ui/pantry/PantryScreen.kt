@@ -289,8 +289,12 @@ private fun AddCard(state: PantryUiState, actions: PantryActions) {
     }
 }
 
-/** How many stickers stand on one shelf: 4 on a 360 dp phone, 5 from 412 dp (§6.13). */
-fun stickersPerShelf(screenWidth: Dp): Int = if (screenWidth >= 412.dp) 5 else 4
+/**
+ * How many stickers stand on one shelf: 4 on a 360 dp phone, 5 from 412 dp (§6.13). From font scale 1.5 one fewer, so
+ * a two-word name like "Black pepper" still fits its two lines.
+ */
+fun stickersPerShelf(screenWidth: Dp, fontScale: Float = 1f): Int =
+    (if (screenWidth >= 412.dp) 5 else 4) - (if (fontScale >= 1.5f) 1 else 0)
 
 /** The cabinet: a gingham valance, then one board per [stickersPerShelf] stickers. */
 @Composable
@@ -303,7 +307,7 @@ private fun Shelves(
     onAppeared: (String) -> Unit,
 ) {
     val screen = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
-    val perShelf = stickersPerShelf(screen)
+    val perShelf = stickersPerShelf(screen, androidx.compose.ui.platform.LocalDensity.current.fontScale)
     Cabinet {
         state.stickers.chunked(perShelf).forEach { row ->
             Shelf(row, perShelf) { sticker ->

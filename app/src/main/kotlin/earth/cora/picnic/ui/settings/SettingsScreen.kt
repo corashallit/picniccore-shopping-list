@@ -263,6 +263,8 @@ fun SettingsScreen(
                 Text(stringResource(R.string.settings_area_rationale_title), style = PicnicTheme.type.cardTitle.copy(color = PicnicTheme.colors.ink))
                 Spacer(Modifier.height(10.dp))
                 Text(stringResource(R.string.settings_area_rationale), style = PicnicTheme.type.body.copy(color = PicnicTheme.colors.ink))
+                // Room above the sticky footer's fade, so the last line is never washed out.
+                Spacer(Modifier.height(28.dp))
             }
         },
     ) {

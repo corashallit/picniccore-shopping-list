@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
@@ -256,11 +258,17 @@ internal fun EditDetails(
         SectionDivider()
         when {
             !state.canDraw -> Text(stringResource(R.string.edit_draw_no_key), style = t.caption.copy(color = c.inkSoft))
-            state.drawing -> PicnicLoader(
-                LoaderKind.LadybugRing,
-                label = stringResource(R.string.edit_drawing),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // The ladybug walks its ring round the sticker being drawn (the current one waits inside, sparkling).
+            state.drawing -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                PicnicLoader(
+                    LoaderKind.LadybugRing,
+                    label = stringResource(R.string.edit_drawing),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Box(Modifier.size(110.dp), contentAlignment = Alignment.Center) {
+                    ItemIcon(state.icon, contentDescription = null, size = 56.dp, drawing = true)
+                }
+            }
             else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 PicnicButton(
                     stringResource(R.string.edit_draw),
@@ -271,6 +279,8 @@ internal fun EditDetails(
                 Text(stringResource(R.string.edit_draw_hint), style = t.caption.copy(color = c.inkSoft))
             }
         }
+        // Room for the last line to scroll clear of the footer's fade.
+        Spacer(Modifier.height(28.dp))
     }
 }
 
@@ -305,7 +315,8 @@ private fun StickerToggle(
                 Glyph(offGlyph, contentDescription = null, tint = c.inkSoft, size = 18.dp)
             }
         }
-        Text(label, style = PicnicTheme.type.fieldValue.copy(color = c.ink), modifier = Modifier.clearAndSetSemantics { })
+        // The label merges into the switch node: TalkBack reads "Favourite, switch, on".
+        Text(label, style = PicnicTheme.type.fieldValue.copy(color = c.ink))
     }
 }
 

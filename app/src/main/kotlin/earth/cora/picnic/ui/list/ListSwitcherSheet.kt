@@ -167,6 +167,8 @@ fun ListSwitcherSheet(
             if ((stickers[confirming.id] ?: 0) > 0) {
                 Text(stringResource(R.string.lists_delete_book), style = PicnicTheme.type.body.copy(color = PicnicTheme.colors.ink))
             }
+            // Room above the sticky footer's fade, so the last line is never washed out.
+            Spacer(Modifier.height(28.dp))
         }
     }
 }
