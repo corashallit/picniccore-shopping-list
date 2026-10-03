@@ -12,8 +12,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * icons, the IconDecider batcher (step 2) and the drawing queue (step 3). CROSS-MODULE CONTRACT
  * between app-shell (implements: AppIconRepository) and app-screens (calls it from ViewModels).
  *
- * Storage: bundled = assets/icons/<key>.webp; bespoke = filesDir/icons/custom/<customIconId>.webp +
- * filesDir/icons/index.json (normalizedName -> customIconId, blocked names, daily counter).
+ * Storage: library stickers = res/drawable/sk_i_<key>.xml (StickerManifest); bespoke (live stickers v4,
+ * docs/DESIGN_STICKER.md §18.3) = filesDir/icons/custom/<customIconId>.webp + its die-cut path <customIconId>.cut
+ * (no .cut = a legacy icon drawn before v4) + filesDir/icons/index.json (normalizedName -> customIconId, blocked
+ * names, daily counter).
  * Every method returns immediately, never throws and never blocks adding items; the work runs in
  * the app scope.
  */
@@ -24,7 +26,7 @@ interface IconRepository {
      */
     val busy: StateFlow<Set<String>>
 
-    /** True if assets/icons/<key>.webp is bundled. */
+    /** True if [key] has library art (StickerManifest; §19.3). */
     fun isBundled(key: String): Boolean
 
     /**
@@ -39,7 +41,11 @@ interface IconRepository {
      */
     fun submit(items: List<GroceryItem>)
 
-    /** App start (MainActivity.onCreate / first list load): submit every PENDING item left from an offline session. */
+    /**
+     * App start (MainActivity.onCreate / first list load): submit every PENDING item left from an offline session;
+     * once per process, sweep orphaned icon files (keeping everything a list, the pantry or the album shows) and
+     * queue v4 redraws of legacy icons (oldest first, under the daily cap, only with a token and drawing on).
+     */
     fun resumePending()
 
     /** Edit sheet "Draw a new icon": always enqueues (ignores the setting, cache and cap); the result overwrites. */

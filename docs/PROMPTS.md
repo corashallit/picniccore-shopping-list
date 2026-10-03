@@ -270,7 +270,7 @@ source <env file with OPENAI_API_KEY>          # never commit or print the key
 ./gradlew -p core run --args="icons Gochujang Spatula Cheez-Its"      # local match, then the IconDecider
 ./gradlew -p core run --args="recat Sriracha Diapers 'Cat litter'"
 ./gradlew -p core run --args="baskets"                                 # model vs heuristic, per aisle
-./gradlew -p core run --args="draw Gochujang out.webp --style=path/to/_style_reference.png"
+./gradlew -p core run --args="draw Kimchi ../app/src/test/resources/icons/ai4/sheet_kimchi.png out.webp --families=strawberry,melon"   # live sticker v4 (raw answer), about US$0.015
 ./gradlew -p core run --args="match 'Meyer lemons' 'garlic bread'"     # offline, no key needed
 ./gradlew -p core run --args="parse '2 lemons, 500g flour, milk x2'"   # offline parser, no key needed
 ./gradlew -p core test -Plive=true                                     # live suite, about US$0.10

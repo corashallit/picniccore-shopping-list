@@ -19,10 +19,14 @@ import kotlin.math.sqrt
  *    answer came back opaque.
  * 2. **Palette snap**: every art pixel to the nearest (CIE Lab) of the item's two families' pastel, mid, trace and
  *    deep, white and lemon pastel. Trace blobs thicker than 3.4u are bands, not outlines: they become the deep tone.
- * 3. **Speck removal**: the model's own gloss and white specks (thinner than 3.2u, under 60u²) and specks of any other
- *    colour under 2u take the colour of their surroundings.
+ * 3. **Speck removal**: the model's own gloss and white specks (thinner than 3.2u, under 60u²; with the pastel halo
+ *    the model paints around its gloss, not in post4) and specks of any other colour under 2u take the colour of
+ *    their surroundings; then a 0.8u mode filter smooths the ragged boundaries a
+ *    gradient or a texture leaves between two fills (not in post4: the live run's mochi showed them; lines untouched).
  * 4. **Size and base**: the silhouette is scaled to the neighbours' mean art area ([targetAreaU2]), capped at a 39u
- *    box, centred on x 24 with its base on y 42 (the 52u box −2…50).
+ *    box, centred on x 24 with its base on y 42 (the 52u box −2…50). The silhouette edge then always ends in a 2u
+ *    colour trace (§3.1; not in post4: a dark part the band rule turned deep, like gochujang's mound, lost its
+ *    outline).
  * 5. **Trace to 2u**: a thinner outline grows to 2u in final units.
  * 6. **Procedural gloss**: one 2.6u white stroke with round caps along the upper-left inner contour of the dominant
  *    fill region (bearing 200–290°, ≥ 10u), plus a 1.6u dot just past its lower end — the library's gloss recipe.
@@ -66,6 +70,15 @@ object IconPostProcessorV4 {
 
     /** Cut path tolerance (post4: simplify(.12)). */
     const val CUT_SIMPLIFY_U: Double = 0.12
+
+    /** Half the box of the fill mode filter (step 3c), in the answer's own u. */
+    const val MODE_RADIUS_U: Double = 0.4
+
+    /** How far around a removed model gloss its pastel halo goes too (step 3a), in the answer's own u. */
+    const val GLOSS_HALO_U: Double = 0.8
+
+    /** A removed white blob this big (u², the answer's own) was the model's gloss and takes its halo along. */
+    const val GLOSS_MIN_AREA_U2: Double = 3.0
 
     private const val SS = 2
     private const val OU = OUT_PX / BOX_U
@@ -121,6 +134,8 @@ object IconPostProcessorV4 {
         /** The procedural gloss stroke's length in u (0 = none fitted) and whether its dot fitted. */
         val glossLengthU: Double,
         val glossDot: Boolean,
+        /** Silhouette edge the model left without a trace, in final u², now rimmed in its family's trace. */
+        val rimmedU2: Double,
         val millis: Double,
         /** Milliseconds per step, for the log ("cut 3.1, snap 4.0, …"). */
         val steps: String = "",
@@ -272,7 +287,20 @@ object IconPostProcessorV4 {
             val removed = BooleanArray(count + 1) { l -> l > 0 && maxD[l] <= 1.6 * pxu && size[l] <= 60 * pxu * pxu }
             whiteRemoved = removed.count { it }
             if (whiteRemoved == 0) return@run
-            for (i in 0 until n) if (removed[labels[i]]) k[i] = -2
+            val gone = BooleanArray(n) { removed[labels[it]] }
+            // The soft halo the model paints around its own gloss snaps to a pastel: it goes with the gloss (within
+            // 0.8u of it), so no pale smear is left under the procedural gloss. Only gloss-sized blobs (≥ 3u²) have
+            // one: a dusting of tiny white specks (powder, seeds) keeps the fill around it.
+            val glossLike = BooleanArray(count + 1) { l -> removed[l] && size[l] >= GLOSS_MIN_AREA_U2 * pxu * pxu }
+            val glossMask = BooleanArray(n) { glossLike[labels[it]] }
+            val halo = Raster.dilateDisk(glossMask, w, h, GLOSS_HALO_U * pxu)
+            val big = BooleanArray(n) { i ->
+                glossMask[i] || (halo[i] && k[i] >= 0 && (tones[k[i]] == Tone.PASTEL || tones[k[i]] == Tone.LEMON_PASTEL))
+            }
+            // A gloss and its halo take the colour most of their surroundings have (within 0.6u outside them): the
+            // nearest pixel could be a stray of another colour that would then spread over the whole hole.
+            fillByMajority(k, big, tones, w, h, ringPx = 0.6 * pxu)
+            for (i in 0 until n) if (gone[i] && !big[i]) k[i] = -2
             val fillable = BooleanArray(n) { art[it] && k[it] >= 0 && tones[k[it]] != Tone.TRACE }
             fillFromNearest(k, fillable, w, h, hole = -2)
         }
@@ -317,6 +345,10 @@ object IconPostProcessorV4 {
             fillFromNearest(k, ok, w, h, hole = -3)
         }
 
+        // 3c. Ragged boundaries between two fills (a gradient or texture the snap split pixel by pixel) are smoothed
+        //     by a mode filter over 0.8u; the trace is left exactly as drawn.
+        smoothFills(k, tones, art, w, h, radius = (MODE_RADIUS_U * pxu).roundToInt(), paletteSize = pal.size)
+
         lap("specks")
         // 4. Scale: the neighbours' mean area, capped by the 39u box.
         var bx0 = w; var by0 = h; var bx1 = -1; var by1 = -1; var areaPx = 0
@@ -329,6 +361,10 @@ object IconPostProcessorV4 {
         val sArea = sqrt(target / (areaPx / (pxu * pxu)))
         val sBox = ART_MAX_U / (max(by1 - by0 + 1, bx1 - bx0 + 1) / pxu)
         val scale = min(sArea, sBox)
+
+        // 4b. Every silhouette ends in its colour trace (§3.1): a fill the model left open to the outside (or a dark
+        //     part the band rule turned deep) gets a 2u rim in its own family's trace.
+        val rimmed = rimSilhouette(k, tones, art, w, h, rimPx = TRACE_U / scale * pxu)
 
         // 5. The trace to 2u in final units: grow it (nearest trace colour) where it is thinner.
         val isTrace = BooleanArray(n) { k[it] >= 0 && tones[k[it]] == Tone.TRACE }
@@ -438,6 +474,7 @@ object IconPostProcessorV4 {
             specksRemoved = specks,
             glossLengthU = gloss.first,
             glossDot = gloss.second,
+            rimmedU2 = rimmed / (pxu * pxu) * scale * scale,
             millis = (System.nanoTime() - started) / 1e6,
             steps = steps.toString(),
         )
@@ -483,6 +520,133 @@ object IconPostProcessorV4 {
         for (l in labels) if (l > 0) size[l]++
         val biggest = size.max()
         return BooleanArray(art.size) { labels[it] > 0 && size[labels[it]] > 0.02 * biggest }
+    }
+
+    /**
+     * A mode filter on the fills: each non-trace art pixel takes the fill colour most common in the (2 [radius] + 1)²
+     * box around it when that colour is strictly more common there than its own. Trace pixels neither change nor
+     * vote, so lines keep their exact width. One integral image per colour present: O(colours × pixels).
+     */
+    private fun smoothFills(k: IntArray, tones: Array<Tone>, art: BooleanArray, w: Int, h: Int, radius: Int, paletteSize: Int) {
+        if (radius < 1) return
+        val n = w * h
+        val fill = BooleanArray(n) { art[it] && k[it] >= 0 && tones[k[it]] != Tone.TRACE }
+        val present = BooleanArray(paletteSize)
+        for (i in 0 until n) if (fill[i]) present[k[i]] = true
+        val labels = (0 until paletteSize).filter { present[it] }
+        if (labels.size < 2) return
+        val stride = w + 1
+        val integral = Array(paletteSize) { if (present[it]) IntArray(stride * (h + 1)) else IntArray(0) }
+        for (label in labels) {
+            val s = integral[label]
+            for (y in 0 until h) {
+                var row = 0
+                val base = (y + 1) * stride
+                for (x in 0 until w) {
+                    val i = y * w + x
+                    if (fill[i] && k[i] == label) row++
+                    s[base + x + 1] = s[base - stride + x + 1] + row
+                }
+            }
+        }
+        val out = k.copyOf()
+        for (y in 0 until h) {
+            val y0 = max(0, y - radius)
+            val y1 = min(h - 1, y + radius) + 1
+            for (x in 0 until w) {
+                val i = y * w + x
+                if (!fill[i]) continue
+                val x0 = max(0, x - radius)
+                val x1 = min(w - 1, x + radius) + 1
+                var best = k[i]
+                val own = integral[best].let { s -> s[y1 * stride + x1] - s[y0 * stride + x1] - s[y1 * stride + x0] + s[y0 * stride + x0] }
+                var bestCount = own
+                for (label in labels) {
+                    if (label == k[i]) continue
+                    val s = integral[label]
+                    val c = s[y1 * stride + x1] - s[y0 * stride + x1] - s[y1 * stride + x0] + s[y0 * stride + x0]
+                    if (c > bestCount) { bestCount = c; best = label }
+                }
+                out[i] = best
+            }
+        }
+        System.arraycopy(out, 0, k, 0, n)
+    }
+
+    /**
+     * The colour-trace rule on the silhouette (§3.1): every art pixel within [rimPx] of the outside that is not a trace
+     * already becomes a trace, chosen per fill region (see below). Returns the number of pixels changed.
+     */
+    private fun rimSilhouette(k: IntArray, tones: Array<Tone>, art: BooleanArray, w: Int, h: Int, rimPx: Double): Int {
+        val n = w * h
+        val dIn = Raster.insideDistance(art, w, h)
+        val isTrace = BooleanArray(n) { k[it] >= 0 && tones[k[it]] == Tone.TRACE }
+        val families = (tones.size - 2) / 4
+        // Which trace each fill region already touches: a region outlined by the model in some trace continues in
+        // that trace (one outline, one colour), a region touching its own family's trace keeps that one, and a region
+        // touching none (a loose tip, a mound) takes its own family's trace (white and lemon pastel: the body's).
+        val regions = IntArray(n)
+        val count = Raster.labelEqual(IntArray(n) { if (isTrace[it] || !art[it]) -1 else k[it] }, w, h, regions)
+        if (count == 0) return 0
+        val touch = Array(count + 1) { IntArray(tones.size) }
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = y * w + x
+            val r = regions[i]
+            if (r == 0) continue
+            if (x > 0 && isTrace[i - 1]) touch[r][k[i - 1]]++
+            if (x < w - 1 && isTrace[i + 1]) touch[r][k[i + 1]]++
+            if (y > 0 && isTrace[i - w]) touch[r][k[i - w]]++
+            if (y < h - 1 && isTrace[i + w]) touch[r][k[i + w]]++
+        }
+        val rimColour = IntArray(count + 1)
+        val regionTone = IntArray(count + 1) { -1 }
+        for (i in 0 until n) if (regions[i] > 0) regionTone[regions[i]] = k[i]
+        for (r in 1..count) {
+            val tone = regionTone[r]
+            val own = if (tone in 0 until families * 4) (tone / 4) * 4 + 2 else 2
+            val t = touch[r]
+            val mostTouched = t.indices.maxBy { t[it] }
+            rimColour[r] = when {
+                t[own] > 0 -> own
+                t[mostTouched] > 0 -> mostTouched
+                else -> own
+            }
+        }
+        var changed = 0
+        for (i in 0 until n) {
+            val r = regions[i]
+            if (r == 0 || dIn[i] > rimPx) continue
+            k[i] = rimColour[r]
+            changed++
+        }
+        return changed
+    }
+
+    /**
+     * Every connected part of [hole] takes the fill colour (not trace, not white) most common in the ring of [ringPx]
+     * just outside it. Parts with no such neighbour are marked -2 for the nearest-fill pass that follows.
+     */
+    private fun fillByMajority(k: IntArray, hole: BooleanArray, tones: Array<Tone>, w: Int, h: Int, ringPx: Double) {
+        val n = w * h
+        val labels = IntArray(n)
+        val count = Raster.label(hole, w, h, labels)
+        if (count == 0) return
+        val nearest = IntArray(n)
+        val d2 = Raster.edt(hole, w, h, nearest)
+        val r2 = (ringPx * ringPx).toFloat()
+        val votes = Array(count + 1) { IntArray(tones.size) }
+        for (i in 0 until n) {
+            val ki = k[i]
+            if (hole[i] || ki < 0 || d2[i] > r2 || nearest[i] < 0) continue
+            if (tones[ki] == Tone.TRACE || tones[ki] == Tone.WHITE) continue
+            votes[labels[nearest[i]]][ki]++
+        }
+        val colour = IntArray(count + 1) { l ->
+            val v = votes[l]
+            val best = v.indices.maxBy { v[it] }
+            if (l == 0 || v[best] == 0) -2 else best
+        }
+        for (i in 0 until n) if (hole[i]) k[i] = colour[labels[i]]
     }
 
     /** Pixels of [k] equal to [hole] take the value of the nearest pixel where [source] is true. */

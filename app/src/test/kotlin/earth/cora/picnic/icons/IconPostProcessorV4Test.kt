@@ -192,6 +192,77 @@ class IconPostProcessorV4Test {
         assertTrue(s.glossLengthU >= 10.0)
     }
 
+    /** A synthetic answer in the fourth cell: [paint] gives each cell pixel's ARGB (0 = transparent). */
+    private fun synthetic(paint: (x: Int, y: Int) -> Int): IntArray {
+        val sheet = IntArray(1024 * 1024)
+        for (y in 0 until 512) for (x in 0 until 512) sheet[(y + 512) * 1024 + x + 512] = paint(x, y)
+        return sheet
+    }
+
+    @Test
+    fun aFillLeftOpenToTheOutsideIsRimmedInItsOwnTrace() {
+        // A melon-mid disc the model drew without any outline: the silhouette must still end in melon trace (§3.1).
+        val pxu = 512 / 52.0
+        val sheet = synthetic { x, y -> if (hypot(x - 256.0, y - 260.0) <= 15 * pxu) 0xFF8EDB76.toInt() else 0 }
+        val r = IconPostProcessorV4.process(sheet, 1024, 1024, listOf("melon"), targetAreaU2 = 700.0)
+        assertTrue("rimmed ${r.stats.rimmedU2}", r.stats.rimmedU2 > 100.0)
+        assertEquals(2.0, r.stats.outlineU, 0.4)
+        val s = r.stats
+        val cx = (s.artLeftU + s.artRightU) / 2
+        val cy = (s.artTopU + s.artBottomU) / 2
+        val rad = (s.artRightU - s.artLeftU) / 2
+        val trace = rgb(0xFF2E8239.toInt())
+        var ring = 0
+        var traced = 0
+        for (y in 0 until px) for (x in 0 until px) {
+            val d = hypot((x + 0.5) / ou - 2 - cx, (y + 0.5) / ou - 2 - cy)
+            if (d !in rad - 1.4..rad - 0.6) continue // 1u inside the silhouette edge
+            ring++
+            if (rgb(r.argb[y * px + x]).contentEquals(trace)) traced++
+        }
+        assertTrue("$traced of $ring rim pixels are melon trace", traced * 100 >= ring * 97)
+    }
+
+    @Test
+    fun raggedBoundariesBetweenTwoFillsAreSmoothed() {
+        // A traced disc, pastel on top and mid below, the boundary dithered over 1u the way a gradient snaps.
+        val pxu = 512 / 52.0
+        val rnd = java.util.Random(7)
+        val sheet = synthetic { x, y ->
+            val d = hypot(x - 256.0, y - 260.0)
+            val split = 260 + (rnd.nextDouble() - 0.5) * pxu
+            when {
+                d > 15 * pxu -> 0
+                d > 13 * pxu -> 0xFFC3264F.toInt()
+                y < split -> 0xFFFFC4D1.toInt()
+                else -> 0xFFFF6F8E.toInt()
+            }
+        }
+        val r = IconPostProcessorV4.process(sheet, 1024, 1024, listOf("strawberry"), targetAreaU2 = 700.0)
+        val pastel = rgb(0xFFFFC4D1.toInt())
+        val mid = rgb(0xFFFF6F8E.toInt())
+        var columns = 0
+        var clean = 0
+        val s = r.stats
+        val x0 = ((s.artLeftU + 2 + 6) * ou).toInt()
+        val x1 = ((s.artRightU + 2 - 6) * ou).toInt()
+        for (x in x0 until x1) {
+            var last = 0
+            var changes = 0
+            for (y in 0 until px) {
+                val c = rgb(r.argb[y * px + x])
+                val now = if (c.contentEquals(pastel)) 1 else if (c.contentEquals(mid)) 2 else 0
+                if (now != 0) {
+                    if (last != 0 && now != last) changes++
+                    last = now
+                }
+            }
+            columns++
+            if (changes <= 1) clean++
+        }
+        assertTrue("$clean of $columns columns cross the boundary once", clean * 100 >= columns * 95)
+    }
+
     @Test
     fun anOpaqueAnswerIsKeyedOnItsFlatGrey() {
         val f = fixtures.first { it.key == "kimchi" }

@@ -1,0 +1,26 @@
+{
+ "name": "Mochi",
+ "look": "Exactly three small round mochi rice cakes, two overlapping in front and one behind, with soft white dough and a little powder dusting",
+ "families": [
+  "lemon",
+  "cocoa"
+ ],
+ "category": "frozen",
+ "approximate_key": "frozen_generic",
+ "neighbours": [
+  "frozen_pizza",
+  "french_fries",
+  "ice_cream"
+ ],
+ "neighbour_u2": [
+  846.9,
+  935.5,
+  919.6
+ ],
+ "target_u2": 900.7,
+ "model": "gpt-image-2.5-flare",
+ "draw_ms": 9344,
+ "raw_bytes": 87998,
+ "sticker_bytes": 15000,
+ "post": "Stats(deltaE=8.913956702695145, outlineRawU=1.9531342969059895, outlineU=2.278815973029528, scale=0.9820971867007673, targetAreaU2=900.7, areaU2=861.625, artLeftU=4.5, artTopU=11.5, artRightU=43.5, artBottomU=42.0, whiteSpecksRemoved=124, specksRemoved=713, glossLengthU=11.61137273068583, glossDot=true, rimmedU2=30.62275887782, millis=260.851047, steps=cut 11.3, snap 28.0, white 29.0, specks 81.1, trace 51.4, render 10.2, gloss 29.4, diecut 10.2, path 9.7)"
+}
