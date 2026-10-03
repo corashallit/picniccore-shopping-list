@@ -58,7 +58,10 @@ class HarnessRig(
     val probe = StillnessProbe()
     val toasts = ToastHostState()
 
-    fun start(content: @Composable () -> Unit = { MotionHarness(model, toasts, nextStopCard = nextStopCard, celebration = celebration, talkBack = talkBack) }): HarnessRig {
+    /** TalkBack's state for the harness (a test may turn it on between scenes). */
+    val talkBackState = androidx.compose.runtime.mutableStateOf(talkBack)
+
+    fun start(content: @Composable () -> Unit = { MotionHarness(model, toasts, nextStopCard = nextStopCard, celebration = celebration, talkBack = talkBackState.value) }): HarnessRig {
         compose.mainClock.autoAdvance = false
         compose.setContent {
             val base = LocalDensity.current

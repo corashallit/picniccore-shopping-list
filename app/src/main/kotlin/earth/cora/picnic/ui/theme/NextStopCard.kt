@@ -50,25 +50,45 @@ import earth.cora.picnic.ui.a11y.textOverflowed
  * Radius 14, 4 dp white border, hs2; three sparkle stickers twinkle at its corners, outside the text. The foil is
  * STATIC: no glint ever crosses the text during its hold (§9).
  *
- * Name fit: the name gets the card's 200 dp inner width minus the number circle and the chip; it shrinks in 1 sp steps
- * from 23 to 18 sp, then wraps to two lines (the card grows), and only beyond two lines ellipsizes. The same steps apply
- * on the scaled sizes at font scale 2.0. It never clips. Motion and semantics are the host's (NextCardHost).
+ * Name fit: the name gets the card's inner width minus the number circle and the chip (it may run over the tab's
+ * pattern, which sits behind it at 45 %); it shrinks in 1 sp steps from 23 to 18 sp, then wraps to two lines (the card
+ * grows). At large font scales (the same steps on the scaled sizes) a word can still be wider than the card: the card
+ * then widens with the font scale (up to the screen less 16 dp a side) and, only if two lines at 18 sp still do not
+ * hold the name, keeps shrinking on two lines down to 14 sp; it ellipsizes only beyond that, which no default aisle
+ * name needs at font scale 2.0. It never clips. Motion and semantics are the host's (NextCardHost).
  */
 
 /** The fitted name: its size and its line count (tests: NextStopTest.defaultAislesFit, fontScale200). */
 @Immutable
 data class NextNameFit(val fontSizeSp: Float, val lines: Int, val overflowed: Boolean)
 
-/** Fits [name] into [maxWidthPx] by the §10 rule (23 → 18 sp on one line, then two lines at 18, then an ellipsis). */
-fun fitNextName(measurer: TextMeasurer, name: String, style: TextStyle, maxWidthPx: Int, fromSp: Float = 23f, toSp: Float = 18f): NextNameFit {
+/**
+ * Fits [name] into [maxWidthPx] by the §10 rule: [fromSp] → [toSp] on one line, then two lines at [toSp], then two
+ * lines shrinking to [floorSp] (large font scales only need it), then an ellipsis.
+ */
+fun fitNextName(
+    measurer: TextMeasurer,
+    name: String,
+    style: TextStyle,
+    maxWidthPx: Int,
+    fromSp: Float = 23f,
+    toSp: Float = 18f,
+    floorSp: Float = 14f,
+): NextNameFit {
     var sp = fromSp
     while (sp >= toSp - 0.01f) {
         val layout = measurer.measure(name, style.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp), softWrap = false, maxLines = 1, constraints = Constraints(maxWidth = maxWidthPx))
         if (!layout.hasVisualOverflow) return NextNameFit(sp, 1, false)
         sp -= 1f
     }
-    val two = measurer.measure(name, style.copy(fontSize = toSp.sp, lineHeight = (toSp * 1.2f).sp), softWrap = true, maxLines = 2, overflow = TextOverflow.Ellipsis, constraints = Constraints(maxWidth = maxWidthPx))
-    return NextNameFit(toSp, two.lineCount.coerceAtMost(2), two.hasVisualOverflow)
+    sp = toSp
+    while (true) {
+        val two = measurer.measure(name, style.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp), softWrap = true, maxLines = 2, overflow = TextOverflow.Ellipsis, constraints = Constraints(maxWidth = maxWidthPx))
+        // A word wider than the line breaks inside itself: that is a clip too, so it counts as not fitting.
+        val wordsWhole = (0 until two.lineCount).all { l -> two.getLineEnd(l, visibleEnd = true).let { e -> e >= name.length || name[e - 1] == ' ' || name.getOrNull(e) == ' ' } }
+        if ((!two.hasVisualOverflow && wordsWhole) || sp <= floorSp + 0.01f) return NextNameFit(sp, two.lineCount.coerceAtMost(2), two.hasVisualOverflow || !wordsWhole)
+        sp -= 1f
+    }
 }
 
 /** The card's fixed width (§2.9 `nextCard`). */
@@ -99,44 +119,51 @@ fun NextStopCard(
     val shadows = PicnicTheme.shadows
     val reduced = LocalReducedMotion.current
     val loop by rememberLoopTime(enabled = !reduced)
-    // The card plus room round it for the corner sparkles and the hs2 shadow.
-    Box(modifier.width(NextCardWidth + 16.dp)) {
-        Column(
-            Modifier
-                .padding(8.dp)
-                .width(NextCardWidth)
-                .hardShadow(shapes.nextCard, shadows, large = true)
-                .clip(shapes.nextCard)
-                .background(c.stickerWhite)
-                .padding(4.dp)
-                .clip(RoundedInner)
-                .drawBehind { drawRect(holoBrush(Offset(size.width * 0.5f, size.height * 0.42f))) }
-                .padding(horizontal = 14.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PuffyText(
-                    nextLabel,
-                    style = t.nextLabel.copy(color = c.ballpoint),
-                    fill = PicnicTheme.colors.ballpoint,
-                    stroke = 6.dp,
-                    strokeColor = Color.White,
-                    shadow = shadows.hs,
-                    modifier = Modifier.clearAndSetSemantics { },
-                )
-                Spacer(Modifier.width(4.dp))
-                DecorSticker("star4", size = 20.dp)
+    val fontScale = LocalDensity.current.fontScale
+    // The card plus room round it for the corner sparkles and the hs2 shadow. At large font scales the card widens with
+    // the text, up to the screen less 16 dp a side.
+    BoxWithConstraints(modifier) {
+        val room = 8.dp
+        val widest = if (constraints.hasBoundedWidth) maxWidth - 32.dp else NextCardWidth * 1.4f
+        val cardWidth = (NextCardWidth * fontScale.coerceIn(1f, 1.4f)).coerceAtMost(widest).coerceAtLeast(NextCardWidth.coerceAtMost(widest))
+        Box(Modifier.width(cardWidth + room * 2)) {
+            Column(
+                Modifier
+                    .padding(room)
+                    .width(cardWidth)
+                    .hardShadow(shapes.nextCard, shadows, large = true)
+                    .clip(shapes.nextCard)
+                    .background(c.stickerWhite)
+                    .padding(4.dp)
+                    .clip(RoundedInner)
+                    .drawBehind { drawRect(holoBrush(Offset(size.width * 0.5f, size.height * 0.42f))) }
+                    .padding(horizontal = 12.dp, vertical = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PuffyText(
+                        nextLabel,
+                        style = t.nextLabel.copy(color = c.ballpoint),
+                        fill = PicnicTheme.colors.ballpoint,
+                        stroke = 6.dp,
+                        strokeColor = Color.White,
+                        shadow = shadows.hs,
+                        modifier = Modifier.clearAndSetSemantics { },
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    DecorSticker("star4", size = 20.dp)
+                }
+                NextTab(number, displayName, storeAisle, look)
             }
-            NextTab(number, displayName, storeAisle, look)
+            // Three sparkle stickers at the corners, twinkling, outside the text.
+            val twinkle = if (reduced) Pose() else Twinkle.at(loop)
+            val twinkle2 = if (reduced) Pose() else Twinkle.at(loop, 125)
+            val twinkle3 = if (reduced) Pose() else Twinkle.at(loop, 250)
+            DecorSticker("star4", Modifier.align(Alignment.TopStart).offset(2.dp, 2.dp).size(22.dp).graphicsLayer { scaleX = twinkle.scale; scaleY = twinkle.scale; rotationZ = twinkle.rotation }, size = 22.dp)
+            DecorSticker("star", Modifier.align(Alignment.TopEnd).offset((-2).dp, 4.dp).size(20.dp).graphicsLayer { scaleX = twinkle2.scale; scaleY = twinkle2.scale; rotationZ = twinkle2.rotation }, size = 20.dp)
+            DecorSticker("heart", Modifier.align(Alignment.BottomStart).offset(4.dp, (-2).dp).size(18.dp).graphicsLayer { scaleX = twinkle3.scale; scaleY = twinkle3.scale; rotationZ = twinkle3.rotation }, size = 18.dp)
         }
-        // Three sparkle stickers at the corners, twinkling, outside the text.
-        val twinkle = if (reduced) Pose() else Twinkle.at(loop)
-        val twinkle2 = if (reduced) Pose() else Twinkle.at(loop, 125)
-        val twinkle3 = if (reduced) Pose() else Twinkle.at(loop, 250)
-        DecorSticker("star4", Modifier.align(Alignment.TopStart).offset(2.dp, 2.dp).size(22.dp).graphicsLayer { scaleX = twinkle.scale; scaleY = twinkle.scale; rotationZ = twinkle.rotation }, size = 22.dp)
-        DecorSticker("star", Modifier.align(Alignment.TopEnd).offset((-2).dp, 4.dp).size(20.dp).graphicsLayer { scaleX = twinkle2.scale; scaleY = twinkle2.scale; rotationZ = twinkle2.rotation }, size = 20.dp)
-        DecorSticker("heart", Modifier.align(Alignment.BottomStart).offset(4.dp, (-2).dp).size(18.dp).graphicsLayer { scaleX = twinkle3.scale; scaleY = twinkle3.scale; rotationZ = twinkle3.rotation }, size = 18.dp)
     }
 }
 
@@ -154,7 +181,8 @@ private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: A
         val inner = maxWidth
         // The chip's footprint (measured roughly from its text) and the tab's fixed parts.
         val chipWidth: Dp = if (storeAisle != null) (with(density) { measurer.measure("A$storeAisle", PicnicTheme.type.label.copy(fontSize = 13.sp)).size.width.toDp() } + 36.dp) else 0.dp
-        val fixed = 3.dp * 2 + 6.dp + 30.dp + 8.dp + 32.dp
+        // Border 3 + 3, start 6, circle 30, gap 8, end 12 (the 32 dp pattern sits behind the name's end).
+        val fixed = 3.dp * 2 + 6.dp + 30.dp + 8.dp + 12.dp
         val nameMax = (inner - chipWidth - fixed).coerceAtLeast(40.dp)
         val fit = remember(displayName, nameMax, density) {
             fitNextName(measurer, displayName, nameStyle, with(density) { nameMax.roundToPx() })
@@ -171,7 +199,7 @@ private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: A
                     .background(look.family.pastel)
                     .tabPattern(look, width = 32.dp, alpha = 0.45f)
                     .heightIn(min = 40.dp)
-                    .padding(start = 6.dp, end = 32.dp, top = 4.dp, bottom = 4.dp),
+                    .padding(start = 6.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {

@@ -97,7 +97,7 @@ fun MotionOverlay(
                     .align(Alignment.BottomCenter)
                     // The card face sits 20 dp above the inset; its box carries 8 dp of room for the sparkles.
                     .padding(bottom = bottomInset + 20.dp - CARD_ROOM + cardLift)
-                    .onSizeChanged { stack.cardHeightPx = it.height - with(density) { CARD_ROOM.roundToPx() } },
+                    .onSizeChanged { stack.cardHeightPx = it.height - with(density) { (CARD_ROOM * 2).roundToPx() } },
             )
         }
     }

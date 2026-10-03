@@ -102,8 +102,8 @@ object MotionFixture {
     }
 
     /** Everything checked but [left] (in their aisles), the list still open on [open]; times after the fixture's. */
-    fun allBut(left: List<String>, open: String? = null): AppState {
-        var s = state()
+    fun allBut(left: List<String>, open: String? = null, title: String = "Saturday shop"): AppState {
+        var s = state(title)
         var t = TRIP_START + 26 * MIN
         val list = s.list(LIST_ID)!!
         for (it in list.items) if (!it.checked && it.id !in left) s = s.toggleChecked(LIST_ID, it.id, t++)
@@ -174,11 +174,14 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
 
     fun item(id: String): GroceryItem = state.list(listId)!!.items.first { it.id == id }
 
-    /** Replaces the state without telling the engine (setting a scene up). */
+    /** Replaces the state without telling the engine (setting a scene up); earlier finales no longer count. */
     fun set(s: AppState) {
         state = s
+        eventMark = engine.eventLog.size
         engine.setSections(state.grouped().motionSections())
     }
+
+    private var eventMark = 0
 
     /** A check-off tap (or its TalkBack / keyboard / swipe equivalent) on [itemId]. */
     fun toggle(itemId: String): ToggleEvent {
@@ -261,7 +264,7 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
     fun syncFinale() {
         val list = state.list(listId) ?: return
         if (list.trip?.completedAt == null || list.trip?.finaleShownAt != null) return
-        val shown = engine.eventLog.any {
+        val shown = engine.eventLog.drop(eventMark).any {
             (it is MotionEvent.CelebrationStarted && it.listId == listId) || (it is MotionEvent.FinaleMarked && it.listId == listId)
         }
         if (shown) state = state.markFinaleShown(listId, now)

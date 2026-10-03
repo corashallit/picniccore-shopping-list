@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -122,8 +124,11 @@ object CelebrationTags {
 }
 
 /** The scene's clock: ms since it started; under reduced motion every movement is at its end. */
-private class SceneClock(val cele: CelebrationPresentation, val plan: CelebrationPlan, val clock: MotionClock) {
-    val reduced: Boolean get() = cele.reduced
+private class SceneClock(initial: CelebrationPresentation, val plan: CelebrationPlan, val clock: MotionClock) {
+    /** The presentation now (kept, closing): snapshot state, so the layers that read it follow it. */
+    var cele: CelebrationPresentation by mutableStateOf(initial)
+
+    val reduced: Boolean = initial.reduced
 
     /** The full storyboard's beat times (also under reduced motion, where everything is at its end). */
     val story: CelebrationPlan = if (plan.reduced) {
@@ -174,6 +179,8 @@ fun CelebrationScene(
     val content = cele.content ?: return
     val plan = cele.plan ?: return
     val sc = remember(cele.t0, cele.reduced, plan) { SceneClock(cele, plan, clock) }
+    // Written before anything in this composition reads it.
+    sc.cele = cele
     val density = LocalDensity.current
     val probe = LocalMotionProbe.current
     val anchors = remember { SceneAnchors() }
@@ -197,7 +204,9 @@ fun CelebrationScene(
         Box(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { translationX = shakeDx(sc) * density.density },
+                .onGloballyPositioned { anchors.stageOrigin = it.boundsInRoot().topLeft }
+                .graphicsLayer { translationX = shakeDx(sc) * density.density }
+                .onPlaced { anchors.stage = it },
         ) {
             Rays(sc)
             BurstStar(sc)
@@ -407,6 +416,16 @@ private class SceneAnchors {
     var origin: Offset by mutableStateOf(Offset.Zero)
     var sceneRight: Float by mutableStateOf(0f)
 
+    /** Inside the shake layer, and where that layer sits at rest (root px): plates are measured from it, unshaken. */
+    var stage: androidx.compose.ui.layout.LayoutCoordinates? = null
+    var stageOrigin: Offset = Offset.Zero
+
+    /** [coords]'s bounds in root px as if the screen never shook. */
+    fun unshaken(coords: androidx.compose.ui.layout.LayoutCoordinates): Rect {
+        val st = stage
+        return if (st != null && st.isAttached) st.localBoundingBoxOf(coords, clipBounds = false).translate(stageOrigin) else coords.boundsInRoot()
+    }
+
     /** Every text plate's laid-out bounds (root px, before its own motion), by tag. */
     val plates: MutableMap<String, Rect> = LinkedHashMap()
 
@@ -424,7 +443,7 @@ private class SceneAnchors {
 
 /** Records this text plate's laid-out bounds (put it before the plate's motion layer). */
 private fun Modifier.plate(anchors: SceneAnchors, tag: String): Modifier =
-    testTag(tag).onGloballyPositioned { anchors.plates[tag] = it.boundsInRoot() }
+    testTag(tag).onGloballyPositioned { anchors.plates[tag] = anchors.unshaken(it) }
 
 @Composable
 private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: CelebrationCopy, anchors: SceneAnchors, onSummaryCard: (Rect) -> Unit) {
@@ -544,7 +563,10 @@ private fun SceneLcd(sc: SceneClock, content: CelebrationContent) {
         }
         LcdChip(LcdState(LcdMode.Pet, content.stats.stickers, content.total, petPose = pose))
     } else {
-        LcdChip(LcdState(LcdMode.Count, content.stats.stickers, content.total))
+        // A text plate holds still (§9): the scene's LCD does not blink its star.
+        CompositionLocalProvider(LocalReducedMotion provides true) {
+            LcdChip(LcdState(LcdMode.Count, content.stats.stickers, content.total))
+        }
     }
 }
 
@@ -626,7 +648,7 @@ private fun StampCard(sc: SceneClock, content: CelebrationContent, anchors: Scen
         Box(
             Modifier
                 .size(cardW, cardH)
-                .onGloballyPositioned { anchors.plates[CelebrationTags.STAMP_CARD] = it.boundsInRoot() }
+                .onGloballyPositioned { anchors.plates[CelebrationTags.STAMP_CARD] = anchors.unshaken(it) }
                 .graphicsLayer {
                     val e = sc.since(BeatName.StampCard)
                     if (!sc.reduced) {
@@ -1323,10 +1345,13 @@ private fun ClosingBar(sc: SceneClock, copy: CelebrationCopy, summaryAt: Long, m
 }
 
 /** How far the closing bar has filled (0..1), stepped in 8 under reduced motion. */
-private fun closingProgress(sc: SceneClock, start: Long, hold: Long): Float {
-    val e = (sc.clock.now - sc.cele.t0 - start).coerceAtLeast(0)
-    val raw = (e.toFloat() / hold).coerceIn(0f, 1f)
-    return if (sc.reduced) Stepped(8).transform(raw) else raw
+private fun closingProgress(sc: SceneClock, start: Long, hold: Long): Float =
+    closingFill(sc.clock.now - sc.cele.t0 - start, hold, sc.reduced)
+
+/** The closing bar's fill [elapsed] ms into a summary hold of [hold] ms (0..1; 8 steps under [reduced] motion). */
+internal fun closingFill(elapsed: Long, hold: Long, reduced: Boolean): Float {
+    val raw = (elapsed.coerceAtLeast(0).toFloat() / hold).coerceIn(0f, 1f)
+    return if (reduced) Stepped(8).transform(raw) else raw
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -1339,7 +1364,6 @@ private fun ProbeReports(sc: SceneClock, probe: MotionProbe, anchors: SceneAncho
     val now = sc.clock.now
     val density = LocalDensity.current.density
     SideEffect {
-        if (sc.cele.closingT0 != null) return@SideEffect
         val dx = shakeDx(sc) * density
         val a = sc.sceneAlpha()
         fun report(tag: String, pose: MotionPose, alpha: Float = pose.alpha) {
