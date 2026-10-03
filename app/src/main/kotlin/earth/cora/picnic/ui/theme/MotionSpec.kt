@@ -1,11 +1,12 @@
 package earth.cora.picnic.ui.theme
 
+import android.content.ContentResolver
+import android.provider.Settings
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.MotionDurationScale
-import kotlin.math.floor
 
 /*
  * Motion tokens and the reading rule (docs/DESIGN_STICKER.md §8.2, §8.8, §9). Every timing in the app lives
@@ -16,16 +17,6 @@ import kotlin.math.floor
 /** One animation: a duration and its easing. */
 @Immutable
 data class MotionToken(val durationMillis: Int, val easing: Easing)
-
-/** CSS `steps(n, end)`: floor(t × n) / n. Stickers move in stepped poses (§8.1). */
-@Immutable
-data class Stepped(val steps: Int) : Easing {
-    init {
-        require(steps > 0) { "steps must be positive" }
-    }
-
-    override fun transform(fraction: Float): Float = floor(fraction * steps) / steps
-}
 
 /** Every §8.2 token. Millis are on the frame clock under [FixedMotionScale] (§8.8), never under Android's scales. */
 object PicnicMotion {
@@ -73,6 +64,68 @@ object PicnicMotion {
     val floorToast: Long = 4000
     val floorBeat: Long = 1500
     val floorLcdWord: Long = 1500
+
+    // ---- Component timings (§4) ----
+
+    /** A pressed button drops onto its shadow in 2 steps of 80 ms (§4.6). */
+    val buttonPress: MotionToken = MotionToken(160, Stepped(2))
+
+    /** The switch knob moves in 2 steps (120 ms, §4.9). */
+    val switchKnob: MotionToken = MotionToken(120, Stepped(2))
+
+    /** LCD digits tick on change: −2 → +1 → 0 dp, 2 steps, 160 ms (§4.3). */
+    val lcdTick: MotionToken = MotionToken(160, Stepped(2))
+    val lcdTickOffsetsDp: List<Float> = listOf(-2f, 1f, 0f)
+
+    /** The LCD star blinks to 12 % for 3 % of every 4 s (0.25 Hz, §4.3). */
+    val lcdBlinkPeriod: Long = 4000
+    val lcdBlinkOn: Long = 120
+    val lcdBlinkAlpha: Float = 0.12f
+
+    /** The hanko slams 1.4 → 1.15 → 1.0 in 2 steps (160 ms, §8.3). */
+    val hankoSlam: MotionToken = MotionToken(160, Stepped(2))
+    val hankoSlamScales: List<Float> = listOf(1.4f, 1.15f, 1f)
+
+    /** The sun bounces 1.25, −20° → 1.1, +10° → 1 (2 steps, 240 ms, §4.2). */
+    val sunBounce: MotionToken = MotionToken(240, Stepped(2))
+    val sunBouncePoses: List<Pose> = listOf(Pose(1.25f, -20f), Pose(1.1f, 10f), Pose(1f, 0f))
+
+    /** The washi handle slaps on a beat after the sheet arrives: 1.6 → 1.2 → 1, 2 poses (§4.16). */
+    val handleSlapScales: List<Float> = listOf(1.6f, 1.2f, 1f)
+
+    /** Toast drop poses (§4.15): from −30 dp at −9°, overshoot +4 dp at −1°, settle at −2°. */
+    val toastDropFrom: Pose = Pose(rotation = -9f, dy = -30f)
+    val toastDropOvershoot: Pose = Pose(rotation = -1f, dy = 4f)
+    val toastRest: Pose = Pose(rotation = -2f)
+
+    /** The overflow menu pops from 90 % (220 ms, cubic-bezier(.3, 1.5, .5, 1), §4.24). */
+    val menuPop: MotionToken = MotionToken(220, CubicBezierEasing(0.3f, 1.5f, 0.5f, 1f))
+
+    /** The FAB bobs −4 dp on a 2.4 s ease-in-out loop while visible (§4.6). */
+    val fabBob: MotionToken = MotionToken(2400, CubicBezierEasing(0.42f, 0f, 0.58f, 1f))
+
+    /** Washi flutter: skewX 10° → −6° for 10 % of every 6 s (§4.14). */
+    val washiFlutterPeriod: Long = 6000
+
+    /** Glow stars charge 85 % → 100 % at 1.15× for 2 frames every 5 s (§2.12). */
+    val glowChargePeriod: Long = 5000
+    val glowChargeFrames: Int = 2
+
+    /** Loaders (§4.22): the bee loop (2.4 s), the ladybug ring (3 s), the busy sparkle (8 fps). */
+    val beeLoop: Long = 2400
+    val ladybugRing: Long = 3000
+    val busySparkleFps: Int = 8
+
+    /** The gashapon wobbles ±8° in 3 poses "on threes" (§4.18). */
+    val gashaponPoses: List<Pose> = listOf(Pose(rotation = -8f), Pose(rotation = 0f), Pose(rotation = 8f))
+    val gashaponPoseMillis: Long = 125
+
+    /** The shiny glint: an 80 % white band clipped to the die-cut, 6 steps, every 4 s (§2.11). */
+    val shinyGlintPeriod: Long = 4000
+    val shinyGlint: MotionToken = MotionToken(500, Stepped(6))
+
+    /** The "now" stamp ring turns once per 6 s (§4.13). */
+    val nowRingTurn: Long = 6000
 }
 
 /** CSS `ease-in`. */
@@ -106,3 +159,15 @@ private val WHITESPACE = Regex("\\s+")
 object FixedMotionScale : MotionDurationScale {
     override val scaleFactor: Float = 1f
 }
+
+/** Reduced motion (§8.8): on when the animator duration scale OR the transition animation scale is 0. */
+fun reducedMotionFrom(animatorScale: Float, transitionScale: Float): Boolean = animatorScale == 0f || transitionScale == 0f
+
+/**
+ * Reads both Android animation scales explicitly from Settings.Global (the system scale is used only to make this
+ * decision; animations never follow it, §8.8). MainActivity calls it at start and on every resume.
+ */
+fun readReducedMotion(resolver: ContentResolver): Boolean = reducedMotionFrom(
+    Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f),
+    Settings.Global.getFloat(resolver, Settings.Global.TRANSITION_ANIMATION_SCALE, 1f),
+)
