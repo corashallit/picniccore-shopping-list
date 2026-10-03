@@ -8,6 +8,8 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -170,6 +172,37 @@ class PullToRefreshTest {
         compose.runOnIdle { action.action() }
         compose.frames(2)
         assertSyncHolds(2)
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * R6 (§6.1): the bunting starts above the list (its sag runs −34 → +10 dp) and comes out from under the top stack;
+     * it is never drawn over the sticker book. Early in a pull, while it is still mostly hidden, the top stack looks
+     * exactly as it did before the pull.
+     */
+    @Test
+    fun buntingStaysUnderTheTopStack() {
+        val screen = ListScreenState()
+        compose.setContent {
+            PicnicTheme { Box(Modifier.fillMaxSize()) { ListScreen(ListFixture.ui(), ListActions(), screen = screen) } }
+        }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.frames(2)
+        fun stack() = compose.onNodeWithTag(ListTags.TOP_STACK).captureToImage().asAndroidBitmap()
+        val before = stack()
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput {
+            down(Offset(centerX, top + 40 * dp))
+            repeat(3) { moveBy(Offset(0f, 12 * dp)) }
+        }
+        compose.frames(3)
+        assertTrue("the bunting is out (${screen.pull / dp} dp)", compose.exists(ListTags.BUNTING) && screen.pull > 0f)
+        val during = stack()
+        var changed = 0
+        for (y in 0 until before.height) for (x in 0 until before.width) if (before.getPixel(x, y) != during.getPixel(x, y)) changed++
+        assertEquals("nothing drew over the top stack during the pull", 0, changed)
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput { up() }
+        compose.frames(30)
         compose.mainClock.autoAdvance = true
     }
 

@@ -1064,6 +1064,7 @@ private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScree
             .fillMaxSize()
             .onGloballyPositioned { origin = it.boundsInWindow().topLeft }
             .clickable(remember { MutableInteractionSource() }, indication = null, onClick = close)
+            .testTag(LIST_MENU_SCRIM_TAG)
             .clearAndSetSemantics {
                 contentDescription = closeLabel
                 role = Role.Button
@@ -1072,8 +1073,7 @@ private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScree
                     close()
                     true
                 }
-            }
-            .testTag(LIST_MENU_SCRIM_TAG),
+            },
     )
     val items = listOf(
         MenuItem(

@@ -888,7 +888,7 @@ private fun CollapsedStamps(stamps: List<StampUi>, plan: CollapsedDots, probe: P
     val variant = PicnicTheme.variant
     val size = plan.size.dp
     Row(horizontalArrangement = Arrangement.spacedBy(plan.gap.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (plan.hiddenBefore > 0) MoreDot(plan.hiddenBefore, Modifier.probe(probe, "collapsedMore:before"))
+        if (plan.hiddenBefore > 0) MoreDot(plan.hiddenBefore, Modifier.probe(probe, "collapsedMore:before:${plan.hiddenBefore}"))
         for (s in stamps.subList(plan.first, plan.first + plan.count)) {
             Canvas(Modifier.size(size).decorative().probe(probe, "collapsedDot:${s.sectionId}")) {
                 val k = this.size.minDimension / 12.dp.toPx()
@@ -900,7 +900,7 @@ private fun CollapsedStamps(stamps: List<StampUi>, plan: CollapsedDots, probe: P
                 }
             }
         }
-        if (plan.hiddenAfter > 0) MoreDot(plan.hiddenAfter, Modifier.probe(probe, "collapsedMore:after"))
+        if (plan.hiddenAfter > 0) MoreDot(plan.hiddenAfter, Modifier.probe(probe, "collapsedMore:after:${plan.hiddenAfter}"))
     }
 }
 

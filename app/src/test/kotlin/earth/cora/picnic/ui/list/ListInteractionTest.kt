@@ -12,7 +12,7 @@ import androidx.compose.ui.test.click
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isFocused
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconFit
@@ -56,7 +57,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = PHONE_360)
 class ListInteractionTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<androidx.activity.ComponentActivity>()
 
     private fun row(id: String) = compose.onNodeWithTag(ListTags.row(id))
 
@@ -112,6 +113,42 @@ class ListInteractionTest {
         compose.onNodeWithText("Start my list").performClick()
         compose.waitForIdle()
         compose.onNodeWithTag(ADD_FIELD_TAG).assert(isFocused())
+    }
+
+    /**
+     * Item 71 at font scale 2.0 (§15): the empty state scrolls clear of the docked add bar, which grows with large text,
+     * so "Start my list" can always be seen whole above it.
+     */
+    @Test
+    fun emptyStateClearsTheAddBarAtLargeText() {
+        compose.show(ListRig(ListFixture.empty()), fontScale = 2f)
+        // Scrolled to its end.
+        compose.onNodeWithTag(ListTags.EMPTY).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+        compose.waitForIdle()
+        val button = compose.onNodeWithText("Start my list", useUnmergedTree = true)
+        val b = button.fetchSemanticsNode().boundsInRoot
+        val bar = compose.boundsOf(earth.cora.picnic.ui.add.ADD_BAR_TAG)
+        val d = compose.density.density
+        assertTrue("the button (${b.top / d}..${b.bottom / d} dp) ends above the add bar (${bar.top / d} dp)", b.bottom <= bar.top + 0.5f)
+    }
+
+    /**
+     * §15: the open tray's heading reads its store aisle once ("Aisle 4, Baking, store aisle 2"); the store chip beside
+     * it is decorative, so TalkBack does not read "store aisle 2" a second time.
+     */
+    @Test
+    fun trayStoreAisleReadOnce() {
+        compose.show(ListRig())
+        val id = "aisle-2-baking"
+        val mentions = compose.onAllNodes(
+            androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(ListTags.header(id))) and
+                androidx.compose.ui.test.hasContentDescription("store aisle", substring = true),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes()
+            // TalkBack skips everything under a node that clears its descendants' semantics.
+            .filter { node -> generateSequence(node.parent) { it.parent }.none { it.config.isClearingSemantics } }
+            .map { it.config[SemanticsProperties.ContentDescription].single() }
+        assertEquals(listOf("Aisle 4, Baking, store aisle 2"), mentions)
     }
 
     /** Item 78: a folded strip is one button read as "Aisle 1, Produce: 2 left of 5", with the action "Expand". */
@@ -282,6 +319,34 @@ class ListInteractionTest {
         compose.onNodeWithText("New list", substring = true).assertExists()
     }
 
+    /**
+     * Item 121 (§4.24, §15): Back closes the overflow menu and stays on the list (the List is the root destination, so
+     * Back reaching the system would close the app); with TalkBack the area outside the menu is a "Close menu" button.
+     */
+    @Test
+    fun backClosesMenu() {
+        compose.show(ListRig())
+        fun open() {
+            compose.onNodeWithTag(ListTags.MORE).performClick()
+            compose.waitForIdle()
+            assertTrue("the menu is open", compose.exists(LIST_MENU_TAG))
+        }
+        open()
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+        assertFalse("Back closes the menu", compose.exists(LIST_MENU_TAG))
+        assertFalse("and the app stays open", compose.activity.isFinishing)
+
+        open()
+        val scrim = config(LIST_MENU_SCRIM_TAG)
+        assertEquals("Close menu", scrim.getOrNull(SemanticsActions.OnClick)?.label)
+        assertEquals(listOf("Close menu"), scrim.getOrNull(SemanticsProperties.ContentDescription))
+        compose.onNodeWithTag(LIST_MENU_SCRIM_TAG).performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+        assertFalse("its TalkBack button closes the menu", compose.exists(LIST_MENU_TAG))
+        assertFalse(compose.activity.isFinishing)
+    }
+
     /** Item 121: with no trip yet, New trip is disabled ("No trip yet"). */
     @Test
     fun newTripDisabledWithoutTrip() {
@@ -311,6 +376,63 @@ class ListInteractionTest {
         rig.vm.switchList(ListFixture.LIST_ID)
         compose.waitForIdle()
         assertEquals("Trip sticker book, Sat 3 Oct: 10 of 24 stickers, 1 of 8 aisles stamped", summary())
+    }
+
+    /**
+     * Item 164 (§6.4): another list opens at its top, with its current tray in view, never at the old list's scroll
+     * position (both lists here have the same aisles, so the same item keys); the bar and the book come back with it.
+     */
+    @Test
+    fun switchListOpensAtTop() {
+        var s = ListFixture.longAisle()
+        val copies = s.list(ListFixture.LIST_ID)!!.items.mapIndexed { i, it ->
+            GroceryItem(id = "b$i", name = it.name, quantity = it.quantity, aisleId = it.aisleId, icon = it.icon, iconFit = it.iconFit, addedAt = it.addedAt)
+        }
+        s = s.newList("other", "Weekday shop", ListFixture.NOW).addItems("other", copies, ListFixture.NOW).first.switchList(ListFixture.LIST_ID)
+        val rig = ListRig(s)
+        compose.show(rig)
+        val d = compose.density.density
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput { swipeUp(startY = centerY + 120 * d, endY = top + 10 * d, durationMillis = 400) }
+        compose.onNodeWithTag(ListTags.LIST).performScrollToKey("end-note")
+        compose.waitForIdle()
+        assertTrue("list A is scrolled to its end", compose.exists(ListTags.END_NOTE))
+        rig.vm.switchList("other")
+        compose.waitForIdle()
+        assertEquals("Weekday shop", rig.vm.state.value.title)
+        val first = rig.vm.state.value.sections.first().id
+        assertTrue("the new list shows its first stop", compose.exists(ListTags.strip(first)) || compose.exists(ListTags.header(first)))
+        assertFalse("not the old list's end", compose.exists(ListTags.END_NOTE))
+        assertTrue("the add bar is back", compose.exists(earth.cora.picnic.ui.add.ADD_BAR_TAG))
+        assertEquals("the book is expanded again", 76f, compose.boundsOf(BookTags.BOOK).height / d, 1f)
+    }
+
+    /**
+     * §6.1 aisle behaviour (D2): opening a folded strip herself scrolls its tray into view, smoothly. Household, the last
+     * stop with eleven things, sits just above the add bar; after the tap its band is at the top of the list and its
+     * first three rows show above the add bar.
+     */
+    @Test
+    fun openScrollsIntoView() {
+        val rig = ListRig(ListFixture.longAisle().setOpenAisle(ListFixture.LIST_ID, "produce"))
+        compose.show(rig)
+        val d = compose.density.density
+        compose.onNodeWithTag(ListTags.LIST).performScrollToKey("end-note")
+        compose.waitForIdle()
+        val dock = compose.boundsOf(earth.cora.picnic.ui.add.ADD_BAR_TAG)
+        val strip = compose.boundsOf(ListTags.strip("household"))
+        assertTrue("the strip starts near the bottom ($strip, add bar top ${dock.top / d} dp)", strip.bottom <= dock.top && strip.top >= dock.top - 160 * d)
+        compose.onNodeWithTag(ListTags.strip("household")).performClick()
+        compose.waitForIdle()
+        val list = compose.boundsOf(ListTags.LIST)
+        val header = compose.boundsOf(ListTags.header("household"))
+        assertTrue("the band is at the top of the list (band ${header.top / d}, list ${list.top / d} dp)", header.top >= list.top - 1f && header.top <= list.top + 20 * d)
+        val bar = compose.boundsOf(earth.cora.picnic.ui.add.ADD_BAR_TAG)
+        val rows = rig.vm.state.value.sections.first { it.id == "household" }.rows.take(3)
+        assertEquals(3, rows.size)
+        for (r in rows) {
+            val b = compose.boundsOf(ListTags.row(r.id))
+            assertTrue("${r.name} shows above the add bar (${b.bottom / d} ≤ ${bar.top / d} dp)", b.bottom <= bar.top + 0.5f)
+        }
     }
 
     /**

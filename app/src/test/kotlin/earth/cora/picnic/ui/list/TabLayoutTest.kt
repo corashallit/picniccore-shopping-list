@@ -121,4 +121,56 @@ class TabLayoutTest {
     /** Item 79: the fixture's Deli & meat, a short name: the full ribbon from the end of the text. */
     @Test
     fun ribbonNeverOverTextShortName() = ribbons(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, ""))
+
+    /**
+     * Item 107 (§4.12): the badge overhangs its basket by 12 dp and, with large text or a long count, grows to the right
+     * into a pill; the basket stands far enough left that the badge's white face and its hard shadow keep clear of the
+     * chevron's round face (8 dp inside its 48 dp target), on the open tray's band and on a folded strip. Household holds
+     * eleven things with one got: its badge reads "10".
+     */
+    @Test
+    fun badgeClearsTheChevronAtLargeText() = badgeClearsTheChevron(2f, grows = true)
+
+    @Test
+    fun badgeClearsTheChevron() = badgeClearsTheChevron(1f, grows = false)
+
+    private fun badgeClearsTheChevron(fontScale: Float, grows: Boolean) {
+        val rig = ListRig(ListFixture.longAisle())
+        val probe = RecordingProbe()
+        compose.show(rig, probe, fontScale = fontScale)
+        val id = "household"
+        assertEquals(10, rig.vm.state.value.sections.first { it.id == id }.toGet)
+        // The open tray: the badge itself (in the unmerged tree), and the chevron's target.
+        compose.onNodeWithTag(ListTags.LIST).performScrollToKey("header:$id")
+        compose.waitForIdle()
+        val badge = compose.onAllNodes(
+            androidx.compose.ui.test.hasTestTag(earth.cora.picnic.ui.list.motion.BADGE_TAG) and
+                androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(ListTags.header(id))),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().single().boundsInRoot
+        val trayBasket = probe["trayBasket:$id"]
+        assertEquals("fs $fontScale: the badge's left edge 10 dp inside the basket's right edge", trayBasket.right - 10 * dp, badge.left, 1f)
+        if (grows) assertTrue("fs $fontScale: \"10\" is a pill wider than the 22 dp circle (${badge.width / dp} dp)", badge.width > 23 * dp)
+        val chevron = compose.boundsOf(ListTags.chevron(id))
+        val shadow = 1.6f * dp
+        fun air(badgeRight: Float, chevronLeft: Float) = (chevronLeft + CHEVRON_FACE_INSET * dp - badgeRight - shadow) / dp
+        val trayAir = air(badge.right, chevron.left)
+        assertTrue("fs $fontScale, tray: the badge and its shadow end before the chevron's face ($trayAir dp of air)", trayAir >= 2f)
+
+        // The folded strip (another aisle open): the same badge, on the strip's basket, before the strip's chevron.
+        compose.runOnIdle { rig.vm.openSection("produce") }
+        compose.waitForIdle()
+        compose.onNodeWithTag(ListTags.LIST).performScrollToKey("strip:$id")
+        compose.waitForIdle()
+        val strip = compose.boundsOf(ListTags.strip(id))
+        val basket = probe["basket:$id"]
+        val stripBadgeRight = basket.right - 10 * dp + badge.width
+        val stripAir = air(stripBadgeRight, strip.right - 48 * dp)
+        assertTrue("fs $fontScale, strip: the badge and its shadow end before the chevron's face ($stripAir dp of air)", stripAir >= 2f)
+    }
+
+    private companion object {
+        /** ChevronFace: its round face starts 8 dp inside the 48 dp target. */
+        const val CHEVRON_FACE_INSET = 8f
+    }
 }

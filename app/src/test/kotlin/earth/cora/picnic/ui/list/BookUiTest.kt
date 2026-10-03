@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeUp
@@ -16,12 +17,14 @@ import earth.cora.picnic.ui.add.ADD_FIELD_TAG
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.common.focusWithoutTouch
 import earth.cora.picnic.ui.list.motion.BookFx
+import earth.cora.picnic.ui.theme.BookLayout
 import earth.cora.picnic.ui.theme.BookRules
 import earth.cora.picnic.ui.theme.BookTags
 import earth.cora.picnic.core.model.setOpenAisle
 import androidx.compose.ui.test.click
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -114,18 +117,33 @@ class BookUiTest {
         compose.waitForIdle()
         val dp = compose.density.density
         fun height() = compose.boundsOf(BookTags.BOOK).height / dp
+        // The app bar above it: from the top of the stack to the book (72 dp expanded, 56 collapsed, §4.2).
+        fun bar() = (compose.boundsOf(BookTags.BOOK).top - compose.boundsOf(ListTags.TOP_STACK).top) / dp
         assertEquals(76f, height(), 1f)
+        val barOpen = bar()
         compose.mainClock.autoAdvance = false
-        fun samples(): List<Float> = buildList { repeat(16) { compose.frames(1); add(height()) } }
+        val bars = mutableListOf<Float>()
+        fun samples(): List<Float> = buildList { repeat(16) { compose.frames(1); add(height()); bars += bar() } }
         screen.scrolledDown = true
         val down = samples()
+        val barDown = bars.toList()
         assertTrue("passes between 76 and 40 dp on the way down: $down", down.any { it in 45f..71f })
         assertTrue("never jumps more than half the way in one frame: $down", down.zipWithNext().all { (a, b) -> kotlin.math.abs(a - b) < 18f })
         assertEquals("settled on the strip by about 200 ms: $down", 40f, down.drop(14).last(), 1f)
+        assertEquals("the bar collapses to 56 dp: $barDown", 56f, barDown.last(), 1f)
+        bars.clear()
         screen.scrolledDown = false
         val up = samples()
+        val barUp = bars.toList()
         assertTrue("and on the way up: $up", up.any { it in 45f..71f })
         assertEquals(76f, up.last(), 1f)
+        assertEquals("the bar opens to 72 dp again: $barUp", barOpen, barUp.last(), 1f)
+        // The bar's height never snaps either (its subtitle and title follow the same animation): at most ~4 dp a frame
+        // over its 16 dp travel, in both directions (§6.1: every height change animates).
+        for ((name, b) in listOf("down" to listOf(barOpen) + barDown, "up" to listOf(barDown.last()) + barUp)) {
+            assertTrue("the bar moves no more than 4 dp a frame on the way $name: $b", b.zipWithNext().all { (x, y) -> kotlin.math.abs(x - y) <= 4.5f })
+            assertTrue("and passes in between on the way $name: $b", b.any { it in 58f..70f })
+        }
         compose.mainClock.autoAdvance = true
     }
 
@@ -254,6 +272,71 @@ class BookUiTest {
         val twins = probe.keys("collapsedTwin:").associateWith { probe[it] }
         assertTrue("the new twin (spot 10) shows in the strip: ${twins.keys}", "collapsedTwin:10" in twins)
         assertEquals("in the newest (right-most) place", "collapsedTwin:10", twins.maxByOrNull { it.value.right }!!.key)
+    }
+
+    /**
+     * Item 161 (§7.4): the collapsed strip fits the newest twins first. With the app's own 14-aisle store on a 360 dp
+     * phone (eight stickers, so the "+n" pearl shows too), the strip keeps the newest three twins, the magic appear
+     * lands in the right-most place, every stop is either a dot or counted in a "+n" pill, the now stop's dot is drawn,
+     * and nothing covers anything else: the pearl never lies on a dot. At font scale 1.0 and 1.3 (the date tag grows).
+     */
+    @Test
+    @Config(qualifiers = "w360dp-h560dp-xxhdpi")
+    fun collapsedDefaultAisles() = collapsedDefaultAislesAt(1f)
+
+    @Test
+    @Config(qualifiers = "w360dp-h560dp-xxhdpi")
+    fun collapsedDefaultAislesLargeText() = collapsedDefaultAislesAt(1.3f)
+
+    private fun collapsedDefaultAislesAt(fontScale: Float) {
+        var app = ListFixture.everyDefaultAisle()
+        app.items().filter { !it.checked }.take(5).forEachIndexed { i, item ->
+            app = app.toggleChecked(ListFixture.LIST_ID, item.id, ListFixture.TRIP_START + (10 + i) * ListFixture.MIN)
+        }
+        val rig = ListRig(app)
+        val probe = RecordingProbe()
+        compose.show(rig, probe, fontScale = fontScale)
+        val d = compose.density.density
+        assertEquals("a short window: the 40 dp strip", 40f, compose.boundsOf(BookTags.BOOK).height / d, 1f)
+        checkCollapsedStrip(rig, probe, "fs $fontScale, eight stickers")
+
+        // A check while collapsed: the new twin magic-appears in the newest (right-most) place.
+        val next = rig.vm.state.value.sections.first { it.id == rig.vm.state.value.nowSectionId }.rows.first { !it.checked }.id
+        compose.onNodeWithTag(ListTags.LIST).performScrollToKey(next)
+        compose.waitForIdle()
+        compose.onNodeWithTag(ListTags.row(next)).performTouchInput { click(center) }
+        compose.waitForIdle()
+        val slot = rig.vm.state.value.row(next)!!.slot!!
+        val twins = probe.keys("collapsedTwin:").associateWith { probe[it] }
+        assertEquals("fs $fontScale: the new twin is the right-most", "collapsedTwin:$slot", twins.maxByOrNull { it.value.right }?.key)
+        checkCollapsedStrip(rig, probe, "fs $fontScale, after the check")
+    }
+
+    private fun checkCollapsedStrip(rig: ListRig, probe: RecordingProbe, stage: String) {
+        val book = compose.boundsOf(BookTags.BOOK)
+        val ui = rig.vm.state.value
+        val stops = ui.book!!.stamps
+        val twins = probe.keys("collapsedTwin:").map { probe[it] }
+        assertTrue("$stage: the newest three twins at least (${twins.size})", twins.size >= BookLayout.COLLAPSED_MIN_TWINS)
+        val dots = probe.keys("collapsedDot:")
+        val pills = probe.keys("collapsedMore:")
+        val counted = dots.size + pills.sumOf { it.substringAfterLast(':').toInt() }
+        assertEquals("$stage: every stop is a dot or counted in a pill ($dots, $pills)", stops.size, counted)
+        assertTrue("$stage: the now stop's dot is drawn ($dots)", "collapsedDot:${ui.nowSectionId}" in dots)
+        val marks = (dots + pills).map { probe[it] }
+        val pearl = probe.bounds["collapsedPearl"]
+        val shown = ui.book.stickers.size
+        if (shown > twins.size) assertNotNull("$stage: the pearl counts the rest", pearl)
+        fun overlaps(a: androidx.compose.ui.geometry.Rect, b: androidx.compose.ui.geometry.Rect) =
+            a.left < b.right - 0.5f && b.left < a.right - 0.5f
+        for (m in marks) {
+            if (pearl != null) assertFalse("$stage: the pearl $pearl lies on a dot $m", overlaps(pearl, m))
+            for (t in twins) assertFalse("$stage: a twin $t lies on a dot $m", overlaps(t, m))
+        }
+        if (pearl != null) for (t in twins) assertFalse("$stage: the pearl $pearl lies on a twin $t", overlaps(pearl, t))
+        for (r in marks + twins + listOfNotNull(pearl)) {
+            assertTrue("$stage: inside the book ($r in $book)", r.left >= book.left && r.right <= book.right)
+        }
     }
 
     /** Item 161: an empty list has no book (the empty state takes the screen, §4.21). */

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -374,17 +375,23 @@ private fun badgeStyle(color: Color): androidx.compose.ui.text.TextStyle {
 private fun badgeLabel(count: Int): String = if (count > 99) "99+" else count.toString()
 
 /**
- * How far [count]'s badge reaches past the basket box's right edge (the flag slot's 12 dp, more once it grows into a
- * pill with large text or a long count; 0 when hidden at 0), so a strip or a tray band can keep it clear of the
- * chevron beside the basket (item 107).
+ * How far the badge reaches past the basket box's right edge for any count up to [maxCount] (the flag slot's 12 dp, more
+ * once it grows into a pill with large text or a long count): sized for the widest numeral with as many digits as
+ * [maxCount] ("10" is wider than "11"), so a strip or a tray band can keep it clear of the chevron beside the basket
+ * whatever it shows (item 107).
  */
 @Composable
-internal fun badgeOverhang(count: Int): Dp {
-    if (count <= 0) return 0.dp
+internal fun badgeOverhang(maxCount: Int): Dp {
     val measurer = rememberTextMeasurer(cacheSize = 2)
-    val layout = measurer.measure(badgeLabel(count), badgeStyle(Color.Black))
+    val style = badgeStyle(Color.Black)
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val label = badgeLabel(maxCount.coerceAtLeast(1))
+    val widest = remember(label.length, style, density) {
+        val labels = if (label.endsWith("+")) listOf(label) else ('0'..'9').map { it.toString().repeat(label.length) }
+        labels.map { measurer.measure(it, style).size }.maxBy { it.width }
+    }
     val d = BasketManifest.BADGE_SIZE_DP.dp
-    val (w, _) = pillSize(layout.size.width, layout.size.height, minW = d, minH = d, padH = 10.dp)
+    val (w, _) = pillSize(widest.width, widest.height, minW = d, minH = d, padH = 10.dp)
     return w - (d - BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp)
 }
 

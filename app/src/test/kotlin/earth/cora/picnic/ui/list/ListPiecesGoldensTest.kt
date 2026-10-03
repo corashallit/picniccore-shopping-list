@@ -253,6 +253,15 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
         ListScreen(ListFixture.ui(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, "deli-meat")), ListActions(), screen = remember { ListScreenState(peek = "breakfast") })
     }
 
+    /**
+     * A capped note (a long aisle with too little room, item 114): the first lines, then "+8 more" in ballpoint, which
+     * holds on the lemon note in Day and in Glow (§2.2; Glow's soft ink would all but vanish on it).
+     */
+    @Test
+    fun peekNoteMore() = compose.recordPiece(name("peek_note_more"), variant, width = 240.dp, pad = 16.dp) {
+        PeekNote(section(ListFixture.ui(ListFixture.longAisle()), "household"), maxHeight = 130.dp)
+    }
+
     companion object {
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{1}")

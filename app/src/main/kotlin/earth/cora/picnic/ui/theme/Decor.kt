@@ -344,9 +344,16 @@ private fun StickerSheetArt() {
             ItemIcon(IconRef("strawberry"), null, Modifier.offset(140.dp, 11.dp), size = 44.dp)
             DecorSticker("bee", Modifier.offset(44.dp, 58.dp).rotate(4f), size = 42.dp)
             ItemIcon(IconRef("lemonade"), null, Modifier.offset(106.dp, 56.dp), size = 44.dp)
+            // The caption is printed on the sheet: like the stickers it keeps the art's size at any font scale, so it
+            // always fits its fixed 204 dp sheet (decorative; the empty state's own title and body grow).
+            val art = 1f / LocalDensity.current.fontScale
             Text(
                 caption,
-                style = PicnicTheme.type.doodle.copy(color = c.ballpointSoft, fontSize = PicnicTheme.type.caption.fontSize, lineHeight = PicnicTheme.type.caption.lineHeight),
+                style = PicnicTheme.type.doodle.copy(
+                    color = c.ballpointSoft,
+                    fontSize = PicnicTheme.type.caption.fontSize * art,
+                    lineHeight = PicnicTheme.type.caption.lineHeight * art,
+                ),
                 maxLines = 1,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
             )

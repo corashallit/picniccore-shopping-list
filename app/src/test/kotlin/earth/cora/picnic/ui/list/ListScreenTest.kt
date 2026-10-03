@@ -3,6 +3,7 @@ package earth.cora.picnic.ui.list
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -12,6 +13,8 @@ import earth.cora.picnic.core.model.list
 import earth.cora.picnic.core.model.setOpenAisle
 import earth.cora.picnic.ui.common.PHONE_360
 import org.junit.Assert.assertEquals
+import androidx.compose.foundation.layout.fillMaxSize
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -84,5 +87,42 @@ class ListScreenTest {
         assertEquals(listOf("strawberries", "bananas", "apples", "carrots", "broccoli"), order())
         assertEquals("produce", rig.app.list(ListFixture.LIST_ID)!!.openAisle)
         assertEquals("still 24 rows, each in its aisle", 24, rig.vm.state.value.sections.sumOf { it.rows.size })
+    }
+
+    /**
+     * §6.5, §6.6: turning the phone or a dark-mode switch recreates the screen; the open menu, the New trip and Trip book
+     * sheets and the folded bar come back as they were (the list keeps its own scroll).
+     */
+    @Test
+    fun screenStateSurvivesRecreation() {
+        val restore = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        var screen: ListScreenState? = null
+        restore.setContent {
+            earth.cora.picnic.ui.theme.PicnicTheme {
+                val s = rememberListScreenState()
+                screen = s
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) { ListScreen(ListFixture.ui(), ListActions(), screen = s) }
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag(ListTags.LIST).performScrollToKey("end-note")
+        compose.waitForIdle()
+        val before = screen!!
+        compose.runOnIdle {
+            before.menuOpen = true
+            before.tripBookOpen = true
+            before.scrolledDown = true
+        }
+        compose.waitForIdle()
+        restore.emulateSavedInstanceStateRestore()
+        compose.waitForIdle()
+        val after = screen!!
+        assertTrue("a fresh state object after recreation", after !== before)
+        assertTrue("the menu is still open", after.menuOpen)
+        assertTrue("the Trip book sheet is still open", after.tripBookOpen)
+        assertFalse(after.newTripOpen)
+        assertTrue("the bar and the book stay folded", after.scrolledDown)
+        compose.onNodeWithTag(LIST_MENU_TAG).assertExists()
+        assertTrue("the list kept its scroll", compose.onAllNodesWithTag(ListTags.END_NOTE).fetchSemanticsNodes().isNotEmpty())
     }
 }

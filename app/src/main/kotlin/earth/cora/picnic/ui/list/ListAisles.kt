@@ -56,7 +56,6 @@ import earth.cora.picnic.ui.list.motion.MotionBasket
 import earth.cora.picnic.ui.list.motion.MotionClock
 import earth.cora.picnic.ui.list.motion.StripRibbon
 import earth.cora.picnic.ui.list.motion.badgeOverhang
-import earth.cora.picnic.ui.theme.gen.BasketManifest
 import earth.cora.picnic.ui.theme.BasketSize
 import earth.cora.picnic.ui.theme.ChevronFace
 import earth.cora.picnic.ui.theme.DecorSticker
@@ -170,7 +169,7 @@ internal fun FoldedStrip(
     val peek by rememberUpdatedState(onPeek)
     val threshold = LocalTimeouts.current.holdThresholdMs
     val probe = LocalPieceProbe.current
-    val badgeExtra = badgeExtra(section)
+    val badgeGap = basketGap(section, 6.dp)
     val metaText = buildAnnotatedString {
         section.storeAisle?.let { append(stringResource(R.string.list_strip_store_prefix, it)) }
         if (toGet == 0) {
@@ -276,9 +275,9 @@ internal fun FoldedStrip(
         val chevron = measurables.first { it.layoutId == "chevron" }.measure(Constraints.fixed(px(48.dp), px(48.dp)))
         val basketM = measurables.first { it.layoutId == "basket" }.measure(Constraints())
         val chevronX = w - chevron.width
-        // The badge overhangs the basket box by 12 dp; a wider one (large text, a long count) moves the basket left by
-        // the difference, so it keeps its clearance from the chevron (item 107).
-        val basketX = chevronX - px(6.dp) - px(badgeExtra) - basketM.width
+        // The badge overhangs the basket box (12 dp, more as a pill): the basket stands far enough left to keep it clear
+        // of the chevron (item 107).
+        val basketX = chevronX - px(badgeGap) - basketM.width
         val start = px(6.dp)
         // The tab ends 8 dp before the basket (§4.10); the meta line wraps under it.
         val textMax = (basketX - px(8.dp) - start).coerceAtLeast(px(48.dp))
@@ -362,7 +361,7 @@ internal fun TrayHeader(
     val collapse = stringResource(R.string.list_tray_collapse, earth.cora.picnic.ui.list.motion.MotionStrings.spoken(section.displayName))
     val heading = trayHeading(section)
     val fold by rememberUpdatedState(onFold)
-    val badgeExtra = badgeExtra(section)
+    val badgeGap = basketGap(section, 4.dp)
     Layout(
         modifier = modifier
             .fillMaxWidth()
@@ -440,7 +439,7 @@ internal fun TrayHeader(
         val chevron = measurables.first { it.layoutId == "chevron" }.measure(Constraints.fixed(px(48.dp), px(48.dp)))
         val basketM = measurables.first { it.layoutId == "basket" }.measure(Constraints())
         val chevronX = w - px(TrayMetrics.border) - px(2.dp) - chevron.width
-        val basketX = chevronX - px(4.dp) - px(badgeExtra) - basketM.width
+        val basketX = chevronX - px(badgeGap) - basketM.width
         val start = px(TrayMetrics.border) + px(6.dp)
         val chip = measurables.firstOrNull { it.layoutId == "chip" }?.measure(Constraints())
         // The tab ends 8 dp before the store chip (or the basket, §4.10); a chip may run on to 2 dp from the basket's box
@@ -575,11 +574,17 @@ internal fun SkeletonStrip(modifier: Modifier = Modifier) {
 }
 
 /**
- * How much wider than its 22 dp circle [section]'s badge can grow (0 at font scale 1.0 for up to two digits): sized for
- * the aisle's whole count, the most it ever shows, so the basket does not shift as she checks things off (item 107).
+ * The room between the basket's box and the chevron's 48 dp target beside it: at least [least], and enough that the
+ * badge overhanging the basket (12 dp as the 22 dp circle, more as a pill with large text or a long count) ends
+ * [BADGE_CLEARANCE] short of the chevron's round face, which starts [CHEVRON_FACE_INSET] inside its target. It is sized
+ * for the aisle's whole count, the most the badge ever shows, so the basket does not shift as she checks things off
+ * (§4.12, item 107).
  */
 @Composable
-private fun badgeExtra(section: SectionUi): Dp = (badgeOverhang(section.total) - BADGE_OVERHANG).coerceAtLeast(0.dp)
+private fun basketGap(section: SectionUi, least: Dp): Dp = maxOf(least, badgeOverhang(section.total) + BADGE_CLEARANCE - CHEVRON_FACE_INSET)
 
-/** The badge's overhang past the basket box at its 22 dp size (§4.12: right −12 dp). */
-private val BADGE_OVERHANG = BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp
+/** The chevron's round face starts this far inside its 48 dp target (ChevronFace: a 30 dp face in a 34 dp canvas). */
+private val CHEVRON_FACE_INSET = 8.dp
+
+/** Air between the badge's white face and the chevron's face (its 1.6 dp hard shadow sits in it). */
+private val BADGE_CLEARANCE = 4.dp

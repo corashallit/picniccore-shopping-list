@@ -2,6 +2,7 @@ package earth.cora.picnic.ui.list
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performTouchInput
@@ -13,6 +14,7 @@ import earth.cora.picnic.ui.add.ADD_FAB_TAG
 import earth.cora.picnic.ui.add.ADD_FIELD_TAG
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.theme.TOAST_TAG
+import kotlinx.coroutines.launch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -75,5 +77,28 @@ class FabTest {
         compose.waitForIdle()
         assertTrue(compose.exists(ADD_BAR_TAG))
         assertTrue(compose.onNodeWithTag(ADD_FIELD_TAG).fetchSemanticsNode().config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Focused) { false })
+    }
+
+    /**
+     * Items 116 and 71: when the list empties while she is scrolled down (here every item goes at once, as after New
+     * trip → "Clear what I got" on a list that was all got), the empty state comes with the docked add bar, not the
+     * FAB, and the full 72 dp app bar with its subtitle.
+     */
+    @Test
+    fun emptyListShowsTheBar() {
+        val rig = ListRig(ListFixture.longAisle())
+        compose.show(rig)
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput { swipeUp(startY = centerY + 120 * dp, endY = top + 10 * dp, durationMillis = 500) }
+        compose.waitForIdle()
+        assertTrue("scrolled down: the FAB", compose.exists(ADD_FAB_TAG))
+        rig.scope.launch {
+            rig.store.update { s -> s.copy(lists = s.lists.map { if (it.id == ListFixture.LIST_ID) it.copy(items = emptyList(), trip = null) else it }) }
+        }
+        compose.waitForIdle()
+        assertTrue("the empty state", compose.exists(ListTags.EMPTY))
+        assertTrue("with the add bar docked", compose.exists(ADD_BAR_TAG))
+        assertFalse("not the FAB", compose.exists(ADD_FAB_TAG))
+        assertEquals("the full app bar", 72f, compose.boundsOf(ListTags.TOP_STACK).height / dp, 1f)
+        compose.onNodeWithText(ListFixture.ui().storeName, substring = true).assertExists()
     }
 }
