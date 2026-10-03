@@ -424,7 +424,7 @@ add('catfood', 'Cat food', [
     F(('ellipse', 30.4, 24.4, 3.4, 1.6), 'grape', 'w', ol=1.3, cut=False),
 ], gloss=[G('M11.8 31.4V34.6', 2.4), G('M13.8 22.6Q17 20.8 21 20.6', 1.8)], qty='6 × 156 g', aisle='household')
 
-# 41 chicken thighs on a foam tray: strawberry thighs, sakura fat edge, white bone knuckles, film glint
+# 41 chicken thighs on a foam tray: strawberry thighs, sakura fat edge, white bone knuckles, a white price label, film glint
 TH1 = 'M8 28.6C7.4 23.4 11.4 19.4 17 19.4C22.2 19.4 25.6 22.4 25.4 27C25.2 30.6 22.4 32.6 17.6 32.6C12.4 32.6 8.4 31.6 8 28.6Z'
 TH2 = 'M22.6 28.4C22.2 23.2 26 19.6 31.4 19.6C36.8 19.6 40.6 22.6 40.2 27.2C40 30.8 37 32.6 32.2 32.6C27 32.6 23 31.4 22.6 28.4Z'
 add('chickentray', 'Chicken thighs', [
@@ -435,7 +435,7 @@ add('chickentray', 'Chicken thighs', [
     F(('circle', 43.4, 24, 1.9), 'strawberry', 'w', ol=1.4), F(('circle', 43.4, 27.2, 1.9), 'strawberry', 'w', ol=1.4),
     F(('path', TH2), 'strawberry', 'p', tex=['M23.6 25.8C24.2 21.8 28 20 32.2 20.2C35.8 20.4 38.8 22 39.6 25'], tex_t='#FF9FC8', tex_w=3.6, det=['M28.2 27.4Q31.4 25.6 35 27.4'], det_t='#FF9FC8', det_w=2),
     F(('path', 'M6.6 29.8H41.4L38.6 39.8Q38 42 35.6 42H12.4Q10 42 9.4 39.8Z'), 'ramune', 'p', band=.32),
-    F(('rect', 25.6, 32.4, 9.6, 5, 1.4), 'lemon', 'lp', ol=1.2, cut=False),
+    F(('rect', 25.6, 32.4, 9.6, 5, 1.4), 'ramune', 'w', ol=1.2, cut=False),
 ], gloss=[G('M19.4 31.2L30.6 21.4', 2), DOT(32.6, 19.8, .9), G('M8.6 31.6H16', 2.2)], qty='1 kg tray', aisle='meat')
 
 # 42 baking powder tin

@@ -28,7 +28,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.CornerBasedShape
 import earth.cora.picnic.core.catalog.IconCatalog
-import earth.cora.picnic.icons.IconImages
+import earth.cora.picnic.icons.StickerArt
 import earth.cora.picnic.platform.DefaultTimeouts
 import earth.cora.picnic.platform.Timeouts
 import java.time.LocalTime
@@ -106,8 +106,11 @@ private val MIDNIGHT_START: LocalTime = LocalTime.of(23, 0)
 private val MIDNIGHT_END: LocalTime = LocalTime.of(4, 0)
 private const val GOLDEN_MINUTES = 30L
 
-/** Bitmap loader for ItemIcon's live stickers. MainActivity provides AppContainer.iconImages; previews get none. */
-val LocalIconImages = staticCompositionLocalOf<IconImages> { IconImages.None }
+/**
+ * Where ItemIcon finds live-drawn stickers (a bitmap and its cut path, §3.3, §19.2). MainActivity provides
+ * AppContainer.stickerArt; previews and tests get [StickerArt.None] and draw the library art.
+ */
+val LocalStickerArt = staticCompositionLocalOf<StickerArt> { StickerArt.None }
 
 /** Icon catalog (category fallbacks for keys without library art). */
 val LocalIconCatalog = staticCompositionLocalOf { IconCatalog.default }

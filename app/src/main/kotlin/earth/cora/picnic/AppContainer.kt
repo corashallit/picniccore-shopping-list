@@ -19,11 +19,11 @@ import earth.cora.picnic.core.store.AlbumStore
 import earth.cora.picnic.core.store.JsonFileAlbumStore
 import earth.cora.picnic.core.store.JsonFileStateStore
 import earth.cora.picnic.core.store.StateStore
+import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.icons.AppIconRepository
-import earth.cora.picnic.icons.AssetIconImages
-import earth.cora.picnic.icons.BundledIcons
-import earth.cora.picnic.icons.IconImages
+import earth.cora.picnic.icons.AppStickerArt
 import earth.cora.picnic.icons.IconRepository
+import earth.cora.picnic.icons.StickerArt
 import earth.cora.picnic.platform.AndroidAnnouncer
 import earth.cora.picnic.platform.AndroidFeedback
 import earth.cora.picnic.platform.AndroidTimeouts
@@ -124,7 +124,7 @@ class AppContainer(private val app: Application) {
 
     /**
      * The sticker album: filesDir/album.json, next to state.json on the backup allow-list (§7.2, amendment A5).
-     * Phase 0: WP3's stub keeps it in memory; New trip writes it BEFORE state.json once trips exist.
+     * Filing writes it BEFORE state.json (TripFiling); [startOnce] keeps it in step with every committed state.
      */
     val album: AlbumStore by lazy { JsonFileAlbumStore(File(app.filesDir, "album.json")) }
 
@@ -150,13 +150,19 @@ class AppContainer(private val app: Application) {
     /** Day / Glow / Dusk / Golden (§2.5); MainActivity feeds it the system dark mode (WP4). */
     val themeVariants: ThemeVariantSource by lazy { ThemeVariantSource(settings, clock, SunClock, places) }
 
-    private val bundledIcons: BundledIcons by lazy { BundledIcons(app) }
+    /**
+     * Sticker art for ItemIcon (§3.3, §19.2), provided to the theme as LocalStickerArt: library vectors from
+     * StickerManifest, live stickers from filesDir/icons/custom/<id>.webp and their `.cut` paths, decoded off the main
+     * thread into a bounded memory cache.
+     */
+    private val appStickerArt: AppStickerArt by lazy { AppStickerArt(File(AppIconRepository.iconsDir(app), "custom")) }
 
-    private val assetIconImages: AssetIconImages by lazy {
-        AssetIconImages(bundledIcons, catalog, File(AppIconRepository.iconsDir(app), "custom"))
-    }
+    val stickerArt: StickerArt get() = appStickerArt
 
-    /** The icon cascade on device: decider batcher, live drawing queue, bespoke cache (§8.3). */
+    /**
+     * The icon cascade on device: decider batcher, live drawing queue (v4), bespoke cache (§8.3). A redraw that
+     * deletes the file it replaced drops that sticker from [stickerArt]'s memory too.
+     */
     val icons: IconRepository by lazy {
         AppIconRepository(
             app = app,
@@ -167,14 +173,10 @@ class AppContainer(private val app: Application) {
             catalog = catalog,
             appScope = appScope,
             clock = clock,
-            bundled = bundledIcons,
             album = album,
-            onIconReplaced = assetIconImages::evictCustom,
+            onIconReplaced = appStickerArt::evict,
         )
     }
-
-    /** Bitmap loader provided to the theme layer through LocalIconImages. */
-    val iconImages: IconImages get() = assetIconImages
 
     val photos: PhotoPreparer by lazy { CapturePhotoPreparer(app) }
 
@@ -184,7 +186,7 @@ class AppContainer(private val app: Application) {
     private val _ready = MutableStateFlow(false)
 
     /**
-     * True once [startOnce] has parsed the icon catalog (a ~105 KB JSON resource) off the main
+     * True once [startOnce] has parsed the icon catalog (a ~110 KB JSON resource) off the main
      * thread. MainActivity keeps the splash screen up and composes nothing until then, so no
      * ViewModel factory ever parses it on the main thread.
      */
@@ -194,9 +196,10 @@ class AppContainer(private val app: Application) {
 
     /**
      * Once per process (MainActivity calls it on every onCreate; only the first call does anything),
-     * all in [appScope]: warm the catalog and the bundled-icon index, then resume the icon cascade
-     * (PENDING items from an offline or token-less session), sweep stale camera captures, and watch
-     * for a token being added.
+     * all in [appScope]: warm the catalog, then keep the album in step with the state (TripFiling.launchAlbumSync:
+     * collects check-offs, repairs a filing interrupted between album.json and state.json, §7.2), resume the icon
+     * cascade (PENDING items from an offline or token-less session), sweep stale camera captures, and watch for a
+     * token being added.
      */
     fun startOnce() {
         if (!started.compareAndSet(false, true)) return
@@ -204,9 +207,9 @@ class AppContainer(private val app: Application) {
         appScope.launch {
             withContext(Dispatchers.IO) {
                 catalog.match("milk") // parses the catalog and builds its match index
-                bundledIcons.keys
             }
             _ready.value = true
+            TripFiling.launchAlbumSync(appScope, store, album, catalog, clock)
             icons.resumePending()
             withContext(Dispatchers.IO) { Captures.sweepStale(app) }
         }

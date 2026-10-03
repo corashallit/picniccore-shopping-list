@@ -16,17 +16,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Canvas
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import earth.cora.picnic.core.model.IconRef
 import org.junit.Rule
@@ -144,15 +137,39 @@ class ThemeExtraGoldensTest(private val variant: ThemeVariant, private val v: St
     @Test fun pixel() = compose.recordGolden("itemicon_pixel_$v", variant) { StickerLooksRow(StickerLook.Pixel) }
 
     @Test fun holoBitmap() {
-        val live = FakeLiveStickers(listOf("strawberry", "maple_syrup", "croissant"), px = 208)
+        val art = LiveStickerFixtures.art()
         compose.recordGolden("itemicon_holo_bitmap_$v", variant) {
-            CompositionLocalProvider(LocalLiveStickers provides live) {
-                // The holo bitmaps (foil clipped to the bitmap's alpha), then the same bitmaps plain.
+            CompositionLocalProvider(LocalStickerArt provides art) {
+                // The live stickers in holo (foil clipped to the bitmap's alpha), then the same stickers plain.
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    for (k in live.keys) ItemIcon(IconRef(k, customIconId = "live-$k"), null, holo = true)
+                    for ((item, _) in LiveStickerFixtures.V4) ItemIcon(LiveStickerFixtures.v4Ref(item), null, holo = true)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    for (k in live.keys) ItemIcon(IconRef(k, customIconId = "live-$k"), null)
+                    for ((item, _) in LiveStickerFixtures.V4) ItemIcon(LiveStickerFixtures.v4Ref(item), null)
+                }
+            }
+        }
+    }
+
+    /**
+     * A legacy live icon (checklist 47; §3.3 step 5): drawn as it is, with its own baked outline, border and shadow and
+     * none added, at row, basket-mini and book sizes; its ghost is the monochrome silhouette at 18 % (no cut to peel
+     * along). Below, at the 120 dp hero size, the legacy icon beside the same item redrawn in v4.
+     */
+    @Test fun legacyBitmap() {
+        val art = LiveStickerFixtures.art()
+        compose.recordGolden("itemicon_legacy_bitmap_$v", variant) {
+            CompositionLocalProvider(LocalStickerArt provides art) {
+                val legacy = LiveStickerFixtures.legacyRef()
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ItemIcon(legacy, null, size = 52.dp)
+                    ItemIcon(legacy, null, size = 52.dp, ghost = true)
+                    ItemIcon(legacy, null, size = 30.dp)
+                    ItemIcon(legacy, null, size = 22.dp)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ItemIcon(legacy, null, size = 120.dp)
+                    ItemIcon(LiveStickerFixtures.v4Ref(LiveStickerFixtures.LEGACY), null, size = 120.dp)
                 }
             }
         }
@@ -194,12 +211,14 @@ class ThemeLiveBitmapGoldensTest(private val variant: ThemeVariant, private val 
         fun params() = dayAndGlow()
     }
 
+    /** A library sticker, then the three live v4 stickers: the shadow and the die-cut edge come from each one's cut path. */
     @Test fun liveBitmap() {
-        val live = FakeLiveStickers(listOf("strawberry", "milk_bag", "croissant", "carrot"), px = IconImagesLiveStickers.V4_PX)
+        val art = LiveStickerFixtures.art()
         compose.recordGolden("itemicon_live_bitmap_xxxhdpi_$v", variant) {
-            CompositionLocalProvider(LocalLiveStickers provides live) {
+            CompositionLocalProvider(LocalStickerArt provides art) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    for (k in live.keys) ItemIcon(IconRef(k, customIconId = "live-$k"), null, size = 52.dp)
+                    ItemIcon(IconRef("strawberry"), null, size = 52.dp)
+                    for ((item, _) in LiveStickerFixtures.V4) ItemIcon(LiveStickerFixtures.v4Ref(item), null, size = 52.dp)
                 }
             }
         }
@@ -259,23 +278,4 @@ class ThemeStripGoldensTest {
             capture("holo_card_frames_$t")
         }
     }
-}
-
-/**
- * Stands in for WP1's StickerArt: each key's library sticker rendered (die-cut, no shadow) into a [px] bitmap, the way
- * a v4 live sticker arrives.
- */
-internal class FakeLiveStickers(val keys: List<String>, private val px: Int) : LiveStickerSource {
-    private val images: Map<String, LiveStickerImage> = keys.associateWith { key ->
-        val resources = ApplicationProvider.getApplicationContext<android.content.Context>().resources
-        val art = VectorArtCache.get(resources, StickerLibrary.entry(key)!!.drawable)
-        val bitmap = ImageBitmap(px, px)
-        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, Canvas(bitmap), Size(px.toFloat(), px.toFloat())) {
-            drawSticker(art, StickerStyle(shadow = null))
-        }
-        LiveStickerImage(bitmap, cut = null, legacy = px != IconImagesLiveStickers.V4_PX)
-    }
-
-    override fun cached(ref: IconRef): LiveStickerImage? = images[ref.key]
-    override suspend fun load(ref: IconRef): LiveStickerImage? = images[ref.key]
 }

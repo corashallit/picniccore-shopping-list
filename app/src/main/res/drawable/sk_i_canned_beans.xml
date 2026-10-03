@@ -30,14 +30,14 @@
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M12.9 21.6L39.1 21.6L39.1 38L12.9 38Z"
-        android:fillColor="#F1DEC9"/>
+        android:fillColor="#FFFFFF"/>
     <path android:pathData="M12.9 21.6L39.1 21.6"
-        android:strokeColor="#7A4A28"
+        android:strokeColor="#3E4BB0"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M12.9 38L39.1 38"
-        android:strokeColor="#7A4A28"
+        android:strokeColor="#3E4BB0"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>

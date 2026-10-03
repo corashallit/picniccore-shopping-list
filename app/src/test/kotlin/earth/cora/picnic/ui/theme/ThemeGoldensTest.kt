@@ -1,9 +1,12 @@
 package earth.cora.picnic.ui.theme
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.unit.dp
@@ -147,7 +150,19 @@ class ThemeGoldensTest(private val variant: ThemeVariant, private val v: String)
 
     @Test fun itemIcons() = compose.recordGolden("itemicon_kit_$v", variant) { ItemIconsKit() }
 
-    @Test fun itemIconGhost() = compose.recordGolden("itemicon_ghost_$v", variant) { GhostRow() }
+    /** Library ghosts, then live ones (checklist 37): the three v4 stickers peeled along their stored cut paths, and a legacy icon's silhouette. */
+    @Test fun itemIconGhost() {
+        val art = LiveStickerFixtures.art()
+        compose.recordGolden("itemicon_ghost_$v", variant) {
+            GhostRow()
+            CompositionLocalProvider(LocalStickerArt provides art) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    for ((item, _) in LiveStickerFixtures.V4) ItemIcon(LiveStickerFixtures.v4Ref(item), null, size = 52.dp, ghost = true)
+                    ItemIcon(LiveStickerFixtures.legacyRef(), null, size = 52.dp, ghost = true)
+                }
+            }
+        }
+    }
 
     @Test fun itemIconShadow() = compose.recordGolden("itemicon_shadow_$v", variant) { ShadowRow() }
 

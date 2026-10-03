@@ -91,6 +91,7 @@ Smaller conflicts between the written spec, the mockup and the app, and how this
 | Ambient glint every 7 s on a random sticker | holo | a plain white gloss sweep (holo stays for rewards) |
 | Next card glint | a holo glint sweeps the card while it holds | no glint: it would cross the text during its hold (§9); the foil is static and the corner sparkles twinkle outside the text |
 | Thinking box headline | "Looking up a recipe…" from the start | "Reading your note…" while waiting; the recipe wording only when the answer has a recipe (D16) |
+| Add-bar buttons | square stickers in the mockup | **round** 52 dp stickers in their family pastels (§4.6, §6.2) |
 
 ---
 
@@ -394,7 +395,7 @@ Stickers inside a tray row lie flat on the page except their own die-cut shadow 
 
 - **Box**: viewBox −2 −2 52 52; art grid 0–48, live area 6–42; base on y 42; centred. Front view, chibi (height:width ≈ 1:1.1), cylinders with a 1:3 top ellipse, boxes front face only with r 3–4u corners.
 - **Colour-trace outline**: every shape outlined in its own trace, 2u, round joins and caps. Interior detail 1.5u trace. Texture lines 2u mid on pastel. **No universal dark ink.**
-- **Two-tone fill**: dominant shape pastel + mid accents (or mid body for berries and tomatoes). At most two families per icon, plus white and lemon-pastel details; a third family only as a small accent (a stem, a leaf, a cap: under 6 % of the coloured area). Exception: a composite generic that stands for a whole aisle of mixed things (`fruit_generic`, `vegetables_generic`, `breakfast_generic`, `deli_generic`, `household_generic`) may show three. No gradients.
+- **Two-tone fill**: dominant shape pastel + mid accents (or mid body for berries and tomatoes). At most two families per icon, plus white and lemon-pastel details; a third family only as a small accent (a stem, a leaf, a cap, an olive's pimento: under 6 % of the coloured area, lemon pastel counted as lemon; `validate.py` fails anything more, with no sticker grandfathered on this rule). Kept exceptions, each with its reason: a composite generic that stands for a whole aisle of mixed things (`fruit_generic`, `vegetables_generic`, `breakfast_generic`, `deli_generic`, `household_generic`) may show three, because it shows several things at once; `sprinkles` may show more, because sprinkles are multicoloured by nature (the library sticker uses sakura and ramune, which read best on its white jar). No gradients.
 - **Volume**: no cel shadow. A flat puffy bottom band: the bottom 20–25 % of the dominant shape in its mid (deep on mid bodies), clipped to the silhouette.
 - **Bonbon gloss**: one 2.6u white curved stroke (round caps) along the upper-left inner contour, inset 3u, covering 25–35 % of the contour, plus a 1.6u white dot just past its end; sub-shapes ≥10u wide get a 2.2u gloss. 100 % white, never blurred. Generated from each outline and linted (no gloss in critter heads, no stray fragments).
 - **Die-cut**: the union silhouette stroked 8u white with round joins and filled white (border 4u outside the art); the hard shadow is drawn at render time (§3.3).
@@ -1175,7 +1176,7 @@ floors:  interstitial card 2600 ms · toast 4000 ms · in-scene beat 1500 ms · 
 | Celebration · summary | everything on screen | 12 | max(4000, readHold(12)) | **4.8 s still**, then closes (16.95 s for the fixture) or on a tap; reduced motion max(6000, readHold) = 6 s (§11.4) |
 | Sticky-note toast | "Added 5 items to Saturday shop ♡" + Undo | 6–7 | max(4000, 3300) | 4 s (or the recommended timeout) |
 | Tear-off undo | "Oat cereal torn out" + Undo | 4–5 | 4000 | 4 s; merges with the next tear-off (§4.15) |
-| Rainy-day toast | "Rain on the way · bring the tote!" | 6 | 4000 | 4 s |
+| Rainy-day toast | "Rain on the way · bring the tote!" | 7 | max(4000, 3300) | 4 s |
 | Nudge toast | "New shop? Start a fresh sticker book" + New trip | 7 | 4000 | 6 s (it carries an action) |
 | JACK / POT! | hanko on the row | 2 | 1800 | 1.8 s with the gold capsule, then it stays as the row's chip |
 | HAPPY / B-DAY! | the row's hanko | 2 | — | stays (it is the stamp) |

@@ -70,8 +70,8 @@
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M43.8 39.4C43.8 40.14 43.61 40.86 43.24 41.5C42.87 42.14 42.34 42.67 41.7 43.04C41.06 43.41 40.34 43.6 39.6 43.6C38.86 43.6 38.14 43.41 37.5 43.04C36.86 42.67 36.33 42.14 35.96 41.5C35.59 40.86 35.4 40.14 35.4 39.4C35.4 38.66 35.59 37.94 35.96 37.3C36.33 36.66 36.86 36.13 37.5 35.76C38.14 35.39 38.86 35.2 39.6 35.2C40.34 35.2 41.06 35.39 41.7 35.76C42.34 36.13 42.87 36.66 43.24 37.3C43.61 37.94 43.8 38.66 43.8 39.4Z"
-        android:fillColor="#FFDA4A"
-        android:strokeColor="#8A6800"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#AE4D1C"
         android:strokeWidth="1.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>

@@ -40,8 +40,8 @@
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M8.8 14.6C12.6 10 19 8 26 8C33 8 39.4 10 43.2 14.6C43.8 15.4 43.4 16.6 42.4 16.6C38.4 14.2 32.6 13 26 13C19.4 13 13.6 14.2 9.6 16.6C8.6 16.6 8.2 15.4 8.8 14.6Z"
-        android:fillColor="#FFA477"
-        android:strokeColor="#AE4D1C"
+        android:fillColor="#FFDA4A"
+        android:strokeColor="#8A6800"
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>

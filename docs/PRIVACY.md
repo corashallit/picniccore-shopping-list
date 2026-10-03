@@ -24,7 +24,8 @@ Picnic List is a grocery-list app for Android, made by [FILL IN: your name as sh
 
 | What | Why | Backed up by Android? |
 |---|---|---|
-| Your lists and items, your aisles and store name, the aisle corrections you've taught the app, and the icons you picked for items | That's the app | **Yes**, if you've turned on Android backup or move to a new phone. This file is the only part of the app that is backed up. Backups are handled by Google under your Google account. |
+| Your lists and items, your aisles and store name, the aisle corrections you've taught the app, and the icons you picked for items | That's the app | **Yes**, if you've turned on Android backup or move to a new phone. This file and your sticker album (next row) are the only parts of the app that are backed up. Backups are handled by Google under your Google account. |
+| Your sticker album: the sticker books of the trips you've finished and the stickers you've collected (item names and their icons) | So your album keeps its pages | **Yes**, together with your lists. |
 | Settings: the "Draw new icons with AI" switch, a random installation ID, and a masked hint of your key (like `sk-…a1b2`) | So the app remembers your setup | No |
 | Your OpenAI key | To connect | No. It is encrypted with a key kept in your phone's Android Keystore and can't be decrypted on any other device. The app never shows it again. |
 | Icons drawn for your items, a count of today's drawings, and any item names the image service refused to draw | So each icon is drawn once, and a refused name isn't retried | No |
@@ -86,8 +87,8 @@ The app has **no camera permission**: photos come from your camera app or Androi
 
 | Data | Kept |
 |---|---|
-| Lists, settings and drawn icons on your phone | Until you delete them or uninstall the app |
-| Android backup of your lists | As long as Google keeps your device backup (your Google account settings) |
+| Lists, sticker album, settings and drawn icons on your phone | Until you delete them or uninstall the app |
+| Android backup of your lists and sticker album | As long as Google keeps your device backup (your Google account settings) |
 | Photos and voice notes on your phone | Deleted right after they're sent; leftovers within a day |
 | OpenAI's abuse-monitoring logs | Up to 30 days (no logs for voice transcription) |
 
@@ -130,7 +131,7 @@ If what the app collects or sends changes, I'll update this page and its effecti
 
 | Statement | Source in the repository |
 |---|---|
-| On-device files and the backup allow-list | `app/src/main/res/xml/data_extraction_rules.xml`, `backup_rules.xml` (only `state.json`); docs/ARCHITECTURE.md §6.1 |
+| On-device files and the backup allow-list | `app/src/main/res/xml/data_extraction_rules.xml`, `backup_rules.xml` (only `state.json` and `album.json`); docs/ARCHITECTURE.md §6.1 |
 | Token encryption | `settings/TokenStore.kt` (`noBackupFilesDir/token.bin`), `platform/TokenCipher.kt` |
 | Settings and the install ID; the safety identifier is a hash of it | `settings/DataStoreSettingsRepository.kt` (`llmConfig()`); core `OpenAiClient.responses()` adds `safety_identifier` to Responses calls only |
 | Requests go only to OpenAI | core `LlmConfig.DEFAULT_BASE_URL` (`https://api.openai.com/v1`); the app has no address setting (`DataStoreSettingsRepository.llmConfig()`) |

@@ -9,7 +9,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -25,6 +24,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
@@ -43,17 +43,21 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.IconRef
-import earth.cora.picnic.icons.IconImages
+import earth.cora.picnic.icons.LiveSticker
+import earth.cora.picnic.icons.StickerArt
 import earth.cora.picnic.ui.theme.gen.DecorManifest
 import earth.cora.picnic.ui.theme.gen.StickerEntry
 import earth.cora.picnic.ui.theme.gen.StickerManifest
+import java.util.Collections
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToInt
 
 /*
- * The one sticker render path (docs/DESIGN_STICKER.md §3.3, items 36–41). Library vectors (WP1's generated
- * `sk_i_<key>` drawables with named groups) and live bitmaps go through the same steps: a hard shadow drawn at render
- * time from the theme (Day #6E7BD0, Glow #0B0D24, Golden (+3, +4) #E59A7A), then the sticker, then its variant
- * (ghost, holo, pixel, mono, capsule), then the corner flags. Owner: WP4.
+ * The one sticker render path (docs/DESIGN_STICKER.md §3.3, items 36–41, 47). Library vectors (WP1's generated
+ * `sk_i_<key>` drawables with named groups) and live stickers ([StickerArt]: a bitmap plus its stored cut path) go
+ * through the same steps: a hard shadow drawn at render time from the theme (Day #6E7BD0, Glow #0B0D24, Golden (+3, +4)
+ * #E59A7A), then the sticker, then its variant (ghost, holo, pixel, mono, capsule), then the corner flags. Owner: WP4.
  */
 
 /** The flags at a sticker's top-right (§3.3 step 4), each a 20 dp sticker with its own white border. */
@@ -70,35 +74,6 @@ enum class StickerFlag {
 
 /** How a sticker is drawn (§3.3 step 3). */
 enum class StickerLook { Normal, Ghost, Holo, Pixel, Mono }
-
-/**
- * A live-drawn sticker's bitmap (§3.2): v4 stickers are 208 px with their white cut baked in (and a stored cut path);
- * legacy ones (192 px direction-A rasters) carry their own baked shadow, so they get none added and no cut variants.
- * WP1's StickerArt supplies these; until it lands, [LocalLiveStickers] adapts the v1 IconImages.
- */
-@Immutable
-class LiveStickerImage(val bitmap: ImageBitmap, val cut: Path?, val legacy: Boolean)
-
-/** Where live stickers come from (WP1's StickerArt.cached / load). */
-interface LiveStickerSource {
-    fun cached(ref: IconRef): LiveStickerImage?
-    suspend fun load(ref: IconRef): LiveStickerImage?
-}
-
-/** Adapts the v1 [IconImages]: a 208 px bitmap is a v4 sticker, anything else is legacy (§3.3 step 5). */
-class IconImagesLiveStickers(private val images: IconImages) : LiveStickerSource {
-    override fun cached(ref: IconRef): LiveStickerImage? = images.cached(ref)?.let(::wrap)
-    override suspend fun load(ref: IconRef): LiveStickerImage? = (images.cached(ref) ?: images.load(ref))?.let(::wrap)
-    private fun wrap(b: ImageBitmap) = LiveStickerImage(b, cut = null, legacy = b.width != V4_PX)
-
-    companion object {
-        /** v4 live stickers are 208 px (4× of 52 dp). */
-        const val V4_PX: Int = 208
-    }
-}
-
-/** Live sticker source for ItemIcon; null = adapt [LocalIconImages]. */
-val LocalLiveStickers = staticCompositionLocalOf<LiveStickerSource?> { null }
 
 /* ------------------------------------------------------------------------------------------------
  * Resolution: which library art draws a ref.
@@ -137,7 +112,8 @@ private val GoldHighlight = Color(0xFFFFF3A6)
 /**
  * An item's sticker (§3.3). CONTRACT (§19.2):
  * - Library vectors by key (else the category's generic, else the capsule); a bespoke [IconRef.customIconId] draws the
- *   live bitmap (via [LocalLiveStickers]), falling back to the library art while it loads.
+ *   live sticker from [LocalStickerArt] (its bitmap, and its cut path for the shadow, the die-cut edge and the ghost),
+ *   falling back to the library art while it loads or when its file is gone.
  * - [aisleIndex] tints the capsule sentinel (0-based aisle rotation index; −1 = neutral "Everything else").
  * - [ghost] = a checked row's peeled outline; [holo] = shiny / jackpot foil; [pixel] = the bonus-stage 16 px sprite
  *   (egg 10); [flags] = the corner flags; [drawing] = the busy sparkle while an icon is being decided or drawn.
@@ -168,12 +144,12 @@ fun ItemIcon(
 ) {
     @Suppress("UNUSED_VARIABLE") val unusedLifted = lifted
     val catalog = LocalIconCatalog.current
-    val live = LocalLiveStickers.current ?: IconImagesLiveStickers(LocalIconImages.current)
+    val stickers = LocalStickerArt.current
     val customId = icon.customIconId
-    // Restarts whenever the ref changes (a bespoke icon got attached): the previous bitmap stays until the new one
-    // is decoded, so rows never flash.
-    val bitmap: LiveStickerImage? by produceState(if (customId != null) live.cached(icon) else null, icon, live) {
-        value = if (customId != null) live.cached(icon) ?: live.load(icon) else null
+    // Restarts whenever the bespoke id changes (a drawing got attached or replaced): the previous sticker stays until
+    // the new one is decoded, so rows never flash.
+    val live: LiveSticker? by produceState(customId?.let(stickers::cached), customId, stickers) {
+        value = customId?.let { stickers.cached(it) ?: stickers.load(it) }
     }
     val entry = remember(icon.key, catalog) { StickerLibrary.resolve(icon.key, catalog) }
     val look = when {
@@ -201,7 +177,7 @@ fun ItemIcon(
     val glintTime by rememberLoopTime(enabled = holo && !reduced && !ghost)
     Box(modifier.then(semantics).size(size)) {
         Canvas(Modifier.size(size)) {
-            val liveImage = bitmap
+            val liveSticker = live
             val style = StickerStyle(
                 look = look,
                 shadow = if (shadow) shadows else null,
@@ -212,7 +188,7 @@ fun ItemIcon(
                 glint = if (holo) Holo.shinyGlint.progressAt(glintTime % PicnicMotion.shinyGlintPeriod) else 0f,
             )
             when {
-                liveImage != null -> drawLiveSticker(liveImage, style)
+                liveSticker != null -> drawLiveSticker(liveSticker, style)
                 look == StickerLook.Pixel && art != null && entry != null -> drawPixelSticker(entry.key, art, style)
                 art != null -> drawSticker(art, style, faceArt)
             }
@@ -312,6 +288,19 @@ private fun DrawScope.drawStickerShadow(art: VectorArt, shadows: PicnicShadows?,
     translate(dx, dy) { drawArt(art, box, groups = setOf("cut"), paint = solid(shadows.color)) }
 }
 
+/** The die-cut border: the `cut` group's white stroke is 8u, so the border reaches 4u outside the art (§3.1). */
+private const val CUT_STROKE_U = 8f
+
+/** The ghost's dashed outline is stroked 11u on the art's silhouette: 1.5u of it shows outside the 8u die-cut. */
+private const val GHOST_STROKE_U = 11f
+
+/** The ghost's dash pattern (§3.3), in sticker units; DashSpec fits it to each contour exactly. */
+private const val GHOST_DASH_U = 3f
+private const val GHOST_GAP_U = 2f
+
+/** The ghost's monochrome silhouette (§3.3). */
+private const val GHOST_SILHOUETTE_ALPHA = 0.18f
+
 /**
  * The peeled ghost (§3.3): the cut silhouette stroked 11u in dashed [StickerStyle.ghostDash] (dash 3 / gap 2, exact),
  * the 8u cut drawn over it (white; Glow #3A438A) so a dashed line shows just outside the border, and the art as a
@@ -320,52 +309,94 @@ private fun DrawScope.drawStickerShadow(art: VectorArt, shadows: PicnicShadows?,
 private fun DrawScope.drawGhost(art: VectorArt, style: StickerStyle, u: Float, box: Size) {
     val cut = art.paths.filter { it.group == "cut" }
     withTransform({ scale(u, u, pivot = Offset.Zero) }) {
-        for (p in cut) drawDashedPath(p.path, style.ghostDash, strokeWidth = 11f, nominalDash = 3f, nominalGap = 2f)
+        for (p in cut) drawDashedPath(p.path, style.ghostDash, strokeWidth = GHOST_STROKE_U, nominalDash = GHOST_DASH_U, nominalGap = GHOST_GAP_U)
     }
     drawArt(art, box, groups = setOf("cut"), paint = solid(style.ghostFill))
     // The mono silhouette (a ballpoint shape with white interior lines) at 18 %, so the peeled shape keeps its detail.
     val fill = SolidColor(style.silhouette)
     val white = SolidColor(Color.White)
-    inLayer(0.18f, Rect(Offset.Zero, box)) {
+    inLayer(GHOST_SILHOUETTE_ALPHA, Rect(Offset.Zero, box)) {
         drawArt(art, box, groups = setOf("fills", "lines"), paint = { _, isStroke -> if (isStroke) white else fill })
     }
 }
 
-/** A live bitmap (§3.3): shadow from its alpha (v4 only; legacy carry their own), then the bitmap, then its look. */
-private fun DrawScope.drawLiveSticker(image: LiveStickerImage, style: StickerStyle) {
-    val dst = IntSize(size.width.toInt(), size.height.toInt())
-    val src = IntSize(image.bitmap.width, image.bitmap.height)
+/**
+ * A live sticker (§3.3), in the same steps as a library one.
+ *
+ * - **v4 with its cut path** (`<id>.cut`, the outer edge of the white die-cut in the bitmap's 208 px space): the shadow
+ *   is the cut in the shadow colour at the variant's offset; the die-cut is the cut filled white under the bitmap, so
+ *   its edge stays a crisp vector at every size (the bitmap is 4 px per unit: exact at 52 dp on xxxhdpi, upscaled for
+ *   the 120 dp hero); then the bitmap. The ghost is drawn from the cut like a library sticker's: a dashed line 1.5u wide
+ *   just outside the border, the border in the ghost fill, and the art as a monochrome silhouette at 18 % inside it.
+ *   Mono is the same silhouette, opaque, on the white die-cut.
+ * - **v4 without a readable cut**: the shadow comes from the bitmap's alpha (it carries its white die-cut); the ghost
+ *   falls back to the monochrome silhouette at 18 %.
+ * - **Legacy** (pre-v4, §3.3 step 5: a 192 px direction-A raster with its outline, border and shadow baked in): drawn as
+ *   it is, with no added shadow and no variant that needs a cut (the ghost is the monochrome silhouette at 18 %).
+ *
+ * Holo clips the foil to the bitmap's alpha; pixel is the sticker as a 16 × 16 px sprite, scaled up nearest-neighbour.
+ */
+private fun DrawScope.drawLiveSticker(sticker: LiveSticker, style: StickerStyle) {
+    val image = sticker.bitmap
+    val src = IntSize(image.width, image.height)
+    val dst = IntSize(size.width.roundToInt(), size.height.roundToInt())
     val u = size.minDimension / STICKER_UNITS
-    val shadows = style.shadow
+    // Bitmap pixels per sticker unit (4 for a v4 sticker), and the scale from bitmap pixels to this canvas.
+    val pu = src.width / STICKER_UNITS
+    val scale = size.width / src.width
+    val cut = if (sticker.legacy) null else sticker.cut
+    val shadows = if (sticker.legacy) null else style.shadow
+    fun DrawScope.bitmap(filter: ColorFilter? = null) =
+        drawImage(image, IntOffset.Zero, src, IntOffset.Zero, dst, colorFilter = filter, filterQuality = FilterQuality.High)
+    fun DrawScope.inBitmapSpace(block: DrawScope.() -> Unit) = withTransform({ scale(scale, scale, pivot = Offset.Zero) }, block)
+    fun DrawScope.hardShadow() {
+        if (shadows == null) return
+        translate(shadows.hs.x.value * u, shadows.hs.y.value * u) {
+            if (cut != null) inBitmapSpace { drawPath(cut, shadows.color) } else bitmap(ColorFilter.tint(shadows.color, BlendMode.SrcIn))
+        }
+    }
+    // The art alone, as a flat silhouette: the whole bitmap tinted, then its 4u border repainted from the cut path.
+    fun DrawScope.silhouette(cut: Path, alpha: Float, border: Color) {
+        inLayer(alpha) { bitmap(ColorFilter.tint(style.silhouette, BlendMode.SrcIn)) }
+        inBitmapSpace { clipPath(cut) { drawPath(cut, border, style = Stroke(width = CUT_STROKE_U * pu)) } }
+    }
     when (style.look) {
-        StickerLook.Ghost -> {
-            if (image.legacy || image.cut == null) {
-                // Legacy: the mono silhouette at 18 %, no cut variants (§3.3 step 5).
-                inLayer(0.18f) {
-                    drawImage(image.bitmap, IntOffset.Zero, src, IntOffset.Zero, dst, colorFilter = ColorFilter.tint(style.silhouette, BlendMode.SrcIn), filterQuality = FilterQuality.High)
-                }
+        StickerLook.Ghost -> if (cut != null) {
+            inBitmapSpace {
+                drawDashedPath(cut, style.ghostDash, strokeWidth = (GHOST_STROKE_U - CUT_STROKE_U) * pu, nominalDash = GHOST_DASH_U * pu, nominalGap = GHOST_GAP_U * pu)
+                drawPath(cut, style.ghostFill)
+            }
+            silhouette(cut, GHOST_SILHOUETTE_ALPHA, style.ghostFill)
+        } else {
+            inLayer(GHOST_SILHOUETTE_ALPHA) { bitmap(ColorFilter.tint(style.silhouette, BlendMode.SrcIn)) }
+        }
+        StickerLook.Mono -> {
+            hardShadow()
+            if (cut != null) {
+                inBitmapSpace { drawPath(cut, Color.White) }
+                silhouette(cut, 1f, Color.White)
             } else {
-                withTransform({ scale(size.width / src.width, size.height / src.height, pivot = Offset.Zero) }) {
-                    drawDashedPath(image.cut, style.ghostDash, strokeWidth = 11f * src.width / STICKER_UNITS, nominalDash = 3f * src.width / STICKER_UNITS, nominalGap = 2f * src.width / STICKER_UNITS)
-                    drawPath(image.cut, style.ghostFill)
-                }
-                inLayer(0.18f) {
-                    drawImage(image.bitmap, IntOffset.Zero, src, IntOffset.Zero, dst, colorFilter = ColorFilter.tint(style.silhouette, BlendMode.SrcIn), filterQuality = FilterQuality.High)
-                }
+                bitmap()
             }
         }
-        else -> {
-            if (shadows != null && !image.legacy) {
-                translate(shadows.hs.x.value * u, shadows.hs.y.value * u) {
-                    drawImage(image.bitmap, IntOffset.Zero, src, IntOffset.Zero, dst, colorFilter = ColorFilter.tint(shadows.color, BlendMode.SrcIn), filterQuality = FilterQuality.High)
+        StickerLook.Pixel -> {
+            val sprite = PixelSprites.get(image)
+            val spriteSrc = IntSize(sprite.width, sprite.height)
+            shadows?.let { s ->
+                translate(s.hs.x.value * u, s.hs.y.value * u) {
+                    drawImage(sprite, IntOffset.Zero, spriteSrc, IntOffset.Zero, dst, colorFilter = ColorFilter.tint(s.color, BlendMode.SrcIn), filterQuality = FilterQuality.None)
                 }
             }
-            val pixel = style.look == StickerLook.Pixel
-            drawImage(image.bitmap, IntOffset.Zero, src, IntOffset.Zero, dst, filterQuality = if (pixel) FilterQuality.None else FilterQuality.High)
+            drawImage(sprite, IntOffset.Zero, spriteSrc, IntOffset.Zero, dst, filterQuality = FilterQuality.None)
+        }
+        StickerLook.Normal, StickerLook.Holo -> {
+            hardShadow()
+            if (cut != null) inBitmapSpace { drawPath(cut, Color.White) }
+            bitmap()
             if (style.look == StickerLook.Holo) {
                 // Bitmaps clip the holo to their alpha (SrcAtop over the sticker just drawn, in a layer).
                 inLayer(1f) {
-                    drawImage(image.bitmap, IntOffset.Zero, src, IntOffset.Zero, dst, filterQuality = FilterQuality.High)
+                    bitmap()
                     drawRect(stickerHoloBrush(size), alpha = Holo.STICKER_ALPHA, blendMode = BlendMode.SrcAtop)
                 }
             }
@@ -387,17 +418,24 @@ private fun DrawScope.drawPixelSticker(key: String, art: VectorArt, style: Stick
     drawImage(sprite, IntOffset.Zero, src, IntOffset.Zero, dst, filterQuality = FilterQuality.None)
 }
 
-/** 16 × 16 px sprites of library stickers, rendered once per key. */
+/** 16 × 16 px sprites of library stickers (rendered once per key) and of live stickers (once per bitmap). */
 internal object PixelSprites {
     const val PX = 16
     private val cache = ConcurrentHashMap<String, ImageBitmap>()
 
-    fun get(key: String, art: VectorArt): ImageBitmap = cache.getOrPut(key) {
+    /** Keyed by the decoded bitmap itself, so a sprite goes when StickerArt drops its sticker. */
+    private val live: MutableMap<ImageBitmap, ImageBitmap> = Collections.synchronizedMap(WeakHashMap())
+
+    fun get(key: String, art: VectorArt): ImageBitmap = cache.getOrPut(key) { sprite { drawArt(art) } }
+
+    fun get(bitmap: ImageBitmap): ImageBitmap = live.getOrPut(bitmap) {
+        sprite { drawImage(bitmap, IntOffset.Zero, IntSize(bitmap.width, bitmap.height), IntOffset.Zero, IntSize(PX, PX), filterQuality = FilterQuality.High) }
+    }
+
+    private fun sprite(block: DrawScope.() -> Unit): ImageBitmap {
         val image = ImageBitmap(PX, PX)
-        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(image), Size(PX.toFloat(), PX.toFloat())) {
-            drawArt(art)
-        }
-        image
+        CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(image), Size(PX.toFloat(), PX.toFloat()), block)
+        return image
     }
 }
 

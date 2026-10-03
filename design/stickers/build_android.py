@@ -67,12 +67,7 @@ GLYPHS_SPEC = ['add', 'close', 'check', 'back', 'more', 'camera', 'gallery', 'mi
 def load_catalog():
     with open(os.path.join(ROOT, CATALOG_JSON), encoding='utf-8') as f:
         cat = json.load(f)
-    icons = list(cat['icons'])
-    have = {i['key'] for i in icons}
-    for k, extra in catalog_map.CATALOG_ADDITIONS.items():
-        if k not in have:
-            icons.append(dict(key=k, aliases=[], **extra))
-    return cat, icons
+    return cat, list(cat['icons'])
 
 
 def res_name(key):
@@ -110,7 +105,7 @@ def item_outputs(out, catalog_icons, report):
         cat = by_key.get(key, {})
         entries.append(dict(key=key, dsl=icon.key, res=name, face=face_res,
                             families=E.families(icon.parts, STICKER_BASE),
-                            personality=catalog_map.personality(key, cat.get('category'), cat.get('personality')),
+                            personality=catalog_map.personality(cat.get('personality')),
                             groups=[g.name for g in groups]))
         stickers.append((icon, key, groups, dom, sil))
     report['stickers'] = stickers

@@ -18,11 +18,11 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Sticker art for `ItemIcon` and the icon repository (docs/DESIGN_STICKER.md §3.2, §3.3, §19.2; replaces
- * [IconImages]). Library stickers are vector drawables with named groups; live-drawn stickers are a bitmap plus their
- * die-cut path. Both go through the one render path: the shadow is drawn at render time from the sticker's alpha
- * (the bitmap already carries its white die-cut, exactly as the vector's `cut` group does), so a live sticker and a
- * library sticker look alike in every theme variant.
+ * Sticker art for `ItemIcon` and the icon repository (docs/DESIGN_STICKER.md §3.2, §3.3, §19.2; replaces the v1
+ * `IconImages`). Library stickers are vector drawables with named groups; live-drawn stickers are a bitmap plus their
+ * die-cut path. Both go through the one render path (`ItemIcon`, provided as `LocalStickerArt`): the shadow, the white
+ * die-cut edge and the ghost of a live sticker are drawn at render time from its cut path, as a library sticker's are
+ * from its `cut` group, so the two look alike in every theme variant.
  */
 interface StickerArt {
     /** A library sticker: its drawable and named groups (§3.2), or null when the key has no art yet. */

@@ -12,7 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import earth.cora.picnic.ui.PicnicAppRoot
-import earth.cora.picnic.ui.theme.LocalIconImages
+import earth.cora.picnic.ui.theme.LocalStickerArt
 import earth.cora.picnic.ui.theme.LocalTimeouts
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.SystemBarsHost
@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
                 PicnicTheme(variant = variant, reducedMotion = reducedMotion.value) {
                     if (ready) {
                         CompositionLocalProvider(
-                            LocalIconImages provides container.iconImages,
+                            LocalStickerArt provides container.stickerArt,
                             LocalTimeouts provides container.timeouts,
                         ) {
                             PicnicAppRoot(container)

@@ -205,3 +205,8 @@ dependencies {
 apply(from = rootProject.file("design/stickers/checkStickers.gradle.kts"))
 // :app:checkSounds: the sound clips match their recipes (design/sounds/make_sounds.py, §14.2).
 apply(from = rootProject.file("design/sounds/checkSounds.gradle.kts"))
+
+// CI (.github/workflows/android.yml) runs :app:lintDebug, so lint runs checkSounds too: it needs nothing but Python 3's
+// standard library, which every runner has. checkStickers is not wired in: it needs shapely, svgelements and numpy
+// (design/stickers/requirements.txt), which a runner does not have; run it locally after any change to design/stickers/.
+tasks.named { it == "lintDebug" }.configureEach { dependsOn("checkSounds") }

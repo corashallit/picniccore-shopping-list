@@ -20,7 +20,8 @@ run(report) -> (errors, warnings, measurements). Errors fail `build_android.py` 
   hairline  every detail line, texture line, plain line and outline is at least HAIRLINE (1.2u) wide.
   families  at most two families per sticker plus white and lemon-pastel details (§3.1): a third family (lemon pastel
             counts as lemon) is allowed only as a small accent (under FAMILY_ACCENT of the coloured area: stems,
-            leaves, seeds, a cap), or on the composite generics in COMPOSITE (a bowl of mixed fruit, a breakfast plate).
+            leaves, seeds, a cap), on the composite generics in COMPOSITE (a bowl of mixed fruit, a breakfast plate),
+            or on the stickers in MULTICOLOURED, which are many-coloured by nature (sprinkles).
   geometry  the union cut is present; the base sits on y 42 (41.4-42.6); the art stays in the live area 6-42 (the 2u
             trace may overhang by 1u, so 5-43); every die-cut fill part fits a 2u disc; die-cut rectangles have
             corners r >= 2u; no die-cut line is thinner than 1.2u; no <text> or <image> anywhere.
@@ -76,6 +77,8 @@ HAIRLINE = 1.2             # thinnest detail, texture or printed outline (§3.1:
 FAMILY_ACCENT = .06         # a third family under 6 % of the coloured area is an accent (stems, leaves)
 # composite generics: one sticker standing for a whole aisle of mixed things (§3.1 exception)
 COMPOSITE = {'fruit_generic', 'vegetables_generic', 'breakfast_generic', 'deli_generic', 'household_generic'}
+# things that are many-coloured by nature and may show more than two families (§3.1 exception)
+MULTICOLOURED = {'sprinkles'}
 
 # approved r9 stickers that miss a rule as drawn (catalog keys); see the module docstring
 GRANDFATHERED = {
@@ -92,9 +95,9 @@ GRANDFATHERED = {
     'coverage': {'baby_wipes', 'bandages', 'banana', 'bottled_water', 'butter_tart', 'diapers', 'honey'},
     'dot': {'baguette', 'banana', 'diapers', 'lettuce'},
     'cross': set(),
-    'printed': {'bakery_generic', 'canned_beans', 'canned_tomatoes', 'canned_tuna', 'cheddar', 'donut', 'maple_syrup', 'muffin',
-        'oatmeal', 'pasta', 'soup_can', 'sunscreen', 'sweet_potato', 'tea', 'tissues', 'yogurt'},
-    'families': {'canned_beans', 'chicken_breast', 'frozen_pizza', 'ground_beef', 'muffin', 'popsicle', 'sponge', 'vitamins'},
+    'printed': {'bakery_generic', 'canned_tomatoes', 'canned_tuna', 'cheddar', 'donut', 'maple_syrup', 'oatmeal', 'pasta',
+        'soup_can', 'sunscreen', 'sweet_potato', 'tea', 'tissues', 'yogurt'},
+    'families': set(),
     'hairline': {'baby_food', 'cat_food', 'cat_litter', 'cherries', 'granola', 'grapes', 'honey', 'hot_sauce', 'ice_cream', 'jam',
         'ketchup', 'laundry_detergent', 'lemonade', 'maple_syrup', 'mayonnaise', 'oatmeal', 'orange', 'pasta_sauce', 'peach',
         'peanut_butter', 'pear', 'potato_chips', 'salt', 'sparkling_water', 'tea', 'toothpaste', 'vitamins', 'yogurt'},
@@ -389,12 +392,12 @@ def check_families(lint, stickers):
     for icon, key, groups, dom, sil in stickers:
         fams = families_used(icon)
         major = [(f, a) for f, a in fams if a >= FAMILY_ACCENT]
-        if len(major) > 2 and key not in COMPOSITE:
+        if len(major) > 2 and key not in COMPOSITE and key not in MULTICOLOURED:
             lint.fail('families', key, f'families: {key} uses {len(major)} families as masses (' +
                       ', '.join(f'{f} {a:.0%}' for f, a in major) + '); at most two plus white and lemon pastel')
-    stale = COMPOSITE - {k for _, k, *_ in stickers}
+    stale = (COMPOSITE | MULTICOLOURED) - {k for _, k, *_ in stickers}
     if stale and len(stickers) > 100:
-        lint.warnings.append('families: COMPOSITE lists keys with no sticker: ' + ', '.join(sorted(stale)))
+        lint.warnings.append('families: COMPOSITE or MULTICOLOURED lists keys with no sticker: ' + ', '.join(sorted(stale)))
 
 
 def check_geometry(lint, stickers):

@@ -104,7 +104,8 @@ Run on every build and in `--check`; errors fail the task.
   out than the outline's outer edge, unless the part's own trace repaints it. A band that must run edge to edge is a
   `tex` stroke or a `band` path on its host (clipped), or `_c1_strip` / `_c3_strip` (the host's interior, inset 1u).
 - **Families**: at most two families plus white and lemon-pastel details (§3.1); a third family only as an accent
-  under 6 % of the coloured area, or on the composite generics in `validate.COMPOSITE`.
+  under 6 % of the coloured area, or on the composite generics in `validate.COMPOSITE` and the many-coloured things in
+  `validate.MULTICOLOURED` (sprinkles). No sticker is grandfathered on this rule.
 - **Baskets**: all 17 kinds; back, front, open and closed lid; decoration slice on exactly the four decorated kinds;
   hanko point on the closed lid; rim inside the art; every layer's die-cut inside the 80 × 64 viewport (a VectorDrawable
   clips to it).

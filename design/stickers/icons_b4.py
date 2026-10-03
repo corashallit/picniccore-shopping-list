@@ -22,11 +22,11 @@ add('garbagebags', 'Garbage bags', [
     F(('rect', 18.6, 10.6, 10.8, 4, 2), 'periwinkle', 'p'),
 ], gloss=[G('M11.6 28Q12.2 22.4 16 18.4'), DOT(11.2, 31.6)], qty='40 bags', aisle='household')
 
-# sponge: lemon sponge with melon scrub layer and bubbles
+# sponge: lemon sponge with melon scrub layer and melon-traced bubbles
 add('sponge', 'Sponges', [
     F(('rect', 7.6, 22.4, 32.8, 19.6, 4), 'lemon', 'p', band=.24, tex=['M13 29h.1M19.6 32.4h.1M26.4 28.4h.1M33.4 31.4h.1M16.4 36.4h.1M29.6 35.6h.1'], tex_t='m', tex_w=2.4),
     F(('rect', 7.6, 17.4, 32.8, 7, 3), 'melon', 'm'),
-    F(('circle', 32.6, 11.2, 4.4), 'ramune', 'w', ol=1.5), F(('circle', 23.6, 9.6, 2.8), 'ramune', 'w', ol=1.4), F(('circle', 39.4, 6.6, 2.4), 'ramune', 'w', ol=1.3),
+    F(('circle', 32.6, 11.2, 4.4), 'melon', 'w', ol=1.5), F(('circle', 23.6, 9.6, 2.8), 'melon', 'w', ol=1.4), F(('circle', 39.4, 6.6, 2.4), 'melon', 'w', ol=1.3),
 ], gloss=[G('M11 27.6V33'), DOT(11, 36), G('M30.6 9.8Q31 8.6 32.4 8.2', 1.4)], qty='3 pack', aisle='household')
 
 # light bulb: lemon glass, filament, periwinkle screw base
@@ -96,7 +96,7 @@ add('wipes', 'Baby wipes', [
     F(('path', heart_path(24, 33.4, 3.6)), 'sakura', 'm', ol=1.3, cut=False),
 ], gloss=[G('M10.6 24V30'), DOT(10.6, 33.4)], qty='80 wipes', aisle='baby')
 
-# vitamins: amber peach bottle, white cap, two capsules in front
+# vitamins: amber peach bottle, white cap, a capsule and a white tablet in front
 add('vitamins', 'Multivitamins', [
     F(('rect', 13.4, 6, 17.2, 7.6, 2.6), 'peach', 'w', det=['M16 7.8V11.8M19.4 7.8V11.8M22 7.8V11.8M24.6 7.8V11.8M28 7.8V11.8'], det_t='p', det_w=1.1),
     F(('path', 'M14.6 12.8H29.4Q32.6 12.8 32.6 16V35H11.4V16Q11.4 12.8 14.6 12.8Z'), 'peach', 'm', band=.18),
@@ -104,7 +104,7 @@ add('vitamins', 'Multivitamins', [
     F(('path', 'M17.6 23.6C17.6 22 18.8 21 20.2 21H23.8C25.2 21 26.4 22 26.4 23.6C26.4 25.2 25.2 26.2 23.8 26.2H20.2C18.8 26.2 17.6 25.2 17.6 23.6Z'), 'peach', 'm', ol=1.2, cut=False, det=['M22 21.2V26'], det_w=1),
     F(('path', 'M14 36.2C14 33.4 16 31.8 18.2 31.8H23V40.6H18.2C16 40.6 14 39 14 36.2Z'), 'sakura', 'm', ol=1.6),
     F(('path', 'M23 31.8H27.8C30 31.8 32 33.4 32 36.2C32 39 30 40.6 27.8 40.6H23Z'), 'sakura', 'w', ol=1.6),
-    F(('circle', 37.6, 37.4, 4.2), 'lemon', 'm', ol=1.6),
+    F(('circle', 37.6, 37.4, 4.2), 'peach', 'w', ol=1.6),
 ], gloss=[G('M14.4 17.6V20', 2), G('M16 34.4H19.4', 1.6)], qty='120 tablets', aisle='pharmacy')
 
 # bandages: two crossed peach strips, white pads, dot holes

@@ -32,7 +32,7 @@ import earth.cora.picnic.ui.settings.SettingsRoute as SettingsDestination
 
 /**
  * Entry point of the UI (app-screens), called by MainActivity inside PicnicTheme with
- * LocalIconImages provided. A type-safe NavHost: List (start) -> Aisles / Settings. The Add and
+ * LocalStickerArt provided. A type-safe NavHost: List (start) -> Aisles / Settings. The Add and
  * Edit sheets belong to the List destination. Back is navigation's own (predictive back included).
  */
 @Composable

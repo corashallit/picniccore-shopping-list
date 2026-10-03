@@ -22,7 +22,7 @@ CATALOG = {
     # deli
     'cheese': 'cheddar', 'curds': 'cheese_curds', 'ham': 'deli_meat', 'roastchicken': 'rotisserie_chicken',
     # meat: drumsticks keep chicken_drumstick; the chicken-thighs tray is the calibration set's "chicken tray" and
-    # draws chicken_breast (pale pieces on a tray); peameal gets its own key (catalog addition, WP3)
+    # draws chicken_breast (pale pieces on a tray); peameal draws the catalog's own peameal_bacon key (§19.1, WP3)
     'drumstick': 'chicken_drumstick', 'chickentray': 'chicken_breast', 'peameal': 'peameal_bacon',
     'groundbeef': 'ground_beef', 'sausages': 'sausages', 'bacon': 'bacon', 'steak': 'steak',
     # seafood
@@ -71,28 +71,10 @@ ORPHANS = {
     'pretzel': 'crackers already draws the "Crackers & pretzels" key; kept in the DSL as a part donor for snacks_generic',
 }
 
-# Keys the catalog does not have yet but the spec adds (§19.1, owner WP3).
-CATALOG_ADDITIONS = {
-    'peameal_bacon': dict(label='Peameal bacon', category='meat',
-                          drawHint='Two round slices of cornmeal-rolled back bacon on edge, pink centres in a lemon rim.'),
-}
 
-# Hop personality (§8.3) until icon_catalog.json carries "personality" (§19.1); the catalog field wins once it exists.
-# berry: strawberries, blueberries, raspberries, cherries; egg; bread: the bakery category; can: tins (and the maple
-# tin); frozen: the frozen category.
-PERSONALITY = {
-    'strawberry': 'berry', 'blueberries': 'berry', 'raspberries': 'berry', 'cherries': 'berry',
-    'eggs': 'egg',
-    'canned_tomatoes': 'can', 'canned_beans': 'can', 'soup_can': 'can', 'canned_tuna': 'can', 'maple_syrup': 'can',
-    'cat_food': 'can', 'coconut_milk': 'can', 'broth': 'can',
-}
-PERSONALITY_BY_CATEGORY = {'bakery': 'bread', 'frozen': 'frozen'}
-
-
-def personality(key, category, catalog_value=None):
-    if catalog_value:
-        return catalog_value
-    return PERSONALITY.get(key) or PERSONALITY_BY_CATEGORY.get(category) or 'none'
+def personality(catalog_value):
+    """the hop personality (§8.3) the catalog gives a key (`"personality"` in icon_catalog.json, §19.1), else 'none'."""
+    return catalog_value or 'none'
 
 
 def catalog_key(dsl_key, catalog_keys):

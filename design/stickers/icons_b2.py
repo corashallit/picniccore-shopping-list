@@ -142,15 +142,15 @@ add('chocolate', 'Milk chocolate', [
     F(('path', heart_path(24, 31.2, 4.4)), 'ramune', 'w', ol=1.4, cut=False),
 ], gloss=[G('M13.6 24.6V31', 2.4), DOT(13.6, 34.4), G('M15 9.4H17.4', 1.8)], qty='100 g bar', aisle='snacks')
 
-# canned beans: periwinkle tin, cocoa label, three kidney beans
-def can(fam_tin, fam_lab, x0=10, x1=38, top=14.4, lab_y=19.6, lab_h=16.4):
+# canned beans: periwinkle tin, white label, three red kidney beans (two families, §3.1)
+def can(fam_tin, fam_lab, x0=10, x1=38, top=14.4, lab_y=19.6, lab_h=16.4, lab_t='p'):
     return [F(cyl(x0, x1, top, 42), fam_tin, 'p', band=.18),
-            F(('rect', x0 + .9, lab_y, x1 - x0 - 1.8, lab_h), fam_lab, 'p', ol=0, cut=False, det=[f'M{x0 + .9} {lab_y}H{x1 - .9}', f'M{x0 + .9} {lab_y + lab_h}H{x1 - .9}'], det_w=1.4),
+            F(('rect', x0 + .9, lab_y, x1 - x0 - 1.8, lab_h), fam_lab, lab_t, ol=0, cut=False, det=[f'M{x0 + .9} {lab_y}H{x1 - .9}', f'M{x0 + .9} {lab_y + lab_h}H{x1 - .9}'], det_w=1.4),
             F(ell_top(x0, x1, top), fam_tin, 'w'),
             F(('ellipse', (x0 + x1) / 2, top, (x1 - x0) / 2 - 3.4, (x1 - x0) / 6 - 1.2), fam_tin, 'p', ol=1.3, cut=False)]
 BEAN = 'M-3.6 -1.4C-3.6 -3.6 -1 -4.2 .6 -3.2C2 -2.2 3.6 -2.8 4.2 -1.2C5 1.2 3.4 3.6 0 3.4C-2.6 3.2 -3.6 1.2 -3.6 -1.4Z'
 add('beans', 'Kidney beans', [
-    *can('periwinkle', 'cocoa'),
+    *can('periwinkle', 'periwinkle', lab_t='w'),
     *[F(('path', BEAN), 'strawberry', 'm', ol=1.3, cut=False, tf=f'translate({x} {y}) rotate({r})') for x, y, r in [(19.4, 25.6, -20), (28.4, 25.4, 24), (24, 31, 4)]],
 ], gloss=[G('M13.4 21V30'), DOT(13.4, 33.4), G('M15.6 13.4Q18 12 21 11.8', 1.8)], qty='540 mL can', aisle='pantry')
 

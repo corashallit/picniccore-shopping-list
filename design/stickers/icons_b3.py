@@ -6,7 +6,7 @@ add('groundbeef', 'Lean ground beef', [
     F(('path', smooth([(8.6, 30), (10.4, 22.4), (17, 18.4), (24, 17.4), (31.4, 18.4), (37.6, 22.6), (39.4, 30)])), 'strawberry', 'm',
       tex=['M12.4 26.6q1.4-2 2.8 0t2.8 0', 'M20 22.6q1.4-2 2.8 0t2.8 0', 'M27.6 25.6q1.4-2 2.8 0t2.8 0', 'M17.4 28q1.4-2 2.8 0t2.8 0', 'M28.6 20.6q1.2-1.6 2.4 0'], tex_t='p', tex_w=1.6),
     F(TRAY, 'ramune', 'p', band=.32),
-    F(('rect', 25.6, 32.4, 9.6, 5, 1.4), 'lemon', 'lp', ol=1.2, cut=False),
+    F(('rect', 25.6, 32.4, 9.6, 5, 1.4), 'ramune', 'w', ol=1.2, cut=False),
 ], gloss=[G('M19 28.2L30.2 19.4', 2), DOT(32.2, 18.2, .9), G('M8.6 31.6H16', 2.2)], qty='454 g pack', aisle='meat')
 
 # ham: classic glazed ham with a scored diamond pattern and a white bone
@@ -55,11 +55,11 @@ add('roastchicken', 'Rotisserie chicken', [
     F(('circle', 41.4, 16.2, 2), 'peach', 'w', ol=1.4), F(('circle', 43.2, 18.6, 2), 'peach', 'w', ol=1.4),
 ], gloss=[G('M9.4 27.4Q11.8 22.6 16.6 21'), DOT(20.6, 20.4)], qty='whole, hot', aisle='deli')
 
-# pizza slice: lemon cheese, deep crust, strawberry pepperoni
+# pizza slice: lemon cheese, golden lemon crust, strawberry pepperoni
 add('pizza', 'Frozen pizza', [
     F(('path', 'M24 42.2C21.6 42.2 6.8 15.4 7.8 13C11.4 9.8 17.4 8.4 24 8.4C30.6 8.4 36.6 9.8 40.2 13C41.2 15.4 26.4 42.2 24 42.2Z'), 'lemon', 'p', band=.18,
       det=['M14.4 18.6q1 3.4 -.2 5.6', 'M33.6 22q-1.2 3 .2 5'], det_t='m', det_w=1.6),
-    F(('path', 'M6.8 12.6C10.6 8 17 6 24 6C31 6 37.4 8 41.2 12.6C41.8 13.4 41.4 14.6 40.4 14.6C36.4 12.2 30.6 11 24 11C17.4 11 11.6 12.2 7.6 14.6C6.6 14.6 6.2 13.4 6.8 12.6Z'), 'peach', 'm', ol=2),
+    F(('path', 'M6.8 12.6C10.6 8 17 6 24 6C31 6 37.4 8 41.2 12.6C41.8 13.4 41.4 14.6 40.4 14.6C36.4 12.2 30.6 11 24 11C17.4 11 11.6 12.2 7.6 14.6C6.6 14.6 6.2 13.4 6.8 12.6Z'), 'lemon', 'm', ol=2),
     *[F(('circle', x, y, r), 'strawberry', 'm', ol=1.4, cut=False) for x, y, r in [(18.4, 17.6, 3.2), (29, 19.6, 3), (23.4, 27.6, 2.8)]],
     F(('path', 'M26.6 33.2C28 33.4 28.2 35.4 27.4 37.6C26.6 39.4 25.4 39.2 25.4 37.6Z'), 'lemon', 'p', ol=1.6),
 ], gloss=[G('M12.4 17.4L15.8 24.4', 2.2), DOT(17.4, 27.4, .9)], qty='800 g box', aisle='frozen')
@@ -83,10 +83,10 @@ add('waffles', 'Frozen waffles', [
     F(('path', 'M24.6 26.4C27.4 26.2 28.8 27.6 28.8 29.6V33.6C28.8 35 27.4 35 27.2 33.6L26.8 31.4C26.4 30.4 25.4 30.6 25.2 31.6L24.8 34.4C24.6 35.6 23.4 35.6 23.4 34.4V28.4C23.4 27.2 23.6 26.4 24.6 26.4Z'), 'cocoa', 'm', ol=1.4, cut=False),
 ], gloss=[G('M11.4 26V33', 2.4), DOT(11.4, 36.2)], qty='12 waffles', aisle='frozen')
 
-# ice pops: sakura and ramune pops on lemon sticks
+# ice pops: sakura and ramune pops on white sticks traced in their own colour
 def pop(cx, fam, rot):
     tf = f'rotate({rot} {cx} 40)'
-    return [F(('rect', cx - 2, 26, 4, 15.6, 2), 'lemon', 'lp', tf=tf, sband=False),
+    return [F(('rect', cx - 2, 26, 4, 15.6, 2), fam, 'w', tf=tf, sband=False),
             F(('path', f'M{fmt(cx - 7.4)} 13.6C{fmt(cx - 7.4)} 8.6 {fmt(cx - 4)} 6.4 {fmt(cx)} 6.4C{fmt(cx + 4)} 6.4 {fmt(cx + 7.4)} 8.6 {fmt(cx + 7.4)} 13.6V29Q{fmt(cx + 7.4)} 31.6 {fmt(cx + 4.8)} 31.6H{fmt(cx - 4.8)}Q{fmt(cx - 7.4)} 31.6 {fmt(cx - 7.4)} 29Z'),
               fam, 'm', band=.26, tf=tf, sband=False, det=[f'M{fmt(cx - 4)} 22.6Q{fmt(cx)} 20.6 {fmt(cx + 4)} 22.6'], det_t='p', det_w=1.6)]
 add('icepops', 'Ice pops', [*pop(17.4, 'sakura', -10), *pop(30.8, 'ramune', 10)],
@@ -108,12 +108,12 @@ add('sourcream', 'Sour cream', [
     LINE('M19 34.4L22.6 28.6M23.6 34.4L25.8 28.4M28.2 34.4L28.8 28.8', 'melon', 1.8, t='m', cut=False),
 ], gloss=[G('M14 26L14.6 33', 2.4), G('M11 20.6H19', 2.2)], qty='500 mL tub', aisle='dairy')
 
-# blueberry muffin: sakura pleated cup, cocoa dome with periwinkle berries
+# blueberry muffin: periwinkle pleated cup, cocoa dome with periwinkle berries (two families, §3.1)
 add('muffins', 'Blueberry muffins', [
     F(('path', 'M8.4 24.4C8.4 15.4 15 10.6 24 10.6C33 10.6 39.6 15.4 39.6 24.4C39.6 26.6 38 27.4 36.4 27.4H11.6C10 27.4 8.4 26.6 8.4 24.4Z'), 'cocoa', 'p', band=.2,
       det=['M16 15.6h.1M30.6 15h.1'], det_t='m', det_w=1.8),
     *[F(('circle', x, y, 2.1), 'periwinkle', 'm', ol=1.3, cut=False) for x, y in [(19.4, 18.2), (27.6, 20.4), (33.4, 17.2), (14.2, 22), (23.4, 13.8)]],
-    F(('path', 'M10.6 26.6H37.4L34.8 39.6Q34.4 42 31.8 42H16.2Q13.6 42 13.2 39.6Z'), 'sakura', 'p', band=.24, det=['M17 29V39.6', 'M21.4 29V40', 'M26.6 29V40', 'M31 29V39.6'], det_t='m', det_w=1.6),
+    F(('path', 'M10.6 26.6H37.4L34.8 39.6Q34.4 42 31.8 42H16.2Q13.6 42 13.2 39.6Z'), 'periwinkle', 'p', band=.24, det=['M17 29V39.6', 'M21.4 29V40', 'M26.6 29V40', 'M31 29V39.6'], det_t='m', det_w=1.6),
 ], gloss=[G('M12.4 20Q13.6 15.4 18 13.4'), DOT(21.8, 12.6)], qty='6 pack', aisle='bakery')
 
 # tortillas: stack of flour tortillas (front view, 1:3 ellipses)

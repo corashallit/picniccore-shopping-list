@@ -8,6 +8,9 @@ import earth.cora.picnic.core.model.SectionIds
 import earth.cora.picnic.core.model.currentList
 import earth.cora.picnic.core.model.findItem
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.store.Album
+import earth.cora.picnic.core.store.AlbumStore
+import earth.cora.picnic.core.store.InMemoryAlbumStore
 import earth.cora.picnic.core.store.InMemoryStateStore
 import earth.cora.picnic.core.store.StateStore
 import earth.cora.picnic.settings.InMemorySettingsRepository
@@ -38,17 +41,19 @@ class ListViewModelTest {
     private val catalog = IconCatalog.default
     private var nextId = 0
 
-    private class Fixture(val vm: ListViewModel, val store: StateStore, val icons: RecordingIconRepository)
+    private class Fixture(val vm: ListViewModel, val store: StateStore, val icons: RecordingIconRepository, val album: AlbumStore)
 
     private fun TestScope.fixture(
         state: AppState = Samples.shoppingState,
         store: StateStore = InMemoryStateStore(state),
+        album: AlbumStore = InMemoryAlbumStore(),
         busy: Set<String> = emptySet(),
         token: String? = "sk-test-0123456789abcdef",
     ): Fixture {
         val icons = RecordingIconRepository(busy)
         val vm = ListViewModel(
             store = store,
+            album = album,
             icons = icons,
             settings = InMemorySettingsRepository(storedToken = token),
             catalog = catalog,
@@ -57,7 +62,7 @@ class ListViewModelTest {
             appScope = testAppScope(),
         )
         backgroundScope.launch { vm.state.collect {} }
-        return Fixture(vm, store, icons)
+        return Fixture(vm, store, icons, album)
     }
 
     private suspend fun ListViewModel.loaded() = state.first { !it.loading }
@@ -299,6 +304,44 @@ class ListViewModelTest {
         f.vm.deleteList("new-0")
         advanceUntilIdle()
         assertEquals(2, f.store.current().lists.size)
+    }
+
+    /** Deleting a list with a trip files its book in the album first (§6.4, §7.2, checklist 144). */
+    @Test
+    fun deletingAListFilesItsBookFirst() = runTest {
+        val f = fixture()
+        val party = f.store.current().list(Samples.PARTY_ID)!!
+        val item = party.items.first { !it.checked }
+        f.vm.toggle(item.id)
+        advanceUntilIdle()
+        val trip = f.store.current().list(Samples.PARTY_ID)!!.trip!!
+
+        f.vm.deleteList(Samples.PARTY_ID)
+        advanceUntilIdle()
+        assertNull(f.store.current().list(Samples.PARTY_ID))
+        val book = f.album.current().books.single()
+        assertEquals(trip.id, book.id)
+        assertEquals("Saturday party", book.listTitle)
+        assertEquals(listOf(item.name), book.stickers.map { it.name })
+    }
+
+    /** A list whose book can't be filed stays: album.json is written before state.json (§7.2). */
+    @Test
+    fun aListWhoseBookCannotBeFiledStays() = runTest {
+        val failing = object : AlbumStore by InMemoryAlbumStore() {
+            override suspend fun update(transform: (Album) -> Album): Album = throw IOException("disk full")
+        }
+        val f = fixture(album = failing)
+        val events = mutableListOf<ListEvent>()
+        testAppScope().launch { f.vm.events.collect { events += it } }
+        val party = f.store.current().list(Samples.PARTY_ID)!!
+        f.vm.toggle(party.items.first { !it.checked }.id)
+        advanceUntilIdle()
+
+        f.vm.deleteList(Samples.PARTY_ID)
+        advanceUntilIdle()
+        assertTrue(f.store.current().list(Samples.PARTY_ID) != null)
+        assertEquals(listOf<ListEvent>(ListEvent.Message(ScreenText.SAVE_FAILED)), events)
     }
 
     @Test

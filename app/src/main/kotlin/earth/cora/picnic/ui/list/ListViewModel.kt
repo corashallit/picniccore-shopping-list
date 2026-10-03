@@ -11,7 +11,6 @@ import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.clearChecked
 import earth.cora.picnic.core.model.currentList
-import earth.cora.picnic.core.model.deleteList
 import earth.cora.picnic.core.model.editItemDetails
 import earth.cora.picnic.core.model.findItem
 import earth.cora.picnic.core.model.list
@@ -25,7 +24,9 @@ import earth.cora.picnic.core.model.setItemIcon
 import earth.cora.picnic.core.model.setSectionCollapsed
 import earth.cora.picnic.core.model.switchList
 import earth.cora.picnic.core.model.toggleChecked
+import earth.cora.picnic.core.store.AlbumStore
 import earth.cora.picnic.core.store.StateStore
+import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.icons.IconRepository
 import earth.cora.picnic.settings.SettingsRepository
 import earth.cora.picnic.ui.common.ScreenText
@@ -50,6 +51,7 @@ import java.io.IOException
  */
 class ListViewModel(
     private val store: StateStore,
+    private val album: AlbumStore,
     private val icons: IconRepository,
     private val settings: SettingsRepository,
     private val catalog: IconCatalog,
@@ -148,12 +150,13 @@ class ListViewModel(
     fun renameList(id: String, title: String) = mutate { it.renameList(id, title) }
 
     /**
-     * Deletes a list. TODO(WP5): a list with a trip returns its book, which goes to the album first
-     * (§6.4, §7.2); there are no trips before WP3, so phase 0 drops the (always null) book.
+     * Deletes a list (§6.4). A list with a trip has its sticker book filed in the album first (a printed receipt as
+     * saved), and only then leaves state.json (TripFiling.deleteList, §7.2, checklist 144): a failed album write keeps
+     * the list.
      */
     fun deleteList(id: String) {
         val now = clock()
-        mutate { it.deleteList(id, now).first }
+        appScope.launch { save { TripFiling.deleteList(store, album, id, now) } }
     }
 
     fun openEdit(itemId: String) {
@@ -227,7 +230,7 @@ class ListViewModel(
         private const val STOP_TIMEOUT_MS = 5_000L
 
         fun factory(c: AppContainer): ViewModelProvider.Factory = viewModelFactory {
-            initializer { ListViewModel(c.store, c.icons, c.settings, c.catalog, c.clock, c::newId, c.appScope) }
+            initializer { ListViewModel(c.store, c.album, c.icons, c.settings, c.catalog, c.clock, c::newId, c.appScope) }
         }
     }
 }
