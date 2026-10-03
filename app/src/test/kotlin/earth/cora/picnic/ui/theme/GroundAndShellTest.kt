@@ -98,6 +98,9 @@ class ShaderCacheTest {
             }
         }
         compose.waitForIdle()
+        // One drawn frame first: the binder's pinstripe tile is made on the first draw, which Robolectric may not have
+        // run yet; the count that matters is the one after the screen has been drawn once.
+        compose.onRoot().captureToImage()
         val after = PatternCache.tileCreations.get()
         repeat(12) {
             tick++
