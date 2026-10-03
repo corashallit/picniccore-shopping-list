@@ -2,6 +2,19 @@ package earth.cora.picnic.ui.aisles
 
 import android.os.Looper
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.unit.dp
@@ -173,6 +186,75 @@ class AisleEditorTest {
         assertEquals(s.store.aisles().first().id, s.findItem("i-lemons")?.aisleId)
         assertNull(s.findItem("i-baguette")?.aisleId)
         assertNull(s.findItem("i-bagels")?.aisleId)
+    }
+
+    /** "Aisles as text" also commits when the field loses focus (§6.7), not only on Done. */
+    @Test
+    fun rawTextCommitsOnBlur() {
+        val store = launch()
+        val text = store.now().store.aislesText.lines().joinToString("\n") { if (it.trim() == "Produce") "Fruit & vegetables" else it }
+        compose.onNodeWithContentDescription("Aisles as text:").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Aisles as text:").performTextReplacement(text)
+        compose.waitForIdle()
+        // Typing previews; nothing is saved yet.
+        assertEquals("Produce", store.now().store.aisles().first().name)
+        // Focus moves on to the Store field: the text commits through the line diff, so the edited line keeps its items.
+        compose.onNodeWithTag(AislesTags.STORE).performScrollTo().performClick()
+        waitFor(store) { s -> s.store.aisles().first().name == "Fruit & vegetables" }
+        val s = store.now()
+        assertEquals(s.store.aisles().first().id, s.findItem("i-lemons")?.aisleId)
+    }
+
+    /** §15 (swatches are named among the 48 dp targets): each colour and pattern swatch, and each basket, is ≥48 × 48 dp. */
+    @Test
+    fun swatchTargets() {
+        launch()
+        compose.onNodeWithContentDescription("Edit Bakery").performClick()
+        compose.waitForIdle()
+        val radios = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)).fetchSemanticsNodes()
+        // 10 colours + 10 patterns + 17 baskets.
+        assertEquals(37, radios.size)
+        val small = radios.filter { n ->
+            with(compose.density) { n.size.width.toDp() < 48.dp || n.size.height.toDp() < 48.dp }
+        }.map { "${it.config.getOrNull(SemanticsProperties.ContentDescription)} ${it.size}" }
+        assertTrue("targets under 48 dp: $small", small.isEmpty())
+    }
+
+    /**
+     * §15 (names wrap, never clip) and §4.26: with the app's 14 default aisles, no label's name or "store aisle N" is
+     * ellipsized or cut, at font scale 1.0, 1.3 and 2.0; every label that has a store number shows it.
+     */
+    @Test
+    fun labelsNeverClip() {
+        val ui = AislesViewModel.stateOf(Samples.shoppingState, baskets)
+        val numbered = ui.labels.count { it.storeAisle != null }
+        assertEquals(7, numbered)
+        var scale by mutableFloatStateOf(1f)
+        compose.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, scale)) {
+                PicnicTheme { AislesScreen(ui, AislesActions()) }
+            }
+        }
+        for (s in listOf(1f, 1.3f, 2f)) {
+            scale = s
+            compose.waitForIdle()
+            val cut = mutableListOf<String>()
+            var storeLines = 0
+            for (position in 1..ui.labels.size) {
+                compose.onAllNodes(hasAnyAncestor(hasTestTag(AislesTags.label(position))), useUnmergedTree = true).fetchSemanticsNodes().forEach { node ->
+                    val results = mutableListOf<TextLayoutResult>()
+                    node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+                    results.forEach { r ->
+                        val text = r.layoutInput.text.text
+                        if (text.startsWith("store aisle ")) storeLines++
+                        if (r.hasVisualOverflow || (0 until r.lineCount).any { r.isLineEllipsized(it) }) cut += "$s: '$text'"
+                    }
+                }
+            }
+            assertTrue("cut label texts: $cut", cut.isEmpty())
+            assertEquals("store numbers shown at font scale $s", numbered, storeLines)
+        }
     }
 
     @Test

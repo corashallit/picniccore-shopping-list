@@ -34,6 +34,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -371,10 +373,15 @@ private fun OkLcd() {
     val t by rememberLoopTime(enabled = !reduced)
     val dots = if (reduced) 0 else ((t / OK_TICK_MILLIS) % 3).toInt()
     val label = stringResource(R.string.settings_test_ok)
-    Box(Modifier.clearAndSetSemantics { contentDescription = label; liveRegion = LiveRegionMode.Polite }) {
-        LcdChip(LcdState(mode = LcdMode.Ok, text = "OK" + ".".repeat(dots)), pitch = 1.6.dp)
+    val shown = "OK" + ".".repeat(dots)
+    Box(Modifier.clearAndSetSemantics { contentDescription = label; liveRegion = LiveRegionMode.Polite; okLcdShown = shown }) {
+        LcdChip(LcdState(mode = LcdMode.Ok, text = shown), pitch = 1.6.dp)
     }
 }
+
+/** Test hook (SettingsScreenTest): what the "OK" LCD shows now ("OK", "OK.", "OK.."); TalkBack reads "Connected". */
+val OkLcdShown: SemanticsPropertyKey<String> = SemanticsPropertyKey("OkLcdShown")
+private var SemanticsPropertyReceiver.okLcdShown: String by OkLcdShown
 
 private const val OK_TICK_MILLIS = 600L
 

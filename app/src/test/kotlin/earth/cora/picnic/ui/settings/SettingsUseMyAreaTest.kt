@@ -11,11 +11,15 @@ import earth.cora.picnic.platform.AreaPlaceSource
 import earth.cora.picnic.platform.CoarseLocator
 import earth.cora.picnic.platform.InMemoryPlaceCache
 import earth.cora.picnic.platform.LatLon
+import earth.cora.picnic.platform.StoredPlace
+import earth.cora.picnic.settings.AppSettings
+import earth.cora.picnic.settings.InMemorySettingsRepository
 import earth.cora.picnic.settings.Surprise
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.theme.PicnicTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -101,19 +105,29 @@ class SettingsUseMyAreaTest {
         assertEquals(listOf("denied"), calls)
         compose.onNodeWithText("Location wasn’t allowed, so the surprises use Toronto.").assertExists()
 
-        // And the place the surprises get is Toronto: the setting is off, no fix is asked for.
+    }
+
+    /**
+     * The switch stays on but the permission was taken back in Android's settings: the place the surprises get is Toronto,
+     * no fix is asked for, and the stored area is deleted (§0.4: nothing about location is kept without it).
+     */
+    @Test
+    fun revokedPermissionFallsBackToToronto() = runBlocking {
+        val settings = InMemorySettingsRepository(AppSettings(useMyArea = true))
+        val cache = InMemoryPlaceCache(StoredPlace(43.3, -79.9, "s0000549", at = 0L))
         val located = mutableListOf<Unit>()
         val source = AreaPlaceSource(
-            useMyArea = { false },
+            useMyArea = { settings.current().allows(Surprise.UseMyArea) },
             locator = object : CoarseLocator {
                 override fun hasPermission() = false
                 override suspend fun locate(): LatLon? = null.also { located += Unit }
             },
-            cache = InMemoryPlaceCache(),
-            clock = { 0L },
+            cache = cache,
+            clock = { 1L },
         )
-        assertEquals(Place.TORONTO, runBlocking { source.place() })
-        assertTrue(located.isEmpty())
+        assertEquals(Place.TORONTO, source.place())
+        assertTrue("no fix asked for", located.isEmpty())
+        assertNull("the stored area is gone", cache.stored)
     }
 
     @Test

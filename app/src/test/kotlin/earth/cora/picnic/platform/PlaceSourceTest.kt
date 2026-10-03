@@ -125,6 +125,35 @@ class PlaceSourceTest {
         assertEquals(Place.TORONTO.lon, EcSites.TORONTO.lon, 0.0)
     }
 
+    /**
+     * One code scheme for every place (§0.4 Q6, §12.4): Toronto's default and a found area both carry an EC site code
+     * ("s" + 7 digits) and their city's own coordinates, and core's [Place.forecastFeedUrl] names that city's feed, so the
+     * weather client (WP9, core) can build the request from a Place alone.
+     */
+    @Test
+    fun oneCitySchemeForEveryPlace() {
+        val siteCode = Regex("""^s\d{7}$""")
+        assertTrue(Place.TORONTO.cityCode, siteCode.matches(Place.TORONTO.cityCode))
+        assertEquals("s0000458", Place.TORONTO.cityCode)
+        assertEquals(EcSites.TORONTO.feedUrl, Place.TORONTO.forecastFeedUrl)
+        assertEquals("https://weather.gc.ca/rss/weather/43.65_-79.38_e.xml", Place.TORONTO.forecastFeedUrl)
+
+        val hamilton = EcSites.placeFor(LatLon(43.2557, -79.8711))
+        assertTrue(hamilton.cityCode, siteCode.matches(hamilton.cityCode))
+        val site = assertNotNullAnd(EcSites.byCode(hamilton.cityCode))
+        // The point is the phone's rounded area; the feed is the city's, never the point's.
+        assertEquals(43.3, hamilton.lat, 0.0)
+        assertEquals(-79.9, hamilton.lon, 0.0)
+        assertEquals(site.lat, hamilton.siteLat, 0.0)
+        assertEquals(site.lon, hamilton.siteLon, 0.0)
+        assertEquals(site.feedUrl, hamilton.forecastFeedUrl)
+        assertEquals("https://weather.gc.ca/rss/weather/43.26_-79.87_e.xml", hamilton.forecastFeedUrl)
+        // A stored area comes back with its city's coordinates too.
+        assertEquals(hamilton, StoredPlace(hamilton.lat, hamilton.lon, hamilton.cityCode, at = 0L).place)
+        // Every bundled site code is in the same scheme.
+        assertTrue(EcSites.all.all { siteCode.matches(it.code) })
+    }
+
     @Test
     fun theBundledListIsOntarioAndTheMainCities() {
         val sites = EcSites.all

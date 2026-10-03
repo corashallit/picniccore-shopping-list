@@ -17,12 +17,30 @@ import earth.cora.picnic.settings.Surprise
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.theme.PicnicTheme
 import org.junit.Assert.assertEquals
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.text.AnnotatedString
+import earth.cora.picnic.settings.InMemorySettingsRepository
+import earth.cora.picnic.ui.common.FakeAssistant
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+
+/** A clipboard holding [text] (null: empty). */
+private class FakeClipboard(var text: String?) : ClipboardManager {
+    override fun getText(): AnnotatedString? = text?.let(::AnnotatedString)
+
+    override fun setText(annotatedString: AnnotatedString) {
+        text = annotatedString.text
+    }
+}
 
 /** Settings (§6.8, checklist 226): the key card, the Stickers card, the Surprises card and the About row. */
 @RunWith(AndroidJUnit4::class)
@@ -80,7 +98,7 @@ class SettingsScreenTest {
     fun stickersCard() {
         launch(SettingsSamples.ok)
         compose.onNodeWithText("Draw new stickers with AI", substring = true).performScrollTo().assertIsOn().performClick()
-        compose.onNodeWithText("costs about 1.5¢", substring = true).assertExists()
+        compose.onNodeWithText("Drawing a new sticker takes about 10\u00a0s and uses your OpenAI key.").assertExists()
         assertEquals(listOf("draw:false"), calls)
     }
 
@@ -99,6 +117,61 @@ class SettingsScreenTest {
         compose.onNodeWithText("Celebration", substring = true).performClick()
         assertEquals(listOf("${Surprise.Sounds.key}:true", "${Surprise.Celebration.key}:false"), calls)
         compose.onNodeWithText("Reduced motion follows your phone’s setting.").performScrollTo().assertExists()
+    }
+
+    /** The eye reveals the key she is typing and hides it again (§4.8); the field is masked by default. */
+    @Test
+    fun eyeRevealsTheTypedKey() {
+        var state by mutableStateOf(SettingsSamples.typed)
+        val reveal = SettingsActions(onRevealChange = { state = state.copy(tokenVisible = it) })
+        compose.setContent { PicnicTheme { SettingsScreen(state, reveal, location = LocationPermission.Denied) } }
+        val key = SettingsSamples.typed.tokenInput
+        val field = compose.onNodeWithContentDescription("OpenAI API key")
+        fun shown(): String = field.fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+        assertEquals("•".repeat(key.length), shown())
+        compose.onNodeWithContentDescription("Show key").performClick()
+        assertEquals(key, shown())
+        compose.onNodeWithContentDescription("Hide key").performClick()
+        assertEquals("•".repeat(key.length), shown())
+    }
+
+    /** Paste reads the clipboard (trimmed) into the key field, through the route's real wiring. */
+    @Test
+    fun pasteFillsTheKeyFromTheClipboard() {
+        val settings = InMemorySettingsRepository()
+        val vm = SettingsViewModel(settings, FakeAssistant(), "0.4.0")
+        val clipboard = FakeClipboard("  sk-proj-pasted0123456789abcd \n")
+        compose.setContent {
+            PicnicTheme {
+                CompositionLocalProvider(LocalClipboardManager provides clipboard) { SettingsRoute(vm, onBack = {}) }
+            }
+        }
+        compose.onNodeWithContentDescription("Paste key").performClick()
+        compose.waitUntil(5_000) { vm.state.value.tokenInput == "sk-proj-pasted0123456789abcd" }
+        assertTrue(vm.state.value.canSave)
+        // An empty clipboard changes nothing.
+        clipboard.text = null
+        compose.onNodeWithContentDescription("Paste key").performClick()
+        compose.waitForIdle()
+        assertEquals("sk-proj-pasted0123456789abcd", vm.state.value.tokenInput)
+    }
+
+    /** A passing test ticks on its LCD: "OK" → "OK." → "OK.." every 0.6 s (§6.8), then round again. */
+    @Test
+    fun okLcdTicks() {
+        compose.mainClock.autoAdvance = false
+        launch(SettingsSamples.ok)
+        repeat(3) { compose.mainClock.advanceTimeByFrame() }
+        val lcd = compose.onNode(SemanticsMatcher.keyIsDefined(OkLcdShown))
+        fun shown() = lcd.fetchSemanticsNode().config[OkLcdShown]
+        lcd.assertContentDescriptionEquals("Connected")
+        assertEquals("OK", shown())
+        compose.mainClock.advanceTimeBy(600)
+        assertEquals("OK.", shown())
+        compose.mainClock.advanceTimeBy(600)
+        assertEquals("OK..", shown())
+        compose.mainClock.advanceTimeBy(600)
+        assertEquals("OK", shown())
     }
 
     @Test

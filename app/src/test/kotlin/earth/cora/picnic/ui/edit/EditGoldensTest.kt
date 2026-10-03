@@ -8,6 +8,10 @@ import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTextReplacement
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.common.dayAndGlowScreens
 import earth.cora.picnic.ui.common.goldenName
@@ -23,8 +27,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Edit sheet goldens (checklist 217, 329): `edit_default_{day,glow}`; Day only: `edit_drawing`, `edit_nokey`,
- * `edit_sheet_pantry_on`, `edit_fs200`.
+ * Edit sheet goldens (checklist 217, 329, Appendix C), from the Appendix A fixture (Milk, 2 % in 6 · Dairy & eggs at
+ * Hillcrest Market): `edit_{default,renamed,drawing,nokey}_{day,glow}`; Day only: `edit_sheet_pantry_on`, `edit_fs130`,
+ * `edit_fs200`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -45,7 +50,10 @@ class EditGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pri
     ) = compose.recordScreen(name, variant, fontScale = fontScale, before = before) {
         Box(Modifier.fillMaxSize()) {
             PicnicBackground(Modifier.fillMaxSize()) {}
-            EditItemSheet(state, { _, _, _ -> }, {}, {}, {}, {}, {}, favourite = favourite, inPantry = inPantry)
+            EditItemSheet(
+                state, { _, _, _ -> }, {}, {}, {}, {}, {},
+                favourite = favourite, inPantry = inPantry, aisleStyles = EditSamples.app.store.aisleStyles,
+            )
         }
     }
 
@@ -57,23 +65,28 @@ class EditGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pri
     @Test
     fun default() = record(goldenName("edit_default", variant), EditSamples.milk())
 
+    /** "renamed (dirty)" (§6.3): a new name typed, so Save is live. */
     @Test
-    fun drawing() {
-        if (day) {
-            record("edit_drawing", EditSamples.milk(drawing = true), before = { toTheEnd() })
-        }
-    }
+    fun renamed() = record(goldenName("edit_renamed", variant), EditSamples.milk(), before = {
+        onNodeWithContentDescription("Name").performTextReplacement("Milk, 1 %")
+        waitForIdle()
+        onNodeWithText("Save").assertIsEnabled()
+    })
 
     @Test
-    fun noKey() {
-        if (day) {
-            record("edit_nokey", EditSamples.milk(canDraw = false), before = { toTheEnd() })
-        }
-    }
+    fun drawing() = record(goldenName("edit_drawing", variant), EditSamples.milk(drawing = true), before = { toTheEnd() })
+
+    @Test
+    fun noKey() = record(goldenName("edit_nokey", variant), EditSamples.milk(canDraw = false), before = { toTheEnd() })
 
     @Test
     fun pantryOn() {
         if (day) record("edit_sheet_pantry_on", EditSamples.milk(), favourite = true, inPantry = true)
+    }
+
+    @Test
+    fun fontScale130() {
+        if (day) record("edit_fs130", EditSamples.milk(), fontScale = 1.3f)
     }
 
     @Test

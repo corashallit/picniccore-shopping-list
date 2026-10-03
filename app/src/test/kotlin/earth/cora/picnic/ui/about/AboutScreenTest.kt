@@ -33,9 +33,10 @@ class AboutScreenTest {
     private val settings = InMemorySettingsRepository()
     private var labOpened = 0
 
+    /** The version taps are timed on the compose test clock (never the wall clock), so a slow machine can't break a run. */
     private fun launch(debugBuild: Boolean = false) {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val vm = AboutViewModel(settings, "0.4.0", debugBuild) { Licences.load(context) }
+        val vm = AboutViewModel(settings, "0.4.0", debugBuild, clock = { compose.mainClock.currentTime }) { Licences.load(context) }
         compose.setContent { PicnicTheme { AboutRoute(vm, onBack = {}, onOpenLab = { labOpened++ }) } }
         compose.waitForIdle()
     }
@@ -53,28 +54,74 @@ class AboutScreenTest {
         compose.onNodeWithText("Every sticker, basket and doodle is original, made for this app.").performScrollTo().assertExists()
     }
 
+    /** Lets the tap's work (the ViewModel's write, the toast's drop) run on the held clock. */
+    private fun settle(frames: Int = 10) = repeat(frames) {
+        shadowOf(Looper.getMainLooper()).idle()
+        compose.mainClock.advanceTimeByFrame()
+    }
+
+    private fun unlocked(): Boolean = runBlocking { settings.current() }.surpriseLab
+
     @Test
     fun sevenTapsUnlockLab() {
         launch()
         assertTrue(compose.onAllNodesWithText("Surprise lab").fetchSemanticsNodes().isEmpty())
-        val version = compose.onNodeWithText("Version 0.4.0")
-        repeat(6) { version.performClick() }
-        compose.waitForIdle()
-        assertFalse("six taps are not enough", runBlocking { settings.current() }.surpriseLab)
-        // The seventh tap: a toast says so (the clock held so the toast is caught mid-stay, not played out).
+        // The clock stands still between taps; each tap comes 1.5 s after the last (inside the 2 s gap).
         compose.mainClock.autoAdvance = false
-        version.performClick()
-        repeat(10) {
-            shadowOf(Looper.getMainLooper()).idle()
-            compose.mainClock.advanceTimeByFrame()
+        val version = compose.onNodeWithText("Version 0.4.0")
+        repeat(6) {
+            version.performClick()
+            settle(1)
+            compose.mainClock.advanceTimeBy(1_500)
         }
+        settle()
+        assertFalse("six taps are not enough", unlocked())
+        // The seventh tap: a toast says so (caught mid-stay, not played out).
+        version.performClick()
+        settle()
         compose.mainClock.advanceTimeBy(400)
         compose.onNodeWithText("Surprise lab unlocked", substring = true).assertExists()
         compose.mainClock.autoAdvance = true
-        compose.waitUntil(5_000) { runBlocking { settings.current() }.surpriseLab }
+        compose.waitUntil(5_000) { unlocked() }
         compose.waitUntil(5_000) { compose.onAllNodesWithText("Surprise lab").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Surprise lab").performClick()
         assertEquals(1, labOpened)
+    }
+
+    /** A pause longer than 2 s between two taps starts the count again (on the test clock, as on the phone). */
+    @Test
+    fun aPauseStartsTheCountAgain() {
+        launch()
+        compose.mainClock.autoAdvance = false
+        val version = compose.onNodeWithText("Version 0.4.0")
+        fun tap(gapMillis: Long) {
+            version.performClick()
+            settle(1)
+            compose.mainClock.advanceTimeBy(gapMillis)
+        }
+        repeat(5) { tap(300) }
+        compose.mainClock.advanceTimeBy(TAP_GAP_MILLIS + 500)
+        // Six more: eleven in all, but only six since the pause.
+        repeat(6) { tap(300) }
+        settle()
+        assertFalse(unlocked())
+        tap(300)
+        settle()
+        compose.mainClock.autoAdvance = true
+        compose.waitUntil(5_000) { unlocked() }
+    }
+
+    /** The counter itself (pure): seven taps within 2 s of each other unlock; the count restarts after a pause. */
+    @Test
+    fun unlockTapsCount() {
+        var now = 0L
+        val taps = UnlockTaps { now }
+        repeat(6) { assertFalse(taps.tap()); now += TAP_GAP_MILLIS }
+        assertTrue("the seventh tap, each exactly 2 s apart", taps.tap())
+        now += TAP_GAP_MILLIS + 1
+        repeat(6) { assertFalse(taps.tap()); now += 100 }
+        now += TAP_GAP_MILLIS + 1
+        assertFalse("a pause restarted the count", taps.tap())
     }
 
     @Test

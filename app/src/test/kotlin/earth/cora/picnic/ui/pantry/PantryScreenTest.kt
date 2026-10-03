@@ -13,6 +13,9 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.core.assistant.IconDecider
 import earth.cora.picnic.core.assistant.IconDecision
@@ -141,6 +144,41 @@ class PantryScreenTest {
         assertEquals("nothing stored before Done", listOf("Salt", "Pepper"), store.names())
         compose.onNodeWithText("Done").performClick()
         waitForNames(store, listOf("Salt", "Rice", "Pepper"))
+    }
+
+    /** "Pantry as text" also commits when the field loses focus (§6.13), not only on Done. */
+    @Test
+    fun textCommitsOnBlur() {
+        val store = launch(state("Salt", "Pepper"))
+        compose.onNodeWithContentDescription("Pantry as text:").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Pantry as text:").performTextReplacement("Salt\nRice, oats\nPepper")
+        compose.waitForIdle()
+        assertEquals("nothing stored while she types", listOf("Salt", "Pepper"), store.names())
+        // Focus moves on to the add field: the text commits (a line with a comma becomes two entries).
+        compose.onNodeWithContentDescription("Add to pantry:").performScrollTo().performClick()
+        waitForNames(store, listOf("Salt", "Rice", "Oats", "Pepper"))
+    }
+
+    /**
+     * The pop card opens under the shelf's name row, centred on the tapped sticker's slot, so the sticker and its name
+     * stay in view; with no room below it, it opens above the shelf (§6.13 polish).
+     */
+    @Test
+    fun popCardKeepsTheNameInView() {
+        val window = IntSize(1080, 2280)
+        val card = IntSize(624, 300)
+        val shelf = IntRect(36, 900, 1044, 1200)
+        val below = ShelfCardPosition(index = 1, perShelf = 4, margin = 24).calculatePosition(shelf, window, LayoutDirection.Ltr, card)
+        assertEquals("under the names", shelf.bottom, below.y)
+        val slot = shelf.width / 4f
+        assertEquals("centred on the slot", (shelf.left + slot * 1.5f - card.width / 2f).toInt(), below.x)
+        // The last slot's card stays inside the window.
+        val right = ShelfCardPosition(index = 3, perShelf = 4, margin = 24).calculatePosition(shelf, window, LayoutDirection.Ltr, card)
+        assertEquals(window.width - card.width - 24, right.x)
+        // A shelf near the bottom: the card opens above the shelf, never over the tapped sticker's name.
+        val low = IntRect(36, 1950, 1044, 2250)
+        val above = ShelfCardPosition(index = 0, perShelf = 4, margin = 24).calculatePosition(low, window, LayoutDirection.Ltr, card)
+        assertEquals(low.top - card.height, above.y)
     }
 
     @Test

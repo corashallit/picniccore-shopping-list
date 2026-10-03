@@ -8,6 +8,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -34,7 +36,8 @@ class SettingsRepositoryTest {
     @After
     fun tearDown() = scope.cancel()
 
-    private fun store(): DataStore<Preferences> = PreferenceDataStoreFactory.create(scope = scope) { tmp.root.resolve("settings.preferences_pb") }
+    private fun store(on: CoroutineScope = scope): DataStore<Preferences> =
+        PreferenceDataStoreFactory.create(scope = on) { tmp.root.resolve("settings.preferences_pb") }
 
     @Test
     fun surprisesDefaults() = runBlocking {
@@ -58,25 +61,31 @@ class SettingsRepositoryTest {
 
     @Test
     fun everySwitchPersistsAndComesBackAfterARestart() = runBlocking {
-        val dataStore = store()
-        val repo = DataStoreSettingsRepository(dataStore, InMemoryTokenStore())
-        for (surprise in Surprise.entries) repo.setSurprise(surprise, !surprise.default)
-        repo.setDuskBinder(true)
-        repo.setSurpriseLab(true)
+        // The first run: its own DataStore on its own scope, written, then shut down (as when the process dies).
+        val firstRun = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val first = DataStoreSettingsRepository(store(firstRun), InMemoryTokenStore())
+        for (surprise in Surprise.entries) first.setSurprise(surprise, !surprise.default)
+        first.setDuskBinder(true)
+        first.setSurpriseLab(true)
+        first.markBooksSeen(listOf("t-saturday-1"))
+        firstRun.coroutineContext.job.cancelAndJoin()
 
-        // A new repository over the same file: a cold start.
-        val restarted = DataStoreSettingsRepository(dataStore, InMemoryTokenStore()).settings.first()
-        for (surprise in Surprise.entries) assertEquals(surprise.name, !surprise.default, restarted.allows(surprise))
-        assertTrue(restarted.duskBinder)
-        assertTrue(restarted.surpriseLab)
+        // A cold start: a new DataStore instance reading the same file from disk.
+        val dataStore = store()
+        val restarted = DataStoreSettingsRepository(dataStore, InMemoryTokenStore())
+        val settings = restarted.settings.first()
+        for (surprise in Surprise.entries) assertEquals(surprise.name, !surprise.default, settings.allows(surprise))
+        assertTrue(settings.duskBinder)
+        assertTrue(settings.surpriseLab)
+        assertEquals(setOf("t-saturday-1"), restarted.seenBooks.first())
         val keys = dataStore.data.first().asMap().keys.map { it.name }.toSet()
-        assertEquals(Surprise.entries.map { it.key }.toSet() + setOf("dusk_binder", "surprise_lab"), keys)
+        assertEquals(Surprise.entries.map { it.key }.toSet() + setOf("dusk_binder", "surprise_lab", "seen_books"), keys)
 
         // Back to the defaults: the keys go (absent = default).
-        for (surprise in Surprise.entries) repo.setSurprise(surprise, surprise.default)
-        repo.setDuskBinder(false)
-        assertEquals(setOf("surprise_lab"), dataStore.data.first().asMap().keys.map { it.name }.toSet())
-        assertEquals(AppSettings(surpriseLab = true), repo.current())
+        for (surprise in Surprise.entries) restarted.setSurprise(surprise, surprise.default)
+        restarted.setDuskBinder(false)
+        assertEquals(setOf("surprise_lab", "seen_books"), dataStore.data.first().asMap().keys.map { it.name }.toSet())
+        assertEquals(AppSettings(surpriseLab = true), restarted.current())
     }
 
     @Test
@@ -87,5 +96,8 @@ class SettingsRepositoryTest {
         repo.setDuskBinder(true)
         repo.setSurpriseLab(true)
         assertEquals(AppSettings(useMyArea = true, eggs = false, duskBinder = true, surpriseLab = true), repo.current())
+        repo.markBooksSeen(listOf("a"))
+        repo.markBooksSeen(listOf("b"))
+        assertEquals(setOf("a", "b"), repo.seenBooks.first())
     }
 }

@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
 
 /*
  * Press feedback for WP8's own tap targets (docs/DESIGN_STICKER.md §0.2 "no Material default survives", checklist 235).
- * PicnicTheme wraps a MaterialTheme whose LocalIndication is Material's ripple, so:
+ * Inside PicnicTheme (it carries a Material 3 layer for the v1 screens) LocalIndication is Material's ripple, so:
  * - every clickable, selectable, toggleable or combinedClickable in WP8's files names its indication: [highlighterPress]
  *   for a text row (the §4.11 highlighter band behind the row while it is pressed), or null where the target draws its
  *   own state (a pocket's lift, a swatch's ring, a tab's raise, a sticker cell's lemon ring). NoMaterialDefaultsTest scans

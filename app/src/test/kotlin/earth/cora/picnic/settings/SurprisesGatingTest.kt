@@ -22,10 +22,14 @@ import org.junit.runner.RunWith
 
 /**
  * Checklist 228 (docs/DESIGN_STICKER.md §6.8, §0.4): each Surprises switch gates exactly its own feature, table-driven.
- * For every switch, flipping it from its default changes that feature and nothing else, measured on everything that
- * reads the switches: the real Feedback (sounds, haptics), the real "Use my area" place, and the gate every other
- * consumer asks ([AppSettings.allows]: Easter eggs for WP9's engine, the Next card and the Celebration for WP6's scenes,
- * Weather surprises for WP9's forecast).
+ * For every switch, flipping it from its default changes that feature and nothing else.
+ *
+ * PARTIAL (3 of 7 measured on a real consumer): Sounds and Haptics are measured on the real Feedback and Use my area on
+ * the real place source. Easter eggs, the Next stop card, the Celebration and Weather surprises have no consumer in this
+ * build yet (the SurpriseEngine is a no-op until WP9; the Next card and the celebration are WP6's; the forecast client is
+ * WP9's), so their rows prove only the gate those consumers will ask ([AppSettings.allows]). When they land, each row
+ * moves onto its consumer: the engine with a fake clock (no egg fires with eggs off), the Choreographer (no Next card or
+ * celebration presented), and a fake WeatherSource counting fetches (none with Weather off).
  */
 @RunWith(AndroidJUnit4::class)
 class SurprisesGatingTest {

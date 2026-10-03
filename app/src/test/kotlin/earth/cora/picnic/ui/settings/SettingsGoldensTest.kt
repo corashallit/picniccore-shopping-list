@@ -19,7 +19,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Settings goldens (checklist 226, Appendix C): `settings_{nokey,typed,ok,failed,surprises_off}_{day,glow}`, plus
- * `settings_save_error_*` (the §6.8 notice state) and, Day only, `settings_fs130` and `settings_fs200`.
+ * `settings_typed_shown_*` (the typed key revealed by the eye, §6.8 "key typed (shown / hidden)"), `settings_save_error_*`
+ * (the §6.8 notice state) and, Day only, `settings_fs130` and `settings_fs200`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -49,6 +50,9 @@ class SettingsGoldensTest(private val variant: ThemeVariant, @Suppress("unused")
 
     @Test
     fun typed() = record("settings_typed", SettingsSamples.typed)
+
+    @Test
+    fun typedShown() = record("settings_typed_shown", SettingsSamples.typed.copy(tokenVisible = true))
 
     @Test
     fun ok() = record("settings_ok", SettingsSamples.ok)

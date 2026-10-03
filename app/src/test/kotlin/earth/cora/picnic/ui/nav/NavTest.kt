@@ -26,8 +26,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The app's routes on the real container (JSON store, DataStore settings, no key, so no network), driven through the
- * same [AppNav] the list's overflow menu, the recipe card and the screens' menus use (checklist 233).
+ * The app's routes on the real container (JSON store, DataStore settings, no key, so no network) (checklist 233). The
+ * Album is reached by tapping through the real screens: List → Settings → More options → Sticker album (§4.24: the
+ * Settings and Album menus). The list's own overflow menu (My pantry, Sticker album) belongs to WP5's List screen; until
+ * it lands, the routes it will call are exercised through the same [AppNav] it will use.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -63,14 +65,49 @@ class NavTest {
 
     private fun atList(): Boolean = nav.currentDestination?.hasRoute<ListRoute>() == true
 
+    private fun at(route: kotlin.reflect.KClass<*>): Boolean = when (route) {
+        AlbumRoute::class -> nav.currentDestination?.hasRoute<AlbumRoute>() == true
+        SettingsRoute::class -> nav.currentDestination?.hasRoute<SettingsRoute>() == true
+        else -> false
+    }
+
+    /** Taps "More options", then the menu item [item]. */
+    private fun menu(item: String) {
+        compose.waitForIdle() // the screen change has finished: one More button on screen
+        compose.onNodeWithContentDescription("More options").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(item, substring = true).performClick()
+    }
+
     @Test
     fun albumRoute() {
         launch()
         assertTrue(atList())
-        // The list's overflow menu "Sticker album" calls this.
-        compose.runOnIdle { appNav!!.openAlbum() }
+        // List → Settings (its top-bar button) → More options → Sticker album, all by taps.
+        compose.onNodeWithContentDescription("Settings").performClick()
+        waitForText("Your OpenAI key")
+        menu("Sticker album")
+        compose.waitUntil(5_000) { at(AlbumRoute::class) }
         waitForText("Sticker album")
-        compose.runOnIdle { assertTrue(nav.currentDestination?.hasRoute<AlbumRoute>() == true) }
+        // Back returns to the screen she came from.
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitUntil(5_000) { at(SettingsRoute::class) }
+        // And the album's own menu goes straight back to the list.
+        menu("Sticker album")
+        compose.waitUntil(5_000) { at(AlbumRoute::class) }
+        menu("Back to")
+        compose.waitUntil(5_000) { atList() }
+        assertTrue(nav.previousBackStackEntry == null)
+    }
+
+    /** The route the list's overflow menu "Sticker album" (WP5) will call: Back returns to the list. */
+    @Test
+    fun albumFromTheListMenuRoute() {
+        launch()
+        compose.runOnIdle { appNav!!.openAlbum() }
+        compose.waitUntil(5_000) { at(AlbumRoute::class) }
+        compose.waitForIdle()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.waitUntil(5_000) { atList() }
     }

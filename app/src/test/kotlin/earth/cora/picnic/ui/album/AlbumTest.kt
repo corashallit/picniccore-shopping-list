@@ -1,5 +1,15 @@
 package earth.cora.picnic.ui.album
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
+import earth.cora.picnic.settings.InMemorySettingsRepository
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,15 +75,15 @@ class AlbumTest {
         compose.onNodeWithText("Groceries").assertIsSelected()
         compose.onNodeWithText("Fruit").assertExists()
         assertTrue(compose.onAllNodesWithContentDescription("Not collected yet").fetchSemanticsNodes().isNotEmpty())
-        compose.onNodeWithContentDescription("Apples, rarity 3 of 3").assertExists()
-        compose.onNodeWithContentDescription("Lemons, holo, rarity 3 of 3").assertExists()
+        compose.onNodeWithContentDescription("Apples, collected, rarity 3 of 3").assertExists()
+        compose.onNodeWithContentDescription("Lemons, collected, holo, rarity 3 of 3").assertExists()
 
         compose.onNodeWithText("Picnic").performClick()
         compose.onNodeWithText("Picnic").assertIsSelected()
         compose.onNodeWithText("Groceries").assertIsNotSelected()
         compose.onNodeWithText("Picnic sheet").assertExists()
         compose.onNodeWithText("Sakura sheet").assertExists()
-        compose.onNodeWithContentDescription("Bee, rarity 1 of 3").assertExists()
+        compose.onNodeWithContentDescription("Bee, collected, rarity 1 of 3").assertExists()
 
         compose.onNodeWithText("Seasonal").performClick()
         compose.onNodeWithText("Seasonal").assertIsSelected()
@@ -156,6 +166,74 @@ class AlbumTest {
         compose.mainClock.advanceTimeBy(2_000)
         compose.waitForIdle()
         assertEquals(1, appeared)
+    }
+
+    /**
+     * §7.8: a book filed since the album was last open blooms in with the magic appear once; it is then marked seen
+     * (device-local), so the next opening shows it plainly; a book filed after that blooms on the opening after it.
+     */
+    @Test
+    fun newBookAppearsOnce() {
+        val store = InMemoryAlbumStore(AlbumSamples.mockup.copy(books = listOf(AlbumSamples.partBook)))
+        val settings = InMemorySettingsRepository()
+        runBlocking { settings.markBooksSeen(listOf(AlbumSamples.partBook.id)) }
+        // The perfect book is filed now (New trip): it is the newest, and the album has not shown it yet.
+        runBlocking { store.update { it.copy(books = listOf(AlbumSamples.perfectBook) + it.books) } }
+        fun vm() = AlbumViewModel(
+            store, AlbumSamples.catalog, { AlbumSamples.today }, now = { AlbumSamples.now },
+            seenBooks = settings.seenBooks, markBooksSeen = settings::markBooksSeen,
+        )
+        val first = vm()
+        compose.waitUntil(5_000) { !first.state.value.loading }
+        assertEquals(listOf(true, false), first.state.value.books.map { it.fresh })
+
+        var played by mutableIntStateOf(0)
+        compose.setContent {
+            PicnicTheme {
+                val state by first.state.collectAsState()
+                AlbumScreen(state, AlbumActions(onBookAppeared = { played++; first.bookAppeared(it) }))
+            }
+        }
+        // The row blooms when it comes into view (the list is lazy), then reports it once.
+        compose.onNodeWithTag(AlbumTags.LIST).performScrollToKey("books")
+        compose.waitUntil(5_000) { runBlocking { settings.seenBooks.first() }.contains(AlbumSamples.perfectBook.id) }
+        compose.waitForIdle()
+        assertEquals(1, played)
+        compose.onAllNodes(SemanticsMatcher.expectValue(BookRowFresh, true)).assertCountEquals(0)
+
+        // Opening the album again: nothing blooms.
+        val again = vm()
+        compose.waitUntil(5_000) { !again.state.value.loading }
+        assertTrue(again.state.value.books.none { it.fresh })
+    }
+
+    /** Large text (§15): the three tabs always show whole, inside the screen, at font scale 1.3 and 2.0. */
+    @Test
+    fun tabsFitAtLargeText() {
+        var scale by mutableFloatStateOf(1.3f)
+        compose.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, scale)) {
+                PicnicTheme { AlbumScreen(AlbumSamples.state(AlbumSamples.mockup), AlbumActions()) }
+            }
+        }
+        for (s in listOf(1f, 1.3f, 2f)) {
+            scale = s
+            compose.waitForIdle()
+            val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+            val tabs = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).fetchSemanticsNodes()
+            assertEquals(3, tabs.size)
+            tabs.forEach { tab ->
+                val b = tab.boundsInRoot
+                assertTrue("tab ${tab.config.getOrNull(SemanticsProperties.Text)} at $s: $b in $root", b.left >= root.left && b.right <= root.right && b.width > 0f)
+            }
+            for (label in listOf("Groceries", "Picnic", "Seasonal")) {
+                val node = compose.onNodeWithText(label, useUnmergedTree = true).fetchSemanticsNode()
+                val results = mutableListOf<TextLayoutResult>()
+                node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+                assertTrue("$label is cut at $s", results.none { r -> r.hasVisualOverflow || (0 until r.lineCount).any { r.isLineEllipsized(it) } })
+            }
+        }
     }
 
     @Test

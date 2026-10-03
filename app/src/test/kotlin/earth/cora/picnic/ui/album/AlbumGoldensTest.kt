@@ -19,9 +19,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Sticker album goldens (checklist 165, 230, Appendix C): `album_{groceries,picnic,seasonal}_{day,glow}`; Day only:
- * `album_tripbooks`, `album_tripbook_open`, `album_early`, `album_full`, `album_holo_glint`, `album_pocket_lift`,
- * `album_face_blink`, `album_back_pocket`, `album_empty`, `album_fs130`, `album_fs200`.
+ * Sticker album goldens (checklist 165, 230, Appendix C), Day and Glow: `album_{groceries,picnic,seasonal}`,
+ * `album_tripbooks`, `album_early`, `album_full`, `album_holo_glint`, `album_face_blink`, `album_back_pocket`,
+ * `album_empty`, and two states Appendix C does not name yet, `album_tripbook_open` (a filed book opened read-only, §6.6)
+ * and `album_pocket_lift` (§4.25); Day only: `album_fs130`, `album_fs200`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -65,56 +66,48 @@ class AlbumGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pr
     fun seasonal() = record("album_seasonal", AlbumSamples.full, AlbumTab.Seasonal)
 
     @Test
-    fun tripBooks() {
-        if (day) {
-            record("album_tripbooks", AlbumSamples.mockup, exact = true, before = { onNodeWithTag(AlbumTags.LIST).performScrollToKey("books") })
-        }
-    }
+    fun tripBooks() = record("album_tripbooks", AlbumSamples.mockup, before = { onNodeWithTag(AlbumTags.LIST).performScrollToKey("books") })
 
     @Test
     fun tripBookOpen() {
-        if (day) record("album_tripbook_open", AlbumSamples.mockup, exact = true, book = AlbumSamples.perfectBook.id)
+        record("album_tripbook_open", AlbumSamples.mockup, book = AlbumSamples.perfectBook.id)
     }
 
     @Test
     fun early() {
-        if (day) record("album_early", AlbumSamples.early, exact = true)
+        record("album_early", AlbumSamples.early)
     }
 
     @Test
     fun full() {
-        if (day) record("album_full", AlbumSamples.full, exact = true, before = { onNodeWithTag(AlbumTags.LIST).performScrollToIndex(14) })
+        record("album_full", AlbumSamples.full, before = { onNodeWithTag(AlbumTags.LIST).performScrollToIndex(14) })
     }
 
     @Test
     fun holoGlint() {
         // 600 ms into the 3.2 s cycle: the glint is half-way across the maple-syrup and croissant pockets.
-        if (day) record("album_holo_glint", AlbumSamples.mockup, exact = true, frozen = true, settleMillis = 600)
+        record("album_holo_glint", AlbumSamples.mockup, frozen = true, settleMillis = 600)
     }
 
     @Test
     fun pocketLift() {
-        if (day) record("album_pocket_lift", AlbumSamples.mockup, exact = true, frozen = true, lifted = "apple")
+        record("album_pocket_lift", AlbumSamples.mockup, frozen = true, lifted = "apple")
     }
 
     @Test
     fun faceBlink() {
         // The blink's second frame (eyes shut), 90–180 ms after the long-press.
-        if (day) record("album_face_blink", AlbumSamples.mockup, exact = true, frozen = true, settleMillis = 120, blink = "apple")
+        record("album_face_blink", AlbumSamples.mockup, frozen = true, settleMillis = 120, blink = "apple")
     }
 
     @Test
-    fun backPocket() {
-        if (day) {
-            record("album_back_pocket", AlbumSamples.backPocket, AlbumTab.Seasonal, exact = true, before = {
-                onNodeWithTag(AlbumTags.LIST).performScrollToIndex(9)
-            })
-        }
-    }
+    fun backPocket() = record("album_back_pocket", AlbumSamples.backPocket, AlbumTab.Seasonal, before = {
+        onNodeWithTag(AlbumTags.LIST).performScrollToIndex(9)
+    })
 
     @Test
     fun empty() {
-        if (day) record("album_empty", Album(), exact = true)
+        record("album_empty", Album())
     }
 
     @Test

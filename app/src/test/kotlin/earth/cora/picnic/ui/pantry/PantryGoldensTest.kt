@@ -1,5 +1,11 @@
 package earth.cora.picnic.ui.pantry
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.performClick
+import earth.cora.picnic.ui.theme.ToastHostState
+import earth.cora.picnic.ui.theme.ToastMessage
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -20,7 +26,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * My pantry goldens (checklist 325–327): `pantry_{empty,few,full,text_focused,fs200,popcard}` in Day, `pantry_glow`.
+ * My pantry goldens (checklist 325–327, §6.13 states): `pantry_{empty,few,full,text_focused,fs200,popcard,takeoff_toast}`
+ * in Day, `pantry_glow`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -36,11 +43,14 @@ class PantryGoldensTest(private val variant: ThemeVariant, @Suppress("unused") p
         state: PantryUiState,
         fontScale: Float? = null,
         popCard: String? = null,
-        focusText: Boolean = false,
         wholeScreen: Boolean = false,
+        frozen: Boolean = false,
+        toast: ToastMessage? = null,
         before: ComposeContentTestRule.() -> Unit = {},
-    ) = compose.recordScreen(name, variant, fontScale = fontScale, wholeScreen = wholeScreen, before = before) {
-        PantryScreen(state, PantryActions(), initialPopCard = popCard, focusText = focusText)
+    ) = compose.recordScreen(name, variant, fontScale = fontScale, wholeScreen = wholeScreen, frozen = frozen, before = before) {
+        val toasts = remember { ToastHostState() }
+        if (toast != null) LaunchedEffect(Unit) { toasts.show(toast) }
+        PantryScreen(state, PantryActions(), toasts = toasts, initialPopCard = popCard)
     }
 
     @Test
@@ -53,9 +63,14 @@ class PantryGoldensTest(private val variant: ThemeVariant, @Suppress("unused") p
         if (day) record("pantry_few", PantrySamples.few)
     }
 
+    /** Full (24 entries, six shelves), scrolled so the last shelf shows. */
     @Test
     fun full() {
-        if (day) record("pantry_full", PantrySamples.full)
+        if (day) {
+            record("pantry_full", PantrySamples.full, before = {
+                onNodeWithContentDescription("Gochujang, in your pantry").performScrollTo()
+            })
+        }
     }
 
     @Test
@@ -63,12 +78,28 @@ class PantryGoldensTest(private val variant: ThemeVariant, @Suppress("unused") p
         if (!day) record("pantry_glow", PantrySamples.few)
     }
 
+    /** The text field in focus (§4.8: the 3 dp strawberry line and the heart, a caret): scrolled to, tapped, focused. */
     @Test
     fun textFocused() {
         if (day) {
-            record("pantry_text_focused", PantrySamples.few, focusText = true, before = {
-                onNodeWithContentDescription("Pantry as text:").performScrollTo()
+            record("pantry_text_focused", PantrySamples.few, before = {
+                onNodeWithContentDescription("Pantry as text:").performScrollTo().performClick()
+                waitForIdle()
+                onNodeWithContentDescription("Pantry as text:").assertIsFocused()
             })
+        }
+    }
+
+    /** After "Take off the shelf" (§6.13): the shelf without Black pepper and its Undo toast, caught mid-hold. */
+    @Test
+    fun takeOffToast() {
+        if (day) {
+            record(
+                "pantry_takeoff_toast",
+                PantrySamples.state("Salt", "Olive oil", "Flour", "Sugar", "Rice"),
+                frozen = true,
+                toast = ToastMessage("Black pepper is off your pantry shelf", kind = "pantry-off", actionLabel = "Undo", onAction = {}),
+            )
         }
     }
 
@@ -103,8 +134,10 @@ object PantrySamples {
 
     val few: PantryUiState = state("Salt", "Black pepper", "Olive oil", "Flour", "Sugar", "Rice")
 
+    /** 24 entries (§6.13 "full (24, scrolled)"): six shelves of four. */
     val full: PantryUiState = state(
         "Salt", "Black pepper", "Olive oil", "Canola oil", "Flour", "Sugar", "Rice", "Honey", "Vinegar", "Spices",
-        "Pasta", "Oats", "Maple syrup", "Soy sauce", "Baking soda", "Gochujang",
+        "Pasta", "Oats", "Maple syrup", "Soy sauce", "Baking soda", "Baking powder", "Brown sugar", "Cinnamon",
+        "Peanut butter", "Ketchup", "Mustard", "Tea", "Coffee", "Gochujang",
     )
 }

@@ -1,5 +1,6 @@
 package earth.cora.picnic.ui.common
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -44,6 +45,7 @@ import earth.cora.picnic.ui.settings.SettingsScreen
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.ThemeVariant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -113,8 +115,10 @@ class NoModelNamesTest {
 
 /**
  * No secondary screen uses Material's defaults (checklist 235): the sources import nothing from Material but its plain
- * Text (always given a kit style and colour), and every text the screens render has a colour of its own (never the
- * Material default content colour).
+ * Text (always given a kit style and colour); no tap target falls back on Material's ripple (PicnicTheme wraps a
+ * MaterialTheme whose LocalIndication is a ripple, so every clickable, selectable, toggleable and combinedClickable in
+ * WP8's files names its indication, and every WP8 screen and sheet root runs under [NoMaterialPress]); and every text
+ * the screens render has a colour of its own (never the Material default content colour).
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -123,10 +127,12 @@ class NoMaterialDefaultsTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val sources = listOf("settings", "about", "aisles", "album", "pantry", "edit", "nav")
-        .flatMap { File("src/main/kotlin/earth/cora/picnic/ui/$it").walkTopDown().filter { f -> f.extension == "kt" }.toList() } +
-        listOf("ScreenChrome.kt", "ScreenBits.kt", "MagicAppear.kt").map { File("src/main/kotlin/earth/cora/picnic/ui/common/$it") } +
-        File("src/main/kotlin/earth/cora/picnic/ui/list/ListSwitcherSheet.kt")
+    // ScreenParts.kt is the v1 List screen's Material scaffold and bottom sheet (ListScreen, the v1 Add sheet); it goes
+    // when WP5's List and WP7's Add land, and no WP8 screen uses it.
+    private val sources = listOf("settings", "about", "aisles", "album", "pantry", "edit", "nav", "common")
+        .flatMap { File("src/main/kotlin/earth/cora/picnic/ui/$it").walkTopDown().filter { f -> f.extension == "kt" && f.name != "ScreenParts.kt" }.toList() } +
+        File("src/main/kotlin/earth/cora/picnic/ui/list/ListSwitcherSheet.kt") +
+        File("src/main/kotlin/earth/cora/picnic/ui/PicnicAppRoot.kt")
 
     @Test
     fun sourcesUseTheKit() {
@@ -142,6 +148,63 @@ class NoMaterialDefaultsTest {
             f.readLines().filter { line -> banned.any { it.containsMatchIn(line) } }.map { "${f.name}: ${it.trim()}" }
         }
         assertTrue("Material defaults in WP8 screens: $offenders", offenders.isEmpty())
+    }
+
+    /**
+     * Every clickable, selectable, toggleable, triStateToggleable and combinedClickable in WP8's files passes an explicit
+     * `indication` (null where the target shows its own pressed state, or the kit's highlighter band), so none falls back
+     * on LocalIndication, which inside PicnicTheme is Material's ripple.
+     */
+    @Test
+    fun everyTapTargetNamesItsIndication() {
+        val call = Regex("""\.(clickable|toggleable|selectable|combinedClickable|triStateToggleable)\(""")
+        val offenders = mutableListOf<String>()
+        var calls = 0
+        for (file in sources) {
+            val text = file.readText()
+            for (m in call.findAll(text)) {
+                calls++
+                if (!Regex("""\bindication\s*=""").containsMatchIn(argumentsAt(text, m.range.last))) {
+                    offenders += "${file.name}:${text.substring(0, m.range.first).count { it == '\n' } + 1} ${m.value}"
+                }
+            }
+        }
+        assertTrue("the scan found the tap targets ($calls)", calls >= 15)
+        assertTrue("tap targets with Material's ripple (no explicit indication): $offenders", offenders.isEmpty())
+    }
+
+    /** The screens' and sheets' roots replace the ripple for anything inside them, kit pieces included. */
+    @Test
+    fun screenAndSheetRootsHaveNoRipple() {
+        var inPicnicTheme: Any? = null
+        var inScreen: Any? = null
+        compose.setContent {
+            PicnicTheme {
+                inPicnicTheme = LocalIndication.current
+                SecondaryScreen(title = "My store", onBack = {}) { inScreen = LocalIndication.current }
+            }
+        }
+        compose.waitForIdle()
+        // The hazard this guards against: PicnicTheme's MaterialTheme provides a ripple.
+        assertTrue("PicnicTheme's default indication: $inPicnicTheme", inPicnicTheme !== NoPressIndication)
+        assertSame(NoPressIndication, inScreen)
+        // The two sheets WP8 owns open their content under NoMaterialPress too.
+        for (name in listOf("edit/EditItemSheet.kt", "list/ListSwitcherSheet.kt")) {
+            val text = File("src/main/kotlin/earth/cora/picnic/ui/$name").readText()
+            assertTrue("$name runs under NoMaterialPress", text.contains("NoMaterialPress {"))
+        }
+    }
+
+    /** The text between the "(" at [open] and its matching ")". */
+    private fun argumentsAt(text: String, open: Int): String {
+        var depth = 0
+        for (i in open until text.length) {
+            when (text[i]) {
+                '(' -> depth++
+                ')' -> if (--depth == 0) return text.substring(open + 1, i)
+            }
+        }
+        return text.substring(open + 1)
     }
 
     @Test

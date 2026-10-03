@@ -4,14 +4,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import earth.cora.picnic.core.catalog.IconCatalog
-import earth.cora.picnic.core.model.AisleStyle
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.ui.common.PHONE_360
-import earth.cora.picnic.ui.common.Samples
+import earth.cora.picnic.ui.common.SaturdayShop
 import earth.cora.picnic.ui.common.dayAndGlowScreens
 import earth.cora.picnic.ui.common.goldenName
 import earth.cora.picnic.ui.common.recordScreen
@@ -26,8 +28,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * My store goldens (checklist 225, §6.7 states): `mystore_{default,editing}_{day,glow}`; Day only: `mystore_dragging`,
- * `mystore_resorting`, `mystore_text_focused`, `mystore_error`, `mystore_fs130`, `mystore_fs200`.
+ * My store goldens (checklist 225, §6.7 states, Appendix C), from the Appendix A fixture (Hillcrest Market, 8 aisles,
+ * "Aisle 2 - Baking" in store aisle 2), compared with the mockup's phone 4: `mystore_{default,editing,dragging,resorting,
+ * error,text_focused}_{day,glow}`; Day only, with the app's 14 default aisles (Appendix A `fixtureDefaultAisles`, the
+ * long names): `mystore_fs130`, `mystore_fs200`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -57,46 +61,37 @@ class MyStoreGoldensTest(private val variant: ThemeVariant, @Suppress("unused") 
     @Test
     fun default() = record("mystore_default", MyStoreSamples.default)
 
+    /** The mockup's open label: 5 · Breakfast, its name field in focus, the swatches and baskets under it. */
     @Test
-    fun editing() = record("mystore_editing", MyStoreSamples.default.copy(editing = "bakery"))
+    fun editing() = record("mystore_editing", MyStoreSamples.default.copy(editing = "breakfast"))
+
+    /** 7 · Frozen lifted (tilted, hsLift) a third of a slot down: only its shadow meets Household's border. */
+    @Test
+    fun dragging() = record("mystore_dragging", MyStoreSamples.default, drag = DragPreview(index = 6, offsetSlots = 0.3f))
 
     @Test
-    fun dragging() {
-        // "Aisle 1 - Breakfast…" lifted a little past the next slot: only its shadow meets a neighbour's border.
-        if (day) record("mystore_dragging", MyStoreSamples.default, exact = true, drag = DragPreview(index = 4, offsetSlots = 1.15f))
-    }
+    fun resorting() = record("mystore_resorting", MyStoreSamples.default.copy(syncing = true), before = {
+        onNodeWithText("Re-sort my list").performScrollTo()
+    })
 
     @Test
-    fun resorting() {
-        if (day) {
-            record("mystore_resorting", MyStoreSamples.default.copy(syncing = true), exact = true, before = {
-                onNodeWithText("Re-sort my list").performScrollTo()
-            })
-        }
-    }
+    fun textFocused() = record("mystore_text_focused", MyStoreSamples.default, before = {
+        onNodeWithTag(AislesTags.TEXT).performScrollTo().performClick()
+        waitForIdle()
+        onNodeWithContentDescription("Aisles as text:").assertIsFocused()
+    })
 
     @Test
-    fun textFocused() {
-        if (day) {
-            record("mystore_text_focused", MyStoreSamples.default, exact = true, focusText = true, before = {
-                onNodeWithTag(AislesTags.TEXT).performScrollTo()
-            })
-        }
-    }
-
-    @Test
-    fun error() {
-        if (day) record("mystore_error", MyStoreSamples.default, exact = true, frozen = true, toast = "Couldn't save. Try again.")
-    }
+    fun error() = record("mystore_error", MyStoreSamples.default, frozen = true, toast = "Couldn't save. Try again.")
 
     @Test
     fun fontScale130() {
-        if (day) record("mystore_fs130", MyStoreSamples.default, exact = true, fontScale = 1.3f)
+        if (day) record("mystore_fs130", MyStoreSamples.longNames, exact = true, fontScale = 1.3f)
     }
 
     @Test
     fun fontScale200() {
-        if (day) record("mystore_fs200", MyStoreSamples.default, exact = true, fontScale = 2f)
+        if (day) record("mystore_fs200", MyStoreSamples.longNames, exact = true, fontScale = 2f)
     }
 
     companion object {
@@ -106,16 +101,11 @@ class MyStoreGoldensTest(private val variant: ThemeVariant, @Suppress("unused") 
     }
 }
 
-/** My store's sample: the default Ontario store at Hillcrest Market, Frozen restyled mint check, Baking in store aisle 2. */
+/** My store's samples: the Appendix A store (Hillcrest Market, 8 aisles), and the same store on the 14 default aisles. */
 object MyStoreSamples {
-    val app: AppState = Samples.shoppingState.let { s ->
-        s.copy(
-            store = s.store.copy(
-                name = "Hillcrest Market",
-                aisleStyles = mapOf("frozen" to AisleStyle(family = "mint", pattern = "check")),
-            ),
-        )
-    }
+    val app: AppState = SaturdayShop.state()
 
     val default: AislesUiState = AislesViewModel.stateOf(app, IconCatalog.default.baskets)
+
+    val longNames: AislesUiState = AislesViewModel.stateOf(SaturdayShop.defaultAisles(), IconCatalog.default.baskets)
 }
