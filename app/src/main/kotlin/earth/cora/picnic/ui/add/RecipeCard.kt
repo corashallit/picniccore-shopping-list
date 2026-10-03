@@ -188,14 +188,15 @@ internal fun AisleTray(rows: List<ReviewRow>, clock: RevealClock?, onToggleKeep:
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             NumberCircle(if (first.aisleIndex < 0) null else first.aisleIndex + 1, look)
-            Text(
-                name,
-                style = t.aisleTab.copy(color = look.family.trace),
-                maxLines = 2,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            first.storeAisle?.let { StoreAisleChip(it) }
-            Spacer(Modifier.weight(0.001f))
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    name,
+                    style = t.aisleTab.copy(color = look.family.trace),
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                first.storeAisle?.let { StoreAisleChip(it) }
+            }
             Text(
                 stringResource(R.string.add_tray_kept, rows.count { it.keep }, rows.size),
                 style = t.label.copy(color = c.ballpoint),

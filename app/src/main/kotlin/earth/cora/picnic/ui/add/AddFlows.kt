@@ -6,8 +6,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -40,31 +42,42 @@ class AddFlows internal constructor(
     val feedback: Feedback,
     private val keyboard: SoftwareKeyboardController?,
 ) {
+    /** The field takes focus as soon as the bar is on screen ([AddDock] does it; the FAB unfolds the bar first). */
+    internal var focusPending by mutableStateOf(false)
+
     /** Focuses the bar's field and opens the keyboard (the FAB, "Start my list"). */
     fun focusField() {
         collapse.expand()
+        focusPending = true
+    }
+
+    /** Called by [AddDock] once the bar is composed. */
+    internal fun focusNow() {
         try {
             focusRequester.requestFocus()
         } catch (e: IllegalStateException) {
-            // The bar is not laid out yet (folded mid-animation); the keyboard alone is still useful.
+            return
         }
         keyboard?.show()
+        focusPending = false
     }
 }
 
 /**
  * Remembers the add flows for [vm]: the launchers (TakePicture with no CAMERA permission, the photo picker, RECORD_AUDIO
- * at runtime), the fold state and the field's focus. Recording stops on ON_STOP (foreground only), except across a
+ * at runtime; [sources] replaces them in tests and the harness), the fold state and the field's focus. Recording stops on ON_STOP (foreground only), except across a
  * configuration change.
  */
 @Composable
-fun rememberAddFlows(vm: AddViewModel, feedback: Feedback = NoOpFeedback): AddFlows {
-    val sources = rememberAddSources(
+fun rememberAddFlows(vm: AddViewModel, feedback: Feedback = NoOpFeedback, sources: AddSources? = null): AddFlows {
+    val platform = rememberAddSources(
         onImage = vm::onPhoto,
         onMicGranted = vm::startRecording,
         onMicDenied = vm::micDenied,
         onCameraUnavailable = vm::cameraUnavailable,
     )
+    // Tests and the harness pass their own launchers (no camera app or permission dialog there).
+    val sources = sources ?: platform
     val collapse = rememberAddBarCollapseState()
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current

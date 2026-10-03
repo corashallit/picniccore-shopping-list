@@ -80,6 +80,7 @@ const val STOP_STICKER_TAG: String = "add_stop_recording"
 const val RECORD_STICKER_TAG: String = "add_record"
 const val EQUALISER_TAG: String = "add_equaliser"
 const val REC_DOT_TAG: String = "add_rec_dot"
+const val HEARD_TRAY_TAG: String = "add_heard_tray"
 
 /** The reels' turn (§4.20, §8.5): 8 steps per second, 45° each. */
 fun reelAngle(elapsedMs: Long): Float = ((elapsedMs / 125) % 8) * 45f
@@ -225,7 +226,7 @@ private fun HankoSticker(stop: Boolean, label: String, onClick: () -> Unit, modi
 @Composable
 fun DotEqualiser(columns: List<Int>, modifier: Modifier = Modifier) {
     val shadow = PicnicTheme.shadows
-    Canvas(modifier.size(width = EQ_WIDTH, height = EQ_HEIGHT).decorative().testTag(EQUALISER_TAG)) {
+    Canvas(modifier.size(width = EQ_WIDTH, height = EQ_HEIGHT).testTag(EQUALISER_TAG).decorative()) {
         val dot = 10.dp.toPx()
         val ring = 1.6.dp.toPx()
         val gapX = (size.width - EQ_COLUMNS * dot) / (EQ_COLUMNS - 1)
@@ -260,8 +261,8 @@ fun RecDot(size: Dp = 10.dp, modifier: Modifier = Modifier) {
     Box(
         modifier
             .size(size + 4.dp)
-            .decorative()
             .testTag(REC_DOT_TAG)
+            .decorative()
             .graphicsLayer { alpha = if (on) 1f else 0.25f }
             .clip(CircleShape)
             .background(Color.White)
@@ -371,6 +372,6 @@ fun HeardTray(rows: List<ReviewRow>, afterPhoto: Boolean, clock: RevealClock?, o
         rows = rows,
         clock = clock,
         onToggleKeep = onToggleKeep,
-        modifier = modifier,
+        modifier = modifier.testTag(HEARD_TRAY_TAG),
     )
 }

@@ -91,7 +91,7 @@ fun Polaroid(photo: SnapPhoto?, reading: Boolean, modifier: Modifier = Modifier)
     val t by rememberLoopTime(enabled = reading && !reduced)
     // Offset so a still frame shows the scan line part-way down rather than at the top.
     val phase = ((t + SCAN_PERIOD_MS * 2 / 5) % SCAN_PERIOD_MS).toFloat() / SCAN_PERIOD_MS
-    val caption = stringResource(R.string.add_snap_caption, dayOf(photo?.takenAt))
+    val caption = if (photo != null) stringResource(R.string.add_snap_caption, dayOf(photo.takenAt)) else ""
     val description = stringResource(R.string.add_snap_photo)
     val shape = PicnicTheme.shapes.toast
     Box(
@@ -220,13 +220,14 @@ private fun PhotoLineRow(line: PhotoLine, landed: Boolean) {
             .heightIn(min = 24.dp)
             .drawBehind { drawRect(c.rule, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }
             .clearAndSetSemantics { contentDescription = spoken },
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
+        val tick = Modifier.padding(top = 4.dp)
         if (line.crossedOut) {
-            Spacer(Modifier.size(16.dp))
+            Spacer(tick.size(16.dp))
         } else {
-            Glyph(if (landed) PicnicGlyph.Check else PicnicGlyph.Sparkle, null, tint = if (landed) c.ink else c.inkSoft, size = 16.dp)
+            Glyph(if (landed) PicnicGlyph.Check else PicnicGlyph.Sparkle, null, tint = if (landed) c.ink else c.inkSoft, size = 16.dp, modifier = tick)
         }
         Text(text, style = t.transcript.copy(color = if (line.crossedOut) c.inkSoft else c.ink))
     }
@@ -289,7 +290,9 @@ internal fun StickerTray(
                 Text(title, style = t.smallTitle.copy(fontSize = 17.sp, lineHeight = 22.sp, color = c.ballpoint), modifier = Modifier.weight(1f))
                 Text(count, style = t.label.copy(color = c.ballpoint), maxLines = 1)
             }
-            if (rows.isNotEmpty()) {
+            // Only the stickers that have popped take a place: the tray fills as they land.
+            val shownRows = rows.filter { clock?.rowShown(it.key) ?: true }
+            if (shownRows.isNotEmpty()) {
                 Column(
                     Modifier
                         .padding(horizontal = 5.dp)
@@ -298,7 +301,7 @@ internal fun StickerTray(
                         .background(c.pad)
                         .border(1.5.dp, family.mid.copy(alpha = 0.6f), PicnicTheme.shapes.sectionInner),
                 ) {
-                    rows.chunked(columns).forEachIndexed { line, pair ->
+                    shownRows.chunked(columns).forEachIndexed { line, pair ->
                         Row(
                             Modifier
                                 .fillMaxWidth()

@@ -25,6 +25,7 @@
 
     <!-- Write (§6.2) -->
     <string name="add_note_label">Note:</string>
+    <string name="add_note_field">Note</string>
     <string name="add_as_typed">As typed</string>
     <string name="add_send">Send</string>
     <string name="add_edit_note">Change the note</string>
@@ -38,9 +39,9 @@
         <item quantity="one">Compared %1$d recipe</item>
         <item quantity="other">Compared %1$d recipes</item>
     </plurals>
-    <string name="add_step_makes">makes %1$d</string>
-    <string name="add_step_makes_alone">Makes %1$d</string>
-    <string name="add_step_pantry">Checked your pantry · left out %1$d</string>
+    <string name="add_step_makes">makes\u00A0%1$d</string>
+    <string name="add_step_makes_alone">Makes\u00A0%1$d</string>
+    <string name="add_step_pantry">Checked your pantry\u00A0· left\u00A0out\u00A0%1$d</string>
     <plurals name="add_step_sorted">
         <item quantity="one">Checked your list, sorted into %1$d aisle</item>
         <item quantity="other">Checked your list, sorted into %1$d aisles</item>
@@ -104,6 +105,7 @@
     <string name="add_retry">Try again</string>
     <string name="add_plain_lines">Add as plain lines</string>
     <string name="add_open_settings">Open Settings</string>
+    <string name="add_problem_ai">Something went wrong reading that. Try again.</string>
     <string name="add_problem_photo">Couldn\'t open that photo. Try another one?</string>
     <string name="add_problem_camera">There\'s no camera app on this phone. Choose a photo instead.</string>
     <string name="add_problem_mic">The microphone isn\'t available right now. Try again in a moment.</string>

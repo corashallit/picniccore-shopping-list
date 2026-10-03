@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -313,17 +314,7 @@ private fun WriteTab(state: AddUiState, actions: AddActions, reveals: Reveals, f
             RecipeCard(review, review.mainRows, clock, onToggleKeep = actions.onToggleKeep, onEditPantry = actions.onEditPantry)
         }
     } else {
-        PicnicTextField(
-            value = state.text,
-            onValueChange = actions.onTextChange,
-            label = stringResource(R.string.add_note_label),
-            placeholder = stringResource(R.string.add_bar_placeholder),
-            example = stringResource(R.string.add_bar_example),
-            minLines = 2,
-            maxLines = 6,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-            modifier = Modifier.fillMaxWidth(),
-        )
+        NoteField(state.text, actions.onTextChange)
         if (failed != null) ErrorBlock(failed, actions)
     }
 }
@@ -364,11 +355,13 @@ private fun SnapTab(state: AddUiState, actions: AddActions, reveals: Reveals, fe
         // No photo yet: an empty polaroid, the hint and the "Choose a photo" chip (the picker never needs a gesture).
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!stacked) Polaroid(photo = null, reading = false)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(R.string.add_snap_hint), style = t.body.copy(fontSize = 15.sp, lineHeight = 21.sp, color = c.ink))
-                ChoosePhotoChip(actions.onChoosePhoto)
-            }
+            Text(
+                stringResource(R.string.add_snap_hint),
+                style = t.body.copy(fontSize = 15.sp, lineHeight = 21.sp, color = c.ink),
+                modifier = Modifier.weight(1f),
+            )
         }
+        ChoosePhotoChip(actions.onChoosePhoto)
         if (failed != null) ErrorBlock(failed, actions)
         return
     }
@@ -498,7 +491,7 @@ private fun ErrorBlock(failed: AddPhase.Failed, actions: AddActions) {
 
 /** The app's own copy for each problem (core's AI errors bring their own friendly message). */
 private fun AddProblem.copy(): Int = when (this) {
-    AddProblem.AI -> R.string.add_problem_save
+    AddProblem.AI -> R.string.add_problem_ai
     AddProblem.PHOTO_UNREADABLE -> R.string.add_problem_photo
     AddProblem.CAMERA_UNAVAILABLE -> R.string.add_problem_camera
     AddProblem.MIC_UNAVAILABLE -> R.string.add_problem_mic
@@ -536,7 +529,12 @@ private fun footerFor(state: AddUiState, reveals: Reveals): FooterKind? {
     }
     return when (state.mode) {
         AddMode.WRITE -> if (state.phase is AddPhase.Failed) null else FooterKind.Write
-        AddMode.SNAP -> if (state.photo == null && review == null) FooterKind.TakePhoto else null
+        AddMode.SNAP -> when {
+            state.photo == null && review == null -> FooterKind.TakePhoto
+            // The photo is being read: "Reading…" waits where "Stick all" will be (§4.19).
+            state.phase is AddPhase.Thinking -> FooterKind.Stick(0, 0, revealing = true)
+            else -> null
+        }
         AddMode.SPEAK -> null
     }
 }
@@ -553,6 +551,7 @@ private fun AddFooter(kind: FooterKind, state: AddUiState, actions: AddActions) 
             is FooterKind.Stick -> {
                 val kept = state.keptCount
                 val label = when {
+                    kind.revealing && kind.total == 0 -> stringResource(R.string.add_reading)
                     kind.revealing -> stringResource(R.string.add_reading_progress, kind.popped, kind.total)
                     kept == 0 -> stringResource(R.string.add_stick_none)
                     else -> pluralStringResource(R.plurals.add_stick, kept, kept)
@@ -568,19 +567,22 @@ private fun AddFooter(kind: FooterKind, state: AddUiState, actions: AddActions) 
             }
             FooterKind.Write -> {
                 val waiting = state.phase is AddPhase.Thinking
-                PicnicButton(
-                    stringResource(R.string.add_as_typed),
-                    onClick = actions.onAsTyped,
-                    style = PicnicButtonStyle.Text,
-                    enabled = state.text.isNotBlank() && !busy,
-                )
+                if (!waiting) {
+                    PicnicButton(
+                        stringResource(R.string.add_as_typed),
+                        onClick = actions.onAsTyped,
+                        style = PicnicButtonStyle.Text,
+                        enabled = state.text.isNotBlank() && !busy,
+                    )
+                    Spacer(Modifier.weight(1f))
+                }
                 PicnicButton(
                     if (waiting) stringResource(R.string.add_reading) else stringResource(R.string.add_send),
                     onClick = actions.onSend,
                     enabled = state.text.isNotBlank() && !busy,
                     busy = waiting,
-                    glyph = PicnicGlyph.Envelope,
-                    modifier = Modifier.weight(1f),
+                    glyph = if (waiting) null else PicnicGlyph.Envelope,
+                    modifier = if (waiting) Modifier.weight(1f) else Modifier,
                 )
             }
             FooterKind.TakePhoto -> PicnicButton(

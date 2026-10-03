@@ -49,6 +49,7 @@ import earth.cora.picnic.ui.theme.PicnicMotion
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.StickerFamily
 import earth.cora.picnic.ui.theme.ThemeVariant
+import earth.cora.picnic.ui.theme.hardShadow
 import earth.cora.picnic.ui.theme.rememberLoopTime
 import androidx.compose.runtime.LaunchedEffect
 
@@ -101,6 +102,7 @@ fun ThinkingBox(
             modifier
                 .fillMaxWidth()
                 .testTag(THINKING_TAG)
+                .hardShadow(shape, PicnicTheme.shadows)
                 .clip(shape)
                 .background(c.backing)
                 .border(PicnicTheme.dimens.border, c.stickerWhite, shape)
@@ -188,7 +190,7 @@ fun stepText(step: ThinkingStep): String = when (step) {
         val recipes = step.recipes
         val servings = step.servings
         when {
-            recipes != null && servings != null -> pluralStringResource(R.plurals.add_step_compared, recipes, recipes) + " · " +
+            recipes != null && servings != null -> pluralStringResource(R.plurals.add_step_compared, recipes, recipes) + "\u00A0· " +
                 stringResource(R.string.add_step_makes, servings)
             recipes != null -> pluralStringResource(R.plurals.add_step_compared, recipes, recipes)
             servings != null -> stringResource(R.string.add_step_makes_alone, servings)

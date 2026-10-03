@@ -174,7 +174,8 @@ fun AddBar(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = PicnicTheme.dimens.addBar)
-                    .padding(start = 14.dp, end = 4.dp, top = 22.dp, bottom = 4.dp),
+                    // 20 + 60 dp touch targets + 4 = the 84 dp bar (the doodle sits in the top 20 dp).
+                    .padding(start = 14.dp, end = 4.dp, top = 20.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 AddBarField(
@@ -184,7 +185,7 @@ fun AddBar(
                     onSend = onSend,
                     focusRequester = focusRequester,
                     onFocusChange = onFocusChange,
-                    modifier = Modifier.weight(1f).padding(end = 6.dp, bottom = 6.dp),
+                    modifier = Modifier.weight(1f).padding(end = 6.dp, bottom = 4.dp),
                 )
                 AddBarButton(
                     AddBarButtonKind.Snap,
@@ -301,6 +302,53 @@ internal fun FieldRule(focused: Boolean, modifier: Modifier = Modifier) {
         if (focused) DecorSticker("heart", Modifier.offset(x = (-4).dp, y = (-3).dp), size = 13.dp, shadow = false)
     }
 }
+
+/**
+ * The Write tab's note (§6.2, §4.8): "Note:" over a ruled field that wraps (no box, no extra rules over the sheet's own
+ * lines), "Write a note…" and the example line while empty, the underline (focus: 3 dp strawberry trace + a puffy
+ * heart). TalkBack: "Note".
+ */
+@Composable
+internal fun NoteField(text: String, onTextChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val c = PicnicTheme.colors
+    val t = PicnicTheme.type
+    val label = stringResource(R.string.add_note_field)
+    var focused by remember { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth()) {
+        Text(stringResource(R.string.add_note_label), style = t.fieldLabel.copy(color = c.inkSoft), modifier = Modifier.clearAndSetSemantics { })
+        BasicTextField(
+            value = text,
+            onValueChange = onTextChange,
+            textStyle = t.fieldValue.copy(color = c.ink),
+            cursorBrush = SolidColor(c.ink),
+            minLines = 1,
+            maxLines = 6,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(NOTE_FIELD_TAG)
+                .onFocusChanged { focused = it.isFocused }
+                .semantics { contentDescription = label },
+            decorationBox = { inner ->
+                Column {
+                    Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(vertical = 4.dp), contentAlignment = Alignment.CenterStart) {
+                        if (text.isEmpty()) {
+                            Column(Modifier.clearAndSetSemantics { }) {
+                                Text(stringResource(R.string.add_bar_placeholder), style = t.fieldValue.copy(color = c.inkSoft))
+                                Text(stringResource(R.string.add_bar_example), style = t.itemDetail.copy(color = c.inkSoft))
+                            }
+                        }
+                        inner()
+                    }
+                    FieldRule(focused = focused)
+                }
+            },
+        )
+    }
+}
+
+/** Test tag of the Write tab's note field. */
+const val NOTE_FIELD_TAG: String = "add_note_field"
 
 /**
  * Rule 3: while the request is out, Send is a 52 dp gashapon capsule wobbling ±8° on threes (still under reduced
@@ -549,6 +597,8 @@ fun BoxScope.AddDock(
                 focusRequester = flows.focusRequester,
                 onFocusChange = { collapse.fieldFocused = it },
             )
+            // The FAB (or an empty Send) asked for the field: the bar is composed now, so focus it.
+            LaunchedEffect(flows.focusPending) { if (flows.focusPending) flows.focusNow() }
         }
     }
     AddFab(

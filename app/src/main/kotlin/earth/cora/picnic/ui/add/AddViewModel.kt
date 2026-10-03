@@ -564,7 +564,7 @@ class AddViewModel(
             val review = s.review ?: return@update s.copy(phase = AddPhase.Idle)
             val fresh = AddRules.newHeard(review.rows.map { it.item.name }, items)
             val firstKey = (review.rows.maxOfOrNull { it.key } ?: -1) + 1
-            val rows = rowsOf(fresh, st, ctx, RowBatch.HEARD, firstKey)
+            val rows = AddRules.rows(fresh, ctx.aisles, st.store.aisleStyles, RowBatch.HEARD, firstKey)
             s.copy(
                 phase = AddPhase.Preview,
                 review = review.copy(rows = review.rows + rows, heardId = ids.incrementAndGet(), heardSteps = steps),
@@ -573,40 +573,8 @@ class AddViewModel(
     }
 
     private fun showReview(result: IngestResult, source: ItemSource, query: String?, st: AppState, ctx: IngestContext, mode: AddMode) {
-        val rows = rowsOf(result.items, st, ctx, RowBatch.MAIN, firstKey = 0)
-        val review = AddReview(
-            id = ids.incrementAndGet(),
-            source = source,
-            rows = rows,
-            steps = if (source == ItemSource.PHOTO) emptyList() else AddRules.thinkingSteps(result, query),
-            recipe = result.recipe,
-            webSearch = result.meta.webSearches > 0,
-            sources = result.sources,
-            message = result.message.takeIf { AddRules.messageWorthShowing(it, query) }?.trim(),
-            lines = result.lines,
-        )
+        val review = AddRules.review(ids.incrementAndGet(), result, source, query, ctx.aisles, st.store.aisleStyles)
         _state.update { it.copy(sheetOpen = true, mode = mode, phase = AddPhase.Preview, review = review, committing = false) }
-    }
-
-    /** The answer's items as review rows (pantry and optional rows start switched off, §4.17). */
-    private fun rowsOf(items: List<ProposedItem>, st: AppState, ctx: IngestContext, batch: RowBatch, firstKey: Int): List<ReviewRow> {
-        val aisles = ctx.aisles.associateBy { it.id }
-        val styles = st.store.aisleStyles
-        return items.mapIndexed { i, item ->
-            val aisle = item.aisleId?.let(aisles::get)
-            val style = aisle?.let { styles[it.id] }
-            ReviewRow(
-                key = firstKey + i,
-                item = item,
-                keep = item.skipReason == SkipReason.NONE,
-                batch = batch,
-                aisleTitle = aisle?.displayName().orEmpty(),
-                aisleIndex = aisle?.let { it.position - 1 } ?: -1,
-                storeAisle = aisle?.let { style?.storeAisle ?: storeAisleNumber(it.name) },
-                style = style,
-                icon = if (item.iconFit == IconFit.PENDING) IconRef(IconCatalog.CAPSULE) else IconRef(item.icon),
-            )
-        }
     }
 
     /** Rules 2 and "As typed": the offline parse commits at once (duplicates included, so they pop, rule 7). */
@@ -628,7 +596,8 @@ class AddViewModel(
         val items = batches.flatMap { (source, proposed) ->
             proposed.map { p ->
                 val item = p.toGroceryItem(newId(), now, source)
-                if (p.skipReason == SkipReason.NONE) item.copy(rarity = surprises.rollRarity()) else item
+                // Every new sticker rolls (egg 6), optional and pantry rows she switched on too; duplicates only pop.
+                if (p.skipReason != SkipReason.ALREADY_ON_LIST) item.copy(rarity = surprises.rollRarity()) else item
             }
         }
         var outcome = AddOutcome.NONE

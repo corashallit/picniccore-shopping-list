@@ -5,6 +5,14 @@ import earth.cora.picnic.core.assistant.PhotoLine
 import earth.cora.picnic.core.assistant.ProposedItem
 import earth.cora.picnic.core.assistant.SkipReason
 import earth.cora.picnic.core.calendar.Season
+import earth.cora.picnic.core.catalog.IconCatalog
+import earth.cora.picnic.core.model.Aisle
+import earth.cora.picnic.core.model.AisleStyle
+import earth.cora.picnic.core.model.IconFit
+import earth.cora.picnic.core.model.IconRef
+import earth.cora.picnic.core.model.ItemSource
+import earth.cora.picnic.core.model.displayName
+import earth.cora.picnic.core.model.storeAisleNumber
 import earth.cora.picnic.core.model.normalizeMetric
 import earth.cora.picnic.core.model.normalizeName
 import earth.cora.picnic.ui.eggs.SurpriseState
@@ -114,8 +122,8 @@ object AddRules {
     }
 
     /**
-     * The transcript's keywords (§4.20): where each heard item's name (or its last word, "peas" for "Frozen peas") appears
-     * in [transcript], case- and accent-insensitive; non-overlapping ranges in order.
+     * The transcript's keywords (§4.20): where each heard item's name (or its longest tail found, "cat food" for "Dry cat food") appears
+     * in [transcript] as whole words, ignoring case; non-overlapping ranges in order.
      */
     fun keywordRanges(transcript: String, names: List<String>): List<IntRange> {
         val lower = transcript.lowercase()
@@ -123,7 +131,9 @@ object AddRules {
         for (name in names) {
             val wanted = name.trim().lowercase()
             if (wanted.isEmpty()) continue
-            val candidates = listOf(wanted, wanted.substringAfterLast(' ')).filter { it.length >= 3 }.distinct()
+            // The whole name, then shorter tails ("dry cat food" → "cat food" → "food").
+            val words = wanted.split(' ').filter { it.isNotEmpty() }
+            val candidates = words.indices.map { words.drop(it).joinToString(" ") }.filter { it.length >= 3 }.distinct()
             for (c in candidates) {
                 val at = indexOfWord(lower, c)
                 if (at >= 0) {
@@ -168,6 +178,40 @@ object AddRules {
         val seen = existing.mapTo(HashSet()) { normalizeName(it) }
         return heard.filter { seen.add(normalizeName(it.name)) }
     }
+
+    /** The answer's items as review rows (§4.17): optional and pantry rows start switched off; pending icons show the capsule (D5). */
+    fun rows(items: List<ProposedItem>, aisles: List<Aisle>, styles: Map<String, AisleStyle>, batch: RowBatch, firstKey: Int): List<ReviewRow> {
+        val byId = aisles.associateBy { it.id }
+        return items.mapIndexed { i, item ->
+            val aisle = item.aisleId?.let(byId::get)
+            val style = aisle?.let { styles[it.id] }
+            ReviewRow(
+                key = firstKey + i,
+                item = item,
+                keep = item.skipReason == SkipReason.NONE,
+                batch = batch,
+                aisleTitle = aisle?.displayName().orEmpty(),
+                aisleIndex = aisle?.let { it.position - 1 } ?: -1,
+                storeAisle = aisle?.let { style?.storeAisle ?: storeAisleNumber(it.name) },
+                style = style,
+                icon = if (item.iconFit == IconFit.PENDING) IconRef(IconCatalog.CAPSULE) else IconRef(item.icon),
+            )
+        }
+    }
+
+    /** The review of an answer (rule 5): its rows, its real thinking steps (D16, none for a photo) and the card's facts. */
+    fun review(id: Long, result: IngestResult, source: ItemSource, query: String?, aisles: List<Aisle>, styles: Map<String, AisleStyle>): AddReview =
+        AddReview(
+            id = id,
+            source = source,
+            rows = rows(result.items, aisles, styles, RowBatch.MAIN, firstKey = 0),
+            steps = if (source == ItemSource.PHOTO) emptyList() else thinkingSteps(result, query),
+            recipe = result.recipe,
+            webSearch = result.meta.webSearches > 0,
+            sources = result.sources,
+            message = result.message.takeIf { messageWorthShowing(it, query) }?.trim(),
+            lines = result.lines,
+        )
 
     private val WHITESPACE = Regex("\\s+")
 }
