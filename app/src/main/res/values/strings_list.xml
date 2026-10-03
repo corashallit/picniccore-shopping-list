@@ -65,6 +65,11 @@
 
     <!-- The peek note (§4.23) for TalkBack. -->
     <string name="list_peek_in_basket">%1$s, in the basket</string>
+    <!-- The last line of a peek note too long for the room it has. -->
+    <plurals name="list_peek_more">
+        <item quantity="one">+%1$d more</item>
+        <item quantity="other">+%1$d more</item>
+    </plurals>
 
     <!-- The New trip sheet (§6.5, §16). -->
     <string name="list_new_trip_title">Start a new trip?</string>

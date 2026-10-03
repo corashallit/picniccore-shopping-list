@@ -110,4 +110,29 @@ class SwipeTest {
         compose.waitForIdle()
 
     }
+
+    /**
+     * A gotten row has nothing to check (D10, item 117): a right swipe does not move it, shows no GOT IT hint, and
+     * leaves it checked; a left swipe still tears it off.
+     */
+    @Test
+    fun rightOnCheckedRowKeepsIt() {
+        val rig = ListRig(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, "produce"))
+        compose.show(rig)
+        assertTrue(rig.app.isChecked("bananas"))
+        val row = compose.onNodeWithTag(ListTags.row("bananas"))
+        val before = compose.boundsOf(ListTags.row("bananas"))
+        val lemon = Families.lemon.pastel.toArgb()
+        row.performTouchInput {
+            down(center)
+            repeat(4) { moveBy(androidx.compose.ui.geometry.Offset(20 * dp, 0f)) }
+        }
+        compose.waitForIdle()
+        assertFalse("no GOT IT band on a gotten row", near(bandColour("bananas", left = true), lemon))
+        assertEquals("the row stays put", before.left, compose.boundsOf(ListTags.row("bananas")).left, 0.5f)
+        row.performTouchInput { up() }
+        compose.waitForIdle()
+        assertTrue("still checked after 80 dp right", rig.app.isChecked("bananas"))
+        assertTrue("no un-check chain played", rig.engine.flightLog.none { it.itemId == "bananas" })
+    }
 }

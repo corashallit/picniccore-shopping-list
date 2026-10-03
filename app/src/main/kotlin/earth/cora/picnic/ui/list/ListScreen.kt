@@ -209,6 +209,9 @@ class ListScreenState(
 
     internal val stripBounds = mutableStateMapOf<String, Rect>()
     internal var moreBounds by mutableStateOf<Rect?>(null)
+
+    /** The list viewport's window bounds (the peek note stays inside it). */
+    internal var listBounds by mutableStateOf<Rect?>(null)
     internal val focus = HashMap<String, Pair<FocusRequester, FocusRequester>>()
 
     /** Pops the stickers of a commit's rows, the new ones 80 ms apart (§6.2), the ones already there at once. */
@@ -219,6 +222,17 @@ class ListScreenState(
     }
 
     internal fun focusOf(sectionId: String): Pair<FocusRequester, FocusRequester> = focus.getOrPut(sectionId) { FocusRequester() to FocusRequester() }
+
+    /**
+     * The re-sync (§6.1, item 119), however she asks for it (the pull, the overflow menu's Refresh, the list's custom
+     * action): the cue, the re-sync itself, the sun's one spin and "SYNC" on the LCD for 1500 ms.
+     */
+    fun refresh(actions: ListActions) {
+        actions.onCue(Cue.PULL_REFRESH)
+        actions.onRefresh()
+        sunSpin++
+        syncing = true
+    }
 }
 
 @Composable
@@ -434,6 +448,12 @@ fun ListScreen(
 ) {
     MotionEngineHost(engine, nextStopCard = state.nextStopCard, celebration = state.celebration, eggs = state.eggs, talkBackOverride = talkBackOverride)
     val p = engine.current.value
+    // SYNC holds on the LCD for the LCD-word floor after each refresh, on the frame clock (§6.1, §9).
+    LaunchedEffect(screen.sunSpin) {
+        if (!screen.syncing) return@LaunchedEffect
+        withContext(FixedMotionScale) { holdOnFrameClock(PicnicMotion.floorLcdWord) }
+        screen.syncing = false
+    }
     val density = LocalDensity.current
     val ime = WindowInsets.ime.getBottom(density) > 0
     val shortWindow = LocalConfiguration.current.screenHeightDp < SHORT_WINDOW_DP
@@ -466,7 +486,7 @@ fun ListScreen(
         }
         dock()
         MotionOverlay(engine, p, toasts, bottomInset = dockHeight, eggs = eggs)
-        PeekLayer(state, screen)
+        PeekLayer(state, screen, dockHeight)
         if (screen.menuOpen) ListMenu(state, actions, screen)
         state.editing?.let { editing ->
             EditItemSheet(
@@ -682,17 +702,7 @@ private fun AisleList(
     val pullPx = with(density) { PULL_MAX.toPx() }
     val triggerPx = with(density) { PULL_TRIGGER.toPx() }
     val pullBack = remember { Animatable(0f) }
-    val refresh: () -> Unit = {
-        actions.onCue(Cue.PULL_REFRESH)
-        act.onRefresh()
-        screen.sunSpin++
-        screen.syncing = true
-    }
-    LaunchedEffect(screen.syncing) {
-        if (!screen.syncing) return@LaunchedEffect
-        withContext(FixedMotionScale) { holdOnFrameClock(PicnicMotion.floorLcdWord) }
-        screen.syncing = false
-    }
+    val refresh: () -> Unit = { screen.refresh(act) }
     val connection = remember(screen, pullPx, triggerPx, reduced) {
         object : NestedScrollConnection, PullGate {
             private var raw = 0f
@@ -743,6 +753,7 @@ private fun AisleList(
     Box(
         Modifier
             .fillMaxSize()
+            .onGloballyPositioned { screen.listBounds = it.boundsInWindow() }
             .pointerInput(connection) {
                 // Watches (never consumes) whether a finger is down, for the pull to refresh.
                 awaitPointerEventScope {
@@ -857,7 +868,8 @@ private fun AisleList(
                 }
             }
         }
-        if (screen.pull > 0f) Bunting(screen.pull / pullPx, Modifier.align(Alignment.TopCenter))
+        // Reduced motion: no sag, no bunting; "SYNC" on the LCD only (§8.5). The pull still counts towards the 40 dp.
+        if (screen.pull > 0f && !reduced) Bunting(screen.pull / pullPx, Modifier.align(Alignment.TopCenter))
     }
 }
 
@@ -912,35 +924,48 @@ private fun Bunting(fraction: Float, modifier: Modifier) {
     }
 }
 
-/** The overlay's peek note (§4.23): 54 dp from the right, below the strip (above it in the lower 55 % of the list). */
+/**
+ * The overlay's peek note (§4.23): 54 dp from the right, below the strip (above it in the lower 55 % of the list). It
+ * stays inside the list's viewport, clear of the add bar: it takes the side the rule picks unless that side is too
+ * cramped and the other one roomier, and a long aisle or large text caps its height to that side's room (the first
+ * lines, then "+n more").
+ */
 @Composable
-private fun PeekLayer(state: ListUiState, screen: ListScreenState) {
+private fun PeekLayer(state: ListUiState, screen: ListScreenState, dockHeight: Dp) {
     val id = screen.peek ?: return
     val section = state.sections.firstOrNull { it.id == id } ?: return
     val bounds = screen.stripBounds[id] ?: return
     var origin by remember { mutableStateOf(Offset.Zero) }
-    var height by remember { mutableFloatStateOf(0f) }
     var noteHeight by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
-    Box(
-        Modifier
-            .fillMaxSize()
-            .onGloballyPositioned {
-                origin = it.boundsInWindow().topLeft
-                height = it.size.height.toFloat()
-            },
-    ) {
-        val lower = (bounds.center.y - origin.y) > height * 0.45f
-        val y = if (lower) bounds.top - origin.y - noteHeight - with(density) { 4.dp.toPx() } else bounds.bottom - origin.y + with(density) { 4.dp.toPx() }
+    Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.boundsInWindow().topLeft }) {
+        val list = screen.listBounds ?: return@Box
+        val gap = with(density) { 4.dp.toPx() }
+        // The room the note may use, in window px: the list's viewport above the add bar.
+        val top = list.top
+        val bottom = maxOf(top, list.bottom - with(density) { dockHeight.toPx() })
+        val above = bounds.top - gap - top
+        val below = bottom - (bounds.bottom + gap)
+        val ruleAbove = (bounds.center.y - list.top) > list.height * 0.45f
+        val wanted = noteHeight.toFloat()
+        val least = with(density) { PEEK_MIN_ROOM.toPx() }
+        val flip = if (ruleAbove) !(above < least && below > above) else below < least && above > below
+        val room = (if (flip) above else below).coerceAtLeast(least)
+        val yWindow = if (flip) bounds.top - gap - minOf(wanted, room) else bounds.bottom + gap
+        val y = yWindow.coerceIn(top, maxOf(top, bottom - minOf(wanted, room))) - origin.y
         PeekNote(
             section,
             Modifier
                 .align(Alignment.TopEnd)
                 .offset { IntOffset(-54.dp.roundToPx(), y.roundToInt()) }
                 .onGloballyPositioned { noteHeight = it.size.height },
+            maxHeight = with(density) { room.toDp() },
         )
     }
 }
+
+/** The least room the peek note is given (its title and a line or two), even on a cramped screen. */
+private val PEEK_MIN_ROOM: Dp = 72.dp
 
 /** The overflow menu (§4.24) dropping from the More button; a tap outside closes it. */
 @Composable
@@ -963,7 +988,7 @@ private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScree
             disabledState = stringResource(R.string.list_menu_no_trip),
         ),
         MenuItem(stringResource(R.string.list_menu_switch_list), PicnicGlyph.Lists, actions.onOpenLists),
-        MenuItem(stringResource(R.string.list_menu_refresh), PicnicGlyph.Refresh, actions.onRefresh),
+        MenuItem(stringResource(R.string.list_menu_refresh), PicnicGlyph.Refresh, onClick = { screen.refresh(actions) }),
         MenuItem(stringResource(R.string.menu_my_store), PicnicGlyph.Aisles, actions.onOpenAisles),
         MenuItem(stringResource(R.string.menu_my_pantry), PicnicGlyph.Jar, actions.onOpenPantry),
         MenuItem(stringResource(R.string.menu_album), PicnicGlyph.Album, actions.onOpenAlbum),

@@ -3,8 +3,9 @@ package earth.cora.picnic.ui.list
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -15,11 +16,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.ui.theme.Families
@@ -33,20 +38,28 @@ import earth.cora.picnic.ui.theme.hardShadow
  * with a 7 dp dot: strawberry = still to get, melon + strike = already in the basket. role=status. Owner: WP5 (PeekTest).
  */
 
+/**
+ * The note for [section]. [maxHeight] caps it (the room on its side of the strip, inside the list): what does not fit
+ * ends in a "+n more" line; TalkBack still reads every item.
+ */
 @Composable
-internal fun PeekNote(section: SectionUi, modifier: Modifier = Modifier) {
+internal fun PeekNote(section: SectionUi, modifier: Modifier = Modifier, maxHeight: Dp = Dp.Infinity) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val inBasket = androidx.compose.ui.res.stringResource(earth.cora.picnic.R.string.list_peek_in_basket, "%s")
+    val resources = LocalResources.current
     val name = spokenAisleName(section)
     val spoken = buildString {
         append(name)
         append(": ")
         append(section.rows.joinToString(", ") { r -> if (r.checked) inBasket.replace("%s", r.name) else r.name })
     }
-    Column(
+    val lineStyle = t.label.copy(color = c.ballpoint, fontSize = 13.sp)
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+    Box(
         modifier
             .width(168.dp)
+            .heightIn(max = maxHeight)
             .testTag(ListTags.PEEK)
             .rotate(-2f)
             .clearAndSetSemantics {
@@ -59,18 +72,57 @@ internal fun PeekNote(section: SectionUi, modifier: Modifier = Modifier) {
             .clip(RectangleShape)
             .background(Families.lemon.pastel)
             .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Text(section.displayName, style = t.smallTitle.copy(color = c.ballpoint, fontSize = 14.sp), maxLines = 2)
-        for (r in section.rows) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Canvas(Modifier.size(7.dp)) { drawCircle(if (r.checked) Families.melon.mid else Families.strawberry.mid) }
-                StruckText(
-                    r.name,
-                    style = t.label.copy(color = c.ballpoint, fontSize = 13.sp),
-                    struck = r.checked,
-                    strike = PicnicTheme.colors.hanko.takeIf { !c.isDark } ?: Families.strawberry.trace,
-                )
+        SubcomposeLayout { constraints ->
+            val loose = constraints.copy(minWidth = 0, minHeight = 0)
+            val gap = 3.dp.roundToPx()
+            val title = subcompose("title") {
+                Text(section.displayName, style = t.smallTitle.copy(color = c.ballpoint, fontSize = 14.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }.single().measure(loose)
+            val lines = section.rows.mapIndexed { i, r ->
+                subcompose("row:$i") {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Canvas(Modifier.size(7.dp)) { drawCircle(if (r.checked) Families.melon.mid else Families.strawberry.mid) }
+                        StruckText(
+                            r.name,
+                            style = lineStyle,
+                            struck = r.checked,
+                            strike = PicnicTheme.colors.hanko.takeIf { !c.isDark } ?: Families.strawberry.trace,
+                        )
+                    }
+                }.single().measure(loose)
+            }
+            val natural = title.height + lines.sumOf { it.height + gap }
+            var shown = lines.size
+            var more: androidx.compose.ui.layout.Placeable? = null
+            if (constraints.hasBoundedHeight && natural > constraints.maxHeight) {
+                val moreText: @Composable (Int) -> Unit = { n ->
+                    Text(resources.getQuantityString(earth.cora.picnic.R.plurals.list_peek_more, n, n), style = lineStyle.copy(color = c.inkSoft), maxLines = 1)
+                }
+                // The last line is one line of text whatever n is: measured, not composed, so it leaves no stray node.
+                val moreHeight = measurer.measure(resources.getQuantityString(earth.cora.picnic.R.plurals.list_peek_more, lines.size, lines.size), lineStyle, maxLines = 1).size.height
+                var h = title.height + gap + moreHeight
+                shown = 0
+                while (shown < lines.size && h + lines[shown].height + gap <= constraints.maxHeight) {
+                    h += lines[shown].height + gap
+                    shown++
+                }
+                more = subcompose("more") { moreText(lines.size - shown) }.single().measure(loose)
+            }
+            val height = title.height + lines.take(shown).sumOf { it.height + gap } + (more?.let { it.height + gap } ?: 0)
+            layout(constraints.maxWidth, height.coerceAtMost(constraints.maxHeight)) {
+                var y = 0
+                title.place(0, y)
+                y += title.height
+                for (l in lines.take(shown)) {
+                    y += gap
+                    l.place(0, y)
+                    y += l.height
+                }
+                more?.let {
+                    y += gap
+                    it.place(0, y)
+                }
             }
         }
     }

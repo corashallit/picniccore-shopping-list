@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -231,12 +230,13 @@ internal fun FoldedStrip(
                     .probe(probe, "basket:${section.id}")
                     .pointerInput(section.id, threshold) {
                         // Press and hold for the hold threshold: the lid opens and the peek note shows; the click is
-                        // swallowed so the strip does not open (§5.3). A shorter tap falls through to the strip.
+                        // swallowed so the strip does not open (§5.3). A shorter tap falls through to the strip. A
+                        // finger that moves past the touch slop, or a scroll that takes the gesture, is not a hold: the
+                        // list keeps the gesture and nothing peeks (item 114).
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             val start = down.uptimeMillis
-                            val released = withTimeoutOrNull(threshold) { waitForUpOrCancellation() }
-                            if (released != null) return@awaitEachGesture
+                            if (!awaitHold(down, threshold)) return@awaitEachGesture
                             peek(true, 0)
                             var end = start
                             while (true) {
@@ -301,6 +301,36 @@ internal fun FoldedStrip(
             chevron.place(chevronX, (h - chevron.height) / 2)
         }
     }
+}
+
+/**
+ * Waits out the hold threshold after [down] (§4.3) without consuming anything. True only when the finger is still down,
+ * still within the touch slop of where it landed, and nothing else (the list's scroll) has taken the gesture by then;
+ * false on a release, a cancellation or a move, which are all different from running out the clock.
+ */
+internal suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.awaitHold(
+    down: androidx.compose.ui.input.pointer.PointerInputChange,
+    thresholdMs: Long,
+): Boolean {
+    val slop = viewConfiguration.touchSlop
+    var ended = false
+    withTimeoutOrNull(thresholdMs) {
+        while (true) {
+            val e = awaitPointerEvent()
+            val change = e.changes.firstOrNull { it.id == down.id }
+            if (change == null || !change.pressed || e.changes.any { it.isConsumed } || (change.position - down.position).getDistance() > slop) {
+                ended = true
+                return@withTimeoutOrNull
+            }
+            // A parent (the list's scroll) consumes on the Main pass after this child; look again on the Final pass.
+            val after = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Final)
+            if (after.changes.any { it.isConsumed }) {
+                ended = true
+                return@withTimeoutOrNull
+            }
+        }
+    }
+    return !ended
 }
 
 /**

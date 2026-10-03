@@ -99,4 +99,28 @@ class TearOffTest {
         assertEquals("both back where they were", order, rig.app.items().map { it.id })
         assertEquals(24, rig.app.list(ListFixture.LIST_ID)!!.items.size)
     }
+
+    /**
+     * A tear she released is never lost (item 118): folding the aisle 200 ms into the tear (the row leaves the
+     * composition before the halves have fallen) still deletes it and still offers Undo.
+     */
+    @Test
+    fun foldMidTearStillTears() {
+        val rig = ListRig(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, "produce"))
+        compose.show(rig)
+        compose.mainClock.autoAdvance = false
+        tear("apples")
+        compose.advanceMs(200)
+        assertTrue("still tearing at 200 ms", rig.app.items().any { it.id == "apples" })
+        compose.onNodeWithTag(ListTags.chevron("produce")).performClick()
+        assertTrue("torn out although the aisle folded", compose.framesUntil(1000) { rig.app.items().none { it.id == "apples" } })
+        assertTrue("the Undo note shows", compose.framesUntil(1000) { compose.exists(TOAST_TAG) })
+        compose.onNodeWithText("McIntosh apples torn out", useUnmergedTree = true).assertExists()
+        compose.advanceMs(1500)
+        assertEquals("deleted once", 23, rig.app.items().size)
+        compose.onNodeWithText("Undo").performClick()
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertTrue("Undo puts it back", rig.app.items().any { it.id == "apples" })
+    }
 }

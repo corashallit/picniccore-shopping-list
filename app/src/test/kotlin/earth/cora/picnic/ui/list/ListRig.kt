@@ -38,13 +38,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
-/** The icon repository the list talks to, counting [resumePending] (pull to refresh, item 119). */
+/**
+ * The icon repository the list talks to, counting [resumePending] (pull to refresh, item 119). [onResume] lets a test
+ * play the repository's part (mark names busy, finish a drawing).
+ */
 class CountingIcons(val inner: RecordingIconRepository = RecordingIconRepository()) : IconRepository by inner {
     var resumed = 0
         private set
+    var onResume: () -> Unit = {}
 
     override fun resumePending() {
         resumed++
+        onResume()
     }
 }
 

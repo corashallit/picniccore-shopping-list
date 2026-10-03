@@ -62,8 +62,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.time.ZoneId
 
@@ -505,26 +507,49 @@ class ListViewModel(
 
     /**
      * Pull to refresh, the overflow menu's Refresh and the list's custom action (§6.1, D18): pending stickers resume and
-     * the items still in "Everything else" are sorted into aisles. [ListEvent.Refreshed] says what changed.
+     * the items still in "Everything else" are sorted into aisles. [ListEvent.Refreshed] says what changed: the sorting
+     * at once, and the stickers once the icon repository has finished the ones it resumed (their names have left its busy
+     * set, within [DRAW_WAIT_MS]). Nothing is said when nothing changed.
      */
     fun refresh() {
         appScope.launch {
-            icons.resumePending()
-            val sync = aisleSync ?: return@launch
             val s = try {
                 store.current()
             } catch (e: IOException) {
-                return@launch
+                null
             }
-            val list = s.currentList()
-            val unsorted = groupedOf(s, list, catalog).sections.firstOrNull { it.kind == SectionKind.UNSORTED }
-            val ids = unsorted?.rows?.filterNot { it.manuallyPlaced }?.map { it.id }.orEmpty()
-            if (ids.isEmpty()) return@launch
-            val pendingBefore = list.items.count { it.iconFit == IconFit.PENDING }
-            val report = runCatching { sync.sortItems(ids) }.getOrNull() ?: return@launch
-            val after = runCatching { store.current().list(list.id) }.getOrNull()
-            val drawn = (pendingBefore - (after?.items?.count { it.iconFit == IconFit.PENDING } ?: pendingBefore)).coerceAtLeast(0)
-            if (report.recategorized > 0 || drawn > 0) _events.send(ListEvent.Refreshed(report.recategorized, report.leftUnsorted, drawn))
+            val list = s?.currentList()
+            // The stickers this refresh resumes: the current list's items still waiting for theirs.
+            val waiting = list?.items?.filter { it.iconFit == IconFit.PENDING && it.customIconId == null }.orEmpty()
+            icons.resumePending()
+            val sync = aisleSync
+            if (s != null && list != null && sync != null) {
+                val unsorted = groupedOf(s, list, catalog).sections.firstOrNull { it.kind == SectionKind.UNSORTED }
+                val ids = unsorted?.rows?.filterNot { it.manuallyPlaced }?.map { it.id }.orEmpty()
+                val report = if (ids.isEmpty()) null else runCatching { sync.sortItems(ids) }.getOrNull()
+                if (report != null && report.recategorized > 0) _events.send(ListEvent.Refreshed(report.recategorized, report.leftUnsorted, 0))
+            }
+            if (list != null && waiting.isNotEmpty()) {
+                val drawn = awaitResumedStickers(list.id, waiting)
+                if (drawn > 0) _events.send(ListEvent.Refreshed(0, 0, drawn))
+            }
+        }
+    }
+
+    /**
+     * Waits (bounded) for the icon repository to finish the stickers of [waiting] and returns how many of them now
+     * show a new sticker. Their names join the busy set once the repository has queued them (it may not: without a key
+     * nothing is decided), and leave it when they are done.
+     */
+    private suspend fun awaitResumedStickers(listId: String, waiting: List<GroceryItem>): Int {
+        val names = waiting.map { normalizeName(it.name) }.toSet()
+        val started = withTimeoutOrNull(DRAW_START_MS) { icons.busy.first { busy -> busy.any { it in names } } } != null
+        if (started) withTimeoutOrNull(DRAW_WAIT_MS) { icons.busy.first { busy -> busy.none { it in names } } }
+        val now = runCatching { store.current().list(listId) }.getOrNull() ?: return 0
+        val before = waiting.associateBy { it.id }
+        return now.items.count { item ->
+            val was = before[item.id] ?: return@count false
+            item.customIconId != was.customIconId || item.icon != was.icon || item.iconFit != was.iconFit
         }
     }
 
@@ -645,6 +670,12 @@ class ListViewModel(
     companion object {
         /** More flips than this in one change (a bulk un-check) play no row chains. */
         private const val MAX_ROW_CHAINS = 6
+
+        /** How long a refresh waits for the icon repository to pick up the stickers it resumed (it debounces). */
+        private const val DRAW_START_MS = 3_000L
+
+        /** How long a refresh waits for those stickers before it reports what is done (a drawing takes about 10 s). */
+        private const val DRAW_WAIT_MS = 60_000L
 
         /** The next stop in walking order with something left after [from], wrapping (§10). */
         fun nextStop(g: GroupedList, from: String): String? {

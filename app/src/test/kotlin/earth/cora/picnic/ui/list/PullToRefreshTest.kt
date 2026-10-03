@@ -16,6 +16,7 @@ import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.addItems
+import earth.cora.picnic.core.model.attachCustomIcon
 import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.theme.PicnicMotion
@@ -127,10 +128,96 @@ class PullToRefreshTest {
         compose.waitForIdle()
         assertEquals(1, rig.icons.resumed)
         assertEquals("asked about the two in Everything else", 1, rig.assistant.recategorized.size)
+        assertEquals("the menu's Refresh plays the refresh cue", 1, rig.feedback.count(Cue.PULL_REFRESH))
         val action = compose.onNodeWithTag(ListTags.LIST).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == "Refresh stickers and aisles" }
         compose.runOnIdle { action.action() }
         compose.waitForIdle()
         assertEquals(2, rig.icons.resumed)
         assertEquals(2, rig.assistant.recategorized.size)
+        assertEquals("and so does the custom action", 2, rig.feedback.count(Cue.PULL_REFRESH))
+    }
+
+    /**
+     * Without the gesture, the menu's Refresh and the custom action do everything the pull does (item 119): the cue, the
+     * re-sync, the sun's spin and SYNC on the LCD for 1500 ms.
+     */
+    @Test
+    fun menuAndActionSpinTheSunAndShowSync() {
+        var refreshed = 0
+        val cues = mutableListOf<Cue>()
+        val screen = ListScreenState()
+        compose.setContent {
+            PicnicTheme { Box(Modifier.fillMaxSize()) { ListScreen(ListFixture.ui(), ListActions(onRefresh = { refreshed++ }, onCue = { cues += it }), screen = screen) } }
+        }
+        compose.waitForIdle()
+        fun assertSyncHolds(times: Int) {
+            assertEquals("re-synced", times, refreshed)
+            assertEquals("the cue", times, cues.count { it == Cue.PULL_REFRESH })
+            assertEquals("the sun spins once more", times, screen.sunSpin)
+            assertTrue("the LCD reads SYNC", screen.syncing)
+            compose.advanceMs(PicnicMotion.floorLcdWord - 100)
+            assertTrue("SYNC holds 1500 ms", screen.syncing)
+            assertTrue(compose.framesUntil(300) { !screen.syncing })
+        }
+        compose.onNodeWithContentDescription("More options").performClick()
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Refresh").performClick()
+        compose.frames(2)
+        assertFalse("the menu closed", screen.menuOpen)
+        assertSyncHolds(1)
+        val action = compose.onNodeWithTag(ListTags.LIST).fetchSemanticsNode().config[SemanticsActions.CustomActions].single { it.label == "Refresh stickers and aisles" }
+        compose.runOnIdle { action.action() }
+        compose.frames(2)
+        assertSyncHolds(2)
+        compose.mainClock.autoAdvance = true
+    }
+
+    /** Reduced motion (§8.5): no sag and no bunting, the list stays still; the release past 40 dp still re-syncs with SYNC. */
+    @Test
+    fun reducedMotionHasNoBunting() {
+        var refreshed = 0
+        val screen = ListScreenState()
+        compose.setContent {
+            PicnicTheme(reducedMotion = true) { Box(Modifier.fillMaxSize()) { ListScreen(ListFixture.ui(), ListActions(onRefresh = { refreshed++ }), screen = screen) } }
+        }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        pull(140f)
+        compose.frames(2)
+        assertFalse("no bunting under reduced motion", compose.exists(ListTags.BUNTING))
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput { up() }
+        compose.frames(3)
+        assertEquals("the pull still re-syncs", 1, refreshed)
+        assertTrue("SYNC on the LCD", screen.syncing)
+        assertFalse(compose.exists(ListTags.BUNTING))
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * The note reports the stickers the refresh resumed once they are done (§6.1): the sorting at once, then "1 new
+     * sticker drawn" when the icon repository has finished the one waiting, even though nothing was left to sort.
+     */
+    @Test
+    fun reportsDrawnStickersWhenTheyAreDone() {
+        val pendingItem = GroceryItem(id = "p0", name = "Rice crackers", aisleId = "aisle-2-baking", icon = "paper_bag", iconFit = IconFit.PENDING, addedAt = ListFixture.NOW - 1000)
+        val start = ListFixture.state().addItems(ListFixture.LIST_ID, listOf(pendingItem), pendingItem.addedAt).first
+        val rig = ListRig(start)
+        val key = earth.cora.picnic.core.model.normalizeName("Rice crackers")
+        rig.icons.onResume = { rig.icons.inner.busyFlow.value = setOf(key) }
+        compose.show(rig)
+        compose.mainClock.autoAdvance = false
+        pull(140f)
+        compose.frames(2)
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput { up() }
+        compose.advanceMs(400)
+        assertEquals(1, rig.icons.resumed)
+        assertFalse("nothing to report while the sticker is being drawn", compose.exists(earth.cora.picnic.ui.theme.TOAST_TAG))
+        // The repository finishes the drawing: the item gets its sticker, and its name leaves the busy set.
+        kotlinx.coroutines.runBlocking { rig.store.update { it.attachCustomIcon(key, "drawn-1", overwrite = true) } }
+        rig.icons.inner.busyFlow.value = emptySet()
+        assertTrue("the note comes", compose.framesUntil(1500) { compose.exists(earth.cora.picnic.ui.theme.TOAST_TAG) })
+        compose.onNodeWithText("1 new sticker drawn", useUnmergedTree = true).assertExists()
+        compose.mainClock.autoAdvance = true
     }
 }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -160,6 +161,14 @@ internal fun TrayRow(
     var tearT0 by remember { mutableStateOf<Long?>(null) }
     var tearNow by remember { mutableStateOf(0L) }
     val act by rememberUpdatedState(actions)
+    // A gotten row has nothing to check: swipe right does not move it, so the GOT IT hint never shows (D10, item 117).
+    val checkedNow by rememberUpdatedState(row.checked)
+    // A tear she released is never lost (§8.6, item 118): if the row leaves the composition before the halves have
+    // fallen (she folds the aisle, scrolls it away, switches list, a chain folds the tray), the delete is made at once.
+    val tear = remember { TearCommit() }
+    DisposableEffect(row.id) {
+        onDispose { if (tear.pending) tear.commit { act.onDelete(row.id) } }
+    }
     val thresholdPx = with(density) { SWIPE_THRESHOLD.toPx() }
     val minH = rowMinHeight()
     fun home(ms: Int) {
@@ -216,7 +225,7 @@ internal fun TrayRow(
                             onDragEnd = {
                                 val v = offset
                                 when {
-                                    v >= thresholdPx -> {
+                                    v >= thresholdPx && !checkedNow -> {
                                         // The same chain as a tap (§4.11).
                                         act.onToggle(row.id)
                                         home(220)
@@ -224,8 +233,9 @@ internal fun TrayRow(
                                     v <= -thresholdPx -> {
                                         act.onTearCue()
                                         offset = 0f
+                                        tear.pending = true
                                         if (reduced) {
-                                            act.onDelete(row.id)
+                                            tear.commit { act.onDelete(row.id) }
                                         } else {
                                             settling = scope.launch {
                                                 withContext(FixedMotionScale) {
@@ -237,7 +247,7 @@ internal fun TrayRow(
                                                         if (n - start >= TEAR_TOTAL) break
                                                     }
                                                 }
-                                                act.onDelete(row.id)
+                                                tear.commit { act.onDelete(row.id) }
                                             }
                                         }
                                     }
@@ -247,7 +257,7 @@ internal fun TrayRow(
                             onDragCancel = { home(200) },
                         ) { change, amount ->
                             change.consume()
-                            offset = (offset + amount).coerceIn(-thresholdPx * 1.6f, thresholdPx * 1.6f)
+                            offset = (offset + amount).coerceIn(-thresholdPx * 1.6f, if (checkedNow) 0f else thresholdPx * 1.6f)
                         }
                     },
             )
@@ -278,6 +288,7 @@ internal fun TrayRow(
                 Modifier
                     .padding(horizontal = inset)
                     .clearAndSetSemantics { }
+                    .swallowTouches()
                     .graphicsLayer {
                         clip = true
                         shape = HalfShape(left = true)
@@ -293,6 +304,7 @@ internal fun TrayRow(
                 Modifier
                     .padding(horizontal = inset)
                     .clearAndSetSemantics { }
+                    .swallowTouches()
                     .graphicsLayer {
                         clip = true
                         shape = HalfShape(left = false)
@@ -307,6 +319,26 @@ internal fun TrayRow(
             // Printed on the paper, and left on the backing where the row was.
             Perforation(e, Modifier.matchParentSize().padding(horizontal = inset))
         }
+    }
+}
+
+/** A released tear-off's delete, made exactly once: when the halves have fallen, or at once if the row goes first. */
+private class TearCommit {
+    var pending = false
+    private var done = false
+
+    fun commit(delete: () -> Unit) {
+        if (done) return
+        done = true
+        pending = false
+        delete()
+    }
+}
+
+/** The torn halves are pictures on their way out: a tap on them neither checks nor edits the row they were. */
+private fun Modifier.swallowTouches(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial).changes.forEach { it.consume() }
     }
 }
 
