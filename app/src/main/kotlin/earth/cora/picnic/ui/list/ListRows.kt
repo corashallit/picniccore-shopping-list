@@ -73,6 +73,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.eggs.EggAnchors
+import earth.cora.picnic.ui.eggs.RowRoller
+import earth.cora.picnic.ui.eggs.eggTwinkle
+import earth.cora.picnic.ui.eggs.goldCapsule
+import earth.cora.picnic.ui.eggs.pixelStickers
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.list.motion.ListPresentation
 import earth.cora.picnic.ui.list.motion.MotionClock
@@ -205,9 +210,13 @@ internal fun TrayRow(
                 SwipeBand(right = offset > 0f, progress = abs(offset) / thresholdPx, Modifier.matchParentSize())
             }
         }
+        // Egg 3 rolls home along this row's line beneath its words (drawn before the row, so the words draw over it).
+        if (!tearing) RowRoller(row.id)
+        val twinkleIndex = section.rows.indexOfFirst { it.id == row.id }.coerceAtLeast(0)
         val content: @Composable (Modifier) -> Unit = { m ->
             RowContent(
                 row = row,
+                twinkleIndex = twinkleIndex,
                 presentation = presentation,
                 clock = clock,
                 anchors = anchors,
@@ -439,10 +448,13 @@ internal fun RowContent(
     pop: PopRequest? = null,
     sweepT0: Long? = null,
     ambientClock: MotionClock? = null,
+    /** Egg 7: the row's place in its tray (each sticker twinkles 60 ms after the one before). */
+    twinkleIndex: Int = 0,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val reduced = LocalReducedMotion.current
+    val eggs = LocalListEggs.current
     val phase = presentation.rows[row.id]
     val start = presentation.rowStarts[row.id]
     val interaction = remember { MutableInteractionSource() }
@@ -512,9 +524,15 @@ internal fun RowContent(
                     CustomAccessibilityAction(editLabel) { act.onEdit(row.id); true },
                 )
             }
+            // The whole row is the eggs' `line:` anchor (egg 3 rolls home along it; the scenes bring it into view).
+            .then(with(anchors) { Modifier.anchor(EggAnchors.line(row.id)) })
             .padding(start = 6.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Egg 3: the row's own sticker hides while its rolling twin travels (it settles on its line at the end). Egg 13: the
+        // capsule is gold while its live sticker draws.
+        val rolling = eggs.hidesRowSticker(row.id)
+        val gold = eggs.goldCapsule(row.id)
         // The sticker box: its anchor first, so it records where the sticker sits, not where a pose moved it.
         with(anchors) {
             Box(
@@ -528,25 +546,28 @@ internal fun RowContent(
                     },
             ) {
                 val ghostAlpha = RowMotion.ghostAlpha(row.checked, phase, start, clock.now, reduced)
-                if (ghostAlpha > 0f) {
+                if (ghostAlpha > 0f && !rolling) {
                     ItemIcon(
                         row.icon, null,
                         Modifier.graphicsLayer { alpha = RowMotion.ghostAlpha(row.checked, phase, start, clock.now, reduced) },
                         ghost = true, aisleIndex = row.aisleIndex,
                     )
                 }
-                if (ghostAlpha < 1f) {
+                if (ghostAlpha < 1f && !rolling) {
                     ItemIcon(
-                        row.icon, null,
+                        if (gold) row.icon.copy(key = earth.cora.picnic.core.catalog.IconCatalog.CAPSULE) else row.icon, null,
                         Modifier
+                            .eggTwinkle(eggs, twinkleIndex)
                             .rowStickerPeel(phase, start, clock)
                             .graphicsLayer { alpha = 1f - RowMotion.ghostAlpha(row.checked, phase, start, clock.now, reduced) }
                             .then(if (ambientClock != null) Modifier.glossSweep(sweepT0, ambientClock) else Modifier),
                         holo = row.holo,
+                        // Egg 10: every sticker on the list is a pixel sprite while the bonus stage lasts.
+                        pixel = eggs.pixelStickers,
                         flags = row.flags,
                         drawing = row.drawing,
                         aisleIndex = row.aisleIndex,
-                        jackpot = row.rarity == earth.cora.picnic.core.model.Rarity.JACKPOT,
+                        jackpot = gold || row.rarity == earth.cora.picnic.core.model.Rarity.JACKPOT,
                     )
                 }
             }
@@ -563,21 +584,22 @@ internal fun RowContent(
                 style = t.itemName.copy(color = if (row.checked) c.inkSoft else c.ink),
                 struck = row.checked,
                 strike = c.hanko,
-                modifier = Modifier.testTag(ListTags.name(row.id)).probe(probe, "name:${row.id}"),
+                modifier = Modifier.testTag(ListTags.name(row.id)).probe(probe, "name:${row.id}").then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "name:" + row.id) }),
             )
             if (row.detail != null || row.holo) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     row.detail?.let {
-                        Text(it, style = t.itemDetail.copy(color = c.inkSoft), modifier = Modifier.weight(1f, fill = false).testTag(ListTags.detail(row.id)).probe(probe, "detail:${row.id}"))
+                        Text(it, style = t.itemDetail.copy(color = c.inkSoft), modifier = Modifier.weight(1f, fill = false).testTag(ListTags.detail(row.id)).probe(probe, "detail:${row.id}").then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "detail:" + row.id) }))
                     }
-                    if (row.holo) RarityChip(jackpot = row.rarity == earth.cora.picnic.core.model.Rarity.JACKPOT)
+                    if (row.holo) RarityChip(jackpot = row.rarity == earth.cora.picnic.core.model.Rarity.JACKPOT, modifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "chip:" + row.id) })
                 }
             }
         }
         with(anchors) {
             Box(Modifier.size(48.dp).anchor(AnchorRegistry.checkKey(row.id)).testTag(ListTags.check(row.id)).probe(probe, "check:${row.id}"), contentAlignment = Alignment.Center) {
                 val lifting = RowMotion.liftsHanko(phase)
-                if (!row.checked || lifting) StickerSpot()
+                // Egg 13: the empty spot steps aside while JACK / POT! is stamped over its column (1.8 s).
+                if ((!row.checked || lifting) && !eggs.hidesCheckSpot(row.id)) StickerSpot()
                 if (row.checked || lifting) {
                     val hanko = RowMotion.hankoScale(row.checked, phase, start, clock.now, reduced)
                     Box(Modifier.size(48.dp).rowHanko(row.checked, phase, start, clock, reduced)) {

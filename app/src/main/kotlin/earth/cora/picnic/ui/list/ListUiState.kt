@@ -197,6 +197,8 @@ data class BookUi(
     val receiptSaved: Boolean,
     /** Bonus stage (egg 10): every twin is a pixel sprite. */
     val pixel: Boolean = false,
+    /** A perfect week (egg 14): the stamp page is holo on every book, PERFECT or not (the PER-FECT! hanko stays the finale's). */
+    val holoStamps: Boolean = false,
 ) {
     val checked: Int get() = stickers.size
     val stamped: Int get() = stamps.count { it.stamped }
@@ -322,6 +324,10 @@ internal fun buildListUiState(
     season: Season? = null,
     bonusStage: Boolean = false,
     bookTurn: Int = 0,
+    /** Egg 14: a perfect week makes every stamp page holo. */
+    perfectWeek: Boolean = false,
+    /** The hanko a checked item wears (egg 9's HAPPY / B-DAY! while Easter eggs are on; WP9's SurpriseState.hankoFor). */
+    hankoFor: (GroceryItem) -> HankoText = { HankoText.GotIt },
 ): ListUiState {
     val list = state.currentList()
     val aisles = state.store.aisles()
@@ -353,6 +359,7 @@ internal fun buildListUiState(
             sectionId = sectionId,
             aisleIndex = aisleIndex,
             personality = catalog.personalityOf(item.icon),
+            hanko = hankoFor(item),
         )
     }
 
@@ -412,6 +419,7 @@ internal fun buildListUiState(
             full = checked == grouped.total,
             receiptSaved = trip?.receiptSaved == true && trip.receipt != null,
             pixel = bonusStage,
+            holoStamps = perfectWeek,
         )
     }
 

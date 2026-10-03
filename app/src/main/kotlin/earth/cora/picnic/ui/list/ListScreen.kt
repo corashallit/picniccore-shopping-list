@@ -32,6 +32,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
@@ -93,6 +96,8 @@ import earth.cora.picnic.R
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.NewTripMode
 import earth.cora.picnic.platform.Cue
+import earth.cora.picnic.platform.Feedback
+import earth.cora.picnic.platform.NoOpFeedback
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.add.AddBar
 import earth.cora.picnic.ui.add.AddBarCollapseState
@@ -105,6 +110,13 @@ import earth.cora.picnic.ui.add.AddSheetHost
 import earth.cora.picnic.ui.add.AddViewModel
 import earth.cora.picnic.ui.add.rememberAddFlows
 import earth.cora.picnic.ui.edit.EditItemSheet
+import earth.cora.picnic.ui.eggs.EggAnchors
+import earth.cora.picnic.ui.eggs.EggListHost
+import earth.cora.picnic.ui.eggs.EggListScope
+import earth.cora.picnic.ui.eggs.NoOpSurpriseEngine
+import earth.cora.picnic.ui.eggs.SurpriseEngine
+import earth.cora.picnic.ui.eggs.SurpriseState
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.list.motion.AmbientBasket
 import earth.cora.picnic.ui.list.motion.CelebrationHost
 import earth.cora.picnic.ui.list.motion.FoldFocusEffect
@@ -182,6 +194,16 @@ class ListActions(
     /** A sound and haptic for the screen's own gestures (§14.3). */
     val onCue: (Cue) -> Unit = {},
 )
+
+/**
+ * What the eggs show on this list (WP9's SurpriseState, handed down by [EggListHost] in [ListScreen]): the pieces of the
+ * list read it (the LCD, the title's holo, the hankos, the pixel and gold stickers, the nap cat, the snack doodle, the
+ * basket's hello). Eggs off outside a list screen.
+ */
+internal val LocalListEggs = compositionLocalOf { SurpriseState.Off }
+
+/** WP9's engine on this list (the nap cat's tap, §12.2 egg 8); the no-op outside a list screen. */
+internal val LocalListSurprises = staticCompositionLocalOf<SurpriseEngine> { NoOpSurpriseEngine }
 
 /** The screen's transient state: the menu, the sheets, a peek, the pull to refresh, the pops. */
 @Stable
@@ -332,10 +354,9 @@ fun ListRoute(
     AddEventsEffect(
         addFlows,
         toasts,
-        onCommitted = { commit ->
-            screen.pop(commit)
-            vm.onCommitted(commit.added)
-        },
+        // The add flows tell the eggs about the commit themselves (AddViewModel → SurpriseEngine.onCommitted, §19.2):
+        // the list only pops the rows, so eggs 3, 6, 9 and 17 fire once per commit.
+        onCommitted = { commit -> screen.pop(commit) },
     )
     // The add flows send to the list on screen.
     LaunchedEffect(state.listId) {
@@ -392,7 +413,16 @@ fun ListRoute(
         screen = screen,
         dockHeight = addFlows.dockHeight,
         collapse = addFlows.collapse,
-        dock = { AddDock(addFlows, addState, tape = tape, otherSheetOpen = sheetUp) },
+        dock = {
+            AddDock(
+                addFlows, addState, tape = tape, otherSheetOpen = sheetUp,
+                // Egg 16: the umbrella stands at the bar's left end; the washi moves along after the doodle.
+                tapeAfterDoodle = surprises.umbrella,
+                modifier = dockAnchors(vm.engine.anchors),
+            )
+        },
+        surprises = vm.surpriseEngine,
+        feedback = vm.feedback,
     )
     // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet.
     AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry)
@@ -460,7 +490,8 @@ internal class TearToasts(private val resources: Resources, private val undo: (G
  * The stateless List screen. [engine] plays the chains ([MotionEngineHost] runs it here); [dock] is the docked add bar
  * (the app: WP7's AddDock; previews and goldens: the bar at rest, wearing the tape of the season the book shows),
  * [dockHeight] its measured height (the toasts sit 20 dp above it, the list's bottom padding is it + 26 dp) and
- * [collapse] its fold rules (programmatic scrolls are ignored). [eggs] is WP9's overlay slot.
+ * [collapse] its fold rules (programmatic scrolls are ignored). [surprises] is WP9's engine: the screen is wrapped in its
+ * [EggListHost], which mounts the egg overlays in MotionOverlay's `eggs` slot and hands the pieces the eggs' state.
  */
 @Composable
 fun ListScreen(
@@ -474,8 +505,14 @@ fun ListScreen(
     listState: LazyListState? = null,
     dockHeight: Dp = 84.dp,
     collapse: AddBarCollapseState? = null,
-    dock: @Composable BoxScope.() -> Unit = { StaticDock(tape = AddRules.addBarTape(earth.cora.picnic.ui.eggs.SurpriseState(season = state.book?.season))) },
-    eggs: @Composable BoxScope.() -> Unit = {},
+    dock: @Composable BoxScope.() -> Unit = {
+        StaticDock(tape = AddRules.addBarTape(SurpriseState(season = state.book?.season)), modifier = dockAnchors(engine.anchors))
+    },
+    /** WP9's engine: [EggListHost] mounts its overlays, shake, keyboard observer and scene scrolls on this list (§19.2). */
+    surprises: SurpriseEngine = NoOpSurpriseEngine,
+    feedback: Feedback = NoOpFeedback,
+    /** Test hook: the keyboard's visibility for egg 17 (null: the phone's own insets). */
+    imeVisible: Boolean? = null,
     talkBackOverride: Boolean? = null,
 ) {
     MotionEngineHost(engine, nextStopCard = state.nextStopCard, celebration = state.celebration, eggs = state.eggs, talkBackOverride = talkBackOverride)
@@ -503,8 +540,55 @@ fun ListScreen(
     val density = LocalDensity.current
     val ime = WindowInsets.ime.getBottom(density) > 0
     val shortWindow = LocalConfiguration.current.screenHeightDp < SHORT_WINDOW_DP
+    // The lazy items (one plan for the list and for the eggs' scrolls to a section, §12.2 eggs 3, 5 and 8).
+    val openId = p.openSection(state.openSectionId)
+    val entries = remember(state.sections, openId) { planEntries(state.sections, openId) }
+    val latestEntries by rememberUpdatedState(entries)
+    val indexOfSection = remember { { id: String -> latestEntries.indexOfFirst { it.sectionId == id && (it is Entry.Strip || it is Entry.Header) } } }
+    val host: @Composable EggListScope.() -> Unit = {
+        CompositionLocalProvider(LocalListEggs provides eggs, LocalListSurprises provides surprises) {
+            ListScreenContent(
+                state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
+                bookCollapsed = screen.scrolledDown || ime || shortWindow,
+            )
+        }
+    }
+    if (imeVisible != null) {
+        EggListHost(
+            surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback,
+            onOpenAlbum = actions.onOpenAlbum, imeVisible = imeVisible, content = host,
+        )
+    } else {
+        EggListHost(surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback, onOpenAlbum = actions.onOpenAlbum, content = host)
+    }
+}
+
+/** The docked add bar's anchors: the eggs' `addbar` (the umbrella, the ants, the scenes' room) and its words' keep-out. */
+internal fun dockAnchors(anchors: AnchorRegistry): Modifier =
+    with(anchors) { Modifier.anchor(AnchorRegistry.ADD_BAR).anchor(EggAnchors.TEXT_PREFIX + "addbar") }
+
+/** The screen inside its [EggListHost]: the top stack, the list, the dock, the overlay, the sheets, the celebration. */
+@Composable
+private fun EggListScope.ListScreenContent(
+    state: ListUiState,
+    actions: ListActions,
+    modifier: Modifier,
+    engine: MotionChoreographer,
+    p: ListPresentation,
+    toasts: ToastHostState,
+    showLists: Boolean,
+    screen: ListScreenState,
+    lazyState: LazyListState,
+    entries: List<Entry>,
+    dockHeight: Dp,
+    collapse: AddBarCollapseState?,
+    dock: @Composable BoxScope.() -> Unit,
+    bookCollapsed: Boolean,
+) {
     Box(modifier.fillMaxSize()) {
         PicnicBackground(Modifier.fillMaxSize()) {
+            // Egg 1: the ground being left fades out over the new one, beneath everything else.
+            Wash()
             Column(Modifier.fillMaxSize()) {
                 TopStack(
                     state = state,
@@ -512,7 +596,7 @@ fun ListScreen(
                     engine = engine,
                     ui = TopStackUi(
                         barCollapsed = screen.scrolledDown,
-                        bookCollapsed = screen.scrolledDown || ime || shortWindow,
+                        bookCollapsed = bookCollapsed,
                         syncing = screen.syncing,
                         sunSpin = screen.sunSpin,
                     ),
@@ -525,13 +609,18 @@ fun ListScreen(
                     when {
                         state.loading -> LoadingList()
                         state.total == 0 -> EmptyList(state, actions, dockHeight)
-                        else -> AisleList(state, p, engine, actions, screen, lazyState, dockHeight, collapse)
+                        else -> AisleList(
+                            state, p, engine, actions, screen, lazyState, entries, dockHeight, collapse,
+                            topExtra = listTopExtra, bottomPadding = listBottomPadding(dockHeight),
+                        )
                     }
                 }
             }
         }
         dock()
-        MotionOverlay(engine, p, toasts, bottomInset = dockHeight, eggs = eggs)
+        // The toasts sit 20 dp above the bar's top (above the umbrella's canopy while it rains); the eggs' overlays ride
+        // in the overlay's `eggs` slot (§12, §19.2).
+        MotionOverlay(engine, p, toasts, bottomInset = overlayInset(dockHeight), eggs = overlays)
         PeekLayer(state, screen, dockHeight)
         if (screen.menuOpen) ListMenu(state, actions, screen)
         state.editing?.let { editing ->
@@ -582,9 +671,9 @@ private const val SHORT_WINDOW_DP = 600
 
 /** The add bar at rest, docked at the bottom (previews and goldens; the app docks WP7's AddDock). */
 @Composable
-fun BoxScope.StaticDock(tape: WashiPattern = WashiPattern.SakuraStripe) {
+fun BoxScope.StaticDock(tape: WashiPattern = WashiPattern.SakuraStripe, modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
-    Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+    Column(modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
         AddBar(AddBarUi(), onTextChange = {}, onSend = {}, onSnap = {}, onChoosePhoto = {}, onSpeak = {}, tape = tape)
         Spacer(Modifier.fillMaxWidth().windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)).background(c.pad))
     }
@@ -691,18 +780,24 @@ private fun AisleList(
     actions: ListActions,
     screen: ListScreenState,
     listState: LazyListState,
+    entries: List<Entry>,
     dockHeight: Dp,
     collapse: AddBarCollapseState?,
+    /** Egg 18 at large text: the room a printed receipt asks for above the list's words (EggListScope.listTopExtra). */
+    topExtra: Dp = 0.dp,
+    /** The add bar + 26 dp, + the umbrella's room while it rains (EggListScope.listBottomPadding). */
+    bottomPadding: Dp = dockHeight + 26.dp,
 ) {
     val reduced = LocalReducedMotion.current
     val density = LocalDensity.current
     val clock = engine.clock
     val anchors = engine.anchors
     val openId = p.openSection(state.openSectionId)
-    val entries = remember(state.sections, openId) { planEntries(state.sections, openId) }
     // The current aisle wears the lemon ring, the bee and the ladybug (§4.10, D2). While a chain holds a finished aisle
     // open (the engine's override), it keeps them until it folds; a finished aisle she reopens herself is not current.
     val currentId = if (openId != null && openId != state.openSectionId) openId else state.nowSectionId
+    // WP6's check-off chains have played out (no hop in flight, no burst, no celebration): egg 8's cat may curl up.
+    val chainsDone = p.flights.isEmpty() && p.bursts.isEmpty() && p.celebration == null
     val scope = rememberCoroutineScope()
     val act by rememberUpdatedState(actions)
     val rowActions = remember(actions) {
@@ -844,12 +939,14 @@ private fun AisleList(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag(ListTags.LIST)
+                // The eggs' room: the list's viewport (the scenes are brought into it, the ladybug flies off its sides).
+                .then(with(anchors) { Modifier.anchor(EggAnchors.LIST) })
                 .visibleFraction { fraction = it }
                 .then(if (collapse != null) Modifier.nestedScroll(collapse.nestedScrollConnection) else Modifier)
                 .nestedScroll(connection)
                 .semantics { customActions = listOf(CustomAccessibilityAction(refreshLabel) { refresh(); true }) }
                 .graphicsLayer { translationY = if (reduced) 0f else screen.pull },
-            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp, bottom = dockHeight + 26.dp),
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp + topExtra, bottom = bottomPadding),
         ) {
             entries.forEachIndexed { index, e ->
                 when (e) {
@@ -872,6 +969,9 @@ private fun AisleList(
                                 screen.peek = if (held) s.id else null
                                 if (!held) act.onBasketHold(s.id, ms)
                             },
+                            // Egg 2: the ladybug sets off while she still holds (threshold + 560 ms), and walks on after.
+                            onHeld = { ms -> act.onBasketHold(s.id, ms) },
+                            chainsDone = chainsDone,
                             peeked = screen.peek == s.id,
                             ambient = beat,
                             ambientClock = ambient.clock,
@@ -899,6 +999,7 @@ private fun AisleList(
                             pinned = pinned,
                             current = s.id == currentId,
                             chevronFocus = chevron,
+                            chainsDone = chainsDone,
                             onFold = {
                                 screen.toggles.bump(s.id)
                                 act.onFoldAll()

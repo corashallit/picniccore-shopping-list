@@ -49,6 +49,8 @@ import earth.cora.picnic.ui.common.ScreenText
 import earth.cora.picnic.ui.eggs.NoOpSurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseState
+import earth.cora.picnic.ui.eggs.hankoFor
+import earth.cora.picnic.ui.eggs.pixelStickers
 import earth.cora.picnic.ui.list.motion.CelebrationContent
 import earth.cora.picnic.ui.list.motion.ChangeCause
 import earth.cora.picnic.ui.list.motion.FinaleKeeper
@@ -93,7 +95,7 @@ class ListViewModel(
     private val clock: () -> Long,
     private val newId: () -> String,
     private val appScope: CoroutineScope,
-    private val feedback: Feedback = NoOpFeedback,
+    internal val feedback: Feedback = NoOpFeedback,
     private val announcer: Announcer = NoOpAnnouncer,
     private val surprises: SurpriseEngine = NoOpSurpriseEngine,
     private val aisleSync: AisleSync? = null,
@@ -139,6 +141,9 @@ class ListViewModel(
 
     /** What the eggs show (the add bar's seasonal tape, §4.14). */
     val surprisesState: StateFlow<SurpriseState> = surprises.state
+
+    /** WP9's engine, for the screen's EggListHost (the overlays, the shake, the scenes' scrolls, §19.2). */
+    val surpriseEngine: SurpriseEngine get() = surprises
 
     /** What TalkBack hears for the book (§7.7); the screen sets it from its resources. */
     var strings: ListStrings = ListStrings.English
@@ -210,8 +215,10 @@ class ListViewModel(
             zone = zone,
             eggs = input.settings.eggs,
             season = input.eggs.season.takeIf { input.eggs.enabled },
-            bonusStage = input.eggs.enabled && input.eggs.bonusStage,
+            bonusStage = input.eggs.pixelStickers,
             bookTurn = input.turn,
+            perfectWeek = input.eggs.enabled && input.eggs.perfectWeek,
+            hankoFor = { item -> input.eggs.hankoFor(item, catalog) },
         ).copy(nextStopCard = input.settings.nextStopCard, celebration = input.settings.celebration)
         val prev = seen
         seen = Seen(list.id, app, list, grouped)

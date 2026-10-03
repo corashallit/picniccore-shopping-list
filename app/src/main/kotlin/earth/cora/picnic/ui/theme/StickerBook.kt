@@ -304,7 +304,8 @@ private fun BookPages(
                     .fillMaxHeight()
                     .testTag(BookTags.LEFT)
                     .probe(LocalPieceProbe.current, "bookLeft")
-                    .then(if (perfect) Modifier.drawBehind { drawRect(holoBrush(center)) } else Modifier)
+                    // PERFECT, or a perfect week (egg 14): the stamp page is holo.
+                    .then(if (perfect || state.holoStamps) Modifier.drawBehind { drawRect(holoBrush(center)) } else Modifier)
                     .pointerInput(state.stamps, layout, gridTop) {
                         detectTapGestures { pos ->
                             val hit = nearestStamp(state.stamps, layout, Offset(pos.x / density, pos.y / density), gridTop) ?: return@detectTapGestures
@@ -315,10 +316,14 @@ private fun BookPages(
                         }
                     },
             ) {
-                if (dateOnPage) DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = DATE_TAG_Y.dp).probe(LocalPieceProbe.current, "dateTag"), onPage = true, season = state.season)
+                if (dateOnPage) {
+                    // The date is words too: the eggs' bursts keep clear of it (`text:` anchor, §12.1).
+                    val dateAnchor = if (anchors != null) with(anchors) { Modifier.anchor(BOOK_DATE_TEXT) } else Modifier
+                    DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = DATE_TAG_Y.dp).probe(LocalPieceProbe.current, "dateTag").then(dateAnchor), onPage = true, season = state.season)
+                }
                 // On the holo stamp page (PERFECT) the stamps keep their Day inks in every variant: the Glow ones fade
                 // into the light foil (§2.4, §7.3; the lid stamps make the same choice, §5.3).
-                HoloInks(perfect) { StampGrid(state.stamps, layout, presentation, clock, anchors, boing, top = gridTop) }
+                HoloInks(perfect || state.holoStamps) { StampGrid(state.stamps, layout, presentation, clock, anchors, boing, top = gridTop) }
             }
             // ---- The spine ----
             Spine(Modifier.width(BookLayout.SPINE.dp).fillMaxHeight())
@@ -990,3 +995,6 @@ private const val PAGE_TURN_MS: Long = 240
 
 /** How far the page number hangs below the book: the top stack's 8 dp gap above the list (§7.3). */
 private val PAGE_LCD_DROP = 8.dp
+
+/** The book's date as the eggs' keep-out (EggAnchors.TEXT_PREFIX + "date"). */
+private const val BOOK_DATE_TEXT: String = "text:date"

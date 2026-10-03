@@ -38,6 +38,11 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
+import earth.cora.picnic.ui.eggs.EggAnchors
+import earth.cora.picnic.ui.eggs.eggTitleSticker
+import earth.cora.picnic.ui.eggs.lcd
+import earth.cora.picnic.ui.eggs.rememberKirakiraBrush
+import earth.cora.picnic.ui.eggs.rememberPetPose
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.list.motion.BookPaging
 import earth.cora.picnic.ui.list.motion.ListPresentation
@@ -199,6 +204,11 @@ private fun AppBar(
     val t = PicnicTheme.type
     val reduced = LocalReducedMotion.current
     val collapsed = ui.barCollapsed
+    // The eggs on the binder top (§12.2): egg 7's holo title, egg 1's sun (hidden while the Dusk change draws its own), egg
+    // 12's sinking sun, and the LCD's words and pet (eggs 5, 10, 15, 18).
+    val eggs = LocalListEggs.current
+    val titleBrush = rememberKirakiraBrush(eggs)
+    val petPose = rememberPetPose(eggs)
     // One animation drives every height change of the bar (§4.2, §6.1, item 161): 1 = expanded, 0 = collapsed. The bar's
     // height, the subtitle's height and alpha and the title's size all follow it (`standard`, 200 ms, on the fixed motion
     // scale like the book below it; at once under reduced motion), so nothing snaps in one frame and the list never jumps.
@@ -250,14 +260,17 @@ private fun AppBar(
                 // whole (item 334); at large text the bar grows to two rows, and TalkBack reads the whole title.
                 maxLines = 1,
                 heading = true,
-                modifier = Modifier.weight(1f, fill = false),
+                fillBrush = titleBrush,
+                modifier = Modifier.weight(1f, fill = false).then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "title") }),
             )
             with(anchors) {
                 SunSticker(
                     onTap = if (moon) actions.onMoonTap else actions.onSunTap,
+                    goldenMinutesLeft = eggs.goldenMinutesLeft,
                     modifier = Modifier
                         .overhang(SUN_ROOM_W, SUN_ROOM_H)
                         .anchor(AnchorRegistry.SUN)
+                        .eggTitleSticker(eggs, c.variant)
                         .graphicsLayer { rotationZ = spin.value },
                 )
             }
@@ -265,7 +278,7 @@ private fun AppBar(
     }
     val subtitleRow: @Composable (Modifier) -> Unit = { m ->
         if (subtitle != null && e > 0f) {
-            PadPatch(m.revealHeight(e).graphicsLayer { alpha = e }.padding(start = 2.dp, bottom = 4.dp)) {
+            PadPatch(m.revealHeight(e).graphicsLayer { alpha = e }.padding(start = 2.dp, bottom = 4.dp).then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "subtitle") })) {
                 // Large text may wrap the line: the star stays on the first line and the patch hugs the widest one.
                 val style = t.appBarSubtitle.copy(color = c.onPadSoft)
                 val firstLine = with(LocalDensity.current) { style.lineHeight.toDp() }
@@ -285,14 +298,17 @@ private fun AppBar(
                 ui.syncing -> state.lcd.copy(mode = LcdMode.Text, text = SYNC)
                 else -> {
                     val shown = presentation.lcdCount(state.checked)
-                    val mode = presentation.lcd?.mode ?: state.lcd.mode
-                    state.lcd.copy(count = shown, mode = mode)
+                    val base = state.lcd.copy(count = shown, mode = presentation.lcd?.mode ?: state.lcd.mode)
+                    // The chain's own LCD (WP6) wins while it plays; otherwise the eggs' word, pet and receipt (§13.1). With
+                    // Easter eggs off the list's own state already shows the plain count (§2.5).
+                    if (presentation.lcd != null || !eggs.enabled) base else eggs.lcd(base, petPose)
                 }
             }
             with(anchors) {
                 LcdChip(
                     lcd,
-                    Modifier.padding(horizontal = 2.dp).anchor(AnchorRegistry.LCD),
+                    // The LCD's digits are words too: the bursts are cut clear of them.
+                    Modifier.padding(horizontal = 2.dp).anchor(AnchorRegistry.LCD).anchor(EggAnchors.TEXT_PREFIX + "lcd"),
                     onHold = if (state.eggs) actions.onLcdHold else null,
                 )
             }

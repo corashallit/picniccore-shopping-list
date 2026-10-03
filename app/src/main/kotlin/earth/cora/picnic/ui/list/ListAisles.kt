@@ -48,6 +48,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.eggs.EggAnchors
+import earth.cora.picnic.ui.eggs.EggRules
+import earth.cora.picnic.ui.eggs.NapCatInBasket
+import earth.cora.picnic.ui.eggs.SnackDoodle
+import earth.cora.picnic.ui.eggs.StripLadybug
+import earth.cora.picnic.ui.eggs.TabMetaDoodle
+import earth.cora.picnic.ui.eggs.basketHello
+import earth.cora.picnic.ui.eggs.pageSticker
+import earth.cora.picnic.ui.eggs.snackDoodleAt
 import earth.cora.picnic.ui.list.motion.AislePresentation
 import earth.cora.picnic.ui.list.motion.AmbientPresentation
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
@@ -159,9 +168,16 @@ internal fun FoldedStrip(
     peeked: Boolean = false,
     ambient: AmbientPresentation? = null,
     ambientClock: MotionClock? = null,
+    /** Egg 2: the basket is still held at the hold threshold + 560 ms (the ladybug sets off, and walks on after release). */
+    onHeld: (heldMs: Long) -> Unit = {},
+    /** WP6's chains have played out (the nap cat curls up after the check-off that finished the other stops, §12.2 egg 8). */
+    chainsDone: Boolean = true,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
+    val eggs = LocalListEggs.current
+    val surprises = LocalListSurprises.current
+    val held by rememberUpdatedState(onHeld)
     val toGet = section.toGet + (basket?.toGetLag ?: 0)
     val label = stripLabel(section, toGet)
     val expand = stringResource(R.string.list_strip_expand)
@@ -199,23 +215,38 @@ internal fun FoldedStrip(
                 role = Role.Button
             },
         content = {
-            Box(Modifier.layoutId("face").stripFace())
-            Column(Modifier.layoutId("text"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                IndexTab(
-                    position = section.position,
-                    displayName = section.displayName,
-                    look = section.look,
-                    size = TabSize.Strip,
-                    ballpoint = false,
-                    modifier = Modifier.testTag(ListTags.stripTab(section.id)),
-                    probeKey = "tab:${section.id}",
-                )
-                Text(
-                    metaText,
-                    style = t.stripMeta.copy(color = c.inkSoft),
-                    modifier = Modifier.padding(start = 3.dp).testTag(ListTags.stripMeta(section.id)).probe(probe, "meta:${section.id}"),
-                )
-            }
+            // The white card is the eggs' `strip:` anchor (egg 2's ladybug walks its bottom edge, §12.2).
+            Box(Modifier.layoutId("face").then(with(anchors) { Modifier.anchor(EggAnchors.strip(section.id)) }).stripFace())
+            // The tab at its own fitted width, the meta line under it; egg 5's snack doodle only in the room the tab leaves
+            // (it never shrinks the tab), else after the meta line (§4.10, §12.2).
+            TabMetaDoodle(
+                tab = {
+                    IndexTab(
+                        position = section.position,
+                        displayName = section.displayName,
+                        look = section.look,
+                        size = TabSize.Strip,
+                        ballpoint = false,
+                        modifier = Modifier
+                            .testTag(ListTags.stripTab(section.id))
+                            .then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)).anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) }),
+                        probeKey = "tab:${section.id}",
+                    )
+                },
+                meta = {
+                    Text(
+                        metaText,
+                        style = t.stripMeta.copy(color = c.inkSoft),
+                        modifier = Modifier
+                            .padding(start = 3.dp, top = 2.dp)
+                            .testTag(ListTags.stripMeta(section.id))
+                            .probe(probe, "meta:${section.id}")
+                            .then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + section.id) }),
+                    )
+                },
+                doodle = if (eggs.snackDoodleAt(section.id)) ({ SnackDoodle(eggs, section.id) }) else null,
+                modifier = Modifier.layoutId("text"),
+            )
             if (complete || aisle?.untieT0 != null) {
                 Box(Modifier.layoutId("ribbon").testTag(ListTags.ribbon(section.id)).probe(probe, "ribbon:${section.id}")) {
                     StripRibbon(complete, aisle, clock, height = 56.dp)
@@ -240,11 +271,20 @@ internal fun FoldedStrip(
                             if (!awaitHold(down, threshold)) return@awaitEachGesture
                             peek(true, 0)
                             var end = start
-                            while (true) {
-                                val e = awaitPointerEvent()
-                                e.changes.forEach { it.consume() }
-                                end = e.changes.firstOrNull()?.uptimeMillis ?: end
-                                if (e.changes.none { it.pressed }) break
+                            var up = false
+                            suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.untilUp() {
+                                while (!up) {
+                                    val e = awaitPointerEvent()
+                                    e.changes.forEach { it.consume() }
+                                    end = e.changes.firstOrNull()?.uptimeMillis ?: end
+                                    if (e.changes.none { it.pressed }) up = true
+                                }
+                            }
+                            // Egg 2: still held 560 ms past the threshold, the ladybug sets off while she holds (§4.3, §12.2).
+                            withTimeoutOrNull(EggRules.LADYBUG_AFTER_THRESHOLD_MS) { untilUp() }
+                            if (!up) {
+                                held(threshold + EggRules.LADYBUG_AFTER_THRESHOLD_MS)
+                                untilUp()
                             }
                             peek(false, end - start)
                         }
@@ -260,14 +300,18 @@ internal fun FoldedStrip(
                         presentation = if (peeked) (basket ?: BasketPresentation()).copy(peek = true, lidClosed = false, minisHidden = false) else basket,
                         clock = clock,
                         size = BasketSize.Strip.size,
-                        modifier = Modifier.basketAnchor(section.id, section.basket, priority = 0),
+                        modifier = Modifier.basketAnchor(section.id, section.basket, priority = 0).basketHello(eggs, section.id),
                         ambientPeekItem = ambient?.peekItem.takeIf { ambient?.wobbleSection == section.id },
                         ambientT0 = ambient?.wobbleT0.takeIf { ambient?.wobbleSection == section.id },
                         ambientClock = ambientClock,
                     )
                 }
+                // Egg 8: the nap cat curls up in the still-empty basket (it scrolls with its strip).
+                NapCatInBasket(eggs, section.id, section.basket, surprises, chainsDone = chainsDone)
             }
             Box(Modifier.layoutId("chevron").size(48.dp).decorative(), contentAlignment = Alignment.Center) { ChevronFace(up = false) }
+            // Egg 2: the ladybug walks the card's bottom edge, drawn by the strip so it scrolls with it.
+            Box(Modifier.layoutId("ladybug")) { StripLadybug(section.id) }
         },
     ) { measurables, constraints ->
         val w = constraints.maxWidth
@@ -293,6 +337,7 @@ internal fun FoldedStrip(
         val fits = bandX <= basketX - px(22.dp)
         val ribbon = if (fits) ribbonMeasurable?.measure(Constraints()) else null
         val bow = if (!fits) bowMeasurable?.measure(Constraints()) else null
+        val ladybug = measurables.firstOrNull { it.layoutId == "ladybug" }?.measure(Constraints.fixed(w, h))
         layout(w, h) {
             face.place(0, 0)
             text.place(start, ((h - text.height) / 2).coerceAtLeast(px(3.dp)))
@@ -302,6 +347,7 @@ internal fun FoldedStrip(
             bow?.place(maxOf(basketX - px(14.dp), textEnd + px(1.dp)), px(4.dp))
             basketM.place(basketX, h - basketM.height)
             chevron.place(chevronX, (h - chevron.height) / 2)
+            ladybug?.place(0, 0)
         }
     }
 }
@@ -353,11 +399,16 @@ internal fun TrayHeader(
     onFold: () -> Unit,
     modifier: Modifier = Modifier,
     current: Boolean = true,
+    /** WP6's chains have played out (the nap cat curls up after them, §12.2 egg 8). */
+    chainsDone: Boolean = true,
 ) {
     val c = PicnicTheme.colors
     val shadows = PicnicTheme.shadows
     val ring = currentRing(current)
     val probe = LocalPieceProbe.current
+    val eggs = LocalListEggs.current
+    val surprises = LocalListSurprises.current
+    val snack = eggs.snackDoodleAt(section.id)
     val collapse = stringResource(R.string.list_tray_collapse, earth.cora.picnic.ui.list.motion.MotionStrings.spoken(section.displayName))
     val heading = trayHeading(section)
     val fold by rememberUpdatedState(onFold)
@@ -380,38 +431,47 @@ internal fun TrayHeader(
                 modifier = Modifier.layoutId("tab").testTag(ListTags.headerTab(section.id)).semantics {
                     contentDescription = heading
                     heading()
-                },
+                }.then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)).anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) }),
                 probeKey = "trayTab:${section.id}",
             )
             section.storeAisle?.let {
                 // The chip's face is 22 dp; with large text its "A2" line outgrows that, so the chip grows with it.
                 val chipHeight = with(LocalDensity.current) { maxOf(22.dp, 15.sp.toDp() + 6.dp) }
                 // Decorative here: the tab's heading already reads "…, store aisle 2" (§15), so TalkBack says it once.
-                Box(Modifier.layoutId("chip").testTag(ListTags.storeChip(section.id)).decorative()) {
+                Box(Modifier.layoutId("chip").testTag(ListTags.storeChip(section.id)).decorative().then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "chip:" + section.id) })) {
                     StoreAisleChip(it, Modifier.height(chipHeight).probe(probe, "chip:${section.id}"))
                 }
             }
-            section.doodle?.let {
-                Text(
-                    it,
-                    style = PicnicTheme.type.doodle.copy(color = c.doodle),
-                    maxLines = 1,
-                    modifier = Modifier.layoutId("doodle").rotate(-4f).decorative(),
-                )
+            if (snack) {
+                // Egg 5 at midnight: the snack star and "snack?" take the doodle's place after the tab (its own width).
+                Box(Modifier.layoutId("doodle")) { SnackDoodle(eggs, section.id) }
+            } else {
+                section.doodle?.let {
+                    Text(
+                        it,
+                        style = PicnicTheme.type.doodle.copy(color = c.doodle),
+                        maxLines = 1,
+                        modifier = Modifier.layoutId("doodle").rotate(-4f).decorative().then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "doodle:" + section.id) }),
+                    )
+                }
             }
-            with(anchors) {
-                MotionBasket(
-                    kind = section.basket,
-                    look = section.look,
-                    gotten = section.gotten,
-                    toGet = section.toGet,
-                    complete = section.complete,
-                    presentation = basket,
-                    clock = clock,
-                    size = BasketSize.Tray.size,
-                    tray = true,
-                    modifier = Modifier.layoutId("basket").testTag(ListTags.basket(section.id)).probe(probe, "trayBasket:${section.id}").basketAnchor(section.id, section.basket, priority = 1),
-                )
+            Box(Modifier.layoutId("basket")) {
+                with(anchors) {
+                    MotionBasket(
+                        kind = section.basket,
+                        look = section.look,
+                        gotten = section.gotten,
+                        toGet = section.toGet,
+                        complete = section.complete,
+                        presentation = basket,
+                        clock = clock,
+                        size = BasketSize.Tray.size,
+                        tray = true,
+                        modifier = Modifier.testTag(ListTags.basket(section.id)).probe(probe, "trayBasket:${section.id}").basketAnchor(section.id, section.basket, priority = 1).basketHello(eggs, section.id),
+                    )
+                }
+                // Egg 8: the nap cat in this aisle's still-empty basket.
+                NapCatInBasket(eggs, section.id, section.basket, surprises, chainsDone = chainsDone)
             }
             Box(
                 Modifier
@@ -481,7 +541,8 @@ private fun Bee(modifier: Modifier) {
     Box(
         modifier
             .size(22.dp)
-            .decorative()
+            // A page sticker (§4.1: at most 3 per screen; DecorBudgetTest counts it): no TalkBack node.
+            .pageSticker("bee")
             .graphicsLayer {
                 if (reduced) return@graphicsLayer
                 val step = ((t % 3200L) * 38 / 3200L).toFloat() / 38f
@@ -509,7 +570,8 @@ internal fun TrayCap(section: SectionUi, modifier: Modifier = Modifier, current:
             .testTag(ListTags.cap(section.id))
             .traySlice(TrayPart.Cap, section.look, ring, shadows.color, c.pad, c.rule, patternTile = tile),
     ) {
-        if (current) Ladybug(Modifier.offset(x = 40.dp, y = 1.dp))
+        // The ladybug steps off while the nap cat and the umbrella both show (§4.1: at most 3 page stickers).
+        if (current && !LocalListEggs.current.ladybugStepsOff) Ladybug(Modifier.offset(x = 40.dp, y = 1.dp))
     }
 }
 
@@ -528,7 +590,7 @@ private fun Ladybug(modifier: Modifier) {
     Box(
         modifier
             .size(14.dp)
-            .decorative()
+            .pageSticker("ladybug")
             .graphicsLayer {
                 if (reduced) return@graphicsLayer
                 val phase = t % 9000L
