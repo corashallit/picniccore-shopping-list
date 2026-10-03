@@ -125,7 +125,9 @@ class EggReducedMotionTest(private val egg: Int) {
                 assertTrue(e().umbrella)
                 r.advance(300)
                 val umbrella = r.probe.frames.filter { it.tag == "umbrella" }
-                assertTrue("it fades in: no turn", umbrella.all { it.rotation == 0f })
+                assertTrue("the umbrella draws", umbrella.isNotEmpty())
+                // It fades in already resting at its tilt: no turn, the angle never changes.
+                assertEquals("it fades in: no turn", 1, umbrella.map { it.rotation }.distinct().size)
             }
             17 -> {
                 r.advance(600)

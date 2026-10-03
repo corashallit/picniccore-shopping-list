@@ -97,6 +97,9 @@ class ShaderCacheTest {
             }
         }
         compose.waitForIdle()
+        // Draw once first: the ground's pinstripe is rasterised on the first draw, which Robolectric only runs on a
+        // capture. Without this the count depends on whether an earlier class in the same JVM cached that tile.
+        compose.onRoot().captureToImage()
         val after = PatternCache.tileCreations.get()
         repeat(12) {
             tick++
