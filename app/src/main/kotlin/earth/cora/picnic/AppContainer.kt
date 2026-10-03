@@ -27,6 +27,7 @@ import earth.cora.picnic.icons.StickerArt
 import earth.cora.picnic.platform.AndroidAnnouncer
 import earth.cora.picnic.platform.AndroidFeedback
 import earth.cora.picnic.platform.AndroidTimeouts
+import earth.cora.picnic.platform.AreaPlaceSource
 import earth.cora.picnic.platform.Announcer
 import earth.cora.picnic.platform.AudioRecorder
 import earth.cora.picnic.platform.CapturePhotoPreparer
@@ -141,8 +142,11 @@ class AppContainer(private val app: Application) {
     /** "Time to take action" and "Touch & hold delay" (§9, §15), read live from the phone's settings. */
     val timeouts: Timeouts by lazy { AndroidTimeouts(app) }
 
-    /** Where sunset and the forecast are computed (§0.4 Q6). Phase 0: Toronto until "Use my area" lands (WP8 · WP9). */
-    val places: PlaceSource get() = PlaceSource.Toronto
+    /**
+     * Where sunset and the forecast are computed (§0.4 Q6, WP8): Toronto unless Surprises → Use my area is on and coarse
+     * location is granted; then the phone's approximate area, rounded to 0.1° before any use, refreshed at most every 6 h.
+     */
+    val places: PlaceSource by lazy { AreaPlaceSource.create(app, settings, clock) }
 
     /** Every Easter-egg trigger (§12). Phase 0: no eggs until WP9's engine lands. */
     val surprises: SurpriseEngine get() = NoOpSurpriseEngine

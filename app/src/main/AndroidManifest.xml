@@ -4,11 +4,16 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- "Use my area" (docs/DESIGN_STICKER.md §0.4 Q6): approximate location only, asked when the switch is turned on.
+         Never ACCESS_FINE_LOCATION, never ACCESS_BACKGROUND_LOCATION (ManifestPermissionsTest). -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- No CAMERA permission: we use the system camera via ACTION_IMAGE_CAPTURE (TakePicture).
          Declaring it without holding it would make ACTION_IMAGE_CAPTURE throw SecurityException. -->
     <!-- Camera and mic are optional so devices without them can still install (Play filtering). -->
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.network" android:required="false" />
 
     <!-- Package visibility (API 30+): needed to resolve a camera app for ACTION_IMAGE_CAPTURE. -->
     <queries>
