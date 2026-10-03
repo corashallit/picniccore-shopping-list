@@ -243,6 +243,8 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
         // D2 / item 90: the next stop opens automatically behind the Next card (the VM sets it; the engine holds the
         // finished aisle open until its fold, then keeps everything folded until the Next card shows).
         if (event.nextSectionId != null) state = state.setOpenAisle(listId, event.nextSectionId)
+        // The trip's last aisle folds and the list stays folded ("" = all folded, D2).
+        if (event.tripCompleted && checked) state = state.setOpenAisle(listId, "")
         // An un-check that re-opens an aisle keeps her in it (its chain is cancelled before the fold).
         if (!checked && aisleChanged) state = state.setOpenAisle(listId, sectionId)
         engine.onToggle(event)
@@ -319,6 +321,7 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
             finaleShown = al.trip?.finaleShownAt != null,
         )
         if (c.nextSectionId != null) state = state.setOpenAisle(listId, c.nextSectionId)
+        if (c.tripCompleted) state = state.setOpenAisle(listId, "")
         if (reopened.isNotEmpty() && completed.isEmpty()) state = state.setOpenAisle(listId, reopened.first())
         engine.onChange(c)
         return c

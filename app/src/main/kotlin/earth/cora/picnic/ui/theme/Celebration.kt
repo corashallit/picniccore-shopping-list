@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -186,37 +187,40 @@ fun CelebrationScene(
     val anchors = remember { SceneAnchors() }
     var origin by remember { mutableStateOf(Offset.Zero) }
     var sceneSize by remember { mutableStateOf(Size.Zero) }
-    BoxWithConstraints(
-        modifier
-            .fillMaxSize()
-            .testTag(CelebrationTags.SCENE)
-            .decorative()
-            .onGloballyPositioned {
-                origin = it.boundsInRoot().topLeft
-                sceneSize = Size(it.size.width.toFloat(), it.size.height.toFloat())
-            }
-            .graphicsLayer { alpha = sc.sceneAlpha() }
-            .irisClip(sc, cele, { origin }, { sceneSize }),
-    ) {
-        val w = maxWidth
-        val h = maxHeight
-        // The screen shake: two 3 dp frames after PERFECT's slam.
-        Box(
+    // The flash whitens the whole finished list (it is not inside the iris); the scene opens inside the iris.
+    Box(modifier.fillMaxSize()) {
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .onGloballyPositioned { anchors.stageOrigin = it.boundsInRoot().topLeft }
-                .graphicsLayer { translationX = shakeDx(sc) * density.density }
-                .onPlaced { anchors.stage = it },
+                .testTag(CelebrationTags.SCENE)
+                .decorative()
+                .onGloballyPositioned {
+                    origin = it.boundsInRoot().topLeft
+                    sceneSize = Size(it.size.width.toFloat(), it.size.height.toFloat())
+                }
+                .graphicsLayer { alpha = sc.sceneAlpha() }
+                .irisClip(sc, cele, { origin }, { sceneSize }),
         ) {
-            Rays(sc)
-            BurstStar(sc)
-            Confetti(sc, w, h)
-            SceneContent(sc, content, copy, anchors, onSummaryCard)
-            AlbumCorner(sc, content.bonus, w, h)
-            BottomBand(sc, copy, w, anchors, onSummaryCard, onDone)
+            val w = maxWidth
+            val h = maxHeight
+            // The screen shake: two 3 dp frames after PERFECT's slam.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { anchors.stageOrigin = it.boundsInRoot().topLeft }
+                    .graphicsLayer { translationX = shakeDx(sc) * density.density }
+                    .onPlaced { anchors.stage = it },
+            ) {
+                Rays(sc)
+                BurstStar(sc)
+                Confetti(sc, w, h)
+                SceneContent(sc, content, copy, anchors, onSummaryCard)
+                AlbumCorner(sc, content.bonus, w, h)
+                BottomBand(sc, copy, w, anchors, onSummaryCard, onDone)
+            }
+            if (probe != null) ProbeReports(sc, probe, anchors, origin, sceneSize)
         }
         Flash(sc)
-        if (probe != null) ProbeReports(sc, probe, anchors, origin, sceneSize)
     }
 }
 
@@ -502,9 +506,7 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.plate(anchors, CelebrationTags.CHIP).graphicsLayer { alpha = textBeatAlpha(sc, BeatName.Title) }) {
-                ChipFace(fill = c.stickerWhite) {
-                    PicnicText("♡ ${content.listName}", style = t.label.copy(color = c.ballpoint), maxLines = 1)
-                }
+                SceneChip("♡ ${content.listName}", t.label.copy(color = c.ballpoint), maxLines = 2)
             }
             Spacer(Modifier.height(6.dp))
             Box(Modifier.plate(anchors, CelebrationTags.LCD).graphicsLayer { alpha = textBeatAlpha(sc, BeatName.Title) }) {
@@ -521,6 +523,33 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
         }
         Riders(sc, content, anchors)
         KiraStars(sc, anchors)
+    }
+}
+
+/**
+ * A white chip sticker on the scene (the list name, "tap to skip"): 32 dp tall at least, and taller when the font scale
+ * or a long name needs a second line, so its text never clips (ChipFace keeps a fixed height).
+ */
+@Composable
+private fun SceneChip(text: String, style: androidx.compose.ui.text.TextStyle, maxLines: Int) {
+    val shape = RoundedCornerShape(16.dp)
+    Box(
+        Modifier
+            .widthIn(max = 312.dp)
+            .heightIn(min = 32.dp)
+            .hardShadow(shape, PicnicTheme.shadows)
+            .clip(shape)
+            .background(PicnicTheme.colors.stickerWhite)
+            .padding(horizontal = 14.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        val center = androidx.compose.ui.text.style.TextAlign.Center
+        // PicnicText draws the inline glyphs (♡); plain words keep the plain Text.
+        if (text.any { it in "♡♥☆★✦♪" }) {
+            PicnicText(text, style = style, textAlign = center, maxLines = maxLines)
+        } else {
+            androidx.compose.material3.Text(text, style = style, textAlign = center, maxLines = maxLines)
+        }
     }
 }
 
@@ -603,7 +632,7 @@ private fun Shelf(sc: SceneClock, content: CelebrationContent, anchors: SceneAnc
                         val e = sc.t()
                         val departed = riders.withIndex().filter { (k, rider) -> rider.stopIndex == i && e >= riderStart(k) }.size
                         val gone = e >= 2200
-                        val minis = if (gone) emptyList() else stop.gotten.drop(departed).mapIndexed { k, icon -> BasketMini("$i-$k", icon) }
+                        val minis = if (gone) emptyList() else stop.gotten.drop(departed).take(earth.cora.picnic.ui.theme.gen.BasketManifest.MAX_MINIS).mapIndexed { k, icon -> BasketMini("$i-$k", icon) }
                         MotionBasket(
                             kind = stop.basket,
                             look = stop.look,
@@ -631,11 +660,18 @@ private fun riderStart(k: Int): Long = CelebrationTimeline.RIDE_AT + k * Celebra
 @Composable
 private fun StampCard(sc: SceneClock, content: CelebrationContent, anchors: SceneAnchors) {
     val stops = content.stops.take(24)
-    val rows = if (stops.size <= 16) 2 else 3
-    val cols = max(4, ceil(min(stops.size, 24) / rows.toFloat()).toInt())
+    // The book's stamp grid scaled to the card: one row up to 4 stops, two up to 16, three beyond; as many columns
+    // as that needs, so a short trip gets a small card rather than empty circles.
+    val rows = when {
+        stops.size <= 4 -> 1
+        stops.size <= 16 -> 2
+        else -> 3
+    }
+    val cols = max(1, ceil(stops.size / rows.toFloat()).toInt())
     val stamp = if (stops.size <= 8) 26.dp else 22.dp
-    val cardW = stamp * cols + 6.dp * (cols - 1) + 28.dp
-    val cardH = stamp * rows + 6.dp * (rows - 1) + 24.dp
+    // Never smaller than a card the PER-FECT! hanko can sit on: the stamps centre on it.
+    val cardW = maxOf(stamp * cols + 6.dp * (cols - 1) + 28.dp, 132.dp)
+    val cardH = maxOf(stamp * rows + 6.dp * (rows - 1) + 24.dp, 74.dp)
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val hankoStyle = PicnicTheme.type.hanko
     val hanko = PicnicTheme.colors.hanko
@@ -720,6 +756,7 @@ private fun StampCardFace(stops: List<earth.cora.picnic.ui.list.motion.Celebrati
                 if (back && !sc.reduced && e in 0 until Holo.glint.durationMillis) drawGlint(Holo.glint.progressAt(e))
             }
             .padding(horizontal = 11.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             for (r in 0 until rows) {
@@ -1272,9 +1309,7 @@ private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, w: Dp, anchors: Sc
                         }
                     },
             ) {
-                ChipFace(fill = c.stickerWhite) {
-                    androidx.compose.material3.Text(copy.skip, style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 17.sp), maxLines = 1)
-                }
+                SceneChip(copy.skip, PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 17.sp), maxLines = 1)
             }
         }
         if (!cele.talkBack) {

@@ -165,6 +165,15 @@ class MotionChoreographer(
     private val state = MutableStateFlow(ListPresentation.Identity)
     override val presentation: StateFlow<ListPresentation> = state.asStateFlow()
 
+    /**
+     * The presentation as snapshot state: hosts read this in composition. It changes inside the frame's tick, so the
+     * frame that first shows a committed change (a check, an un-check) already shows its chain: no frame shows the new
+     * state without its choreography, and the pieces' poses (read off [clock]) match it. The StateFlow follows it for
+     * collectors outside composition (it reaches a collectAsState one frame later).
+     */
+    val current: androidx.compose.runtime.State<ListPresentation> get() = snapshot
+    private val snapshot = androidx.compose.runtime.mutableStateOf(ListPresentation.Identity)
+
     /** The frame-clock time the pieces draw at. */
     val clock: MotionClock = MotionClock()
 
@@ -224,6 +233,7 @@ class MotionChoreographer(
         nextCard = null
         celebration = null
         scroll = null
+        snapshot.value = ListPresentation.Identity
         state.value = ListPresentation.Identity
     }
 
@@ -262,7 +272,9 @@ class MotionChoreographer(
         timeline.advanceTo(now)
         expire(now)
         clock.now = now
-        state.value = build(now)
+        val p = build(now)
+        snapshot.value = p
+        state.value = p
     }
 
     /** The engine's current frame time (tests). */
@@ -891,7 +903,8 @@ class MotionChoreographer(
                 rows[e.itemId] = RowPhase.Landing
                 rowStarts[e.itemId] = u.t0
             }
-            u.flight?.let { if (since < it.durationMs) flights += it }
+            // The copy stays on the row (its last pose) until the row's own sticker returns, so no frame shows neither.
+            u.flight?.let { if (since < maxOf(it.durationMs, Beats.GHOST_UNTIL)) flights += it }
             val b = basket(e.sectionId)
             if (u.reduced) b.inPlace = true
             if (u.wobble && !u.reduced && since < BasketMotion.WOBBLE) b.wobble(u.t0)

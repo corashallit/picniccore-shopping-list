@@ -106,7 +106,7 @@ class HarnessRig(
     }
 
     /** The presentation now. */
-    val p: ListPresentation get() = engine.presentation.value
+    val p: ListPresentation get() = engine.current.value
 
     /** Root bounds of a tagged node (dp). */
     fun bounds(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).getBoundsInRoot()

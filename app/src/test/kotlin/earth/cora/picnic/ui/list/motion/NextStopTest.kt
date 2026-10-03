@@ -271,24 +271,24 @@ class NextStopTest {
     // ---- helpers ----
 
     /** The 14 default aisles' display names. */
-    private fun defaultNames(): List<Pair<Int, String>> {
+    private fun defaultNames(): List<Triple<Int, String, Int?>> {
         val s = AppState(lists = listOf(GroceryList(MotionFixture.LIST_ID, "x", 0)), currentListId = MotionFixture.LIST_ID, store = StoreProfile(aislesText = Aisles.DEFAULT_TEXT))
         var st = s
         s.store.aisles().forEachIndexed { i, a ->
             st = st.addItems(MotionFixture.LIST_ID, listOf(MotionFixture.item("flour").copy(id = "i$i", name = "Thing $i", aisleId = a.id)), 1L).first
         }
-        return st.grouped().motionSections().filter { it.position > 0 }.map { it.position to it.displayName }
+        return st.grouped().motionSections().filter { it.position > 0 }.map { Triple(it.position, it.displayName, it.storeAisle) }
     }
 
-    /** Each default name's fit on the card at [fontScale]: (sp, lines, clipped); [more] is composed below them. */
+    /** Each default name's fit on its card (with its store chip) at [fontScale]: (sp, lines, clipped); [more] below them. */
     private fun fitAll(fontScale: Float, more: @androidx.compose.runtime.Composable () -> Unit = {}): Map<String, Triple<Float, Int, Boolean>> {
         val names = defaultNames()
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale)) {
                 PicnicTheme {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        for ((n, name) in names) {
-                            Box(Modifier.testTag("card_$name")) { NextStopCard(n, name, null, earth.cora.picnic.ui.theme.AisleLooks.of(n), "NEXT") }
+                        for ((n, name, store) in names) {
+                            Box(Modifier.testTag("card_$name")) { NextStopCard(n, name, store, earth.cora.picnic.ui.theme.AisleLooks.of(n), "NEXT") }
                         }
                         more()
                     }
@@ -296,7 +296,7 @@ class NextStopTest {
             }
         }
         compose.waitForIdle()
-        return names.associate { (_, name) ->
+        return names.associate { (_, name, _) ->
             val node = compose.onNode(SemanticsMatcher.keyIsDefined(NextNameFontSize) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("card_$name")), useUnmergedTree = true).fetchSemanticsNode()
             name to Triple(node.config[NextNameFontSize], node.config[NextNameLines], node.config.getOrNull(TextOverflowed) == true)
         }

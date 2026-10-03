@@ -113,7 +113,11 @@ class CheckOffChoreographyTest {
         assertEquals(AnchorRegistry.basketKey("produce"), back.fromKey)
         assertEquals(AnchorRegistry.rowKey("apples"), back.toKey)
         assertEquals(340L, back.durationMs)
-        assertBeat("hop back ends", u0 + 340, frames.firstTime { it.flights.isEmpty() })
+        // It lands on the row at 340 and stays there until the row's sticker takes over at 360: no gap, no double.
+        val row = rig.engine.anchors.bounds(AnchorRegistry.rowKey("apples"))!!.center
+        val landed = rig.engine.flightFrame(back, u0 + 340).center
+        assertTrue("lands on the row: $landed vs $row", kotlin.math.abs(landed.x - row.x) < 2f && kotlin.math.abs(landed.y - row.y) < 2f)
+        assertBeat("hands over to the row", u0 + Beats.GHOST_UNTIL, frames.firstTime { it.flights.isEmpty() })
         // The twin peels off in place and is gone at 320; the spot is free again.
         assertEquals(SpotPhase.Peeling(u0, rig.model.item("apples").iconRef(), false), at0.spots[slot])
         assertBeat("peeled off", u0 + Beats.PEEL_OFF, frames.firstTime { it.spots[slot] == null })

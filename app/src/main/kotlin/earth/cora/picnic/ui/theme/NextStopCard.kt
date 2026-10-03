@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -53,9 +53,10 @@ import earth.cora.picnic.ui.a11y.textOverflowed
  * Name fit: the name gets the card's inner width minus the number circle and the chip (it may run over the tab's
  * pattern, which sits behind it at 45 %); it shrinks in 1 sp steps from 23 to 18 sp, then wraps to two lines (the card
  * grows). At large font scales (the same steps on the scaled sizes) a word can still be wider than the card: the card
- * then widens with the font scale (up to the screen less 16 dp a side) and, only if two lines at 18 sp still do not
- * hold the name, keeps shrinking on two lines down to 14 sp; it ellipsizes only beyond that, which no default aisle
- * name needs at font scale 2.0. It never clips. Motion and semantics are the host's (NextCardHost).
+ * then widens (up to the screen less 16 dp a side), drops the store chip under the tab when the two cannot share a line,
+ * and only if two lines at 18 sp still do not hold the name keeps shrinking on two lines down to 14 sp; it ellipsizes
+ * only beyond that, which no default aisle name needs at font scale 2.0. It never clips. Motion and semantics are the
+ * host's (NextCardHost).
  */
 
 /** The fitted name: its size and its line count (tests: NextStopTest.defaultAislesFit, fontScale200). */
@@ -119,13 +120,21 @@ fun NextStopCard(
     val shadows = PicnicTheme.shadows
     val reduced = LocalReducedMotion.current
     val loop by rememberLoopTime(enabled = !reduced)
-    val fontScale = LocalDensity.current.fontScale
-    // The card plus room round it for the corner sparkles and the hs2 shadow. At large font scales the card widens with
-    // the text, up to the screen less 16 dp a side.
+    val density = LocalDensity.current
+    val measurer = rememberTextMeasurer(cacheSize = 8)
+    val nameStyle = t.nextAisle.copy(color = c.ballpoint)
+    // The card plus room round it for the corner sparkles and the hs2 shadow. It is 236 dp wide, and wider only when the
+    // name cannot sit on two lines at 18 sp beside the circle and the chip (a long name at a large font scale), up to the
+    // screen less 16 dp a side.
     BoxWithConstraints(modifier) {
         val room = 8.dp
-        val widest = if (constraints.hasBoundedWidth) maxWidth - 32.dp else NextCardWidth * 1.4f
-        val cardWidth = (NextCardWidth * fontScale.coerceIn(1f, 1.4f)).coerceAtMost(widest).coerceAtLeast(NextCardWidth.coerceAtMost(widest))
+        val widest = if (constraints.hasBoundedWidth) (maxWidth - 32.dp).coerceAtLeast(NextCardWidth.coerceAtMost(maxWidth)) else NextCardWidth * 1.4f
+        val chip = if (storeAisle != null) with(density) { measurer.measure("A$storeAisle", t.label.copy(fontSize = 13.sp)).size.width.toDp() } + CHIP_CHROME + 6.dp else 0.dp
+        val around = 4.dp * 2 + 12.dp * 2 + TAB_FIXED
+        val needed = remember(displayName, nameStyle, density) { with(density) { nameNeed(measurer, displayName, nameStyle).toDp() } }
+        // The chip follows the tab; when the two cannot share a line even on the widest card, it drops under the tab.
+        val chipBelow = storeAisle != null && around + chip + needed > widest
+        val cardWidth = maxOf(NextCardWidth, around + (if (chipBelow) 0.dp else chip) + needed).coerceAtMost(widest)
         Box(Modifier.width(cardWidth + room * 2)) {
             Column(
                 Modifier
@@ -154,7 +163,7 @@ fun NextStopCard(
                     Spacer(Modifier.width(4.dp))
                     DecorSticker("star4", size = 20.dp)
                 }
-                NextTab(number, displayName, storeAisle, look)
+                NextTab(number, displayName, storeAisle, look, nameStyle, measurer, chipBelow)
             }
             // Three sparkle stickers at the corners, twinkling, outside the text.
             val twinkle = if (reduced) Pose() else Twinkle.at(loop)
@@ -169,58 +178,97 @@ fun NextStopCard(
 
 private val RoundedInner = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
 
+/** The tab's parts round the name: border 3 + 3, start 6, the 30 dp circle, the 8 dp gap, end 12. */
+private val TAB_FIXED: Dp = 3.dp * 2 + 6.dp + 30.dp + 8.dp + 12.dp
+
+/** The store chip round its text: border 2 + 2, padding 7 + 7, the 13 dp basket glyph and its 5 dp gap. */
+private val CHIP_CHROME: Dp = 2.dp * 2 + 7.dp * 2 + 13.dp + 5.dp
+
+/** The narrowest room (px) in which [name] sits on at most two lines at 18 sp with no word broken. */
+private fun nameNeed(measurer: TextMeasurer, name: String, style: TextStyle): Int {
+    val s = style.copy(fontSize = 18.sp, lineHeight = (18f * 1.2f).sp)
+    val one = measurer.measure(name, s, softWrap = false, maxLines = 1).size.width
+    val widestWord = name.split(' ').filter { it.isNotEmpty() }.maxOf { measurer.measure(it, s, softWrap = false, maxLines = 1).size.width }
+    var lo = widestWord
+    var hi = maxOf(one, widestWord)
+    while (lo < hi) {
+        val mid = (lo + hi) / 2
+        val l = measurer.measure(name, s, softWrap = true, maxLines = 3, constraints = Constraints(maxWidth = mid))
+        if (l.lineCount <= 2) hi = mid else lo = mid + 1
+    }
+    return lo + 1
+}
+
 /** The tab sticker on the card: 46 dp, a 30 dp number circle, the name (fitted), the pattern on the right 32 dp at 45 %. */
 @Composable
-private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: AisleLook) {
+private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: AisleLook, nameStyle: TextStyle, measurer: TextMeasurer, chipBelow: Boolean) {
+    if (chipBelow && storeAisle != null) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            NextTab(number, displayName, null, look, nameStyle, measurer, chipBelow = false)
+            NextStoreChip(storeAisle)
+        }
+        return
+    }
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
-    val density = LocalDensity.current
-    val measurer = rememberTextMeasurer(cacheSize = 8)
-    val nameStyle = PicnicTheme.type.nextAisle.copy(color = c.ballpoint)
-    BoxWithConstraints {
-        val inner = maxWidth
-        // The chip's footprint (measured roughly from its text) and the tab's fixed parts.
-        val chipWidth: Dp = if (storeAisle != null) (with(density) { measurer.measure("A$storeAisle", PicnicTheme.type.label.copy(fontSize = 13.sp)).size.width.toDp() } + 36.dp) else 0.dp
-        // Border 3 + 3, start 6, circle 30, gap 8, end 12 (the 32 dp pattern sits behind the name's end).
-        val fixed = 3.dp * 2 + 6.dp + 30.dp + 8.dp + 12.dp
-        val nameMax = (inner - chipWidth - fixed).coerceAtLeast(40.dp)
-        val fit = remember(displayName, nameMax, density) {
-            fitNextName(measurer, displayName, nameStyle, with(density) { nameMax.roundToPx() })
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                Modifier
-                    .heightIn(min = 46.dp)
-                    .hardShadow(shapes.tab, PicnicTheme.shadows)
-                    .clip(shapes.tab)
-                    .background(c.stickerWhite)
-                    .padding(3.dp)
-                    .clip(shapes.tab)
-                    .background(look.family.pastel)
-                    .tabPattern(look, width = 32.dp, alpha = 0.45f)
-                    .heightIn(min = 40.dp)
-                    .padding(start = 6.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                NextNumberCircle(number, look, size = 30.dp, ring = 2.dp, numeral = 17.sp)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // The chip is measured first; the tab takes the rest, and the name what the tab leaves it.
+        Row(
+            Modifier
+                .weight(1f, fill = false)
+                .heightIn(min = 46.dp)
+                .hardShadow(shapes.tab, PicnicTheme.shadows)
+                .clip(shapes.tab)
+                .background(c.stickerWhite)
+                .padding(3.dp)
+                .clip(shapes.tab)
+                .background(look.family.pastel)
+                .tabPattern(look, width = 32.dp, alpha = 0.45f)
+                .heightIn(min = 40.dp)
+                .padding(start = 6.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            NextNumberCircle(number, look, size = 30.dp, ring = 2.dp, numeral = 17.sp)
+            BoxWithConstraints(Modifier.weight(1f, fill = false)) {
+                val room = constraints.maxWidth
+                val fit = remember(displayName, nameStyle, room) { fitNextName(measurer, displayName, nameStyle, room) }
                 Text(
                     displayName,
                     style = nameStyle.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp),
                     maxLines = 2,
                     softWrap = fit.lines > 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .widthIn(max = nameMax)
-                        .semantics {
-                            this[NextNameFontSize] = fit.fontSizeSp
-                            this[NextNameLines] = fit.lines
-                            if (fit.overflowed) textOverflowed = true
-                        },
+                    modifier = Modifier.semantics {
+                        this[NextNameFontSize] = fit.fontSizeSp
+                        this[NextNameLines] = fit.lines
+                        if (fit.overflowed) textOverflowed = true
+                    },
                 )
             }
-            if (storeAisle != null) StoreAisleChip(storeAisle)
         }
+        if (storeAisle != null) NextStoreChip(storeAisle)
+    }
+}
+
+/**
+ * The store-aisle chip on the card (§4.10's "A3": lemon pastel, basket glyph, label 13 sp ballpoint): 22 dp tall, and
+ * taller when the font scale grows its text, so the label never clips. TalkBack: "store aisle 3".
+ */
+@Composable
+private fun NextStoreChip(number: Int) {
+    val label = androidx.compose.ui.res.stringResource(earth.cora.picnic.R.string.theme_store_aisle, number)
+    val style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp)
+    val textHeight = with(LocalDensity.current) { style.lineHeight.toDp() }
+    ChipFace(
+        fill = Families.lemon.pastel,
+        modifier = Modifier.clearAndSetSemantics { contentDescription = label },
+        height = maxOf(22.dp, textHeight + 2.dp * 2 + 4.dp),
+        border = 2.dp,
+        horizontal = 7.dp,
+    ) {
+        Glyph(PicnicGlyph.Basket, null, tint = PicnicTheme.colors.ballpoint, size = 13.dp)
+        Text("A$number", style = style, maxLines = 1)
     }
 }
 
@@ -237,7 +285,9 @@ private fun NextNumberCircle(number: Int?, look: AisleLook, size: Dp, ring: Dp, 
         contentAlignment = Alignment.Center,
     ) {
         if (number != null) {
-            Text(number.toString(), style = PicnicTheme.type.tabNumber.copy(color = look.family.trace, fontSize = numeral, lineHeight = numeral * 1.1f), maxLines = 1)
+            // The numeral sits in a fixed 30 dp circle and repeats what TalkBack hears: it does not grow with the font scale.
+            val unscaled = (numeral.value / LocalDensity.current.fontScale).sp
+            Text(number.toString(), style = PicnicTheme.type.tabNumber.copy(color = look.family.trace, fontSize = unscaled, lineHeight = unscaled * 1.1f), maxLines = 1)
         } else {
             CapsuleMark(look.family, Modifier.size(size * 0.6f))
         }
