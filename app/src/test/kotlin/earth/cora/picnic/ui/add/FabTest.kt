@@ -1,5 +1,9 @@
 package earth.cora.picnic.ui.add
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -109,5 +113,31 @@ class FabTest {
         repeat(4) { list.performTouchInput { swipeDown(startY = top + 40f, endY = centerY + 150f) } }
         compose.waitForIdle()
         compose.onNodeWithTag(ADD_BAR_TAG).assertExists()
+    }
+
+    /** Item 116: a sheet WP5 opens (Edit, the list switcher, the Trip book) keeps the bar docked too; ours never overwrites it. */
+    @Test
+    fun anotherSheetKeepsTheBarDocked() {
+        val rig = addRig(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main))
+        var other by androidx.compose.runtime.mutableStateOf(true)
+        var flows: AddFlows? = null
+        compose.setContent {
+            earth.cora.picnic.ui.theme.PicnicTheme(earth.cora.picnic.ui.theme.ThemeVariant.Day) {
+                val f = rememberAddFlows(rig.vm, RecordingSources().sources)
+                flows = f
+                val state by rig.vm.state.collectAsState()
+                androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) { AddDock(f, state, otherSheetOpen = other) }
+            }
+        }
+        compose.waitForIdle()
+        val collapse = flows!!.collapse
+        assertTrue("another sheet is open", collapse.sheetOpen)
+        collapse.onScrolled(10_000f)
+        assertFalse("never folds under another sheet", collapse.collapsed)
+        other = false
+        compose.waitForIdle()
+        assertFalse(collapse.sheetOpen)
+        collapse.onScrolled(10_000f)
+        assertTrue(collapse.collapsed)
     }
 }

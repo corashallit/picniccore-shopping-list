@@ -9,6 +9,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.unit.Constraints
+import earth.cora.picnic.ui.a11y.Decorative
+import earth.cora.picnic.ui.theme.rememberPressFraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -117,6 +129,11 @@ data class AddBarUi(val text: String = "", val waiting: Boolean = false, val ena
 /** The bar's slice of the add flows' state. */
 fun AddUiState.barUi(): AddBarUi = AddBarUi(text = text, waiting = waiting && origin == AddOrigin.BAR, enabled = !committing)
 
+/** Test tags of the bar's decorative layers (AddBarTest checks they are drawn). */
+const val ADD_BAR_DOODLE_TAG: String = "add_bar_doodle"
+const val ADD_BAR_WASHI_TAG: String = "add_bar_washi"
+const val ADD_BAR_PLACEHOLDER_TAG: String = "add_bar_placeholder"
+
 /**
  * The 84 dp envelope add bar (§6.2): pad white with a perforated top edge (4 dp bites every 10 dp, a 55 % periwinkle rim
  * under each), the season's washi at the left end (56 × 18 dp, −4°, fluttering), the doodle "♡ picnic day ☆", the ruled
@@ -124,7 +141,11 @@ fun AddUiState.barUi(): AddBarUi = AddBarUi(text = text, waiting = waiting && or
  * glyphs: polaroid camera (ramune, "Snap a photo of a list"; long-press or its TalkBack action "Choose a photo" opens
  * the picker), cassette (sakura, "Speak a voice note"), envelope (strawberry, "Send"). Enter or Send submits. While
  * waiting (rule 3) Send is a wobbling gashapon capsule ([onStop] cancels) and the field is read-only. A 12 dp pad fade
- * sits above it. It grows with the font (never clips).
+ * sits above it.
+ *
+ * Large text (§15): the bar grows and nothing overlaps or clips. The doodle sits in the layout above the field and the
+ * buttons (the field and buttons move down as it grows); the placeholder wraps; from font scale 1.5 the example line
+ * steps aside and the buttons move under a full-width field. The field shows two lines before it scrolls.
  */
 @Composable
 fun AddBar(
@@ -148,6 +169,7 @@ fun AddBar(
     val haptic = LocalHapticFeedback.current
     val choosePhotoNow by rememberUpdatedState(onChoosePhoto)
     val choosePhoto = remember { { choosePhotoNow() } }
+    val stacked = LocalDensity.current.fontScale >= VERY_LARGE_TEXT
     LaunchedEffect(state.waiting) {
         // Read-only while waiting: the keyboard goes away (the capsule says what is happening).
         if (state.waiting) keyboard?.hide()
@@ -170,14 +192,7 @@ fun AddBar(
                 .background(c.pad)
                 .drawBehind { drawPerforationRims() },
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = PicnicTheme.dimens.addBar)
-                    // 20 + 60 dp touch targets + 4 = the 84 dp bar (the doodle sits in the top 20 dp).
-                    .padding(start = 14.dp, end = 4.dp, top = 20.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            val field = @Composable { m: Modifier ->
                 AddBarField(
                     text = state.text,
                     readOnly = state.waiting || !state.enabled,
@@ -185,8 +200,11 @@ fun AddBar(
                     onSend = onSend,
                     focusRequester = focusRequester,
                     onFocusChange = onFocusChange,
-                    modifier = Modifier.weight(1f).padding(end = 6.dp, bottom = 4.dp),
+                    showExample = !stacked,
+                    modifier = m,
                 )
+            }
+            val buttons = @Composable {
                 AddBarButton(
                     AddBarButtonKind.Snap,
                     stringResource(R.string.add_bar_snap),
@@ -206,34 +224,88 @@ fun AddBar(
                     AddBarButton(AddBarButtonKind.Send, stringResource(R.string.add_bar_send), onClick = onSend, enabled = state.enabled)
                 }
             }
-            // The doodle sits above the field, clear of every text (decorative, Hachi Maru: the list's third family).
-            PicnicText(
-                stringResource(R.string.add_bar_doodle),
-                style = PicnicTheme.type.doodle.copy(fontSize = PicnicTheme.type.caption.fontSize, lineHeight = PicnicTheme.type.caption.lineHeight),
-                maxLines = 1,
-                modifier = Modifier
-                    .decorative()
-                    .padding(start = 76.dp, top = 5.dp)
-                    .graphicsLayer { rotationZ = -4f },
+            DoodleOverBody(
+                doodle = { Doodle() },
+                body = {
+                    if (stacked) {
+                        Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp)) {
+                            field(Modifier.fillMaxWidth().padding(end = 10.dp, bottom = 2.dp))
+                            Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) { buttons() }
+                        }
+                    } else {
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(start = 14.dp, end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            field(Modifier.weight(1f).padding(end = 6.dp, bottom = 4.dp))
+                            buttons()
+                        }
+                    }
+                },
             )
         }
         // The season's washi at the left end, over the perforation.
-        WashiTape(
-            tape,
-            Modifier.offset(x = 4.dp, y = (-5).dp),
-            length = 56.dp,
-            height = 18.dp,
-            rotation = -4f,
-            alpha = 0.9f,
-            flutter = true,
+        Box(Modifier.offset(x = 4.dp, y = (-5).dp).clearAndSetSemantics { this[Decorative] = Unit; testTag = ADD_BAR_WASHI_TAG }) {
+            WashiTape(tape, length = 56.dp, height = 18.dp, rotation = -4f, alpha = 0.9f, flutter = true)
+        }
+    }
+}
+
+/**
+ * The doodle "♡ picnic day ☆" (decorative, Hachi Maru: the list's third family), rotated −4°. It wraps rather than
+ * clip and tells the clipped-text checks if it ever lost text.
+ */
+@Composable
+private fun Doodle() {
+    var lost by remember { mutableStateOf(false) }
+    // The wrapper clears everything under it: TalkBack never stops on the doodle (§15 "Decor").
+    Box(Modifier.decorativeText(ADD_BAR_DOODLE_TAG, lost).graphicsLayer { rotationZ = -4f }) {
+        PicnicText(
+            stringResource(R.string.add_bar_doodle),
+            style = PicnicTheme.type.doodle.copy(fontSize = PicnicTheme.type.caption.fontSize, lineHeight = PicnicTheme.type.caption.lineHeight),
+            onTextLayout = { lost = it.lostText() },
         )
     }
 }
 
 /**
+ * Lays the doodle out 5 dp under the bar's top, 76 dp in, and the field and buttons under it: 20 dp down at font scale
+ * 1 (the 84 dp bar: 20 + 60 dp targets + 4), further down as the doodle grows, so the doodle never sits on the field's
+ * words or the buttons. The body starts under the doodle's line plus the dip of its −4° tilt at the left end, less the
+ * blank padding of the two lines' boxes ([DOODLE_SLACK]: the doodle's line padding under its ink, the field's above).
+ */
+@Composable
+private fun DoodleOverBody(doodle: @Composable () -> Unit, body: @Composable () -> Unit) {
+    Layout(content = { doodle(); body() }) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val start = DOODLE_START.roundToPx()
+        val top = DOODLE_TOP.roundToPx()
+        val d = measurables[0].measure(Constraints(maxWidth = (width - start - 8.dp.roundToPx()).coerceAtLeast(0)))
+        val dip = (d.width * DOODLE_TILT_SIN / 2f).toInt()
+        val bodyTop = maxOf(BODY_TOP.roundToPx(), top + d.height + dip - DOODLE_SLACK.roundToPx())
+        val b = measurables[1].measure(Constraints(minWidth = width, maxWidth = width))
+        val height = maxOf(constraints.minHeight, bodyTop + b.height + BODY_BOTTOM.roundToPx())
+        layout(width, height) {
+            b.place(0, bodyTop)
+            d.place(start, top)
+        }
+    }
+}
+
+private val DOODLE_START = 76.dp
+private val DOODLE_TOP = 5.dp
+private val DOODLE_SLACK = 8.dp
+
+/** sin 4°: the doodle's tilt. */
+private const val DOODLE_TILT_SIN = 0.0698f
+private val BODY_TOP = 20.dp
+private val BODY_BOTTOM = 4.dp
+
+/**
  * The add-bar field (§4.8): ruled, no box; "Write a note…" over the example line (13.5 sp, ballpointSoft); a 2 dp
- * ballpointSoft underline that becomes 3 dp strawberry trace with a 13 dp puffy heart at its left end on focus. One line;
- * Enter sends. TalkBack: "Write a note". Read-only while waiting.
+ * ballpointSoft underline that becomes 3 dp strawberry trace with a 13 dp puffy heart at its left end on focus. Two
+ * lines, then it scrolls; Enter (and the keyboard's Send) sends. TalkBack: "Write a note". Read-only while waiting. The
+ * placeholder wraps rather than clip; [showExample] false hides the example line (very large text).
  */
 @Composable
 private fun AddBarField(
@@ -243,6 +315,7 @@ private fun AddBarField(
     onSend: () -> Unit,
     focusRequester: FocusRequester,
     onFocusChange: (Boolean) -> Unit,
+    showExample: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val c = PicnicTheme.colors
@@ -250,11 +323,13 @@ private fun AddBarField(
     val label = stringResource(R.string.add_bar_field)
     var focused by remember { mutableStateOf(false) }
     val focusNow by rememberUpdatedState(onFocusChange)
+    val sendNow by rememberUpdatedState(onSend)
     BasicTextField(
         value = text,
         onValueChange = onTextChange,
         readOnly = readOnly,
-        singleLine = true,
+        minLines = 1,
+        maxLines = 2,
         textStyle = t.fieldValue.copy(color = if (readOnly) c.inkSoft else c.ink),
         cursorBrush = SolidColor(c.ink),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Send),
@@ -266,19 +341,27 @@ private fun AddBarField(
                 focused = it.isFocused
                 focusNow(it.isFocused)
             }
+            // A hardware Enter sends (the field wraps to two lines, so Enter must not start a third).
+            .onPreviewKeyEvent { e ->
+                val enter = e.key == Key.Enter || e.key == Key.NumPadEnter
+                if (enter && !e.isShiftPressed) {
+                    if (e.type == KeyEventType.KeyDown) sendNow()
+                    true
+                } else {
+                    false
+                }
+            }
             .semantics { contentDescription = label },
         decorationBox = { inner ->
             Column {
                 Box(Modifier.fillMaxWidth().heightIn(min = 40.dp), contentAlignment = Alignment.CenterStart) {
                     if (text.isEmpty()) {
-                        Column(Modifier.clearAndSetSemantics { }) {
-                            Text(stringResource(R.string.add_bar_placeholder), style = t.fieldValue.copy(color = c.inkSoft), maxLines = 1)
-                            Text(
-                                stringResource(R.string.add_bar_example),
-                                style = t.itemDetail.copy(color = c.inkSoft),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                        val lost = rememberLostText()
+                        Column(Modifier.clearedWith(lost) { testTag = ADD_BAR_PLACEHOLDER_TAG }) {
+                            Text(stringResource(R.string.add_bar_placeholder), style = t.fieldValue.copy(color = c.inkSoft), onTextLayout = lost.layout(0))
+                            if (showExample) {
+                                Text(stringResource(R.string.add_bar_example), style = t.itemDetail.copy(color = c.inkSoft), onTextLayout = lost.layout(1))
+                            }
                         }
                     }
                     inner()
@@ -333,9 +416,10 @@ internal fun NoteField(text: String, onTextChange: (String) -> Unit, modifier: M
                 Column {
                     Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(vertical = 4.dp), contentAlignment = Alignment.CenterStart) {
                         if (text.isEmpty()) {
-                            Column(Modifier.clearAndSetSemantics { }) {
-                                Text(stringResource(R.string.add_bar_placeholder), style = t.fieldValue.copy(color = c.inkSoft))
-                                Text(stringResource(R.string.add_bar_example), style = t.itemDetail.copy(color = c.inkSoft))
+                            val lost = rememberLostText()
+                            Column(Modifier.clearedWith(lost)) {
+                                Text(stringResource(R.string.add_bar_placeholder), style = t.fieldValue.copy(color = c.inkSoft), onTextLayout = lost.layout(0))
+                                Text(stringResource(R.string.add_bar_example), style = t.itemDetail.copy(color = c.inkSoft), onTextLayout = lost.layout(1))
                             }
                         }
                         inner()
@@ -361,11 +445,15 @@ private fun WaitingCapsule(onStop: () -> Unit) {
     val pose = if (reduced) 1 else ((t / PicnicMotion.gashaponPoseMillis) % 3).toInt()
     val stop = stringResource(R.string.add_bar_stop)
     val reading = stringResource(R.string.add_thinking_reading)
+    val shadows = PicnicTheme.shadows
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val press = rememberPressFraction(pressed)
     Box(
         Modifier
             .size(60.dp)
             .testTag(ADD_CAPSULE_TAG)
-            .clickable(role = Role.Button, onClick = onStop)
+            .clickable(interaction, indication = null, role = Role.Button, onClick = onStop)
             .semantics {
                 contentDescription = stop
                 stateDescription = reading
@@ -377,7 +465,12 @@ private fun WaitingCapsule(onStop: () -> Unit) {
             contentDescription = null,
             size = 52.dp,
             aisleIndex = 0,
-            modifier = Modifier.graphicsLayer { rotationZ = PicnicMotion.gashaponPoses[pose].rotation },
+            modifier = Modifier.graphicsLayer {
+                rotationZ = PicnicMotion.gashaponPoses[pose].rotation
+                // Pressed: the sticker presses down by its shadow's offset (§4.6), never a ripple.
+                translationX = shadows.hs.x.toPx() * press
+                translationY = shadows.hs.y.toPx() * press
+            },
         )
     }
 }
@@ -564,6 +657,8 @@ fun BoxScope.AddDock(
     state: AddUiState,
     modifier: Modifier = Modifier,
     tape: WashiPattern = WashiPattern.SakuraStripe,
+    /** Another sheet is up (WP5's Edit sheet, list switcher, Trip book): the bar never folds under it either. */
+    otherSheetOpen: Boolean = false,
 ) {
     val collapse = flows.collapse
     val reduced = LocalReducedMotion.current
@@ -574,7 +669,7 @@ fun BoxScope.AddDock(
             if (reduced) slide.snapTo(target) else slide.animateTo(target, tween(BAR_SLIDE_MS, easing = BarSlide))
         }
     }
-    LaunchedEffect(state.sheetOpen) { collapse.sheetOpen = state.sheetOpen }
+    LaunchedEffect(state.sheetOpen, otherSheetOpen) { collapse.sheetOpen = state.sheetOpen || otherSheetOpen }
     val c = PicnicTheme.colors
     if (slide.value < 1f) {
         Column(

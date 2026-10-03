@@ -101,6 +101,22 @@ data class AddUiState(
 
     /** Speak is recording (the REC dot on the Speak tab, §4.16). */
     val recording: Boolean get() = phase is AddPhase.Recording
+
+    /**
+     * A tab she can switch to: every tab while no review is open; with one, only the tabs that show it. A new note or
+     * photo would replace a review she has not committed, so those tabs are dimmed until it is stuck on or closed.
+     */
+    fun tabEnabled(mode: AddMode): Boolean = review?.showsOn(mode) ?: true
+}
+
+/**
+ * The tabs a review shows on: a note's on Write, a photo's on Snap (D19), a voice note's on Speak; and every review on
+ * Speak, since a voice note adds to any open review as heard rows.
+ */
+fun AddReview.showsOn(mode: AddMode): Boolean = when (source) {
+    ItemSource.PHOTO -> mode != AddMode.WRITE
+    ItemSource.VOICE -> mode == AddMode.SPEAK
+    else -> mode != AddMode.SNAP
 }
 
 /** Which batch a review row belongs to: the answer itself, or the voice note spoken after a photo (D19). */
@@ -131,8 +147,9 @@ data class ReviewRow(
 
 /**
  * The answer under review (rule 5). [id] changes with every new answer (the thinking steps and the fan-out replay only
- * for a new id); [heardId] is the voice batch's own reveal after a photo (D19). [revealed] holds the reveal ids that
- * have played, so returning from My pantry shows the card as she left it, not a replay.
+ * for a new id); [heardId] is the latest voice batch's own reveal (D19: after a photo, a note or another voice note).
+ * [revealed] holds the reveal ids that have played, so returning from My pantry shows the card as she left it, not a
+ * replay.
  */
 @Immutable
 data class AddReview(
@@ -149,12 +166,17 @@ data class AddReview(
     val lines: List<PhotoLine> = emptyList(),
     val heardId: Long? = null,
     val heardSteps: List<ThinkingStep> = emptyList(),
+    /** The keys of the latest heard batch (they fan out on [heardId]; earlier heard rows stay as they were). */
+    val heardFresh: Set<Int> = emptySet(),
     val revealed: Set<Long> = emptySet(),
 ) {
     val kept: Int get() = rows.count { it.keep }
     val mainRows: List<ReviewRow> get() = rows.filter { it.batch == RowBatch.MAIN }
     val heardRows: List<ReviewRow> get() = rows.filter { it.batch == RowBatch.HEARD }
     val hasPantryRow: Boolean get() = rows.any { it.skipReason == SkipReason.IN_PANTRY }
+
+    /** Nothing here could be switched on (no rows, or only names already on her list): the footer offers "OK". */
+    val nothingToKeep: Boolean get() = rows.none { it.canKeep }
 }
 
 /**
@@ -162,7 +184,8 @@ data class AddReview(
  * ran, the recipe meta only if present, the pantry only with `in_pantry` rows (their count), the sort always.
  */
 sealed interface ThinkingStep {
-    data class SearchedWeb(val query: String) : ThinkingStep
+    /** "Searched the web: “<query>”" with the model's own query, or "Searched the web" when the answer names none. */
+    data class SearchedWeb(val query: String?) : ThinkingStep
     data class ComparedRecipes(val recipes: Int?, val servings: Int?) : ThinkingStep
     data class CheckedPantry(val leftOut: Int) : ThinkingStep
     data class SortedAisles(val aisles: Int) : ThinkingStep

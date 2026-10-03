@@ -213,7 +213,11 @@ object EvalScoring {
         val imperial = items.filter { it.quantity?.let(IMPERIAL::containsMatchIn) == true }
         checks += Check("metric quantities", imperial.isEmpty(), imperial.joinToString { "${it.name}: ${it.quantity}" })
 
-        checks += Check("message present, <= $MESSAGE_MAX_CHARS chars", message.isNotBlank() && message.length <= MESSAGE_MAX_CHARS, "${message.length} chars")
+        checks += Check("message <= $MESSAGE_MAX_CHARS chars", message.length <= MESSAGE_MAX_CHARS, "${message.length} chars")
+        // A plain list added exactly as she named it needs no message, so the app can add it at once (DESIGN_STICKER §6.2
+        // rule 4, quick add). Anything skipped or worked out from a dish, or an answer with nothing to buy, says why.
+        val explains = items.isEmpty() || items.any { it.skip != "none" || !it.named }
+        if (explains) checks += Check("message present (something to explain)", message.isNotBlank(), "")
         case.message.mustNot.forEach { phrase ->
             val hit = if (phrase.startsWith("re:")) {
                 Regex(phrase.removePrefix("re:"), RegexOption.IGNORE_CASE).containsMatchIn(message)
@@ -222,9 +226,11 @@ object EvalScoring {
             }
             checks += Check("message avoids '$phrase'", !hit, message)
         }
-        when (case.message.lang) {
-            "fr" -> checks += Check("message in French", FRENCH.findAll(message).count() >= 2, message)
-            "en" -> checks += Check("message in English", FRENCH.findAll(message).count() < 2, message)
+        if (message.isNotBlank()) {
+            when (case.message.lang) {
+                "fr" -> checks += Check("message in French", FRENCH.findAll(message).count() >= 2, message)
+                "en" -> checks += Check("message in English", FRENCH.findAll(message).count() < 2, message)
+            }
         }
 
         if (transcript != null) {

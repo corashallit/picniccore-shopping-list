@@ -7,6 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -38,6 +41,7 @@ import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -63,6 +67,10 @@ val LetterSetShape: BittenEdgeShape = BittenEdgeShape(bite = 4.dp, every = 10.dp
  * a pink-gingham washi handle (60 × 16 dp, −3°) straddles the top edge and slaps on a beat after the sheet arrives
  * (1.6 → 1.2 → 1, 2 poses). Slides up 280 ms `cubic-bezier(.2, .9, .3, 1.1)` (a small overshoot); exits 260 ms; 120 ms
  * fades under reduced motion. [footer] is sticky with a white fade above it. Back and the scrim close it.
+ *
+ * [topClearance]: the height the screen's app bar takes under the status bar (WP7's Add sheet passes the 72 dp app bar).
+ * A tall sheet then stops below it, so the title, the LCD and More stay visible behind the scrim (§4.16); without it
+ * the sheet is capped at 92 % of the window.
  */
 @Composable
 fun LetterSetSheet(
@@ -70,6 +78,7 @@ fun LetterSetSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     footer: (@Composable () -> Unit)? = null,
+    topClearance: Dp? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val reduced = LocalReducedMotion.current
@@ -106,8 +115,11 @@ fun LetterSetSheet(
     if (!present && !visible) return
     BackHandler(enabled = visible, onBack = onDismissRequest)
     val c = PicnicTheme.colors
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     BoxWithConstraints(modifier.fillMaxSize()) {
         val maxH = maxHeight
+        // Below the app bar when asked (never under 60 % of a small window), else 92 % of the window.
+        val cap = if (topClearance == null) maxH * 0.92f else minOf(maxH * 0.92f, maxOf(maxH * 0.6f, maxH - statusTop - topClearance))
         Box(
             Modifier
                 .fillMaxSize()
@@ -120,7 +132,7 @@ fun LetterSetSheet(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .heightIn(max = maxH * 0.92f)
+                .heightIn(max = cap)
                 .graphicsLayer {
                     if (reduced) {
                         alpha = enter.value

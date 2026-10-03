@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -192,6 +193,8 @@ fun PicnicText(
     color: Color = style.color,
     textAlign: TextAlign? = null,
     maxLines: Int = Int.MAX_VALUE,
+    /** The laid-out text (a caller that hides it from TalkBack can still report clipping, §15). */
+    onTextLayout: (TextLayoutResult) -> Unit = {},
 ) {
     val annotated = remember(text) {
         buildAnnotatedString {
@@ -215,6 +218,7 @@ fun PicnicText(
         textAlign = textAlign,
         maxLines = maxLines,
         inlineContent = inline,
+        onTextLayout = onTextLayout,
         modifier = modifier.clearAndSetSemantics { this.text = AnnotatedString(spoken) },
     )
 }

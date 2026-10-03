@@ -21,7 +21,15 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import earth.cora.picnic.ui.a11y.Decorative
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.assistant.IngestResult
@@ -91,9 +99,68 @@ class AddBarTest {
         button("Send").performClick()
         assertEquals(listOf(1, 1, 1), listOf(snaps, speaks, sends))
         // The doodle and the placeholder's example line say nothing to TalkBack.
-        compose.onNode(hasText("♡ picnic day ☆")).assertDoesNotExist()
-        compose.onNode(hasText("“pancakes from scratch”")).assertDoesNotExist()
+        compose.onNode(hasText("picnic day", substring = true)).assertDoesNotExist()
+        compose.onNode(hasText("pancakes from scratch", substring = true)).assertDoesNotExist()
         compose.onNode(hasText("Write a note…")).assertDoesNotExist()
+
+        // The doodle and the washi are there (decorative: tagged for tests, nothing TalkBack reads), on the bar.
+        val bar = compose.onNodeWithTag(ADD_BAR_TAG).fetchSemanticsNode().boundsInRoot
+        for (tag in listOf(ADD_BAR_DOODLE_TAG, ADD_BAR_WASHI_TAG)) {
+            val node = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+            assertTrue("$tag is decorative", node.config.contains(Decorative))
+            assertNull("$tag says nothing", node.config.getOrNull(SemanticsProperties.Text) ?: node.config.getOrNull(SemanticsProperties.ContentDescription))
+            assertTrue("$tag has a size", node.boundsInRoot.width > 10f && node.boundsInRoot.height > 10f)
+            assertTrue("$tag sits on the bar's top", node.boundsInRoot.top < bar.top + 30 * compose.density.density)
+        }
+        // The washi straddles the left end; the doodle starts 76 dp in.
+        val washi = compose.onNodeWithTag(ADD_BAR_WASHI_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(washi.left < bar.left + 10 * compose.density.density && washi.top < bar.top)
+
+        // The perforated top edge is drawn: along a line 1 dp under the bar's top, pad white alternates with the bites.
+        val image = compose.onNodeWithTag(ADD_BAR_TAG).captureToImage().asAndroidBitmap()
+        val y = (1.5f * compose.density.density).toInt()
+        val pad = image.getPixel(image.width / 2, (40 * compose.density.density).toInt())
+        var runs = 0
+        var inPad = false
+        // Right of the washi only (it covers the left end).
+        for (x in (70 * compose.density.density).toInt() until image.width) {
+            val p = image.getPixel(x, y)
+            val isPad = colourDistance(p, pad) < 24
+            if (isPad && !inPad) runs++
+            inPad = isPad
+        }
+        // A straight edge would be one run; a bite every 10 dp (with its rim) breaks the pad 29 times or more.
+        assertTrue("a bite every 10 dp across ~290 dp: $runs pad runs", runs in 24..80)
+    }
+
+    private fun colourDistance(a: Int, b: Int): Int =
+        Math.abs((a shr 16 and 255) - (b shr 16 and 255)) + Math.abs((a shr 8 and 255) - (b shr 8 and 255)) + Math.abs((a and 255) - (b and 255))
+
+    /** The field shows two lines before it scrolls (§6.2): a long note wraps, the bar grows, and Enter still sends. */
+    @Test
+    fun theFieldWrapsToTwoLines() {
+        var text by mutableStateOf("")
+        var sends = 0
+        compose.setContent {
+            PicnicTheme(ThemeVariant.Day) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                    AddBar(AddBarUi(text = text), onTextChange = { text = it }, onSend = { sends++ }, onSnap = {}, onChoosePhoto = {}, onSpeak = {})
+                }
+            }
+        }
+        text = "pancakes"
+        compose.waitForIdle()
+        val oneLine = compose.onNodeWithTag(ADD_FIELD_TAG).fetchSemanticsNode().boundsInRoot.height
+        text = PANCAKES
+        compose.waitForIdle()
+        val twoLines = compose.onNodeWithTag(ADD_FIELD_TAG).fetchSemanticsNode().boundsInRoot.height
+        assertTrue("the note wraps to a second line: $oneLine → $twoLines", twoLines > oneLine + 3 * compose.density.density)
+        text = "$PANCAKES and a big jug of maple syrup for the weekend, plus berries"
+        compose.waitForIdle()
+        assertEquals("no third line: it scrolls", twoLines, compose.onNodeWithTag(ADD_FIELD_TAG).fetchSemanticsNode().boundsInRoot.height, 1f)
+        // The keyboard's Send still sends.
+        compose.onNodeWithTag(ADD_FIELD_TAG).performImeAction()
+        assertEquals(1, sends)
     }
 
     /** Item 199: no key, so Send adds the text as typed (no request) with the toast that says so, and Undo. */
@@ -177,7 +244,10 @@ class AddBarTest {
         assertEquals(1, h.sources.photos)
     }
 
-    /** Item 213: a duplicate of an unchecked item adds no second row; its sticker pops and the toast says so. */
+    /**
+     * Item 213: a duplicate of an unchecked item adds no second row; its sticker pops and the toast says so. It is a
+     * skipped row ("already on your list"), so it shows in review (rule 4) with "OK", which pops the row.
+     */
     @Test
     fun duplicatePopsExisting() {
         val h = compose.setHarness(
@@ -185,6 +255,10 @@ class AddBarTest {
         )
         val before = h.items()
         send("strawberries")
+        assertTrue("a skipped row: the review opens", h.vm.state.value.sheetOpen)
+        compose.onNode(reviewRow("Strawberries")).assertExists()
+        compose.onNode(hasText("OK") and hasClickAction()).performClick()
+        compose.waitForIdle()
         assertEquals(before.size, h.items().size)
         val commit = h.commits.single()
         assertTrue(commit.added.isEmpty())

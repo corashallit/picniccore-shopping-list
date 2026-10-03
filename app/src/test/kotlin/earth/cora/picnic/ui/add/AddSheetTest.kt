@@ -9,6 +9,9 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -17,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import earth.cora.picnic.core.assistant.IngestResult
 import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.ui.common.FakeAssistant
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -25,6 +29,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -90,6 +95,9 @@ class AddSheetTest {
 
     private fun footerSays(text: String) = compose.onNode(hasText(text), useUnmergedTree = true).assertExists()
 
+    /** The footer's pill (its label and whether it can be pressed). */
+    private fun cta(text: String) = compose.onNode(hasText(text) and hasClickAction())
+
     @Test
     fun reducedMotion() {
         // Three steps land 250 ms apart (as fades), the capsule pops at 750 ms, and every row appears with it.
@@ -97,24 +105,69 @@ class AddSheetTest {
         assertEquals(setOf(750L), plan.rowAt.values.toSet())
         reveal(reduced = true)
         compose.mainClock.advanceTimeBy(800)
-        footerSays("Reading… 10 of 10")
+        cta("Stick all 6 on my list").assertIsNotEnabled()
         compose.mainClock.advanceTimeBy(300)
-        footerSays("Stick all 6 on my list")
+        cta("Stick all 6 on my list").assertIsEnabled()
     }
 
+    /**
+     * Item 205: the stickers fan out 80 ms apart. A note's answer is already here, so the footer never claims it is
+     * still "Reading": it is the "Stick all" pill, disabled until the last sticker has landed (only a photo's footer
+     * counts "Reading… n of m", §4.19).
+     */
     @Test
     fun fanOutIs80MsApart() {
         val plan = RevealPlan.thinking(3, (0 until 10).toList(), reduced = false)
         assertEquals((0 until 10).map { 833L + it * 80 }, (0 until 10).map { plan.rowAt.getValue(it) })
         reveal(reduced = false)
-        compose.mainClock.advanceTimeBy(800)
-        footerSays("Reading… 0 of 10")
-        compose.mainClock.advanceTimeBy(80)
-        footerSays("Reading… 1 of 10")
-        compose.mainClock.advanceTimeBy(80)
-        footerSays("Reading… 2 of 10")
+        for (t in listOf(800L, 80L, 80L, 400L)) {
+            compose.mainClock.advanceTimeBy(t)
+            cta("Stick all 6 on my list").assertIsNotEnabled()
+            compose.onNode(hasText("Reading", substring = true), useUnmergedTree = true).assertDoesNotExist()
+        }
         compose.mainClock.advanceTimeBy(1_000)
-        footerSays("Stick all 6 on my list")
+        cta("Stick all 6 on my list").assertIsEnabled()
+    }
+
+    /** D19 and the review kept until committed: Speak adds to a note's review; Snap (a new review) waits, dimmed. */
+    @Test
+    fun tabsWaitForAnOpenReview() {
+        val h = compose.setHarness(FakeAssistant(ingest = { _, _ -> f.pancakes() }))
+        h.vm.openSheet(AddMode.WRITE, f.LIST_ID)
+        h.vm.setText(PANCAKES)
+        h.vm.send(AddOrigin.SHEET)
+        compose.waitForIdle()
+        compose.onNodeWithTag(RECIPE_CARD_TAG).assertExists()
+        tab("Snap").assertIsNotEnabled().performClick()
+        compose.waitForIdle()
+        assertEquals("a dimmed tab does nothing", AddMode.WRITE, h.vm.state.value.mode)
+        tab("Speak").assertIsEnabled().performClick()
+        compose.waitForIdle()
+        assertEquals(AddMode.SPEAK, h.vm.state.value.mode)
+        compose.onNodeWithText("Anything else? Say it out loud.").assertExists()
+        compose.onNodeWithTag(RECORD_STICKER_TAG).assertExists()
+        cta("Stick all 6 on my list").assertIsEnabled()
+        tab("Write").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(RECIPE_CARD_TAG).assertExists()
+    }
+
+    /** An answer with nothing to buy says only its message: no "0 of 0 kept", no impossible "Switch one on"; OK closes. */
+    @Test
+    fun anEmptyAnswerSaysOnlyItsMessage() {
+        val h = compose.setHarness(FakeAssistant(ingest = { _, _ -> IngestResult(emptyList(), "Tell me what to buy, or a dish to cook.", emptyList(), emptyList(), f.meta()) }))
+        h.vm.openSheet(AddMode.WRITE, f.LIST_ID)
+        h.vm.setText("hello there")
+        h.vm.send(AddOrigin.SHEET)
+        compose.waitForIdle()
+        compose.onNodeWithText("Tell me what to buy, or a dish to cook.").assertExists()
+        compose.onNode(hasText("0 of 0", substring = true)).assertDoesNotExist()
+        compose.onNode(hasText("Switch one on", substring = true)).assertDoesNotExist()
+        cta("OK").assertIsEnabled().performClick()
+        compose.waitForIdle()
+        assertEquals(false, h.vm.state.value.sheetOpen)
+        assertEquals("the note stays to change", "hello there", h.vm.state.value.text)
+        assertTrue(h.commits.isEmpty())
     }
 
     @Test
@@ -140,7 +193,7 @@ class AddSheetTest {
         compose.setContent {
             PicnicTheme(ThemeVariant.Day) {
                 if (onList) {
-                    val flows = rememberAddFlows(rig.vm, rig.feedback, sources.sources)
+                    val flows = rememberAddFlows(rig.vm, sources.sources)
                     AddFlowsHarness(flows, harnessRows(f.stateWithPantry), onEditPantry = { opened++; onList = false })
                 } else {
                     Text("My pantry")

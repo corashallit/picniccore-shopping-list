@@ -203,6 +203,10 @@ class GlossGeometry(
     }
 }
 
+/** The pill dot's bottom and right edges on a 52 dp face ((28.8, 6.8) dp, radius 1.8 dp; scaled with the face). */
+private val GLOSS_DOT_BOTTOM = 8.6.dp
+private val GLOSS_DOT_RIGHT = 30.6.dp
+
 /** The R3 gloss geometry (ButtonGlossTest). */
 object ButtonGloss {
     /** Gloss never comes within this of the label's (or glyph's) bounds. */
@@ -449,6 +453,17 @@ private fun PillButton(
         return labelInkBand(f.localBoundingBoxOf(l, clipBounds = false), labelFontPx)
     }
     val border = PicnicTheme.dimens.border
+    // R3 at large text: once the label's ink band reaches the dot's height (font scale ≳ 1.3), a label starting at the
+    // usual 27 / 21 dp would sit within 4 dp of the dot, and the mirrored gloss would meet its end. The label then starts
+    // past the dot instead, so the gloss keeps its place in the left cap and its 4 dp clearance (ButtonGlossTest).
+    val labelStart = run {
+        val face = height - border * 2
+        val k = face / 52.dp
+        val font = with(density) { (if (primary) t.primaryButton else t.secondaryButton).fontSize.toDp() }
+        val inkTop = face / 2 - font / 2
+        val base = if (primary) 27.dp else 21.dp
+        if (inkTop < GLOSS_DOT_BOTTOM * k + ButtonGloss.CLEARANCE) maxOf(base, GLOSS_DOT_RIGHT * k + ButtonGloss.CLEARANCE + 1.dp) else base
+    }
     Box(
         modifier
             .defaultMinSize(minHeight = 48.dp)
@@ -484,7 +499,7 @@ private fun PillButton(
                         else -> Unit
                     }
                 }
-                .padding(start = if (primary) 27.dp else 21.dp, end = if (primary) 21.dp else 19.dp),
+                .padding(start = labelStart, end = if (primary) 21.dp else 19.dp),
             contentAlignment = Alignment.Center,
         ) {
             Row(

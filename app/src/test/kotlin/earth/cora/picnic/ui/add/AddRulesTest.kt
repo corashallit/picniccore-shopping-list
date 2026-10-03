@@ -40,8 +40,9 @@ class AddRulesTest {
         assertFalse("a recipe", AddRules.isQuickAdd(f.pancakes(), "pancakes"))
         assertFalse("an optional row", AddRules.isQuickAdd(answer(f.proposed("Vanilla", "vanilla", null, skip = SkipReason.OPTIONAL)), "x"))
         assertFalse("a pantry row (item 324)", AddRules.isQuickAdd(answer(f.proposed("Salt", "salt", null, skip = SkipReason.IN_PANTRY)), "x"))
-        assertTrue(
-            "a duplicate only pops (rule 7)",
+        // §6.2 rule 4 / item 201: no skipped rows at all; a name already on her list is one (§4.17), so it shows in review.
+        assertFalse(
+            "a row already on the list",
             AddRules.isQuickAdd(answer(f.proposed("Milk", "milk_bag", "dairy-eggs", skip = SkipReason.ALREADY_ON_LIST)), "milk"),
         )
         assertFalse("a message worth showing", AddRules.isQuickAdd(answer(f.proposed("Milk", "milk_bag", null), message = "Bags are 4 L."), "milk"))
@@ -58,6 +59,11 @@ class AddRulesTest {
         assertEquals("1 kg box · pinch", AddRules.detailLine("1 kg box · pinch", null))
         assertEquals("dozen · from your recipe", AddRules.detailLine("dozen", "from your recipe"))
         assertNull(AddRules.detailLine(" ", null))
+        // The note is not a recipe amount: every imperial unit in it becomes metric, cooking measures too.
+        assertEquals("dozen · about 454 g", AddRules.detailLine("dozen", "about 1 lb"))
+        assertEquals("1 bunch · 500 mL chopped", AddRules.detailLine("1 bunch", "2 cups chopped"))
+        assertEquals("340 g box", AddRules.detailLine(null, "12 oz box"))
+        assertEquals("907 g bag · roughly 500 mL, sifted", AddRules.detailLine("2-lb bag", "roughly 2 cups · sifted"))
         // Every detail line of the review fixtures reads metric before the dot.
         val imperial = Regex("\\b(lb|lbs|oz|fl oz|qt|gal|pounds?|ounces?|cups?|tbsp|tsp)\\b")
         val all = (f.pancakes().items + f.pancakes(withPantry = true).items + f.photo().items + f.voice().items)
@@ -74,12 +80,12 @@ class AddRulesTest {
     fun thinkingStepsComeOnlyFromRealFields() {
         // A plain list: no web search, no recipe, no pantry, so only the sorting step.
         val plain = answer(f.proposed("Lemons", "lemon", "produce"), f.proposed("Eggs", "eggs", "dairy-eggs"))
-        assertEquals(listOf(ThinkingStep.SortedAisles(2)), AddRules.thinkingSteps(plain, "lemons and eggs"))
+        assertEquals(listOf(ThinkingStep.SortedAisles(2)), AddRules.thinkingSteps(plain))
 
-        val steps = AddRules.thinkingSteps(f.pancakes(withPantry = true), PANCAKES)
+        val steps = AddRules.thinkingSteps(f.pancakes(withPantry = true))
         assertEquals(
             listOf(
-                ThinkingStep.SearchedWeb(AddRules.searchQuery(PANCAKES)),
+                ThinkingStep.SearchedWeb(f.PANCAKE_QUERY),
                 ThinkingStep.ComparedRecipes(3, 12),
                 ThinkingStep.CheckedPantry(4),
                 ThinkingStep.SortedAisles(4),
@@ -89,7 +95,7 @@ class AddRulesTest {
     }
 
     @Test
-    fun theSearchStepQuotesHerNoteOnOneLine() {
+    fun theSearchStepQuotesTheQueryOnOneLine() {
         assertEquals("pancakes from scratch", AddRules.searchQuery("  pancakes\nfrom   scratch "))
         val long = AddRules.searchQuery("ingredients for a big birthday cake with cream cheese icing and sprinkles")
         assertTrue(long.length <= 44)

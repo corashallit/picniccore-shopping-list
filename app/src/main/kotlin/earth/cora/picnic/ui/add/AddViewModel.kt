@@ -35,7 +35,9 @@ import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.displayName
 import earth.cora.picnic.core.model.ingestContext
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.removeItem
+import earth.cora.picnic.core.model.setRarity
 import earth.cora.picnic.core.model.restoreItem
 import earth.cora.picnic.core.model.storeAisleNumber
 import earth.cora.picnic.core.store.StateStore
@@ -145,6 +147,9 @@ class AddViewModel(
 
     private val ids = AtomicLong(0)
 
+    /** Reveals whose capsule pop has been cued (once each). Main thread only. */
+    private val poppedReveals = HashSet<Long>()
+
     /** What each recent commit's Undo takes back (the last [MAX_UNDO] commits). */
     private val undoRecords = LinkedHashMap<Long, UndoRecord>()
 
@@ -186,9 +191,13 @@ class AddViewModel(
     /** v1 name for [closeSheet]. */
     fun close() = closeSheet()
 
+    /**
+     * Switches the sheet's tab. With a review open, only the tabs that show it switch (Speak adds to any review, D19);
+     * a new note or photo would replace a review she has not committed, so those tabs wait (dimmed) until it is done.
+     */
     fun setMode(mode: AddMode) {
         val s = _state.value
-        if (s.mode == mode || s.phase.busy || s.committing) return
+        if (s.mode == mode || s.phase.busy || s.committing || !s.tabEnabled(mode)) return
         _state.update { it.copy(mode = mode, phase = if (it.phase is AddPhase.Failed) it.restingPhase() else it.phase) }
     }
 
@@ -210,7 +219,8 @@ class AddViewModel(
     fun send(origin: AddOrigin = AddOrigin.BAR) {
         val s = _state.value
         val text = s.text.trim()
-        if (s.phase.busy || s.committing || work?.isActive == true) return
+        // A review she has not committed is never replaced by a new note (its tab shows no Send meanwhile).
+        if (s.phase.busy || s.committing || s.review != null || work?.isActive == true) return
         if (text.isEmpty()) {
             if (origin == AddOrigin.BAR) requestFieldFocus()
             return
@@ -238,7 +248,7 @@ class AddViewModel(
     fun addAsTyped() {
         val s = _state.value
         val text = s.text.trim()
-        if (text.isEmpty() || s.phase.busy || s.committing || work?.isActive == true) return
+        if (text.isEmpty() || s.phase.busy || s.committing || s.review != null || work?.isActive == true) return
         retryAction = null
         work = viewModelScope.launch { commitTyped(text, noKey = false) }
     }
@@ -257,10 +267,13 @@ class AddViewModel(
 
     /* ---------------- Snap ---------------- */
 
-    /** A photo from the camera or the picker: the sheet opens on Snap with the polaroid being read. */
+    /**
+     * A photo from the camera or the picker: the sheet opens on Snap with the polaroid being read. A review she has not
+     * committed is never dropped for it (the Snap tab offers no photo while one is open), so a stray result is discarded.
+     */
     fun onPhoto(uri: Uri) {
         val s = _state.value
-        if (s.phase.busy || s.committing) {
+        if (s.phase.busy || s.committing || s.review != null) {
             appScope.launch { photos.discard(uri) }
             return
         }
@@ -304,7 +317,8 @@ class AddViewModel(
 
     /**
      * Call once RECORD_AUDIO is granted (the route asks): the sheet opens on Speak with the cassette recording ("clunk"
-     * + KEYBOARD_TAP). After a photo's review the recording appends to it (D19), so the tab stays where it is.
+     * + KEYBOARD_TAP). With a review open (a photo's, D19, or a note's or an earlier voice note's) the recording adds to
+     * it as heard rows, de-duplicated, so nothing she has not committed is lost; the tab stays where it is.
      */
     fun startRecording() {
         val s = _state.value
@@ -323,7 +337,7 @@ class AddViewModel(
         recorder = r
         feedback.cue(Cue.CASSETTE)
         val started = clock()
-        val merging = s.review?.source == ItemSource.PHOTO
+        val merging = s.review != null
         _state.update {
             val base = if (merging) it else it.cleared()
             base.copy(
@@ -398,6 +412,23 @@ class AddViewModel(
         }
     }
 
+    /**
+     * "OK" under a review with nothing she could switch on (an answer with no items, or only names already on her
+     * list): the names already there pop on the list (rule 7, "Milk is already on your list"); otherwise the sheet closes
+     * and the draft stays.
+     */
+    fun acknowledge() {
+        val s = _state.value
+        val review = s.review ?: return
+        if (s.committing || s.phase.busy) return
+        if (review.rows.any { it.skipReason == SkipReason.ALREADY_ON_LIST }) commit() else closeSheet()
+    }
+
+    /** The thinking box's capsule popped for [revealId] ("pon!" + CONFIRM, §14.3): once per reveal, never on a replay. */
+    fun capsulePopped(revealId: Long) {
+        if (poppedReveals.add(revealId)) feedback.cue(Cue.CAPSULE_POP)
+    }
+
     /** The sheet finished revealing [revealId] (steps, lines, fan-out): it never replays for that answer. */
     fun revealFinished(revealId: Long) {
         _state.update { s ->
@@ -437,13 +468,18 @@ class AddViewModel(
         work = viewModelScope.launch { commitTyped(text, noKey = false) }
     }
 
-    /** "Stick all n on my list": commits the kept rows in the app scope; the sheet closes once they are saved. */
+    /**
+     * "Stick all n on my list": commits the kept rows in the app scope; the sheet closes once they are saved. Rows
+     * already on her list go along so their stickers pop (rule 7); they are never added twice.
+     */
     fun commit() {
         val s = _state.value
         val review = s.review ?: return
         if (s.committing || s.phase.busy) return
-        val main = review.mainRows.filter { it.keep }.sortedBy { it.key }.map { it.item }
-        val heard = review.heardRows.filter { it.keep }.sortedBy { it.key }.map { it.item }
+        fun List<ReviewRow>.committed() =
+            filter { it.keep || it.skipReason == SkipReason.ALREADY_ON_LIST }.sortedBy { it.key }.map { it.item }
+        val main = review.mainRows.committed()
+        val heard = review.heardRows.committed()
         if (main.isEmpty() && heard.isEmpty()) return
         _state.update { it.copy(committing = true) }
         val batches = listOf(review.source to main, ItemSource.VOICE to heard).filter { it.second.isNotEmpty() }
@@ -496,11 +532,10 @@ class AddViewModel(
             return
         }
         if (AddRules.isQuickAdd(result, text)) {
-            // Rule 4: small and sure, so it commits at once (duplicates go along so they pop, rule 7).
+            // Rule 4: small and sure (nothing skipped), so it commits at once; a checked name revives (rule 7).
             feedback.cue(Cue.CAPSULE_POP)
-            val rows = result.items.filter { it.skipReason == SkipReason.NONE || it.skipReason == SkipReason.ALREADY_ON_LIST }
             _state.update { it.copy(committing = true, phase = AddPhase.Idle) }
-            commitItems(targetListId(), listOf(ItemSource.AI_TEXT to rows), noKey = false, clearsText = true)
+            commitItems(targetListId(), listOf(ItemSource.AI_TEXT to result.items), noKey = false, clearsText = true)
             return
         }
         // Rule 5: review in the sheet's Write tab, the thinking box first.
@@ -551,9 +586,10 @@ class AddViewModel(
             return
         }
         val review = _state.value.review
-        if (review != null && review.source == ItemSource.PHOTO) {
-            // D19: Speak after Snap appends a second batch to the same preview, merged and de-duplicated.
-            appendHeard(result.items, st, ctx, AddRules.thinkingSteps(result, text))
+        if (review != null) {
+            // D19: Speak after Snap (or after a note, or a second voice note) appends a batch to the same preview,
+            // merged and de-duplicated; what she has not committed stays.
+            appendHeard(result.items, st, ctx, AddRules.thinkingSteps(result))
         } else {
             showReview(result, ItemSource.VOICE, query = text, st = st, ctx = ctx, mode = AddMode.SPEAK)
         }
@@ -567,7 +603,12 @@ class AddViewModel(
             val rows = AddRules.rows(fresh, ctx.aisles, st.store.aisleStyles, RowBatch.HEARD, firstKey)
             s.copy(
                 phase = AddPhase.Preview,
-                review = review.copy(rows = review.rows + rows, heardId = ids.incrementAndGet(), heardSteps = steps),
+                review = review.copy(
+                    rows = review.rows + rows,
+                    heardId = ids.incrementAndGet(),
+                    heardSteps = steps,
+                    heardFresh = rows.mapTo(HashSet()) { it.key },
+                ),
             )
         }
     }
@@ -593,21 +634,21 @@ class AddViewModel(
      */
     private suspend fun commitItems(listId: String, batches: List<Pair<ItemSource, List<ProposedItem>>>, noKey: Boolean, clearsText: Boolean) {
         val now = clock()
-        val items = batches.flatMap { (source, proposed) ->
-            proposed.map { p ->
-                val item = p.toGroceryItem(newId(), now, source)
-                // Every new sticker rolls (egg 6), optional and pantry rows she switched on too; duplicates only pop.
-                if (p.skipReason != SkipReason.ALREADY_ON_LIST) item.copy(rarity = surprises.rollRarity()) else item
-            }
-        }
+        val items = batches.flatMap { (source, proposed) -> proposed.map { it.toGroceryItem(newId(), now, source) } }
         var outcome = AddOutcome.NONE
         var before: List<GroceryItem> = emptyList()
+        // Egg 6: only a new sticker rolls (optional and pantry rows she switched on too); a revived row or one already
+        // there keeps its own. Remembered per id, so the roll is the same however often the update runs.
+        val rolled = HashMap<String, Rarity>()
         val after = try {
             store.update { st ->
                 before = st.list(listId)?.items.orEmpty()
                 val (next, o) = st.addItems(listId, items, now)
                 outcome = o
-                next
+                o.added.fold(next) { acc, id ->
+                    val rarity = rolled.getOrPut(id) { surprises.rollRarity() }
+                    if (rarity == Rarity.NONE) acc else acc.setRarity(listId, id, rarity)
+                }
             }
         } catch (e: IOException) {
             retryAction = {

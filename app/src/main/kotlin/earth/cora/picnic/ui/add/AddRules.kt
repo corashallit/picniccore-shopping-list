@@ -32,7 +32,7 @@ object AddRules {
     /** The stickers fan out this far apart after the capsule pops (§4.18). */
     const val FAN_OUT_MILLIS: Long = 80
 
-    /** The web-search step quotes at most this many characters of her note. */
+    /** The web-search step quotes at most this many characters of the model's query. */
     private const val QUERY_MAX = 44
 
     /**
@@ -46,25 +46,27 @@ object AddRules {
     }
 
     /**
-     * Rule 4, quick add: the answer has ≤ 3 items, no `recipe` block, no skipped rows and no message worth showing.
-     * A skipped row is one she could switch on (optional, in her pantry); a name already on her list is a duplicate
-     * (rule 7: its sticker pops and the toast says so), never a reason to review. So an answer with a pantry row is never
-     * a quick add (item 324).
+     * Rule 4, quick add (item 201): the answer has ≤ 3 items, no `recipe` block, no skipped rows (optional, in her
+     * pantry or already on her list: §4.17 calls all three "skipped") and no message worth showing. So an answer with a
+     * pantry row is never a quick add (item 324), and a name already on her list shows in the review as "already on
+     * your list".
      */
     fun isQuickAdd(result: IngestResult, sent: String?): Boolean =
         result.items.size <= QUICK_ADD_MAX_ITEMS &&
             result.recipe == null &&
-            result.items.none { it.skipReason == SkipReason.OPTIONAL || it.skipReason == SkipReason.IN_PANTRY } &&
+            result.items.none { it.skipReason != SkipReason.NONE } &&
             !messageWorthShowing(result.message, sent)
 
     /**
      * The thinking box's steps (§4.18, D16), only from real fields of the answer, in this order: "Searched the web" only
-     * if the answer used web search ([query] is her note: the answer does not carry the model's own search terms);
-     * "Compared 3 recipes · makes 12" only with `recipe.recipes_compared` or `servings`; "Checked your pantry · left out
-     * n" only with `in_pantry` rows (n is their count); "Checked your list, sorted into n aisles" always.
+     * if the answer used web search, quoting the model's own first query (`CallMeta.searchQueries`; never her note, which
+     * may not be what was searched) or, when the answer names none, unquoted; "Compared 3 recipes · makes 12" only with
+     * `recipe.recipes_compared` or `servings`; "Checked your pantry · left out n" only with `in_pantry` rows (n is their
+     * count); "Checked your list, sorted into n aisles" always.
      */
-    fun thinkingSteps(result: IngestResult, query: String?): List<ThinkingStep> = buildList {
-        if (result.meta.webSearches > 0 && !query.isNullOrBlank()) add(ThinkingStep.SearchedWeb(searchQuery(query)))
+    fun thinkingSteps(result: IngestResult): List<ThinkingStep> = buildList {
+        val queries = result.meta.searchQueries.filter { it.isNotBlank() }
+        if (result.meta.webSearches > 0 || queries.isNotEmpty()) add(ThinkingStep.SearchedWeb(queries.firstOrNull()?.let(::searchQuery)))
         val recipe = result.recipe
         if (recipe != null && (recipe.recipesCompared != null || recipe.servings != null)) {
             add(ThinkingStep.ComparedRecipes(recipe.recipesCompared, recipe.servings))
@@ -74,21 +76,23 @@ object AddRules {
         add(ThinkingStep.SortedAisles(result.items.mapNotNullTo(HashSet()) { it.aisleId }.size))
     }
 
-    /** Her note as the search step quotes it: one line, at most [QUERY_MAX] characters ("…" when cut). */
-    fun searchQuery(note: String): String {
-        val one = note.trim().replace(WHITESPACE, " ")
+    /** A search query as the step quotes it: one line, at most [QUERY_MAX] characters ("…" when cut). */
+    fun searchQuery(query: String): String {
+        val one = query.trim().replace(WHITESPACE, " ")
         return if (one.length <= QUERY_MAX) one else one.take(QUERY_MAX - 1).trimEnd() + "…"
     }
 
     /**
      * A kept row's detail line (§4.17, item 296): the pack size, then the recipe amount, then the note, joined by " · ".
-     * Metric after normalisation; a recipe amount after the "·" may keep cup, tbsp, tsp or pinch.
+     * Metric after normalisation; only a recipe amount after the quantity's "·" may keep cup, tbsp, tsp or pinch. The
+     * note is not a recipe amount, so every unit in it becomes metric ("about 1 lb" → "about 454 g").
      */
     fun detailLine(item: ProposedItem): String? = detailLine(item.quantity, item.note)
 
     fun detailLine(quantity: String?, note: String?): String? {
         val q = quantity?.trim()?.takeIf { it.isNotEmpty() }?.let(::normalizeMetric)?.let(::tidyDots)
-        val n = note?.trim()?.takeIf { it.isNotEmpty() }
+        // A "·" inside the note would let normalizeMetric keep cooking units after it: read it as a comma instead.
+        val n = note?.trim()?.takeIf { it.isNotEmpty() }?.let { normalizeMetric(it.replace(" · ", ", ").replace('·', ',')) }
         return listOfNotNull(q, n).joinToString(" · ").ifEmpty { null }
     }
 
@@ -212,7 +216,7 @@ object AddRules {
             id = id,
             source = source,
             rows = rows(result.items, aisles, styles, RowBatch.MAIN, firstKey = 0),
-            steps = if (source == ItemSource.PHOTO) emptyList() else thinkingSteps(result, query),
+            steps = if (source == ItemSource.PHOTO) emptyList() else thinkingSteps(result),
             recipe = result.recipe,
             webSearch = result.meta.webSearches > 0,
             sources = result.sources,

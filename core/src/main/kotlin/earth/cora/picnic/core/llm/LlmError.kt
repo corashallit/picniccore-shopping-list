@@ -55,7 +55,7 @@ sealed class LlmError(
 
     /** DNS, TLS, connection reset, cleartext blocked, 5xx after retries. */
     class Network(cause: Throwable?, override val requestId: String? = null) : LlmError("Network error: ${cause?.javaClass?.simpleName}", cause) {
-        override val friendlyMessage: String get() = "Couldn't reach the server. Check your connection and try again."
+        override val friendlyMessage: String get() = "Couldn't reach OpenAI. Check your connection?"
         override val retryable: Boolean get() = true
     }
 

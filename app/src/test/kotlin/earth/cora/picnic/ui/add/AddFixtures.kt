@@ -14,6 +14,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -103,7 +111,11 @@ object AddFixtures {
         fit: IconFit = IconFit.EXACT,
     ) = ProposedItem(name, quantity, note, aisle, icon, fit, skipReason = skip, named = named, pantryEntry = pantryEntry)
 
-    fun meta(webSearches: Int = 0) = CallMeta(model = "test-model", requestId = "req", latencyMs = 900, webSearches = webSearches)
+    fun meta(webSearches: Int = 0, queries: List<String> = emptyList()) =
+        CallMeta(model = "test-model", requestId = "req", latencyMs = 900, webSearches = webSearches, searchQueries = queries)
+
+    /** What the model searched for the pancakes (its own query, not her note). */
+    const val PANCAKE_QUERY = "fluffy pancakes from scratch recipe"
 
     /** "ingredients for pancakes from scratch": a recipe compared across 3, makes 12, web search used. */
     fun pancakes(withPantry: Boolean = false): IngestResult {
@@ -124,7 +136,7 @@ object AddFixtures {
             message = "",
             sources = listOf(WebSource("https://www.example.ca/recipes/pancakes", "Fluffy pancakes")),
             skippedDuplicates = listOf("Milk, 2 %"),
-            meta = meta(webSearches = 1),
+            meta = meta(webSearches = 1, queries = listOf(PANCAKE_QUERY)),
             recipe = RecipeInfo("Pancakes from scratch", recipesCompared = 3, servings = 12),
         )
     }
@@ -206,9 +218,14 @@ object AddFixtures {
     }
 }
 
-/** The list behind a sheet in the goldens: the binder, the app bar and the LCD (the list itself is WP5's). */
+/**
+ * The list behind a sheet in the goldens: the binder, the app bar and the LCD (the list itself is WP5's), under a 24 dp
+ * stand-in for the status bar. The sheet hears where the app bar ends ([LocalAppBarHeight]), as the List screen tells it.
+ */
 @Composable
 fun SheetStage(content: @Composable () -> Unit) {
+    var barBottom by remember { mutableStateOf<Dp?>(null) }
+    val density = LocalDensity.current
     Box(Modifier.fillMaxSize()) {
         PicnicBackground {
             Column(Modifier.fillMaxWidth().padding(top = 24.dp)) {
@@ -217,10 +234,13 @@ fun SheetStage(content: @Composable () -> Unit) {
                     subtitle = "Hillcrest Market · 8 stops",
                     lcd = LcdState(count = 10, total = 24),
                     onMore = {},
+                    modifier = Modifier.onGloballyPositioned { c ->
+                        barBottom = with(density) { (c.positionInRoot().y + c.size.height).toDp() }
+                    },
                 )
             }
         }
-        content()
+        CompositionLocalProvider(LocalAppBarHeight provides barBottom) { content() }
     }
 }
 

@@ -64,7 +64,7 @@ fun ComposeContentTestRule.setHarness(
     val rows = harnessRows(state)
     setContent {
         PicnicTheme(variant = variant, reducedMotion = reducedMotion) {
-            val flows = rememberAddFlows(rig.vm, rig.feedback, if (fakeSources) h.sources.sources else null)
+            val flows = rememberAddFlows(rig.vm, if (fakeSources) h.sources.sources else null)
             LaunchedEffect(Unit) { snapshotFlow { h.toasts.current }.collect { if (it != null) h.shown += it } }
             AddFlowsHarness(
                 flows,

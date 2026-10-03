@@ -3,6 +3,8 @@ package earth.cora.picnic.ui.add
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,7 +50,6 @@ import androidx.compose.ui.unit.dp
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.theme.ButtonGloss
-import earth.cora.picnic.ui.theme.DayColors
 import earth.cora.picnic.ui.theme.FaceKind
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
@@ -61,6 +62,7 @@ import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicLoader
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.hardShadow
+import earth.cora.picnic.ui.theme.rememberPressFraction
 import earth.cora.picnic.ui.theme.rememberLoopTime
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -69,7 +71,7 @@ import kotlin.math.sin
 /*
  * Speak (docs/DESIGN_STICKER.md §4.20, items 210, 211, 333): a generic pink cassette (130 × 86 dp: sakura pastel body,
  * white border, sakura trace, a white label window with a lemon tape window, two pink reels with white spokes turning in 8
- * steps per second; no brand) with a 48 dp hanko-red stop sticker on its bottom-right corner; the dot equaliser (7 columns ×
+ * steps per second; no brand) with a 48 dp hanko-red stop sticker on its bottom-right corner (a 52 dp target); the dot equaliser (7 columns ×
  * 6 stacked 10 dp puffy dots, lemon / peach / sakura mid from the bottom, whole dots switching on from the bottom up in 3
  * stepped poses per 750 ms, driven by the mic level, never squashed); an LCD timer and a 10 dp hanko REC dot blinking 1.2 s
  * per cycle. Owner: WP7.
@@ -115,8 +117,10 @@ fun Cassette(turning: Boolean, modifier: Modifier = Modifier, onStop: (() -> Uni
     val reduced = LocalReducedMotion.current
     val t by rememberLoopTime(enabled = turning && !reduced)
     val angle = if (turning) reelAngle(t) else 0f
+    val white = PicnicTheme.colors.stickerWhite
+    val shadow = PicnicTheme.shadows.color
     Box(modifier.size(width = 150.dp, height = 104.dp).testTag(CASSETTE_TAG)) {
-        Canvas(Modifier.size(width = 130.dp, height = 86.dp).decorative()) { drawCassette(angle) }
+        Canvas(Modifier.size(width = 130.dp, height = 86.dp).decorative()) { drawCassette(angle, white, shadow) }
         val corner = Modifier.align(Alignment.BottomEnd)
         when {
             onStop != null -> HankoSticker(stop = true, label = stringResource(R.string.add_speak_stop), onClick = onStop, modifier = corner.testTag(STOP_STICKER_TAG))
@@ -125,16 +129,19 @@ fun Cassette(turning: Boolean, modifier: Modifier = Modifier, onStop: (() -> Uni
     }
 }
 
-/** Draws the cassette body into 130 × 86 dp with the reels at [reelDegrees]. */
-private fun DrawScope.drawCassette(reelDegrees: Float) {
+/**
+ * Draws the cassette body into 130 × 86 dp with the reels at [reelDegrees]: [white] is the sticker white (the die-cut,
+ * the label window, the spokes, the gloss) and [shadow] the variant's hard-shadow colour, as every other sticker casts.
+ */
+private fun DrawScope.drawCassette(reelDegrees: Float, white: Color, shadow: Color) {
     val u = size.width / 130f
     val trace = Families.sakura.trace
     val body = Families.sakura.pastel
-    val shadow = Offset(1.6f * u, 2.2f * u)
+    val shadowAt = Offset(1.6f * u, 2.2f * u)
     val radius = CornerRadius(12f * u)
     // Hard shadow, white die-cut border, the body and its trace.
-    drawRoundRect(DayColors.stickerShadow, topLeft = shadow, size = size, cornerRadius = radius)
-    drawRoundRect(Color.White, size = size, cornerRadius = radius)
+    drawRoundRect(shadow, topLeft = shadowAt, size = size, cornerRadius = radius)
+    drawRoundRect(white, size = size, cornerRadius = radius)
     val inset = 3.5f * u
     val inner = Size(size.width - inset * 2, size.height - inset * 2)
     drawRoundRect(body, topLeft = Offset(inset, inset), size = inner, cornerRadius = CornerRadius(9f * u))
@@ -149,14 +156,14 @@ private fun DrawScope.drawCassette(reelDegrees: Float) {
     }
     drawPath(band, Families.sakura.mid)
     drawPath(band, trace, style = Stroke(2f * u, join = StrokeJoin.Round))
-    drawCircle(Color.White, 3.2f * u, Offset(size.width / 2f - 14f * u, size.height - 14f * u))
+    drawCircle(white, 3.2f * u, Offset(size.width / 2f - 14f * u, size.height - 14f * u))
     drawCircle(trace, 3.2f * u, Offset(size.width / 2f - 14f * u, size.height - 14f * u), style = Stroke(1.5f * u))
-    drawCircle(Color.White, 3.2f * u, Offset(size.width / 2f + 14f * u, size.height - 14f * u))
+    drawCircle(white, 3.2f * u, Offset(size.width / 2f + 14f * u, size.height - 14f * u))
     drawCircle(trace, 3.2f * u, Offset(size.width / 2f + 14f * u, size.height - 14f * u), style = Stroke(1.5f * u))
     // The white label window with the lemon tape window.
     val label = Size(96f * u, 36f * u)
     val labelAt = Offset((size.width - label.width) / 2f, 14f * u)
-    drawRoundRect(Color.White, topLeft = labelAt, size = label, cornerRadius = CornerRadius(7f * u))
+    drawRoundRect(white, topLeft = labelAt, size = label, cornerRadius = CornerRadius(7f * u))
     drawRoundRect(trace, topLeft = labelAt, size = label, cornerRadius = CornerRadius(7f * u), style = Stroke(1.5f * u))
     val tape = Size(40f * u, 9f * u)
     drawRoundRect(Families.lemon.pastel, topLeft = Offset((size.width - tape.width) / 2f, labelAt.y + (label.height - tape.height) / 2f), size = tape, cornerRadius = CornerRadius(4.5f * u))
@@ -169,54 +176,63 @@ private fun DrawScope.drawCassette(reelDegrees: Float) {
         rotate(reelDegrees, c) {
             for (k in 0 until 3) {
                 val a = Math.toRadians((k * 120).toDouble())
-                drawLine(Color.White, c, Offset(c.x + (7.5f * u * cos(a)).toFloat(), c.y + (7.5f * u * sin(a)).toFloat()), 2.2f * u, cap = StrokeCap.Round)
+                drawLine(white, c, Offset(c.x + (7.5f * u * cos(a)).toFloat(), c.y + (7.5f * u * sin(a)).toFloat()), 2.2f * u, cap = StrokeCap.Round)
             }
         }
-        drawCircle(Color.White, 3.2f * u, c)
+        drawCircle(white, 3.2f * u, c)
         drawCircle(trace, 3.2f * u, c, style = Stroke(1.2f * u))
     }
     // The one gloss on the body (upper left).
-    drawLine(Color.White, Offset(inset + 10f * u, inset + 8f * u), Offset(inset + 26f * u, inset + 5.5f * u), 2.6f * u, cap = StrokeCap.Round)
+    drawLine(white, Offset(inset + 10f * u, inset + 8f * u), Offset(inset + 26f * u, inset + 5.5f * u), 2.6f * u, cap = StrokeCap.Round)
 }
 
 /**
- * The 48 dp hanko-red sticker on the cassette's corner (§4.20): stop (a white rounded square; "Stop recording") or
- * record (a white dot; "Record a voice note"). Day vermilion in every variant (stickers keep their colours); 3 dp white
- * border, hs, one gloss crescent and one dot (R3).
+ * The 48 dp hanko-red sticker on the cassette's corner (§4.20) in a 52 dp target: stop (a white rounded square; "Stop
+ * recording") or record (a white dot; "Record a voice note"). [StickerHanko] in every variant (stickers keep their
+ * colours); 3 dp white border, hs, one gloss crescent and one dot (R3). Pressed: flat (the face drops onto its shadow
+ * in 2 steps, §4.6); no Material ripple.
  */
 @Composable
 private fun HankoSticker(stop: Boolean, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val shadows = PicnicTheme.shadows
+    val white = PicnicTheme.colors.stickerWhite
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val press = rememberPressFraction(pressed)
     Box(
         modifier
             .size(52.dp)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(
             Modifier
-                .size(44.dp)
-                .hardShadow(CircleShape, shadows)
+                .size(HANKO_STICKER)
+                .hardShadow(CircleShape, shadows.color, shadows.hs)
+                .offset(shadows.hs.x * press, shadows.hs.y * press)
                 .clip(CircleShape)
-                .background(Color.White)
+                .background(white)
                 .padding(3.dp)
                 .clip(CircleShape)
-                .background(DayColors.hanko),
+                .background(StickerHanko),
         ) {
             val g = ButtonGloss.of(FaceKind.Circle, size, null, this)
-            drawPath(g.crescent, Color.White)
-            drawCircle(Color.White, g.dotRadius, g.dotCenter)
+            drawPath(g.crescent, white)
+            drawCircle(white, g.dotRadius, g.dotCenter)
             val c = Offset(size.width / 2f, size.height / 2f)
             if (stop) {
                 val s = size.minDimension * 0.32f
-                drawRoundRect(Color.White, topLeft = Offset(c.x - s / 2f, c.y - s / 2f), size = Size(s, s), cornerRadius = CornerRadius(s * 0.2f))
+                drawRoundRect(white, topLeft = Offset(c.x - s / 2f, c.y - s / 2f), size = Size(s, s), cornerRadius = CornerRadius(s * 0.2f))
             } else {
-                drawCircle(Color.White, size.minDimension * 0.17f, c)
+                drawCircle(white, size.minDimension * 0.17f, c)
             }
         }
     }
 }
+
+/** The stop / record sticker's face (§4.20). */
+internal val HANKO_STICKER: Dp = 48.dp
 
 /**
  * The dot equaliser (§4.20): 7 columns × 6 stacked 10 dp puffy dots (1.6 dp white border, a small hard shadow): lemon mid
@@ -226,6 +242,7 @@ private fun HankoSticker(stop: Boolean, label: String, onClick: () -> Unit, modi
 @Composable
 fun DotEqualiser(columns: List<Int>, modifier: Modifier = Modifier) {
     val shadow = PicnicTheme.shadows
+    val white = PicnicTheme.colors.stickerWhite
     Canvas(modifier.size(width = EQ_WIDTH, height = EQ_HEIGHT).testTag(EQUALISER_TAG).decorative()) {
         val dot = 10.dp.toPx()
         val ring = 1.6.dp.toPx()
@@ -242,7 +259,7 @@ fun DotEqualiser(columns: List<Int>, modifier: Modifier = Modifier) {
                 val c = Offset(col * (dot + gapX) + dot / 2f, size.height - (row * (dot + gapY) + dot / 2f))
                 val on = row < lit
                 if (on) drawCircle(shadow.color, dot / 2f, c + Offset(1.dp.toPx(), 1.4.dp.toPx()))
-                drawCircle(Color.White, dot / 2f, c)
+                drawCircle(white, dot / 2f, c)
                 drawCircle(if (on) family.mid else family.pastel.copy(alpha = 0.75f), dot / 2f - ring, c)
             }
         }
@@ -265,23 +282,24 @@ fun RecDot(size: Dp = 10.dp, modifier: Modifier = Modifier) {
             .decorative()
             .graphicsLayer { alpha = if (on) 1f else 0.25f }
             .clip(CircleShape)
-            .background(Color.White)
+            .background(PicnicTheme.colors.stickerWhite)
             .padding(2.dp)
             .clip(CircleShape)
-            .background(DayColors.hanko),
+            .background(StickerHanko),
     )
 }
 
 /**
- * The Speak section (§4.20, §6.2 "Speak"): the prompt ("Anything else? Say it out loud." after a photo, D19), the
- * cassette with its corner sticker, the REC dot + LCD timer over the equaliser while recording; the bee loop while the
- * words are written down; then the transcript in quotes (Klee One 16 sp, the heard items on a highlighter band).
+ * The Speak section (§4.20, §6.2 "Speak"): the prompt ("Anything else? Say it out loud." once a review is open: after a
+ * photo, D19, a note or an earlier voice note), the cassette with its corner sticker, the REC dot + LCD timer over the
+ * equaliser while recording; the bee loop while the words are written down; then the transcript in quotes (Klee One 16
+ * sp, the heard items on a highlighter band).
  */
 @Composable
 fun SpeakSection(
     phase: AddPhase,
     transcript: String?,
-    afterPhoto: Boolean,
+    afterReview: Boolean,
     heardNames: List<String>,
     onRecord: () -> Unit,
     onStop: () -> Unit,
@@ -296,7 +314,7 @@ fun SpeakSection(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Glyph(PicnicGlyph.Cassette, null, tint = c.ink, size = 18.dp)
             Text(
-                stringResource(if (afterPhoto) R.string.add_speak_after_photo else R.string.add_speak_prompt),
+                stringResource(if (afterReview) R.string.add_speak_after_photo else R.string.add_speak_prompt),
                 style = t.label.copy(color = c.ink),
             )
         }
@@ -361,12 +379,12 @@ internal fun formatElapsed(ms: Long): String {
     return "%d:%02d".format(total / 60, total % 60)
 }
 
-/** The Heard tray (§4.20): the rows the voice note found ("Heard · 2 more stickers" after a photo). */
+/** The Heard tray (§4.20): the rows the voice note found ("Heard · 2 more stickers" when they joined a review, D19). */
 @Composable
-fun HeardTray(rows: List<ReviewRow>, afterPhoto: Boolean, clock: RevealClock?, onToggleKeep: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun HeardTray(rows: List<ReviewRow>, afterReview: Boolean, clock: RevealClock?, onToggleKeep: (Int) -> Unit, modifier: Modifier = Modifier) {
     val n = rows.count { it.keep }
     StickerTray(
-        title = if (afterPhoto) pluralStringResource(R.plurals.add_speak_heard_more, n, n) else pluralStringResource(R.plurals.add_speak_heard, n, n),
+        title = if (afterReview) pluralStringResource(R.plurals.add_speak_heard_more, n, n) else pluralStringResource(R.plurals.add_speak_heard, n, n),
         count = "",
         family = Families.sakura,
         rows = rows,

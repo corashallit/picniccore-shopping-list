@@ -34,6 +34,8 @@
     <string name="add_thinking_reading">Reading your note…</string>
     <string name="add_thinking_recipe">Looking up a recipe…</string>
     <string name="add_step_web">Searched the web: “%1$s”</string>
+    <!-- When the answer names no query (the step never quotes her note: it may not be what was searched) -->
+    <string name="add_step_web_plain">Searched the web</string>
     <plurals name="add_step_compared">
         <item quantity="one">Compared %1$d recipe</item>
         <item quantity="other">Compared %1$d recipes</item>
@@ -110,6 +112,11 @@
     <string name="add_retry">Try again</string>
     <string name="add_plain_lines">Add as plain lines</string>
     <string name="add_open_settings">Open Settings</string>
+    <!-- The same, short, for very large text (the pill keeps one line; TalkBack hears the long form) -->
+    <string name="add_plain_lines_short">Plain lines</string>
+    <string name="add_open_settings_short">Settings</string>
+    <!-- Under a review with nothing to switch on (an empty answer, or only names already on the list) -->
+    <string name="add_ok">OK</string>
     <string name="add_problem_ai">Something went wrong reading that. Try again.</string>
     <string name="add_problem_photo">Couldn\'t open that photo. Try another one?</string>
     <string name="add_problem_camera">There\'s no camera app on this phone. Choose a photo instead.</string>

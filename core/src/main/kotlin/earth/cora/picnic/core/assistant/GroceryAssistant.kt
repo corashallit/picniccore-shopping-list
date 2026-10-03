@@ -149,6 +149,8 @@ data class CallMeta(
     val latencyMs: Long,
     /** Billable web searches (tool_usage.web_search.num_requests). */
     val webSearches: Int = 0,
+    /** What the web searches looked for (the actions' queries, in order; empty without a search). */
+    val searchQueries: List<String> = emptyList(),
     /** Token usage of /responses calls (for logs and the developer CLI), when reported. */
     val usage: TokenUsage? = null,
 )

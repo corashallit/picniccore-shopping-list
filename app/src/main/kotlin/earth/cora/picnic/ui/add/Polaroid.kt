@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,9 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,7 +89,14 @@ const val POPPED_TRAY_TAG: String = "add_popped_tray"
 private val PolaroidWidth: Dp = 150.dp
 private const val SCAN_PERIOD_MS = 2600L
 
-/** The polaroid. [reading] runs the glint and the scan line (still under reduced motion). */
+/** Test tag of the polaroid's caption. */
+const val POLAROID_CAPTION_TAG: String = "add_polaroid_caption"
+
+/**
+ * The polaroid. [reading] runs the glint and the scan line (still under reduced motion). It is a fixed-size object (150
+ * dp, like the cassette), so its decorative print (the caption, "no photo yet") is drawn at font scale 1 and always fits
+ * its lip; TalkBack hears "Your photo".
+ */
 @Composable
 fun Polaroid(photo: SnapPhoto?, reading: Boolean, modifier: Modifier = Modifier) {
     val reduced = LocalReducedMotion.current
@@ -106,7 +118,7 @@ fun Polaroid(photo: SnapPhoto?, reading: Boolean, modifier: Modifier = Modifier)
                 .width(PolaroidWidth)
                 .graphicsLayer { rotationZ = -4f }
                 .hardShadow(shape, PicnicTheme.shadows, large = true)
-                .background(Color.White, shape)
+                .background(PicnicTheme.colors.stickerWhite, shape)
                 .padding(start = 9.dp, end = 9.dp, top = 9.dp),
         ) {
             Box(
@@ -131,22 +143,28 @@ fun Polaroid(photo: SnapPhoto?, reading: Boolean, modifier: Modifier = Modifier)
                     Image(thumb, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else {
                     PaperTheme {
-                        Text(
-                            stringResource(R.string.add_snap_no_photo),
-                            style = PicnicTheme.type.transcript.copy(fontSize = 13.sp, lineHeight = 18.sp, color = PicnicTheme.colors.ballpointSoft),
-                            modifier = Modifier.clearAndSetSemantics { },
-                        )
+                        FixedFontScale {
+                            Text(
+                                stringResource(R.string.add_snap_no_photo),
+                                style = PicnicTheme.type.transcript.copy(fontSize = 13.sp, lineHeight = 18.sp, color = PicnicTheme.colors.ballpointSoft),
+                                modifier = Modifier.clearAndSetSemantics { },
+                            )
+                        }
                     }
                 }
             }
-            Box(Modifier.fillMaxWidth().height(26.dp), contentAlignment = Alignment.CenterStart) {
+            // The 26 dp lip; it would grow (rather than cut the caption) if the print ever needed more.
+            Box(Modifier.fillMaxWidth().heightIn(min = 26.dp), contentAlignment = Alignment.CenterStart) {
                 PaperTheme {
-                    Text(
-                        caption,
-                        style = PicnicTheme.type.transcript.copy(fontSize = 13.sp, lineHeight = 18.sp, color = PicnicTheme.colors.ballpointSoft),
-                        maxLines = 1,
-                        modifier = Modifier.clearAndSetSemantics { },
-                    )
+                    FixedFontScale {
+                        var lost by remember { mutableStateOf(false) }
+                        Text(
+                            caption,
+                            style = PicnicTheme.type.transcript.copy(fontSize = 13.sp, lineHeight = 18.sp, color = PicnicTheme.colors.ballpointSoft),
+                            onTextLayout = { lost = it.lostText() },
+                            modifier = Modifier.decorativeText(POLAROID_CAPTION_TAG, lost),
+                        )
+                    }
                 }
             }
         }
@@ -215,12 +233,13 @@ private fun PhotoLineRow(line: PhotoLine, landed: Boolean) {
         }
     }
     val spoken = if (line.crossedOut) "${line.text}, $crossed" else line.correctionOf?.let { "$it → ${line.text}" } ?: line.text
+    val lost = rememberLostText()
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 24.dp)
             .drawBehind { drawRect(c.rule, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }
-            .clearAndSetSemantics { contentDescription = spoken },
+            .clearedWith(lost) { contentDescription = spoken },
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -230,7 +249,7 @@ private fun PhotoLineRow(line: PhotoLine, landed: Boolean) {
         } else {
             Glyph(if (landed) PicnicGlyph.Check else PicnicGlyph.Sparkle, null, tint = if (landed) c.ink else c.inkSoft, size = 16.dp, modifier = tick)
         }
-        Text(text, style = t.transcript.copy(color = if (line.crossedOut) c.inkSoft else c.ink))
+        Text(text, style = t.transcript.copy(color = if (line.crossedOut) c.inkSoft else c.ink), onTextLayout = lost.layout(0))
     }
 }
 
@@ -284,7 +303,7 @@ internal fun StickerTray(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Box(
-                    Modifier.size(24.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color.White)
+                    Modifier.size(24.dp).clip(androidx.compose.foundation.shape.CircleShape).background(c.stickerWhite)
                         .border(2.dp, family.trace, androidx.compose.foundation.shape.CircleShape),
                     contentAlignment = Alignment.Center,
                 ) { Glyph(PicnicGlyph.Sparkle, null, tint = family.trace, size = 14.dp) }
@@ -329,7 +348,12 @@ internal fun StickerTray(
     }
 }
 
-/** One sticker cell (40 dp sticker, name, detail); the cell is its keep switch. */
+/**
+ * One sticker cell (40 dp sticker, name, detail): the cell is its keep switch (Role.Switch). A small keep spot on the
+ * sticker's corner shows what a tap does, as the recipe card's spot does: kept = the lemon star pressed on; left out =
+ * the empty dashed spot and a faded sticker. A row already on her list has no spot (it can never be added twice).
+ * Pressed: the highlighter band behind the words; no Material ripple.
+ */
 @Composable
 private fun StickerCell(row: ReviewRow, clock: RevealClock?, onToggleKeep: (Int) -> Unit, modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
@@ -345,34 +369,56 @@ private fun StickerCell(row: ReviewRow, clock: RevealClock?, onToggleKeep: (Int)
     val faded = !row.keep
     val detail = rowDetail(row)
     val label = spokenItemLabel(row.item.name, detail)
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     Row(
         modifier
             .heightIn(min = 52.dp)
             .then(
                 if (row.canKeep) {
-                    Modifier.toggleable(value = row.keep, role = Role.Switch, onValueChange = { onToggleKeep(row.key) })
-                        .semantics { contentDescription = label }
+                    Modifier.toggleable(
+                        value = row.keep,
+                        interactionSource = interaction,
+                        indication = null,
+                        role = Role.Switch,
+                        onValueChange = { onToggleKeep(row.key) },
+                    ).semantics { contentDescription = label }
                 } else {
                     Modifier.clearAndSetSemantics { contentDescription = label }
                 },
             )
             .graphicsLayer { alpha = if (shown) 1f else 0f }
-            .padding(horizontal = 6.dp, vertical = 5.dp),
+            .padding(start = 6.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        ItemIcon(
-            row.icon,
-            contentDescription = null,
-            size = PicnicTheme.dimens.stickerCompact,
-            aisleIndex = row.aisleIndex,
-            modifier = Modifier
-                .graphicsLayer { scaleX = pop; scaleY = pop }
-                .then(if (faded) Modifier.skippedSticker() else Modifier),
-        )
-        Column(Modifier.weight(1f).clearAndSetSemantics { }) {
-            Text(row.item.name, style = t.itemNameCompact.copy(color = if (faded) c.ballpointSoft else c.ballpoint))
-            if (detail != null) Text(AddRules.keepTogether(detail), style = t.itemDetailCompact.copy(color = c.ballpointSoft))
+        // The sticker with its keep spot on the corner (two cells share a line, so the spot is the small one).
+        Box(Modifier.size(width = 50.dp, height = 48.dp)) {
+            ItemIcon(
+                row.icon,
+                contentDescription = null,
+                size = PicnicTheme.dimens.stickerCompact,
+                aisleIndex = row.aisleIndex,
+                modifier = Modifier
+                    .graphicsLayer { scaleX = pop; scaleY = pop }
+                    .then(if (faded) Modifier.skippedSticker() else Modifier),
+            )
+            if (row.canKeep) {
+                KeepSpot(
+                    row.keep,
+                    Modifier.align(Alignment.BottomEnd).graphicsLayer { scaleX = pop; scaleY = pop },
+                    box = 24.dp,
+                    spot = 20.dp,
+                    star = 22.dp,
+                )
+            }
+        }
+        val lost = rememberLostText()
+        Column(Modifier.weight(1f).padding(end = 6.dp).clearedWith(lost).pressedBand(pressed, c.pressedBand)) {
+            Text(row.item.name, style = t.itemNameCompact.copy(color = if (faded) c.ballpointSoft else c.ballpoint), onTextLayout = lost.layout(0))
+            if (detail != null) {
+                Text(AddRules.keepTogether(detail), style = t.itemDetailCompact.copy(color = c.ballpointSoft), onTextLayout = lost.layout(1))
+            }
         }
     }
 }

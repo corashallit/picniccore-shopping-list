@@ -18,8 +18,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import earth.cora.picnic.R
 import earth.cora.picnic.platform.AddSources
-import earth.cora.picnic.platform.Feedback
-import earth.cora.picnic.platform.NoOpFeedback
 import earth.cora.picnic.platform.rememberAddSources
 import earth.cora.picnic.ui.theme.ToastHostState
 import earth.cora.picnic.ui.theme.ToastMessage
@@ -27,7 +25,8 @@ import earth.cora.picnic.ui.theme.ToastMessage
 /*
  * The add flows as one holder for the List screen (WP5): the ViewModel, the platform launchers (camera, picker,
  * microphone), the bar's fold state and its focus. WP5 places, in z order: [AddDock] under the list's overlay layer,
- * the toasts ([AddEventsEffect] feeds them), then [AddSheetHost] above. Owner: WP7.
+ * the toasts ([AddEventsEffect] feeds them), then [AddSheetHost] above. Sounds and haptics go through the ViewModel's
+ * own Feedback, so no caller can forget them. Owner: WP7.
  */
 
 /** Toasts from the add flows share this kind, so a second commit's Undo merges into the first (§4.15). */
@@ -39,7 +38,6 @@ class AddFlows internal constructor(
     val sources: AddSources,
     val collapse: AddBarCollapseState,
     val focusRequester: FocusRequester,
-    val feedback: Feedback,
     private val keyboard: SoftwareKeyboardController?,
 ) {
     /** The field takes focus as soon as the bar is on screen ([AddDock] does it; the FAB unfolds the bar first). */
@@ -65,11 +63,11 @@ class AddFlows internal constructor(
 
 /**
  * Remembers the add flows for [vm]: the launchers (TakePicture with no CAMERA permission, the photo picker, RECORD_AUDIO
- * at runtime; [sources] replaces them in tests and the harness), the fold state and the field's focus. Recording stops on ON_STOP (foreground only), except across a
- * configuration change.
+ * at runtime; [sources] replaces them in tests and the harness), the fold state and the field's focus. Recording stops
+ * on ON_STOP (foreground only), except across a configuration change.
  */
 @Composable
-fun rememberAddFlows(vm: AddViewModel, feedback: Feedback = NoOpFeedback, sources: AddSources? = null): AddFlows {
+fun rememberAddFlows(vm: AddViewModel, sources: AddSources? = null): AddFlows {
     val platform = rememberAddSources(
         onImage = vm::onPhoto,
         onMicGranted = vm::startRecording,
@@ -85,13 +83,14 @@ fun rememberAddFlows(vm: AddViewModel, feedback: Feedback = NoOpFeedback, source
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (activity?.isChangingConfigurations != true) vm.onStop()
     }
-    return remember(vm, sources, collapse, focus, feedback, keyboard) { AddFlows(vm, sources, collapse, focus, feedback, keyboard) }
+    return remember(vm, sources, collapse, focus, keyboard) { AddFlows(vm, sources, collapse, focus, keyboard) }
 }
 
 /**
  * Turns the add flows' events into sticky-note toasts (§4.15, §16) with Undo (which removes exactly the added items),
  * and hands each commit to [onCommitted] so the list pops the new rows 80 ms apart, flashes the ones already there and
- * plays the un-check chain for revived ones. [onFocusField] runs for the FAB and "Start my list".
+ * plays the un-check chain for revived ones. Two commits during one toast's hold merge into one note that says what
+ * its Undo takes back ([AddToasts]). The FAB and "Start my list" focus the field.
  */
 @Composable
 fun AddEventsEffect(
@@ -103,12 +102,13 @@ fun AddEventsEffect(
     val resources = LocalResources.current
     val committed by rememberUpdatedState(onCommitted)
     val undone by rememberUpdatedState(onUndone)
+    val notes = remember(flows, resources) { AddToasts(resources, flows.vm::undo) }
     LaunchedEffect(flows) {
         flows.vm.events.collect { event ->
             when (event) {
                 is AddEvent.Committed -> {
                     committed(event.commit)
-                    toasts.show(event.commit.toast(resources) { flows.vm.undo(event.commit.id) })
+                    toasts.show(notes.toast(event.commit))
                 }
                 is AddEvent.Undone -> undone(event.commitId)
                 AddEvent.SaveFailed -> toasts.show(ToastMessage(resources.getString(R.string.add_problem_save), kind = "save"))
@@ -132,6 +132,69 @@ fun AddCommit.toast(resources: Resources, onUndo: () -> Unit): ToastMessage {
         kind = ADD_TOAST_KIND,
         actionLabel = if (canUndo) undo else null,
         onAction = if (canUndo) onUndo else null,
+    )
+}
+
+/**
+ * The add flows' sticky notes (§4.15). A second commit during a note's hold merges into it: the note then counts both
+ * ("Added 3 items to Saturday shop ♡"), so it says everything its single Undo takes back, and that Undo undoes every
+ * commit in it, newest first. [undo] is the ViewModel's Undo by commit id. Main thread only.
+ */
+class AddToasts(private val resources: Resources, private val undo: (Long) -> Unit) {
+    /** The commits behind each note still on screen or queued, by toast id (the last few only). */
+    private val commits = object : LinkedHashMap<Long, List<AddCommit>>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, List<AddCommit>>?): Boolean = size > KEEP
+    }
+
+    /** The note for [commit]. */
+    fun toast(commit: AddCommit): ToastMessage {
+        val note = note(listOf(commit), id = null)
+        commits[note.id] = listOf(commit)
+        return note
+    }
+
+    private fun note(all: List<AddCommit>, id: Long?): ToastMessage {
+        val merged = all.reduce(AddCommit::plus)
+        val undoLabel = resources.getString(R.string.add_toast_undo)
+        val ids = all.map { it.id }
+        val base = ToastMessage(
+            text = merged.toastText(resources),
+            kind = ADD_TOAST_KIND,
+            actionLabel = if (merged.canUndo) undoLabel else null,
+            onAction = if (merged.canUndo) ({ ids.asReversed().forEach(undo) }) else null,
+            merge = ::merge,
+        )
+        return if (id == null) base else base.copy(id = id)
+    }
+
+    private fun merge(current: ToastMessage, incoming: ToastMessage): ToastMessage {
+        val all = commits.remove(current.id).orEmpty() + commits.remove(incoming.id).orEmpty()
+        if (all.isEmpty()) return incoming.copy(id = current.id)
+        commits[current.id] = all
+        return note(all, current.id)
+    }
+
+    private companion object {
+        const val KEEP = 8
+    }
+}
+
+/**
+ * Two commits as one (a merged toast): every added, revived and already-there row; the single added row's aisle only
+ * when there is one; "as typed" only when every commit that added something was.
+ */
+operator fun AddCommit.plus(other: AddCommit): AddCommit {
+    val adding = listOf(this, other).filter { it.added.isNotEmpty() }
+    val added = added + other.added
+    return AddCommit(
+        id = other.id,
+        listId = other.listId,
+        listTitle = other.listTitle.ifBlank { listTitle },
+        added = added,
+        alreadyThere = (alreadyThere + other.alreadyThere).distinctBy { it.id },
+        revived = (revived + other.revived).distinctBy { it.id },
+        aisleTitle = if (added.size == 1) adding.single().aisleTitle else null,
+        asTypedNoKey = adding.isNotEmpty() && adding.all { it.asTypedNoKey },
     )
 }
 

@@ -35,8 +35,6 @@ import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.IconRef
-import earth.cora.picnic.platform.Cue
-import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.Families
@@ -65,7 +63,8 @@ const val THINKING_TAG: String = "add_thinking"
 
 /**
  * The thinking box. [steps] = null while waiting for the answer; with an answer, [clock] runs the reveal ([steps] land on
- * its plan, the capsule pops at its pop beat and cues [feedback] CAPSULE_POP once). [recipe] switches the headline.
+ * its plan, the capsule pops at its pop beat and calls [onPop] with the reveal's id, once, as it pops: the ViewModel
+ * cues "pon!" + CONFIRM, §14.3). [recipe] switches the headline.
  */
 @Composable
 fun ThinkingBox(
@@ -74,7 +73,7 @@ fun ThinkingBox(
     clock: RevealClock?,
     family: StickerFamily,
     modifier: Modifier = Modifier,
-    feedback: Feedback? = null,
+    onPop: ((Long) -> Unit)? = null,
 ) {
     val reduced = LocalReducedMotion.current
     val waiting = steps == null
@@ -89,10 +88,10 @@ fun ThinkingBox(
         else -> 1f
     }
     val wobble = if (reduced || popped) 0f else PicnicMotion.gashaponPoses[((loop / PicnicMotion.gashaponPoseMillis) % 3).toInt()].rotation
-    if (clock != null && feedback != null) {
+    if (clock != null && onPop != null) {
         LaunchedEffect(clock.id, popped) {
             // "pon!" + CONFIRM once, as it pops (not when a played reveal is shown again).
-            if (popped && popAge in 0..(2L * PicnicMotion.pose)) feedback.cue(Cue.CAPSULE_POP)
+            if (popped && popAge in 0..(2L * PicnicMotion.pose)) onPop(clock.id)
         }
     }
     // At large text the steps run long: the capsule stays by the headline instead of floating mid-box.
@@ -187,7 +186,7 @@ private fun PopBurst() {
 /** A step's words (§16). */
 @Composable
 fun stepText(step: ThinkingStep): String = when (step) {
-    is ThinkingStep.SearchedWeb -> stringResource(R.string.add_step_web, step.query)
+    is ThinkingStep.SearchedWeb -> step.query?.let { stringResource(R.string.add_step_web, it) } ?: stringResource(R.string.add_step_web_plain)
     is ThinkingStep.ComparedRecipes -> {
         val recipes = step.recipes
         val servings = step.servings

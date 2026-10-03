@@ -98,8 +98,11 @@ class AddGoldensTest(private val variant: ThemeVariant, private val v: String) {
         ),
     )
 
-    // Scrolled to the kept rows (Baking, Breakfast, Dairy & eggs): kept stars, skipped rows with their reasons.
-    @Test fun recipeCard() = sheet("recipe_card_$v", recipeState(withPantry = false), scrollTo = EDIT_ROW_EGGS)
+    // Item 203 on a tall phone, so the whole card shows at once: the postage edge, the title, "from the kitchen of ♡ the
+    // web", the "web search" chip and "3 recipes · 6 of 10 kept", every tray with its kept stars and skipped rows.
+    @Test
+    @Config(qualifiers = "w360dp-h1800dp-xxhdpi")
+    fun recipeCard() = sheet("recipe_card_$v", recipeState(withPantry = false))
 
     @Test fun recipeCardPantry() = sheet("recipe_card_pantry_$v", recipeState(withPantry = true), scrollTo = EDIT_PANTRY_TAG)
 
@@ -108,7 +111,8 @@ class AddGoldensTest(private val variant: ThemeVariant, private val v: String) {
         base.copy(
             sheetOpen = true, mode = AddMode.WRITE, text = PANCAKES, sentText = PANCAKES,
             phase = AddPhase.Failed(
-                AddProblem.AI, message = "Couldn't reach the server. Check your connection and try again.",
+                // Core's own words for a network error (§4.8, §16: "Couldn't reach OpenAI. Check your connection?").
+                AddProblem.AI, message = earth.cora.picnic.core.llm.LlmError.Network(null).friendlyMessage,
                 retryable = true, canUsePlainLines = true,
             ),
         ),

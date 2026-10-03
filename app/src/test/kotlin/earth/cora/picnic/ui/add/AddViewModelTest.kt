@@ -235,8 +235,8 @@ class AddViewModelTest {
 
     @Test
     fun commitEmitsEvents() = runTest {
-        // Rolls go in row order: blueberries, flour, sugar, baking powder, then salt is shiny.
-        val surprises = RecordingSurprises(rarities = listOf(Rarity.NONE, Rarity.NONE, Rarity.NONE, Rarity.NONE, Rarity.SHINY))
+        // Only new stickers roll (egg 6), in row order: blueberries, then salt is shiny.
+        val surprises = RecordingSurprises(rarities = listOf(Rarity.NONE, Rarity.SHINY))
         val r = rig(f.pancakes(), surprises = surprises)
         val events = events(r.vm)
         r.vm.setText(PANCAKES)
@@ -254,12 +254,14 @@ class AddViewModelTest {
         assertNull(s.review)
         val commit = (events.single { it is AddEvent.Committed } as AddEvent.Committed).commit
         // Kept rows go on in the answer's order; flour and sugar were gotten (checked), so they come back (rule 7),
-        // and the baking powder is already there unchecked, so it only pops.
+        // the baking powder is already there unchecked, so it only pops, and so does the milk row the answer marked
+        // "already on your list" (rule 7: its sticker pops; it is never added twice).
         assertEquals(listOf("Blueberries", "Salt", "Eggs", "Unsalted butter"), commit.added.map { it.name })
         assertEquals(listOf("i-flour", "i-sugar"), commit.revived.map { it.id })
-        assertEquals(listOf("i-bp"), commit.alreadyThere.map { it.id })
+        assertEquals(listOf("i-bp", "i-milk"), commit.alreadyThere.map { it.id })
         assertEquals(listOf(0L, 80L, 160L), (0..2).map(commit::popDelayMillis))
-        assertEquals("one roll per committed row", 7, surprises.rolls)
+        assertEquals("one roll per new sticker (revived and already-there rows keep theirs)", commit.added.size, surprises.rolls)
+        assertEquals("the stored rows carry the rolls", Rarity.SHINY, r.store.current().list(f.LIST_ID)!!.items.single { it.name == "Salt" }.rarity)
         assertEquals(Rarity.SHINY, commit.added[1].rarity)
         assertTrue(commit.shiny)
         assertEquals("the SurpriseEngine hears of the new rows", listOf(commit.added), surprises.committed)
@@ -454,5 +456,176 @@ class AddViewModelTest {
         assertEquals("pears", r.vm.state.value.text)
         r.vm.cancel()
         assertFalse(r.vm.state.value.waiting)
+    }
+
+    // ---- rule 4: a row already on the list is a skipped row ----
+
+    @Test
+    fun aNameAlreadyOnTheListShowsInReview() = runTest {
+        val r = rig(answer(f.proposed("Milk, 2 %", "milk_bag", "dairy-eggs", skip = SkipReason.ALREADY_ON_LIST), message = "Milk is already on your list."))
+        val events = events(r.vm)
+        r.vm.setText("milk")
+        r.vm.send(AddOrigin.BAR)
+        advanceUntilIdle()
+        val s = r.vm.state.value
+        assertTrue("item 201: no skipped rows, so a duplicate is not a quick add", s.sheetOpen)
+        assertTrue("nothing can be switched on: the footer offers OK", s.review!!.nothingToKeep)
+        assertTrue(events.none { it is AddEvent.Committed })
+
+        // OK: the row already there pops ("Milk is already on your list"); nothing is added twice.
+        r.vm.acknowledge()
+        advanceUntilIdle()
+        val commit = (events.single { it is AddEvent.Committed } as AddEvent.Committed).commit
+        assertTrue(commit.added.isEmpty())
+        assertEquals(listOf("i-milk"), commit.alreadyThere.map { it.id })
+        assertFalse(r.vm.state.value.sheetOpen)
+        assertEquals(f.items.size, r.store.current().list(f.LIST_ID)!!.items.size)
+    }
+
+    @Test
+    fun anAnswerWithNothingToBuyOffersOkAndKeepsTheDraft() = runTest {
+        val r = rig(answer(message = "Tell me what to buy, or a dish to cook, and I'll sort it into your aisles."))
+        val events = events(r.vm)
+        r.vm.setText("hello")
+        r.vm.send()
+        advanceUntilIdle()
+        val review = r.vm.state.value.review!!
+        assertTrue(review.rows.isEmpty())
+        assertTrue(review.nothingToKeep)
+        assertNotNull(review.message)
+        r.vm.acknowledge()
+        advanceUntilIdle()
+        assertFalse(r.vm.state.value.sheetOpen)
+        assertEquals("the draft stays to change", "hello", r.vm.state.value.text)
+        assertTrue(events.none { it is AddEvent.Committed })
+    }
+
+    // ---- D19: a review is kept until it is committed ----
+
+    @Test
+    fun aSecondVoiceNoteKeepsTheFirstHeardRows() = runTest {
+        var note = 0
+        val assistant = FakeAssistant(
+            ingest = { input, _ ->
+                when {
+                    input is IngestInput.Image -> f.photo()
+                    note == 1 -> answer(f.proposed("Frozen corn", "frozen_vegetables", "frozen", "750 g bag", named = true))
+                    else -> answer(f.proposed("Cat litter", "cat_litter", "household", "9 kg jug", named = true), f.proposed("Frozen corn", "frozen_vegetables", "frozen", named = true))
+                }
+            },
+            transcribe = { Transcript("note ${++note}") },
+        )
+        val clip = tmp.newFile("note.m4a")
+        val recorder = FakeRecorder(stopResult = { clip.apply { writeBytes(byteArrayOf(1, 2, 3)) } })
+        val r = addRig(testAppScope(), f.state, assistant, recorder = recorder)
+        r.vm.onPhoto(Uri.parse("content://test/photo.jpg"))
+        advanceUntilIdle()
+        val photo = r.vm.state.value.review!!
+        for (i in 1..2) {
+            r.vm.startRecording()
+            advanceTimeBy(350)
+            r.vm.stopRecording()
+            advanceUntilIdle()
+        }
+        val merged = r.vm.state.value.review!!
+        assertEquals("the same preview", photo.id, merged.id)
+        assertEquals(photo.rows, merged.mainRows)
+        assertEquals("the first note's corn stays; the second adds only the litter", listOf("Frozen corn", "Cat litter"), merged.heardRows.map { it.item.name })
+        assertEquals("only the latest batch fans out", setOf(merged.heardRows.last().key), merged.heardFresh)
+    }
+
+    @Test
+    fun aVoiceNoteJoinsANotesReviewAndAnotherVoiceNotesReview() = runTest {
+        var spoken = 0
+        val assistant = FakeAssistant(
+            ingest = { input, _ ->
+                when (input) {
+                    is IngestInput.Transcript -> if (input.text == "first") f.voice() else answer(f.proposed("Maple syrup", "maple_syrup", "breakfast", named = true), f.proposed("Frozen corn", "frozen_vegetables", "frozen", named = true))
+                    else -> f.pancakes()
+                }
+            },
+            transcribe = { Transcript(if (++spoken == 1) "first" else "second") },
+        )
+        val clip = tmp.newFile("note2.m4a")
+        val recorder = FakeRecorder(stopResult = { clip.apply { writeBytes(byteArrayOf(1, 2, 3)) } })
+
+        // A note's recipe card, then Speak: the voice batch joins the card's review (it is never dropped).
+        val r = addRig(testAppScope(), f.state, assistant, recorder = recorder)
+        r.vm.setText(PANCAKES)
+        r.vm.send(AddOrigin.SHEET)
+        advanceUntilIdle()
+        val recipe = r.vm.state.value.review!!
+        assertTrue("Speak adds to a note's review", r.vm.state.value.tabEnabled(AddMode.SPEAK))
+        r.vm.setMode(AddMode.SPEAK)
+        r.vm.startRecording()
+        advanceTimeBy(350)
+        r.vm.stopRecording()
+        advanceUntilIdle()
+        val joined = r.vm.state.value.review!!
+        assertEquals(recipe.id, joined.id)
+        assertEquals(recipe.rows, joined.mainRows)
+        assertEquals("eggs are already in the card: de-duplicated", listOf("Frozen corn", "Cat litter"), joined.heardRows.map { it.item.name })
+
+        // A voice note's own review, then a second voice note: the first note's rows stay.
+        spoken = 0
+        val v = addRig(testAppScope(), f.state, assistant, recorder = recorder)
+        v.vm.openSheet(AddMode.SPEAK)
+        v.vm.startRecording()
+        advanceTimeBy(350)
+        v.vm.stopRecording()
+        advanceUntilIdle()
+        val first = v.vm.state.value.review!!
+        assertEquals(ItemSource.VOICE, first.source)
+        v.vm.startRecording()
+        advanceTimeBy(350)
+        v.vm.stopRecording()
+        advanceUntilIdle()
+        val second = v.vm.state.value.review!!
+        assertEquals(first.id, second.id)
+        assertEquals(first.rows, second.mainRows)
+        assertEquals(listOf("Maple syrup"), second.heardRows.map { it.item.name })
+        v.vm.commit()
+        advanceUntilIdle()
+        val names = v.store.current().list(f.LIST_ID)!!.items.map { it.name }
+        assertTrue(names.containsAll(listOf("Frozen corn", "Cat litter", "Maple syrup")))
+    }
+
+    @Test
+    fun aNewNoteOrPhotoNeverReplacesAnOpenReview() = runTest {
+        val r = rig(f.pancakes())
+        r.vm.setText(PANCAKES)
+        r.vm.send(AddOrigin.SHEET)
+        advanceUntilIdle()
+        val review = r.vm.state.value.review!!
+        // Snap would start another review: its tab is dimmed and a stray photo is discarded, not read.
+        assertFalse(r.vm.state.value.tabEnabled(AddMode.SNAP))
+        r.vm.setMode(AddMode.SNAP)
+        assertEquals(AddMode.WRITE, r.vm.state.value.mode)
+        val uri = Uri.parse("content://test/late.jpg")
+        r.vm.onPhoto(uri)
+        advanceUntilIdle()
+        assertEquals(review, r.vm.state.value.review)
+        assertEquals(listOf(uri), r.photos.discarded)
+        assertEquals("no second request", 1, r.assistant.ingested.size)
+        // Send and As typed wait too (the Write tab shows the card, not the field, meanwhile).
+        r.vm.send(AddOrigin.SHEET)
+        r.vm.addAsTyped()
+        advanceUntilIdle()
+        assertEquals(review, r.vm.state.value.review)
+        assertEquals(1, r.assistant.ingested.size)
+    }
+
+    // ---- §14.3: the capsule's pop ----
+
+    @Test
+    fun theCapsulePopCuesOncePerReveal() = runTest {
+        val r = rig(f.pancakes())
+        r.vm.setText(PANCAKES)
+        r.vm.send(AddOrigin.SHEET)
+        advanceUntilIdle()
+        val id = r.vm.state.value.review!!.id
+        r.vm.capsulePopped(id)
+        r.vm.capsulePopped(id)
+        assertEquals("pon! once, through the ViewModel's own Feedback", 1, r.feedback.cues.count { it == Cue.CAPSULE_POP })
     }
 }

@@ -36,7 +36,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * WP7's Day-only goldens: the gashapon pop and fan-out strip (item 205, one frame every 83 ms from the pop) and the
- * recipe card with pantry rows at font scale 1.3 and 2.0 (`add_fs130`, `add_fs200`, §15), which must clip no text.
+ * recipe card with pantry rows at font scale 1.3 and 2.0 (`add_fs130`, `add_fs200`, §15), which must clip no text
+ * ([assertNoClippedText]; every other state at 1.3 and 2.0 is AddLargeTextTest's).
  * Record: ./gradlew :app:recordRoborazziDebug --tests '*AddDayGoldensTest*'.
  */
 @RunWith(AndroidJUnit4::class)
@@ -132,28 +133,7 @@ class AddDayGoldensTest {
             compose.waitForIdle()
             compose.onRoot().captureRoboImage("src/test/screenshots/${name}_top.png")
         }
-        assertNoClippedText()
+        compose.assertNoClippedText("recipe card at $scale", earth.cora.picnic.ui.theme.LETTERSET_TAG)
     }
 
-    /** A line drawn past the text's own box (cut off), or an ellipsis. */
-    private fun clipped(r: TextLayoutResult): Boolean {
-        if (r.lineCount == 0) return false
-        val wide = (0 until r.lineCount).any { r.getLineRight(it) > r.size.width + 1f }
-        // A descender a hair past a fixed chip is invisible; 2 dp is not.
-        val tall = r.getLineBottom(r.lineCount - 1) > r.size.height + 2 * compose.density.density
-        return wide || tall || r.isLineEllipsized(r.lineCount - 1)
-    }
-
-    private fun assertNoClippedText() {
-        val nodes = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true)
-            .fetchSemanticsNodes()
-        // Clipped: a line drawn past its text box, or an ellipsis, or PuffyText's TextOverflowed.
-        val clipped = nodes.filter { node ->
-            val results = mutableListOf<TextLayoutResult>()
-            node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
-            results.any { r -> clipped(r) } ||
-                node.config.getOrNull(TextOverflowed) == true
-        }.map { it.config.getOrNull(SemanticsProperties.Text)?.joinToString() }
-        assertTrue("clipped text: $clipped", clipped.isEmpty())
-    }
 }

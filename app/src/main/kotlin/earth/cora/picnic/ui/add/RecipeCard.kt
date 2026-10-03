@@ -2,7 +2,8 @@ package earth.cora.picnic.ui.add
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,11 +16,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,11 +50,9 @@ import earth.cora.picnic.core.assistant.SkipReason
 import earth.cora.picnic.ui.a11y.spokenItemLabel
 import earth.cora.picnic.ui.theme.AisleLook
 import earth.cora.picnic.ui.theme.AisleLooks
-import earth.cora.picnic.ui.theme.ChipFace
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.ItemIcon
-import earth.cora.picnic.ui.theme.KeepSwitch
 import earth.cora.picnic.ui.theme.NumberCircle
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
@@ -62,6 +61,7 @@ import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.PostageCard
 import earth.cora.picnic.ui.theme.StoreAisleChip
+import earth.cora.picnic.ui.theme.hardShadow
 import earth.cora.picnic.ui.theme.patternFill
 
 /*
@@ -107,10 +107,13 @@ fun RecipeCard(
                     }
                 }
                 review.message?.let { Text(it, style = t.body.copy(fontSize = 15.sp, lineHeight = 21.sp, color = c.ballpointSoft)) }
-                MetaRow(review, rows)
-                Spacer(Modifier.height(6.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    for (group in groupByAisle(rows)) AisleTray(group, clock, onToggleKeep)
+                // An answer with no rows says only its message: no "0 of 0 kept", nothing to switch on.
+                if (rows.isNotEmpty() || review.webSearch) MetaRow(review, rows)
+                if (rows.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        for (group in groupByAisle(rows)) AisleTray(group, clock, onToggleKeep)
+                    }
                 }
                 if (onEditPantry != null && rows.any { it.skipReason == SkipReason.IN_PANTRY }) {
                     PicnicButton(
@@ -150,7 +153,7 @@ private fun MetaRow(review: AddReview, rows: List<ReviewRow>) {
     val kept = rows.count { it.keep }
     val parts = buildList {
         review.recipe?.recipesCompared?.let { add(pluralStringResource(R.plurals.add_card_recipes, it, it)) }
-        add(stringResource(R.string.add_card_kept, kept, rows.size))
+        if (rows.isNotEmpty()) add(stringResource(R.string.add_card_kept, kept, rows.size))
     }
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -159,12 +162,25 @@ private fun MetaRow(review: AddReview, rows: List<ReviewRow>) {
         modifier = Modifier.padding(top = 4.dp),
     ) {
         if (review.webSearch) {
-            ChipFace(fill = Families.ramune.pastel, height = chipHeight(30.dp)) {
+            // A label, not a button: the face grows with the text and the words wrap rather than clip.
+            Row(
+                Modifier
+                    .heightIn(min = 30.dp)
+                    .hardShadow(PicnicTheme.shapes.pill, PicnicTheme.shadows)
+                    .clip(PicnicTheme.shapes.pill)
+                    .background(c.stickerWhite)
+                    .padding(PicnicTheme.dimens.border)
+                    .clip(PicnicTheme.shapes.pill)
+                    .background(Families.ramune.pastel)
+                    .padding(horizontal = 11.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
                 Glyph(PicnicGlyph.Web, null, tint = c.ballpoint, size = 16.dp)
-                Text(stringResource(R.string.add_card_web), style = t.label.copy(color = c.ballpoint), maxLines = 1)
+                Text(stringResource(R.string.add_card_web), style = t.label.copy(color = c.ballpoint))
             }
         }
-        Text(parts.joinToString(" · "), style = t.label.copy(color = c.ballpointSoft, fontWeight = FontWeight.Medium))
+        if (parts.isNotEmpty()) Text(parts.joinToString(" · "), style = t.label.copy(color = c.ballpointSoft, fontWeight = FontWeight.Medium))
     }
 }
 
@@ -173,6 +189,7 @@ private fun MetaRow(review: AddReview, rows: List<ReviewRow>) {
  * the aisle's display name (DynaPuff 20 sp in its trace, wrapping rather than shrinking) and "3 of 6 kept"; the rows on a
  * white inner panel with 1 dp rules; a patterned end cap.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AisleTray(rows: List<ReviewRow>, clock: RevealClock?, onToggleKeep: (Int) -> Unit, modifier: Modifier = Modifier) {
     val first = rows.first()
@@ -189,38 +206,23 @@ internal fun AisleTray(rows: List<ReviewRow>, clock: RevealClock?, onToggleKeep:
             .border(PicnicTheme.dimens.border, c.stickerWhite, shape),
     ) {
         val kept = stringResource(R.string.add_tray_kept, rows.count { it.keep }, rows.size)
-        // From font scale 1.3 the store chip and the count move under the name, so the name never breaks inside a word.
-        val stacked = LocalDensity.current.fontScale >= LARGE_TEXT
-        Column(
+        // The name wraps at word breaks (never cut); the store chip and the count follow it on its line when they fit
+        // and move under it when they do not, at any font scale.
+        Row(
             Modifier.fillMaxWidth().padding(start = 10.dp, end = 12.dp, top = 8.dp, bottom = 6.dp).semantics(mergeDescendants = true) { heading() },
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FixedSizeBadge { NumberCircle(if (first.aisleIndex < 0) null else first.aisleIndex + 1, look) }
-                if (stacked) {
-                    Text(name, style = t.aisleTab.copy(color = look.family.trace), modifier = Modifier.weight(1f))
-                } else {
-                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            name,
-                            style = t.aisleTab.copy(color = look.family.trace),
-                            maxLines = 2,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        first.storeAisle?.let { FixedSizeBadge { StoreAisleChip(it) } }
-                    }
-                    Text(kept, style = t.label.copy(color = c.ballpoint), maxLines = 1)
-                }
-            }
-            if (stacked) {
-                Row(
-                    Modifier.padding(start = 32.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    first.storeAisle?.let { FixedSizeBadge { StoreAisleChip(it) } }
-                    Text(kept, style = t.label.copy(color = c.ballpoint))
-                }
+            FixedSizeBadge { NumberCircle(if (first.aisleIndex < 0) null else first.aisleIndex + 1, look, modifier = Modifier.padding(top = 1.dp)) }
+            FlowRow(
+                Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(name, style = t.aisleTab.copy(color = look.family.trace))
+                first.storeAisle?.let { FixedSizeBadge { StoreAisleChip(it) } }
+                Text(kept, style = t.label.copy(color = c.ballpoint), modifier = Modifier.padding(top = 2.dp))
             }
         }
         Column(
@@ -268,14 +270,22 @@ internal fun ReviewRowView(
     val label = spokenItemLabel(row.item.name, detail)
     // From font scale 1.5 the words get the row's whole width under the sticker and the switch (no word breaks).
     val stacked = LocalDensity.current.fontScale >= VERY_LARGE_TEXT
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     val rowModifier = modifier
         .fillMaxWidth()
         .heightIn(min = PicnicTheme.dimens.rowCompact)
         .drawBehind { if (ruleAbove) drawRect(c.rule, Offset.Zero, androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }
         .then(
             if (row.canKeep) {
-                Modifier.toggleable(value = row.keep, role = Role.Switch, onValueChange = { onToggleKeep(row.key) })
-                    .semantics { contentDescription = label }
+                // The whole row is the switch; pressed shows the highlighter band behind its words (§4.4), no ripple.
+                Modifier.toggleable(
+                    value = row.keep,
+                    interactionSource = interaction,
+                    indication = null,
+                    role = Role.Switch,
+                    onValueChange = { onToggleKeep(row.key) },
+                ).semantics { contentDescription = label }
             } else {
                 Modifier.clearAndSetSemantics { contentDescription = label }
             },
@@ -293,16 +303,19 @@ internal fun ReviewRowView(
                 .then(if (faded) Modifier.skippedSticker() else Modifier),
         )
     }
+    val lost = rememberLostText()
     val words = @Composable { m: Modifier ->
-        Column(m.clearAndSetSemantics { }) {
-            Text(row.item.name, style = t.itemNameCompact.copy(color = if (faded) c.ballpointSoft else c.ballpoint))
-            if (detail != null) Text(AddRules.keepTogether(detail), style = t.itemDetailCompact.copy(color = c.ballpointSoft))
+        Column(m.clearedWith(lost).pressedBand(pressed, c.pressedBand)) {
+            Text(row.item.name, style = t.itemNameCompact.copy(color = if (faded) c.ballpointSoft else c.ballpoint), onTextLayout = lost.layout(0))
+            if (detail != null) {
+                Text(AddRules.keepTogether(detail), style = t.itemDetailCompact.copy(color = c.ballpointSoft), onTextLayout = lost.layout(1))
+            }
         }
     }
     val switch = @Composable {
         if (row.canKeep) {
-            // The row is the switch; the spot is its picture (no second TalkBack node).
-            KeepSwitch(row.keep, onCheckedChange = { onToggleKeep(row.key) }, modifier = Modifier.clearAndSetSemantics { })
+            // The row is the switch; the spot is its picture (no second TalkBack node, no second target).
+            KeepSpot(row.keep)
         } else {
             Spacer(Modifier.size(48.dp))
         }
@@ -362,23 +375,12 @@ internal fun rowDetail(row: ReviewRow): String? = when (row.skipReason) {
 }
 
 /**
- * A source chip (§4.17): the theme's SourceChip look (ramune pastel, link glyph, label type) on a chip that grows with
- * the text, so a title never clips at large text.
+ * A source chip (§4.7, §4.17): a ramune kiss-cut label with the link glyph that opens the page. The face grows and the
+ * title wraps (up to its 28 characters) rather than clip at large text.
  */
 @Composable
 private fun SourceLink(text: String, onClick: () -> Unit) {
-    val c = PicnicTheme.colors
-    Box(
-        Modifier
-            .minimumInteractiveComponentSize()
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        ChipFace(fill = Families.ramune.pastel, height = chipHeight(32.dp)) {
-            Glyph(PicnicGlyph.Link, null, tint = c.ballpoint, size = 15.dp)
-            Text(text, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
-        }
-    }
+    AddChip(text, PicnicGlyph.Link, onClick = onClick, glyphSize = 15.dp)
 }
 
 /** "allrecipes.com" for a source chip. */
