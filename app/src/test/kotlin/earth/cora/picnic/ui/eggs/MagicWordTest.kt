@@ -173,11 +173,35 @@ class MagicWordScreenTest {
     }
 
     @Test
+    fun theStickersTwinkleOnce() {
+        val r = EggRig(compose).start()
+        r.probe.clear()
+        r.typeAndSend("kirakira")
+        val t0 = r.now
+        r.advanceTo(t0 + 2_400)
+        val twinkles = r.probe.frames.filter { it.tag.startsWith("twinkle") }
+        assertTrue("the visible stickers twinkle", twinkles.map { it.tag }.distinct().size >= 3)
+        assertTrue("a turn", twinkles.any { it.rotation != 0f })
+        assertTrue("a scale", twinkles.any { it.scale != 1f })
+        // Once: every sticker ends at rest.
+        val last = twinkles.groupBy { it.tag }.mapValues { it.value.last() }
+        assertTrue(last.values.all { it.rotation == 0f && it.scale == 1f })
+    }
+
+    @Test
     fun reducedMotionHoloWithoutTwinkle() {
         val r = EggRig(compose, reduced = true).start()
+        r.probe.clear()
         r.typeAndSend("kirakira")
         val t0 = r.now
         assertTrue(r.eggs.kirakira)
+        r.advanceTo(t0 + 2_400)
+        // Every sticker the twinkle would move reports its pose: never turned, never scaled.
+        val twinkles = r.probe.frames.filter { it.tag.startsWith("twinkle") }
+        assertTrue("the stickers are there (${twinkles.size})", twinkles.map { it.tag }.distinct().size >= 3)
+        assertTrue("no turn", twinkles.all { it.rotation == 0f })
+        assertTrue("no scale", twinkles.all { it.scale == 1f })
+        assertTrue("the title holo all the same", r.eggs.kirakira)
         r.advanceTo(t0 + EggRules.KIRAKIRA_MS + 200)
         assertFalse(r.eggs.kirakira)
     }

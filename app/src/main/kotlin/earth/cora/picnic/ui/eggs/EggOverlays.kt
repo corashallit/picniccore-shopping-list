@@ -94,18 +94,21 @@ object EggAnchors {
 
     /** Every text the overlays must keep clear of: register each text node's box as `text:<anything>`. */
     const val TEXT_PREFIX: String = "text:"
+
+    /** The list's viewport (the printed receipt asks the list for room below it, [ListRoom]). */
+    const val LIST: String = "list"
 }
 
 /** Test hook: every frame, each overlay piece reports where it is drawn (window px) and how it is turned. */
 class EggProbe {
-    data class Frame(val tag: String, val time: Long, val bounds: Rect, val rotation: Float, val center: Offset)
+    data class Frame(val tag: String, val time: Long, val bounds: Rect, val rotation: Float, val center: Offset, val scale: Float = 1f)
 
     private val recorded = ArrayList<Frame>()
 
     val frames: List<Frame> get() = synchronized(recorded) { recorded.toList() }
 
-    fun record(tag: String, time: Long, bounds: Rect, rotation: Float) {
-        synchronized(recorded) { recorded += Frame(tag, time, bounds, rotation, bounds.center) }
+    fun record(tag: String, time: Long, bounds: Rect, rotation: Float, scale: Float = 1f) {
+        synchronized(recorded) { recorded += Frame(tag, time, bounds, rotation, bounds.center, scale) }
     }
 
     fun clear() = synchronized(recorded) { recorded.clear() }
@@ -119,6 +122,8 @@ object EggTags {
     const val NAP_CAT: String = "egg_nap_cat"
     const val UMBRELLA: String = "egg_umbrella"
     const val OVERLAY: String = "egg_overlays"
+    /** Egg 5's snack star and "snack?" doodle (decorative: the tag is for tests; TalkBack reads nothing). */
+    const val SNACK: String = "egg_snack"
 }
 
 /**
@@ -416,7 +421,7 @@ private fun SnackStar(sectionId: String, anchors: AnchorRegistry, local: (Rect) 
 /** The snack-time star sticker and the "snack?" doodle (decorative). */
 @Composable
 internal fun SnackDoodleContent(modifier: Modifier = Modifier) {
-    Box(modifier.decorative()) {
+    Box(modifier.testTag(EggTags.SNACK).decorative()) {
         DecorSticker("glowstar", Modifier.offset(y = 2.dp), size = 20.dp)
         Text(
             androidx.compose.ui.res.stringResource(R.string.egg_snack_doodle),

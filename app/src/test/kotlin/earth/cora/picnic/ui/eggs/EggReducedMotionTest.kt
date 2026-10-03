@@ -1,6 +1,7 @@
 package earth.cora.picnic.ui.eggs
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -159,14 +160,28 @@ class EggReducedMotionLabTest {
 
     @Test
     fun fourTilesNeedAnimationsOn() {
-        val lab = previewLab()
+        // A held clock and a bounded number of frames: nothing here can wait on an animation that never ends.
+        compose.mainClock.autoAdvance = false
+        val lab = previewLab {
+            SurpriseLabSandbox(
+                clock = SandboxClock(PracticeFixture.NOW) { compose.mainClock.currentTime },
+                feedback = earth.cora.picnic.platform.NoOpFeedback,
+                timeouts = FakeTimeouts(),
+                minuteTicks = false,
+            )
+        }
         compose.setContent {
             CompositionLocalProvider(LocalTimeouts provides FakeTimeouts()) {
                 PicnicTheme(variant = ThemeVariant.Day, reducedMotion = true) { SurpriseLabScreen(onBack = {}, lab = lab) }
             }
         }
-        compose.waitForIdle()
+        repeat(8) {
+            Snapshot.sendApplyNotifications()
+            compose.mainClock.advanceTimeByFrame()
+        }
+        Snapshot.sendApplyNotifications()
         assertEquals(4, compose.onAllNodesWithText("needs animations on").fetchSemanticsNodes().size)
         assertEquals(14, compose.onAllNodesWithText("Try it").fetchSemanticsNodes().size)
+        lab.close()
     }
 }

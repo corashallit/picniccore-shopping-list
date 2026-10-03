@@ -169,36 +169,9 @@ fun completedFixture(minutes: Long = 41): AppState {
 }
 
 /**
- * A frame-strip golden (§20 "strip"): [frames] in rows of [cols], each scaled by [scale] and labelled with its time in
- * ms, on white.
- */
-fun stripOf(frames: List<Pair<Long, Bitmap>>, cols: Int = 4, scale: Float = 0.5f): Bitmap {
-    val w = (frames.maxOf { it.second.width } * scale).toInt()
-    val h = (frames.maxOf { it.second.height } * scale).toInt()
-    val label = 40
-    val gap = 12
-    val rows = (frames.size + cols - 1) / cols
-    val out = Bitmap.createBitmap(cols * (w + gap) + gap, rows * (h + label + gap) + gap, Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(out)
-    canvas.drawColor(android.graphics.Color.WHITE)
-    val text = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.rgb(0x2E, 0x3A, 0x8C)
-        textSize = 28f
-        typeface = android.graphics.Typeface.MONOSPACE
-    }
-    val filter = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
-    frames.forEachIndexed { i, (t, bmp) ->
-        val x = gap + (i % cols) * (w + gap)
-        val y = gap + (i / cols) * (h + label + gap)
-        canvas.drawText("$t ms", x.toFloat(), (y + 30).toFloat(), text)
-        canvas.drawBitmap(bmp, null, android.graphics.Rect(x, y + label, x + (bmp.width * scale).toInt(), y + label + (bmp.height * scale).toInt()), filter)
-    }
-    return out
-}
-
-/**
  * Every text node on screen (unmerged), in root px: the visible part of each, since the list scrolls under the opaque
- * add bar (a row's words under the bar are hidden by it; the bar's own words are not).
+ * add bar (a row's words under the bar are hidden by it; the bar's own words are not). The printed receipt's own words
+ * are left out (it is never over itself).
  */
 fun textBoxes(compose: ComposeContentTestRule): List<Pair<String, Rect>> {
     val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode()
@@ -210,7 +183,10 @@ fun textBoxes(compose: ComposeContentTestRule): List<Pair<String, Rect>> {
     find(root)
     val out = ArrayList<Pair<String, Rect>>()
     fun walk(n: androidx.compose.ui.semantics.SemanticsNode, inBar: Boolean) {
-        val mine = inBar || n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) == PracticeTags.ADD_BAR
+        val tag = n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)
+        // The printed receipt's own words are its own (the unmerged tree keeps the words its one node replaces).
+        if (tag == EggTags.RECEIPT) return
+        val mine = inBar || tag == PracticeTags.ADD_BAR
         val text = n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
         val box = n.boundsInRoot.let { b -> if (mine) b else Rect(b.left, b.top, b.right, minOf(b.bottom, barTop)) }
         if (text != null && box.width > 0f && box.height > 0f) out += text.joinToString() to box
@@ -218,4 +194,18 @@ fun textBoxes(compose: ComposeContentTestRule): List<Pair<String, Rect>> {
     }
     walk(root, false)
     return out
+}
+
+/**
+ * Every word on screen: the text nodes ([textBoxes]) and the practice list's `text:` keep-outs (the strips and the book
+ * speak as one node each, so their tab names, metas and date are not text nodes of their own), the list's words cut
+ * at the add bar's top as the text nodes are. The add bar's keep-out is its whole bar, so its words come from its text
+ * nodes only.
+ */
+fun wordBoxes(compose: ComposeContentTestRule, anchors: AnchorRegistry): List<Pair<String, Rect>> {
+    val barTop = anchors.bounds(AnchorRegistry.ADD_BAR)?.top ?: Float.MAX_VALUE
+    val keepOuts = anchors.keys().filter { it.startsWith(EggAnchors.TEXT_PREFIX) && it != EggAnchors.TEXT_PREFIX + "addbar" }
+        .mapNotNull { key -> anchors.bounds(key)?.let { b -> key to Rect(b.left, b.top, b.right, minOf(b.bottom, barTop)) } }
+        .filter { (_, b) -> b.width > 0f && b.height > 0f }
+    return textBoxes(compose) + keepOuts
 }

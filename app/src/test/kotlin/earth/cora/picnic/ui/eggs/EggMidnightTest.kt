@@ -2,6 +2,8 @@ package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.ui.theme.ThemeVariant
 import kotlinx.coroutines.runBlocking
@@ -47,10 +49,22 @@ class EggMidnightTest {
         assertEquals(EggRules.SNACK, r.eggs.lcdWord?.text)
         assertEquals("frozen", r.eggs.snackSectionId)
         assertEquals("walking order unchanged", dayOrder, r.engine.grouped()!!.sections.map { it.id })
-        // The doodle draws by the frozen tab (decorative: no text node for TalkBack).
+        // The doodle is decorative: TalkBack has no text node for it.
         assertEquals(0, compose.onAllNodesWithText("snack?").fetchSemanticsNodes().size)
-        // "SNACK?" holds 2.6 s, then the count.
         val t0 = r.now
+        // The frozen aisle comes into view, and the snack star and doodle sit in its tab row: right of the tab, within
+        // the strip's width, level with the tab, on screen above the add bar.
+        r.advance(800)
+        val snack = compose.onNodeWithTag(EggTags.SNACK, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val tab = r.anchor(EggAnchors.tab("frozen"))
+        val strip = r.anchor(EggAnchors.strip("frozen"))
+        val bar = r.anchor(AnchorRegistry.ADD_BAR)
+        assertTrue("drawn ($snack)", snack.width > 20 * 3f && snack.height > 10 * 3f)
+        assertTrue("after the tab ($snack, tab $tab)", snack.left >= tab.right - 1f)
+        assertTrue("within the strip's width ($snack, strip $strip)", snack.left >= strip.left && snack.right <= strip.right)
+        assertTrue("in the tab's row ($snack, tab $tab)", snack.center.y in tab.top..tab.bottom && snack.top >= tab.top - 3 * 3f && snack.bottom <= strip.bottom)
+        assertTrue("on screen above the add bar ($snack, bar $bar)", snack.top >= 0f && snack.bottom <= bar.top)
+        // "SNACK?" holds 2.6 s, then the count.
         r.advanceTo(t0 + EggRules.SNACK_MS - 100)
         assertEquals(EggRules.SNACK, r.eggs.lcdWord?.text)
         r.advanceTo(t0 + EggRules.SNACK_MS + 100)

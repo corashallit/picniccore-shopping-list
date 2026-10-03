@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.IntSize
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.ui.theme.gen.BasketManifest
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -27,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TileMode
@@ -115,18 +117,25 @@ fun SurpriseState.goldCapsule(itemId: String): Boolean = enabled && itemId in go
 
 /**
  * Egg 7: every visible sticker twinkles once (the one twinkle rule, 3 poses at 8 fps), the [index]-th 60 ms after the
- * first. Nothing under reduced motion (§12.3).
+ * first. Nothing under reduced motion (§12.3): the sticker keeps its pose. Each pose it is drawn at is reported to the
+ * test probe as `twinkle<index>` (its turn and scale).
  */
 @Composable
 fun Modifier.eggTwinkle(state: SurpriseState, index: Int = 0): Modifier {
     val id = state.kirakiraId
-    if (id == null || !state.enabled || LocalReducedMotion.current) return this
+    if (id == null || !state.enabled) return this
+    val probe = LocalEggProbe.current
+    if (LocalReducedMotion.current) {
+        if (probe != null) SideEffect { probe.record("twinkle$index", 0L, Rect.Zero, 0f, 1f) }
+        return this
+    }
     val t by rememberEffectTime(id, 600L + index * 60L)
     val pose = EggBeats.twinkle(t - index * 60L)
     return graphicsLayer {
         rotationZ = pose.rotation
         scaleX = pose.scaleX
         scaleY = pose.scaleY
+        probe?.record("twinkle$index", t, Rect.Zero, pose.rotation, pose.scaleX)
     }
 }
 

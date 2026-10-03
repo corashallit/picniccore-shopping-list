@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.Density
@@ -55,8 +56,9 @@ import java.time.LocalDate
 /**
  * Items 266–272 (egg 18, §13.2): the receipt's 9 lines at 21 columns from the trip's real stats; line 2 fitted; its width
  * following the LCD pitch up to 1.6×; the print sequence (14 frames over 1.7 s with jitter, the tear at 1.7 s, settled
- * at 1.96 s, PRINT★ and its cues, no timeout) and its strip `receipt_print_strip_{day,glow}`; the tap that tucks it into the book
- * and the album; the auto-tuck; reduced motion; TalkBack.
+ * at 1.96 s, PRINT★ and its cues, no timeout) and its strip `receipt_print_strip_{day,glow}_<t>`; the slot line and the
+ * paper never over words (item 259) at font scales 1.0, 1.3 and 2.0; the tap that tucks it into the book and the album;
+ * the auto-tuck; reduced motion; TalkBack.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -115,19 +117,21 @@ class ReceiptTest {
             ReceiptMaker.lines("Kirakira Basket", Receipt(0, date.toString(), store, 1, 1, 1, 0), title)[1].text
         val sat = LocalDate.of(2026, 10, 3)
         val twoDigits = LocalDate.of(2026, 10, 10)
-        assertEquals("SAT 3 OCT · HILLCREST", line2(sat, "Hillcrest Market"))
+        // Invented names built from the Appendix A fixture store, for long words, accents and stopwords.
+        assertEquals("SAT 3 OCT · HILLCREST", line2(sat, PracticeFixture.STORE))
         // A 2-digit day: 22 columns with the weekday, so the weekday goes first.
-        assertEquals("10 OCT · HILLCREST", line2(twoDigits, "Hillcrest Market"))
-        // A long word: the weekday goes, and then it fits.
-        assertEquals("3 OCT · SUPERMARCHE", line2(sat, "Supermarché Lefebvre"))
+        assertEquals("10 OCT · HILLCREST", line2(twoDigits, PracticeFixture.STORE))
+        // A long word: the weekday goes, and then it fits (the accent folded).
+        assertEquals("3 OCT · SUPERMARCHE", line2(sat, "Supermarché Hillcrest"))
         // Longer still: cut to the budget (21 − date − 3).
-        assertEquals("3 OCT · KAWARTHALAKES", line2(sat, "Kawarthalakesfoodemporium"))
-        assertEquals("10 OCT · KAWARTHALAKE", line2(twoDigits, "Kawarthalakesfoodemporium"))
+        assertEquals("3 OCT · HILLCRESTFOOD", line2(sat, "Hillcrestfoodemporium Market"))
+        assertEquals("10 OCT · HILLCRESTFOO", line2(twoDigits, "Hillcrestfoodemporium Market"))
         // Stopwords are skipped; with none left, the list title's first word.
         assertEquals("SAT 3 OCT · SATURDAY", line2(sat, "My store"))
         assertEquals("SAT 3 OCT · COTTAGE", line2(sat, "The Market", "Cottage run"))
-        assertEquals("SAT 3 OCT · BELANGER", line2(sat, "Épicerie Bélanger"))
-        for (store in listOf("Hillcrest Market", "Supermarché Lefebvre", "Kawarthalakesfoodemporium", "My store", "Épicerie Bélanger")) {
+        assertEquals("SAT 3 OCT · HILLCREST", line2(sat, "Épicerie Hillcrest"))
+        val stores = listOf(PracticeFixture.STORE, "Supermarché Hillcrest", "Hillcrestfoodemporium Market", "My store", "Épicerie Hillcrest")
+        for (store in stores) {
             for (d in 1..31) {
                 val text = line2(LocalDate.of(2026, 12, d), store)
                 assertTrue("\"$text\" fits", text.length <= ReceiptLines.COLUMNS)
@@ -161,12 +165,33 @@ class ReceiptTest {
 
     // ---- 267: the print sequence and its strip ----
 
+    /** Appendix C: a strip frame every 83 ms over the motion, from 0 to the settle at 1.96 s. */
+    private val stripTimes: List<Long> =
+        (0L..ReceiptMotion.SETTLE_AT step 83).toList().let { if (it.last() == ReceiptMotion.SETTLE_AT) it else it + ReceiptMotion.SETTLE_AT }
+
+    /**
+     * Holds the LCD and records `receipt_print_strip_<v>_<t>.png` (Appendix C: one PNG per frame, full resolution) at
+     * [stripTimes], each cropped to the LCD and the paper (both, with room for the settle's offset and turn); returns
+     * the print's start time.
+     */
+    private fun EggRig.recordStrip(): Long {
+        holdLcd(timeouts.holdThresholdMs + 20)
+        val t0 = now
+        assertNotNull(eggs.receipt)
+        frame()
+        val lcd = anchor(AnchorRegistry.LCD)
+        val paper = compose.onNodeWithTag(EggTags.RECEIPT).fetchSemanticsNode().boundsInRoot
+        val crop = Rect(minOf(lcd.left, paper.left), lcd.top, maxOf(lcd.right, paper.right), paper.bottom).inflate(16 * px)
+        for (t in stripTimes) {
+            advanceTo(t0 + t)
+            grab(crop).captureRoboImage("$EGG_SHOTS/receipt_print_strip_${v}_$t.png")
+        }
+        return t0
+    }
+
     @Test
     fun printSequence() {
-        val r = EggRig(compose, fixture = completedFixture()).start()
-        val lcd = r.anchor(AnchorRegistry.LCD)
-        val crop = Rect(lcd.right - 236 * px, lcd.top - 8 * px, lcd.right + 16 * px, lcd.bottom + 250 * px)
-        val frames = mutableListOf<Pair<Long, android.graphics.Bitmap>>()
+        val r = EggRig(compose, fixture = completedFixture(41)).start()
         r.holdLcd(r.timeouts.holdThresholdMs + 20)
         val t0 = r.now
         assertNotNull(r.eggs.receipt)
@@ -183,44 +208,103 @@ class ReceiptTest {
         assertEquals(Triple(-4f, 10f, 3f), ReceiptMotion.settle(ReceiptMotion.SETTLE_AT))
         assertTrue(ReceiptMotion.slotVisible(ReceiptMotion.SETTLE_AT - 1))
         assertFalse(ReceiptMotion.slotVisible(ReceiptMotion.SETTLE_AT))
-        // On the frame clock: strip frames, the tear's "tk" at 1.7 s, PRINT★ for 1.7 s, then the count.
-        for (t in listOf(0L, 240L, 600L, 1_000L, 1_400L, 1_700L, 1_830L, 1_960L)) {
-            r.advanceTo(t0 + t)
-            frames += t to r.grab(crop)
+        // On the frame clock: the paper feeds out (more of it shows, frame by frame), the tear's "tk" at 1.7 s, PRINT★
+        // for 1.7 s, then the count.
+        var shown = 0f
+        var grew = 0
+        r.probe.clear()
+        while (r.now < t0 + ReceiptMotion.FEED_MS - 20) {
+            r.advance(83)
+            val h = r.probe.frames.lastOrNull { it.tag == "receipt" }?.bounds?.height ?: continue
+            if (h > shown + 1f) grew++
+            shown = maxOf(shown, h)
         }
+        assertTrue("the paper feeds out in steps ($grew)", grew >= ReceiptMotion.FRAMES - 3)
+        r.advanceTo(t0 + ReceiptMotion.SETTLE_AT)
         val tear = r.feedback.times(Cue.RECEIPT_TEAR)
         assertEquals(1, tear.size)
         assertEquals((t0 + ReceiptMotion.FEED_MS).toDouble(), tear.single().toDouble(), 20.0)
         r.advanceTo(t0 + ReceiptMotion.FEED_MS + 120)
         assertNull("the LCD back to the count", r.eggs.lcdWord)
-        stripOf(frames, cols = 4, scale = 0.5f).captureRoboImage("$EGG_SHOTS/receipt_print_strip_day.png")
         // It stays until tapped: no timeout.
         r.advance(12_000)
         assertNotNull(r.eggs.receipt)
         assertFalse(r.list.trip!!.receiptSaved)
     }
 
-    /** The same strip in Glow (`receipt_print_strip_glow`): the LCD and the paper stay light on the night binder. */
+    /** The strip `receipt_print_strip_day_<t>` (Appendix C, item 267). */
     @Test
-    fun printSequenceGlow() {
-        val r = EggRig(compose, variant = ThemeVariant.Glow, fixture = completedFixture()).start()
-        val lcd = r.anchor(AnchorRegistry.LCD)
-        val crop = Rect(lcd.right - 236 * px, lcd.top - 8 * px, lcd.right + 16 * px, lcd.bottom + 250 * px)
+    fun printStripDay() {
+        EggRig(compose, fixture = completedFixture(41)).start().recordStrip()
+    }
+
+    /** The same strip in Glow (`receipt_print_strip_glow_<t>`): the LCD and the paper stay light on the night binder. */
+    @Test
+    fun printStripGlow() {
+        EggRig(compose, variant = ThemeVariant.Glow, fixture = completedFixture(41)).start().recordStrip()
+    }
+
+    // ---- 259: never over words, at 1.0, 1.3 and 2.0 ----
+
+    @Test
+    fun neverOverWords100() = neverOverWords(1f)
+
+    @Test
+    fun neverOverWords130() = neverOverWords(1.3f)
+
+    @Test
+    fun neverOverWords200() = neverOverWords(2f)
+
+    /**
+     * Item 259 (§4.1, §13.2) at font scale [scale]: the slot line is the LCD's width, centred under it, and neither it
+     * nor the paper lies over any word on screen (the text nodes and the list's word keep-outs: the title, the
+     * subtitle, the LCD, the book's date, the tabs, the metas, the rows), on every frame from the hold to well after
+     * the settle; where the paper would cover the list, the list makes room below it.
+     */
+    private fun neverOverWords(scale: Float) {
+        val r = EggRig(compose, fontScale = scale, fixture = completedFixture(41)).start()
+        r.probe.clear()
         r.holdLcd(r.timeouts.holdThresholdMs + 20)
         val t0 = r.now
         assertNotNull(r.eggs.receipt)
-        val frames = listOf(0L, 240L, 600L, 1_000L, 1_400L, 1_700L, 1_830L, 1_960L).map { t ->
-            r.advanceTo(t0 + t)
-            t to r.grab(crop)
+        val wrong = LinkedHashSet<String>()
+        var slots = 0
+        var papers = 0
+        while (r.now < t0 + ReceiptMotion.SETTLE_AT + 600) {
+            r.advance(32)
+            val words = wordBoxes(compose, r.anchors)
+            val frames = r.probe.frames.groupBy { it.tag }.mapValues { it.value.last() }
+            r.probe.clear()
+            frames["slot"]?.let { slot ->
+                slots++
+                val lcd = r.anchor(AnchorRegistry.LCD)
+                assertEquals("the slot line is the LCD's width", lcd.width, slot.bounds.width, 1f)
+                assertEquals("centred under the LCD", lcd.center.x, slot.bounds.center.x, 1f)
+                assertTrue("under the LCD", slot.bounds.top >= lcd.bottom - 1f)
+                assertEquals("4 dp", 4 * px, slot.bounds.height, 1f)
+            }
+            for (tag in listOf("receipt", "slot")) {
+                val f = frames[tag] ?: continue
+                if (tag == "receipt") papers++
+                val piece = f.bounds.deflate(2f)
+                if (piece.width <= 0f || piece.height <= 0f) continue
+                words.filter { (_, box) -> box.overlaps(piece) }.forEach { (w, _) -> wrong += "$tag over \"$w\"" }
+            }
         }
-        stripOf(frames, cols = 4, scale = 0.5f).captureRoboImage("$EGG_SHOTS/receipt_print_strip_glow.png")
+        assertTrue("the slot line showed ($slots frames)", slots > 10)
+        assertTrue("the paper showed ($papers frames)", papers > 10)
+        assertEquals("font scale $scale", emptyList<String>(), wrong.toList())
+        // Still a working list: its first strip is on screen below the receipt.
+        val paper = r.probe.frames.lastOrNull { it.tag == "receipt" }?.bounds ?: compose.onNodeWithTag(EggTags.RECEIPT).fetchSemanticsNode().boundsInRoot
+        val tabs = wordBoxes(compose, r.anchors).filter { it.first.startsWith(EggAnchors.TEXT_PREFIX + "tab:") }.map { it.second }
+        assertTrue("a tab shows on screen", tabs.any { it.top >= paper.bottom - 1f && it.bottom <= compose.onRoot().fetchSemanticsNode().boundsInRoot.bottom })
     }
 
     // ---- 268: the tap ----
 
     @Test
     fun tapSavesToBookAndAlbum() {
-        val r = EggRig(compose, fixture = completedFixture()).start()
+        val r = EggRig(compose, fixture = completedFixture(41)).start()
         r.holdLcd(r.timeouts.holdThresholdMs + 20)
         val printed = r.list.trip!!.receipt!!
         r.advance(2_100)
@@ -304,7 +388,7 @@ class ReceiptTest {
 
     @Test
     fun reducedMotion() {
-        val r = EggRig(compose, reduced = true, fixture = completedFixture()).start()
+        val r = EggRig(compose, reduced = true, fixture = completedFixture(41)).start()
         r.holdLcd(r.timeouts.holdThresholdMs + 20)
         val fx = r.eggs.receipt
         assertNotNull(fx)

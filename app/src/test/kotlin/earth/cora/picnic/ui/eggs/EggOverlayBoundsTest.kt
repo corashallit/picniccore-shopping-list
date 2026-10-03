@@ -20,15 +20,17 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Item 259 (§4.1, §12.1): egg overlays never cover text. Every overlay piece reports where it is drawn on every frame
- * (EggProbe). The pieces that go about the page (the ladybug, the nap cat, JACK / POT!, the umbrella, the rolling
- * produce, the confetti and the petals in their edge lanes, the Dusk sparkles) never overlap a text node at all: they
- * go round the words, so nothing is ever cut out of them. The roll home along the new row's own line is drawn by the row
+ * (EggProbe), and it is checked against every word on screen: the text nodes and the list's word keep-outs
+ * (wordBoxes). The pieces that go about the page (the ladybug, the nap cat, JACK / POT!, the umbrella, the rolling
+ * produce, the confetti and the petals in their edge lanes, the Dusk sparkles) never overlap a word at all: they go
+ * round the words, so nothing is ever cut out of them. The roll home along the new row's own line is drawn by the row
  * beneath its words (it may pass under that row's words only). The ants on the add bar's edge and the shiny row's burst
  * keep to their lanes and are clipped clear of any word all the same, so where one crosses words those words must be one
  * of the boxes their clip cuts out. Sampled over each egg's whole run on the practice list, Day and Glow.
  *
  * The printed receipt is not decoration but an interactive card with its own words, which waits over the list until it
- * is tapped (§13.2), as the Next card and the toasts do: ReceiptPrintTest keeps it and its slot line off every word.
+ * is tapped (§13.2), as the Next card and the toasts do: ReceiptTest.neverOverWords keeps it and its slot line off
+ * every word at font scales 1.0, 1.3 and 2.0.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -57,7 +59,7 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
         val wrong = LinkedHashSet<String>()
         while (r.now < until) {
             r.advance(48)
-            val text = textBoxes(compose)
+            val text = wordBoxes(compose, r.anchors)
             val cutOut = keepOutRects(r.anchors)
             val frames = r.probe.frames.filter { it.time >= 0 }.groupBy { it.tag }.mapValues { it.value.last() }
             r.probe.clear()

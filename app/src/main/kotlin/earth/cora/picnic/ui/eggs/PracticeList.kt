@@ -272,8 +272,23 @@ fun PracticeList(
         val i = indexOf(nap)
         if (i >= 0) listState.animateScrollToItem((i - 2).coerceAtLeast(0), if (i >= 2) peek else 0)
     }
+    // Egg 5: the frozen aisle, where the snack star and doodle sit by the tab, comes into view if it is not on screen.
+    LaunchedEffect(eggs.snackSectionId) {
+        val snack = eggs.snackSectionId ?: return@LaunchedEffect
+        val i = indexOf(snack)
+        if (i < 0) return@LaunchedEffect
+        androidx.compose.runtime.withFrameNanos { }
+        val info = listState.layoutInfo
+        val seen = info.visibleItemsInfo.firstOrNull { it.index == i }
+        val bottom = info.viewportEndOffset - info.afterContentPadding
+        if (seen == null || seen.offset < 0 || seen.offset + seen.size > bottom) listState.animateScrollToItem((i - 2).coerceAtLeast(0), if (i >= 2) peek else 0)
+    }
     val rollHome = remember(model) { RollHome() }
-    androidx.compose.runtime.CompositionLocalProvider(LocalRollHome provides rollHome) {
+    val room = remember(model) { ListRoom() }
+    // Egg 18 at large text: the list makes room under a printed receipt that would lie over its words, from its top.
+    val receiptShift = with(LocalDensity.current) { room.receiptShift.toDp() }
+    LaunchedEffect(room.receiptShift > 0f) { if (room.receiptShift > 0f) listState.animateScrollToItem(0) }
+    androidx.compose.runtime.CompositionLocalProvider(LocalRollHome provides rollHome, LocalListRoom provides room) {
     Box(modifier.fillMaxSize().testTag(PracticeTags.ROOT)) {
         PicnicBackground {
             // Egg 1: the ground being left fades out over the new one.
@@ -283,10 +298,10 @@ fun PracticeList(
                 PracticeTopBar(model, list.title, state.store.name, grouped.stops, list.items.count { it.checked }, list.items.size, eggs, p)
                 PracticeBook(model, state, grouped, eggs, p, Modifier.padding(horizontal = 12.dp).padding(bottom = 8.dp))
                 LazyColumn(
-                    Modifier.weight(1f).fillMaxWidth().testTag(PracticeTags.LIST),
+                    with(model.anchors) { Modifier.weight(1f).fillMaxWidth().testTag(PracticeTags.LIST).anchor(EggAnchors.LIST) },
                     state = listState,
                     // Egg 16: while the umbrella stands on the bar, the list ends clear of its canopy.
-                    contentPadding = PaddingValues(top = LIST_TOP, bottom = 110.dp + if (eggs.umbrella) UMBRELLA_LIST_ROOM else 0.dp),
+                    contentPadding = PaddingValues(top = LIST_TOP + receiptShift, bottom = 110.dp + if (eggs.umbrella) UMBRELLA_LIST_ROOM else 0.dp),
                 ) {
                     entries.forEachIndexed { index, e ->
                         val s = e.section
@@ -313,7 +328,8 @@ fun PracticeList(
             }
             PracticeAddBar(model, eggs, Modifier.align(Alignment.BottomCenter))
         }
-        MotionOverlay(motion, p, model.toasts, bottomInset = 84.dp) {
+        // Egg 16: while the umbrella stands on the bar's shoulder, toasts sit above its canopy.
+        MotionOverlay(motion, p, model.toasts, bottomInset = 84.dp + if (eggs.umbrella) UMBRELLA_LIST_ROOM else 0.dp) {
             EggOverlays(engine, model.anchors, model.toasts, motion, feedback, listPlacesDecor = true)
         }
         CelebrationHost(motion, p)

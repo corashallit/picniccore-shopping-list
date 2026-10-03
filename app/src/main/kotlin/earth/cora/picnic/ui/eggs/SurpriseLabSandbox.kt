@@ -377,18 +377,22 @@ class SurpriseLabSandbox(
         )
     }
 
-    /** Egg 18: completes the practice trip (its finale already shown), then holds the LCD. */
+    /**
+     * Egg 18: completes the practice trip (its finale already shown), then holds the LCD. The rest of the shop is
+     * checked off 30 s apart, finishing 41 minutes after the trip started (or later, if the lab has run that long), so
+     * the receipt reads like §13.2's: "TIME ......... 41 MIN".
+     */
     private fun receipt() {
         val now = clock.now()
+        val left = store.value.list(listId)?.items?.count { !it.checked } ?: 0
+        val done = maxOf(now + 30_000L * left, PracticeFixture.TRIP_START + RECEIPT_MINUTES * PracticeFixture.MIN)
         model.set { s ->
             val list = s.list(listId) ?: return@set s
-            var t = now
-            list.items.filter { !it.checked }.fold(s) { acc, item ->
-                t += 30_000
-                acc.toggleChecked(listId, item.id, t)
-            }.let { it.markFinaleShown(listId, t + 1000) }.setOpenAisle(listId, "")
+            list.items.filter { !it.checked }.foldIndexed(s) { i, acc, item ->
+                acc.toggleChecked(listId, item.id, done - 30_000L * (left - 1 - i))
+            }.let { it.markFinaleShown(listId, done + 1000) }.setOpenAisle(listId, "")
         }
-        clock.nowMs = now + 30_000L * 30
+        clock.nowMs = done + 60_000L
         engine.onLcdHold()
     }
 
@@ -421,5 +425,7 @@ class SurpriseLabSandbox(
         const val BREAKFAST = "breakfast"
         const val JACKPOT_ROW = "baking-powder"
         const val WEEK = 7L * 24 * 60 * 60 * 1000
+        /** The practice trip's shop time once the lab finishes it (§13.2's example receipt, §11's summary). */
+        const val RECEIPT_MINUTES = 41L
     }
 }

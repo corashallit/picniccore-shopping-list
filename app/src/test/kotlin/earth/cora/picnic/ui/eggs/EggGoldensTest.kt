@@ -117,7 +117,7 @@ class EggGoldensTest(private val variant: ThemeVariant) {
     }
 
     private fun receiptAt(name: String, scale: Float) {
-        val r = EggRig(compose, variant = variant, fontScale = scale, fixture = completedFixture()).start()
+        val r = EggRig(compose, variant = variant, fontScale = scale, fixture = completedFixture(41)).start()
         r.holdLcd(r.timeouts.holdThresholdMs + 20)
         r.advance(2_000)
         assertNotNull(r.eggs.receipt)
@@ -166,18 +166,21 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         end(4, 1500) { assertNotNull(eggs.petalsId) }
     }
 
-    /** Egg 5 (Glow only, forced): list entry + 0.5 s, "SNACK?" showing; `list_midnight_glow` (item 242). */
+    /**
+     * Egg 5 (Glow only, forced): list entry + 0.9 s, "SNACK?" showing, the frozen aisle brought into view with the snack
+     * star and doodle by its tab (`egg_5_end_glow`); then `list_midnight_glow` (item 242) once "SNACK?" has gone.
+     */
     @Test
     fun egg5() {
         if (day) return
-        val r = end(5, 500) {
+        val r = end(5, 900) {
             assertEquals(ThemeVariant.Glow, sandbox.variants.variant.value)
             assertEquals("SNACK?", eggs.lcdWord?.text)
+            assertEquals("frozen", eggs.snackSectionId)
+            val snack = compose.onNodeWithTag(EggTags.SNACK, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("the doodle is on screen ($snack)", snack.top >= 0f && snack.bottom <= anchor(AnchorRegistry.ADD_BAR).top)
         }
-        // The snack star and the "snack?" doodle sit by the frozen aisle's tab: bring it on screen.
-        val frozen = r.model.grouped().sections.indexOfFirst { it.id == "frozen" }
-        compose.onNodeWithTag(PracticeTags.LIST).performScrollToIndex((frozen - 2).coerceAtLeast(0))
-        r.advance(300)
+        r.advance(2_000)
         assertEquals("frozen", r.eggs.snackSectionId)
         r.capture("list_midnight_glow")
     }
@@ -212,10 +215,23 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         r.capture("row_hanko_birthday_${r.v}", Rect(row.left - 12 * px, row.top - 3 * px, check.right + 10 * px, maxOf(row.bottom, check.bottom) + 4 * px))
     }
 
-    /** Egg 10: stage start + 0.5 s; `list_bonus_stage_<v>` (item 247). */
+    /**
+     * Egg 10: stage start + 0.5 s; `list_bonus_stage_<v>` (item 247). Produce is opened first, so live rows (strawberries
+     * and apples, still to get) show their stickers as 8-bit sprites in the open tray, clear of the "BONUS STAGE!" toast.
+     */
     @Test
     fun egg10() {
-        val r = end(10, 500) { assertTrue(eggs.bonusStage) }
+        val r = rig()
+        r.act { r.model.open("produce") }
+        r.advance(700)
+        val t0 = r.fire(10)
+        r.advanceTo(t0 + 500)
+        assertTrue(r.eggs.bonusStage)
+        assertTrue(r.eggs.pixelStickers)
+        val strawberries = compose.onNodeWithTag(PracticeTags.row("strawberries"), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val bar = r.anchor(AnchorRegistry.ADD_BAR)
+        assertTrue("a live row on screen ($strawberries)", strawberries.top >= 0f && strawberries.bottom <= bar.top)
+        r.capture("egg_10_end_${r.v}")
         r.capture("list_bonus_stage_${r.v}")
     }
 
@@ -291,13 +307,26 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         end(17, 2100) { assertNotNull(eggs.antsId) }
     }
 
-    /** Egg 18: hold + 2.0 s, settled; `receipt_printed_<v>` (item 273: the LCD stays light). */
+    /** Egg 18: hold + 2.0 s, settled, from the lab's own action (which finishes the trip at 41 minutes, as §13.2's). */
     @Test
     fun egg18() {
-        val r = end(18, 2000) { assertNotNull(eggs.receipt) }
+        end(18, 2000) { assertEquals(41, eggs.receipt?.receipt?.minutes) }
+    }
+
+    /**
+     * `receipt_printed_<v>` (item 273: the LCD stays light): the §13.2 example receipt, "TIME ......... 41 MIN", printed
+     * from the completed fixture (its last check-off 41 minutes into the trip) and settled 2.0 s after the hold.
+     */
+    @Test
+    fun receiptPrinted() {
+        val r = EggRig(compose, variant = variant, fixture = completedFixture(41)).start()
+        r.holdLcd(r.timeouts.holdThresholdMs + 20)
+        r.advance(2_000)
+        assertEquals(41, r.eggs.receipt?.receipt?.minutes)
         val lcd = r.anchors.bounds(AnchorRegistry.LCD)!!
+        val paper = compose.onNodeWithTag(EggTags.RECEIPT).fetchSemanticsNode().boundsInRoot
         val width = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
-        r.capture("receipt_printed_${r.v}", Rect(0f, (lcd.top - 10 * px).coerceAtLeast(0f), width, lcd.bottom + 250 * px))
+        r.capture("receipt_printed_${r.v}", Rect(0f, (lcd.top - 10 * px).coerceAtLeast(0f), width, paper.bottom + 24 * px))
     }
 
     companion object {

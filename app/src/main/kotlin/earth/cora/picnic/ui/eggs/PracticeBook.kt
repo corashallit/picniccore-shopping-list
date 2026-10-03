@@ -208,7 +208,9 @@ internal fun PracticeBook(
     val dateOnPage = LocalDensity.current.fontScale <= DATE_CAPTION_SCALE
     val season = eggs.season.takeIf { eggs.enabled }
     Column(modifier.fillMaxWidth()) {
-        if (!dateOnPage) DateTag(date, season, onPage = false, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+        // The date is words the overlays keep clear of (the printed receipt, egg 18).
+        val dateAnchor = with(model.anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "date") }
+        if (!dateOnPage) DateTag(date, season, onPage = false, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp).then(dateAnchor))
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val layout = PracticeBookLayout.of(maxWidth.value, grouped.stops, list.items.size)
             val perfect = trip?.completedAt != null && trip.finaleShownAt != null && !p.bookFx.perfectHeld
@@ -235,7 +237,7 @@ internal fun PracticeBook(
                     Spine(c.book)
                     StickerPage(model, state, eggs, p, layout, Modifier.weight(1f))
                 }
-                if (dateOnPage) DateTag(date, season, onPage = true, modifier = Modifier.offset(x = 8.dp, y = 0.dp))
+                if (dateOnPage) DateTag(date, season, onPage = true, modifier = Modifier.offset(x = 8.dp, y = 0.dp).then(dateAnchor))
                 if (perfect || p.bookFx.perfectT0 != null) {
                     SpinePerfect(p.bookFx, model.motion.clock, Modifier.offset(x = (3f + layout.leftWidth + 24f - 40f).dp, y = 6.dp))
                 }
