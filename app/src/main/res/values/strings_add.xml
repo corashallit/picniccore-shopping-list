@@ -21,7 +21,6 @@
     <string name="add_tab_snap">Snap</string>
     <string name="add_tab_speak">Speak</string>
     <string name="add_tab_recording">recording</string>
-    <string name="add_close">Close</string>
 
     <!-- Write (§6.2) -->
     <string name="add_note_label">Note:</string>
