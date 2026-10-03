@@ -13,6 +13,9 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasClickAction
+import earth.cora.picnic.core.llm.LlmError
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.assistant.IngestResult
 import earth.cora.picnic.core.model.ItemSource
@@ -117,6 +120,58 @@ class SnapFlowTest {
         // After the photo, Speak can add more (D19).
         compose.onNodeWithText("Anything else? Say it out loud.").assertExists()
         assertEquals(setOf(4L), state.review!!.revealed)
+    }
+
+    /** Item 207: a photo that cannot be opened leaves no dead end: the empty polaroid, the chip and "Take a photo". */
+    @Test
+    fun anUnreadablePhotoOffersAnotherOne() {
+        val h = compose.setHarness()
+        h.rig.photos.bytes = { throw java.io.IOException("gone") }
+        h.vm.onPhoto(Uri.parse("content://test/gone.jpg"))
+        compose.waitForIdle()
+        compose.onNodeWithText("Couldn't open that photo. Try another one?").assertExists()
+        compose.onNodeWithTag(CHOOSE_PHOTO_CHIP_TAG).performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(1, h.sources.picks)
+        compose.onNode(hasText("Take a photo") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        assertEquals(1, h.sources.photos)
+    }
+
+    /**
+     * Item 215: an answer that cannot be retried (a refusal, an account out of credit) keeps the photo and its error,
+     * and offers another photo: the chip under the error and "Take a photo" in the footer.
+     */
+    @Test
+    fun aRefusedPhotoOffersAnotherOne() {
+        val h = compose.setHarness()
+        for ((i, error) in listOf(LlmError.Refusal("no"), LlmError.QuotaExceeded("insufficient_quota")).withIndex()) {
+            h.rig.assistant.ingest = { _, _ -> throw error }
+            h.vm.onPhoto(Uri.parse("content://test/photo$i.jpg"))
+            compose.waitForIdle()
+            compose.onNodeWithText(error.friendlyMessage).assertExists()
+            compose.onNode(hasText("Try again")).assertDoesNotExist()
+            compose.onNodeWithTag(POLAROID_TAG).assertExists()
+            compose.onNodeWithTag(CHOOSE_PHOTO_CHIP_TAG).performScrollTo().performClick()
+            compose.waitForIdle()
+            assertEquals(i + 1, h.sources.picks)
+            compose.onNode(hasText("Take a photo") and hasClickAction()).performClick()
+            compose.waitForIdle()
+            assertEquals(i + 1, h.sources.photos)
+        }
+    }
+
+    /** §6.2 Snap: with no camera app, "Take a photo" could only fail again; "Choose a photo" is the way. */
+    @Test
+    fun noCameraAppOffersOnlyThePicker() {
+        val h = compose.setHarness()
+        h.vm.cameraUnavailable()
+        compose.waitForIdle()
+        compose.onNodeWithText("There's no camera app on this phone. Choose a photo instead.").assertExists()
+        compose.onNode(hasText("Take a photo")).assertDoesNotExist()
+        compose.onNodeWithTag(CHOOSE_PHOTO_CHIP_TAG).performClick()
+        compose.waitForIdle()
+        assertEquals(1, h.sources.picks)
     }
 
     @Test

@@ -5,13 +5,24 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.activity.ComponentActivity
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.unit.Density
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import earth.cora.picnic.ui.theme.TOAST_TAG
+import earth.cora.picnic.ui.theme.ToastHostState
+import earth.cora.picnic.ui.theme.ToastMessage
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -29,7 +40,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w360dp-h760dp-xxhdpi")
 class FabTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun collapseRules() {
@@ -113,6 +124,64 @@ class FabTest {
         repeat(4) { list.performTouchInput { swipeDown(startY = top + 40f, endY = centerY + 150f) } }
         compose.waitForIdle()
         compose.onNodeWithTag(ADD_BAR_TAG).assertExists()
+    }
+
+    /**
+     * §4.15, §6.1: the dock measures itself. At font scale 2.0 the bar is far taller than 84 dp, and with the keyboard
+     * open it rides above it: a toast still sits 20 dp above the bar's top (never on its field or buttons, never behind
+     * the keyboard), and the list's last rows clear it by 26 dp.
+     */
+    @Test
+    fun toastsClearTheDockAtLargeTextAndOverTheKeyboard() {
+        val rig = addRig(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main))
+        val toasts = ToastHostState()
+        var flows: AddFlows? = null
+        compose.setContent {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, 2f)) {
+                earth.cora.picnic.ui.theme.PicnicTheme(earth.cora.picnic.ui.theme.ThemeVariant.Day) {
+                    val f = rememberAddFlows(rig.vm, RecordingSources().sources)
+                    flows = f
+                    AddFlowsHarness(f, harnessRows(AddFixtures.state), toasts = toasts)
+                }
+            }
+        }
+        compose.waitForIdle()
+        val dp = compose.density.density
+        val root = compose.onNodeWithTag(HARNESS_LIST_TAG).fetchSemanticsNode().boundsInRoot
+        fun bar() = compose.onNodeWithTag(ADD_BAR_TAG).fetchSemanticsNode().boundsInRoot
+        fun gapAboveBar(): Float {
+            val toast = compose.onNodeWithTag(TOAST_TAG).fetchSemanticsNode().boundsInRoot
+            return (bar().top - toast.bottom) / dp
+        }
+        assertTrue("the bar grew at 2.0: ${bar().height / dp} dp", bar().height / dp > 120f)
+        assertEquals("the dock is the bar as laid out", bar().height / dp, flows!!.dockHeight.value, 1f)
+
+        compose.mainClock.autoAdvance = false
+        toasts.show(ToastMessage("Added 2 items to Saturday shop ♡"))
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(600)
+        assertEquals("20 dp above the bar at 2.0", 20f, gapAboveBar(), 1f)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+
+        // The keyboard opens (300 dp): the bar rides above it, and so does the next toast.
+        val view = compose.activity.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0)
+        val ime = WindowInsetsCompat.Builder()
+            .setInsets(WindowInsetsCompat.Type.ime(), Insets.of(0, 0, 0, (300 * dp).toInt()))
+            .setVisible(WindowInsetsCompat.Type.ime(), true)
+            .build()
+        compose.runOnUiThread { ViewCompat.dispatchApplyWindowInsets(view, ime) }
+        compose.waitForIdle()
+        assertEquals("the bar sits on the keyboard", 300f, (root.bottom - bar().bottom) / dp, 2f)
+        assertEquals("the dock counts the keyboard", (root.bottom - bar().top) / dp, flows!!.dockHeight.value, 2f)
+        compose.mainClock.autoAdvance = false
+        toasts.show(ToastMessage("Milk is back on your list"))
+        androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeByFrame()
+        compose.mainClock.advanceTimeBy(600)
+        assertTrue("20 dp above the bar over the keyboard: ${gapAboveBar()} dp", gapAboveBar() >= 19f)
     }
 
     /** Item 116: a sheet WP5 opens (Edit, the list switcher, the Trip book) keeps the bar docked too; ours never overwrites it. */

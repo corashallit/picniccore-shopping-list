@@ -42,7 +42,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -141,7 +143,8 @@ fun Polaroid(photo: SnapPhoto?, reading: Boolean, modifier: Modifier = Modifier)
                 val thumb = photo?.thumb
                 if (thumb != null) {
                     Image(thumb, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                } else {
+                } else if (photo == null) {
+                    // Only an empty polaroid says so; a photo still being decoded (or one too odd to show small) is blank.
                     PaperTheme {
                         FixedFontScale {
                             Text(
@@ -200,7 +203,11 @@ fun PhotoLines(lines: List<PhotoLine>, reading: Boolean, clock: RevealClock?, mo
                 Text(
                     stringResource(R.string.add_snap_reading),
                     style = t.label.copy(fontSize = 15.sp, lineHeight = 20.sp, color = c.ink),
-                    modifier = Modifier.semantics { heading() },
+                    // §15 "loader labels once": TalkBack hears that the photo is being read (the bee loop is silent).
+                    modifier = Modifier.semantics {
+                        heading()
+                        liveRegion = LiveRegionMode.Polite
+                    },
                 )
             }
         }

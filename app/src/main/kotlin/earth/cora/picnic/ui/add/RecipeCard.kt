@@ -106,7 +106,8 @@ fun RecipeCard(
                         PicnicText(stringResource(R.string.add_card_kitchen), style = t.transcript.copy(color = c.ballpointSoft))
                     }
                 }
-                review.message?.let { Text(it, style = t.body.copy(fontSize = 15.sp, lineHeight = 21.sp, color = c.ballpointSoft)) }
+                // The model's note, or (with nothing to add and no note) a plain line saying so: the card is never blank.
+                reviewWords(review)?.let { Text(it, style = t.body.copy(fontSize = 15.sp, lineHeight = 21.sp, color = c.ballpointSoft)) }
                 // An answer with no rows says only its message: no "0 of 0 kept", nothing to switch on.
                 if (rows.isNotEmpty() || review.webSearch) MetaRow(review, rows)
                 if (rows.isNotEmpty()) {
@@ -245,7 +246,9 @@ internal fun AisleTray(rows: List<ReviewRow>, clock: RevealClock?, onToggleKeep:
  * One ingredient row (§4.17): a 40 dp sticker, the name (16 sp) over the detail, the keep switch (48 dp on a dashed spot;
  * kept = a lemon star pressed on). The whole row is the switch (Role.Switch, "Flour, 2.5 kilogram bag, 2 cups"). A
  * skipped row is faded (sticker 45 % with 60 % desaturation, name ballpointSoft, never struck) with its reason; a row
- * already on the list has no switch (duplicates are never added twice). Fans out at its beat on [clock].
+ * already on the list has no switch (duplicates are never added twice). The row's words and keep spot are there from
+ * the capsule's pop; its sticker fans into it at its beat on [clock] (0 → 1.2 → 1, §4.18), so the card reads as stickers
+ * landing in their rows, never as blank rows waiting.
  */
 @Composable
 internal fun ReviewRowView(
@@ -290,7 +293,6 @@ internal fun ReviewRowView(
                 Modifier.clearAndSetSemantics { contentDescription = label }
             },
         )
-        .graphicsLayer { alpha = if (shown) 1f else 0f }
         .padding(start = 8.dp, end = 2.dp, top = 4.dp, bottom = 4.dp)
     val sticker = @Composable {
         ItemIcon(
@@ -299,7 +301,11 @@ internal fun ReviewRowView(
             size = PicnicTheme.dimens.stickerCompact,
             aisleIndex = row.aisleIndex,
             modifier = Modifier
-                .graphicsLayer { scaleX = pop; scaleY = pop }
+                .graphicsLayer {
+                    alpha = if (shown) 1f else 0f
+                    scaleX = pop
+                    scaleY = pop
+                }
                 .then(if (faded) Modifier.skippedSticker() else Modifier),
         )
     }

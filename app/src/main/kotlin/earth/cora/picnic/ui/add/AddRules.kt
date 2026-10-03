@@ -46,13 +46,15 @@ object AddRules {
     }
 
     /**
-     * Rule 4, quick add (item 201): the answer has ≤ 3 items, no `recipe` block, no skipped rows (optional, in her
+     * Rule 4, quick add (item 201): the answer has 1 to 3 items, no `recipe` block, no skipped rows (optional, in her
      * pantry or already on her list: §4.17 calls all three "skipped") and no message worth showing. So an answer with a
      * pantry row is never a quick add (item 324), and a name already on her list shows in the review as "already on
-     * your list".
+     * your list". An answer with nothing to add is never a quick add either: it would commit nothing and wipe her note,
+     * so it opens the review ("OK" keeps the draft), with or without a message.
      */
     fun isQuickAdd(result: IngestResult, sent: String?): Boolean =
-        result.items.size <= QUICK_ADD_MAX_ITEMS &&
+        result.items.isNotEmpty() &&
+            result.items.size <= QUICK_ADD_MAX_ITEMS &&
             result.recipe == null &&
             result.items.none { it.skipReason != SkipReason.NONE } &&
             !messageWorthShowing(result.message, sent)

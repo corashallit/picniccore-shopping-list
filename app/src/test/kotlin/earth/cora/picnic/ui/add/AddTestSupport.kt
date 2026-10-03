@@ -1,12 +1,15 @@
 package earth.cora.picnic.ui.add
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import androidx.test.core.app.ApplicationProvider
 import earth.cora.picnic.core.assistant.AisleSync
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.store.InMemoryStateStore
+import earth.cora.picnic.platform.FakeAnnouncer
 import earth.cora.picnic.platform.FakeFeedback
 import earth.cora.picnic.ui.common.FakeAssistant
 import earth.cora.picnic.ui.common.FakePhotos
@@ -66,6 +69,7 @@ class AddRig(
     val recorder: FakeRecorder,
     val surprises: RecordingSurprises,
     val feedback: FakeFeedback,
+    val announcer: FakeAnnouncer,
 )
 
 /** Builds the ViewModel over [state] with fakes; the clock reads [now] and ids count up. */
@@ -85,6 +89,8 @@ fun addRig(
     val icons = RecordingIconRepository()
     val photos = FakePhotos()
     val feedback = FakeFeedback()
+    val announcer = FakeAnnouncer()
+    val context = ApplicationProvider.getApplicationContext<Context>()
     var next = 0
     val vm = AddViewModel(
         store = store,
@@ -103,7 +109,9 @@ fun addRig(
         feedback = feedback,
         thumbs = { null },
         ioDispatcher = io,
+        announcer = announcer,
+        words = context::getString,
     )
     vm.showList(AddFixtures.LIST_ID)
-    return AddRig(vm, store, assistant, icons, photos, recorder, surprises, feedback)
+    return AddRig(vm, store, assistant, icons, photos, recorder, surprises, feedback, announcer)
 }

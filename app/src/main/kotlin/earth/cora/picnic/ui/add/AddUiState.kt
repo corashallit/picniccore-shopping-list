@@ -103,10 +103,12 @@ data class AddUiState(
     val recording: Boolean get() = phase is AddPhase.Recording
 
     /**
-     * A tab she can switch to: every tab while no review is open; with one, only the tabs that show it. A new note or
-     * photo would replace a review she has not committed, so those tabs are dimmed until it is stuck on or closed.
+     * A tab she can switch to: none while something runs (a photo being read, a voice note recording or being written
+     * down, a note being read, a save), since the tap would do nothing; otherwise every tab while no review is open,
+     * and with one only the tabs that show it. A new note or photo would replace a review she has not committed, so
+     * those tabs are dimmed until it is stuck on or closed. A dimmed tab reads "disabled" to TalkBack.
      */
-    fun tabEnabled(mode: AddMode): Boolean = review?.showsOn(mode) ?: true
+    fun tabEnabled(mode: AddMode): Boolean = !phase.busy && !committing && (review?.showsOn(mode) ?: true)
 }
 
 /**
@@ -140,6 +142,8 @@ data class ReviewRow(
     val storeAisle: Int? = null,
     val style: AisleStyle? = null,
     val icon: IconRef,
+    /** The row came from the offline parse ("Add as plain lines"): it commits as TYPED, so the aisle sort places it. */
+    val typed: Boolean = false,
 ) {
     val skipReason: SkipReason get() = item.skipReason
     val canKeep: Boolean get() = item.skipReason != SkipReason.ALREADY_ON_LIST
@@ -169,6 +173,11 @@ data class AddReview(
     /** The keys of the latest heard batch (they fan out on [heardId]; earlier heard rows stay as they were). */
     val heardFresh: Set<Int> = emptySet(),
     val revealed: Set<Long> = emptySet(),
+    /**
+     * The rows are the note's or the transcript's plain lines after a failed AI call (ARCHITECTURE §10.4): no AI ran,
+     * so no thinking box and no steps; the rows fan out straight into the card or the Heard tray.
+     */
+    val plain: Boolean = false,
 ) {
     val kept: Int get() = rows.count { it.keep }
     val mainRows: List<ReviewRow> get() = rows.filter { it.batch == RowBatch.MAIN }

@@ -123,6 +123,24 @@ class SpeakFlowTest {
         compose.onNode(hasRole(Role.Tab) and hasText("Speak")).assert(hasStateDescription("recording"))
     }
 
+    /**
+     * §6.2 Speak: the microphone turned off for good. The words say where to allow it, and "Open phone settings" goes
+     * there (Android's page for this app), so tapping the record sticker is not the only, failing, way.
+     */
+    @Test
+    fun aDeniedMicrophoneOffersThePhonesSettings() {
+        val h = compose.setHarness()
+        h.vm.micDenied()
+        compose.waitForIdle()
+        compose.onNodeWithText("Speak needs the microphone. You can allow it in the phone's settings.").assertExists()
+        compose.onNode(hasText("Open phone settings") and hasClickAction()).performClick()
+        compose.waitForIdle()
+        val started = shadowOf(compose.activity).nextStartedActivity
+        assertNotNull("Android's app settings page opens", started)
+        assertEquals(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, started.action)
+        assertEquals("package:${compose.activity.packageName}", started.data.toString())
+    }
+
     @Test
     fun cassetteCues() {
         assertEquals(Sound.CLUNK, Cue.CASSETTE.sound)

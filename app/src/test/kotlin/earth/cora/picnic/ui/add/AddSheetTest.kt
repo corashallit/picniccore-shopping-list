@@ -19,6 +19,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.assistant.IngestResult
 import earth.cora.picnic.core.model.ItemSource
@@ -58,8 +64,13 @@ class AddSheetTest {
         compose.waitForIdle()
         tab("Write").assertIsSelected()
         compose.onNode(hasSetTextAction() and androidx.compose.ui.test.hasContentDescription("Note")).assertExists()
+        // §15: every tab is a 48 dp target (the faces stay 38 / 44 dp, drawn at the bottom of it).
+        for (label in listOf("Write", "Snap", "Speak")) tab(label).assertHeightIsAtLeast(48.dp)
+        val selectedFace = compose.onAllNodesWithTag(ADD_TAB_LABEL_TAG, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
+        assertTrue("the target reaches above the face", tab("Write").fetchSemanticsNode().boundsInRoot.top < selectedFace.top - 4 * compose.density.density)
 
-        tab("Snap").performClick()
+        // A tap at the very top of a target (above the unselected face) still switches.
+        tab("Snap").performTouchInput { click(Offset(centerX, 2f)) }
         compose.waitForIdle()
         assertEquals(AddMode.SNAP, h.vm.state.value.mode)
         tab("Snap").assertIsSelected()
@@ -150,6 +161,38 @@ class AddSheetTest {
         tab("Write").performClick()
         compose.waitForIdle()
         compose.onNodeWithTag(RECIPE_CARD_TAG).assertExists()
+    }
+
+    /** Item 206: while a photo is read, every tab is dimmed and says "disabled" (a tap would do nothing). */
+    @Test
+    fun tabsWaitWhileAPhotoIsRead() {
+        val gate = kotlinx.coroutines.CompletableDeferred<IngestResult>()
+        val h = compose.setHarness(FakeAssistant(ingest = { _, _ -> gate.await() }))
+        h.vm.onPhoto(android.net.Uri.parse("content://test/photo.jpg"))
+        compose.waitForIdle()
+        tab("Write").assertIsNotEnabled()
+        tab("Speak").assertIsNotEnabled()
+        tab("Write").performClick()
+        compose.waitForIdle()
+        assertEquals(AddMode.SNAP, h.vm.state.value.mode)
+        gate.complete(f.photo())
+        compose.waitForIdle()
+        tab("Speak").assertIsEnabled()
+    }
+
+    /** Rule 4: an answer with no rows and no message says plainly that there was nothing to add, above "OK". */
+    @Test
+    fun anEmptyAnswerWithNoMessageSaysSo() {
+        val h = compose.setHarness(FakeAssistant(ingest = { _, _ -> IngestResult(emptyList(), "", emptyList(), emptyList(), f.meta()) }))
+        h.vm.setText("hello")
+        h.vm.send(AddOrigin.BAR)
+        compose.waitForIdle()
+        compose.onNodeWithTag(RECIPE_CARD_TAG).assertExists()
+        compose.onNodeWithText("Nothing to add from that note.").assertExists()
+        cta("OK").assertIsEnabled().performClick()
+        compose.waitForIdle()
+        assertEquals("hello", h.vm.state.value.text)
+        assertTrue(h.commits.isEmpty())
     }
 
     /** An answer with nothing to buy says only its message: no "0 of 0 kept", no impossible "Switch one on"; OK closes. */

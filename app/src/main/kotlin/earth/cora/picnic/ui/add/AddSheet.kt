@@ -1,5 +1,9 @@
 package earth.cora.picnic.ui.add
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -37,6 +41,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -98,6 +104,8 @@ class AddActions(
     val onUsePlainLines: () -> Unit = {},
     val onCommit: () -> Unit = {},
     val onOpenSettings: () -> Unit = {},
+    /** "Open phone settings" (the microphone was turned off for good): Android's page for this app. */
+    val onOpenAppSettings: () -> Unit = {},
     /** "Edit my pantry" (WP8's navigation); null hides the button. */
     val onEditPantry: (() -> Unit)? = null,
     val onRevealed: (Long) -> Unit = {},
@@ -111,20 +119,24 @@ class AddActions(
 /**
  * The Add sheet wired to [flows] (WP5 places it above the overlay layer): Back and the scrim close it, "Open Settings"
  * and "Edit my pantry" leave it to their screens (the review waits in the ViewModel: Back returns to the same card).
+ * [onOpenSettings] must not close the sheet first: after a key error the photo or the recording waits there, and "Try
+ * again" picks it up once the key is fixed. The camera, the picker and the microphone need the key first
+ * ([AddFlows.takePhoto]).
  */
 @Composable
 fun AddSheetHost(flows: AddFlows, state: AddUiState, onOpenSettings: () -> Unit, onEditPantry: (() -> Unit)?) {
     val vm = flows.vm
-    val actions = remember(flows, onOpenSettings, onEditPantry) {
+    val context = LocalContext.current
+    val actions = remember(flows, onOpenSettings, onEditPantry, context) {
         AddActions(
             onModeChange = vm::setMode,
             onTextChange = vm::setText,
             onSend = { vm.send(AddOrigin.SHEET) },
             onAsTyped = vm::addAsTyped,
             onEditNote = vm::editNote,
-            onTakePhoto = flows.sources.takePhoto,
-            onChoosePhoto = flows.sources.pickPhoto,
-            onRecord = flows.sources.recordVoice,
+            onTakePhoto = flows::takePhoto,
+            onChoosePhoto = flows::pickPhoto,
+            onRecord = flows::recordVoice,
             onStopRecording = vm::stopRecording,
             onCancel = vm::cancel,
             onToggleKeep = vm::toggleKeep,
@@ -132,6 +144,7 @@ fun AddSheetHost(flows: AddFlows, state: AddUiState, onOpenSettings: () -> Unit,
             onUsePlainLines = vm::usePlainLines,
             onCommit = vm::commit,
             onOpenSettings = onOpenSettings,
+            onOpenAppSettings = { openAppSettings(context) },
             onEditPantry = onEditPantry,
             onRevealed = vm::revealFinished,
             onCapsulePop = vm::capsulePopped,
@@ -140,6 +153,17 @@ fun AddSheetHost(flows: AddFlows, state: AddUiState, onOpenSettings: () -> Unit,
         )
     }
     AddSheet(state, actions)
+}
+
+/** Android's settings page for this app (where a microphone turned off for good can be allowed again). */
+private fun openAppSettings(context: android.content.Context) {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+    if (context !is android.app.Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(intent)
+    } catch (e: ActivityNotFoundException) {
+        // A phone without that page: the error's words still say where the switch is.
+    }
 }
 
 /**
@@ -222,8 +246,10 @@ private fun ColumnScope.AddSheetContent(state: AddUiState, actions: AddActions, 
  * The index tabs (§4.16): Write · Snap · Speak in lemon, ramune and sakura pastels, 38 dp tall, Zen Maru 700 14 sp with
  * a 20 dp glyph; the selected tab is 6 dp taller (44 dp), mid fill, DynaPuff 16 sp. A 2 dp rule under them. Role.Tab.
  * A REC dot sits on Speak while recording. The faces grow with the text (never below 38 / 44 dp) and the labels never go
- * under 13 sp (§2.7, §15); the glyph steps aside from font scale 1.5. A tab whose mode would replace an open review is
- * dimmed like a disabled pill and does nothing ([enabled]). Pressed: the highlighter band behind the label.
+ * under 13 sp (§2.7, §15); the glyph steps aside from font scale 1.5. A tab that would do nothing (something runs, or
+ * its mode would replace an open review) is dimmed like a disabled pill ([enabled]). Pressed: the highlighter band
+ * behind the label. Each tab is a 48 dp target (§15): the faces stay as drawn at the bottom and the target reaches up
+ * into the blank sheet above them, so the row sits where 44 dp tabs sit.
  */
 @Composable
 fun AddTabs(
@@ -234,7 +260,18 @@ fun AddTabs(
     enabled: (AddMode) -> Boolean = { true },
 ) {
     val c = PicnicTheme.colors
-    Box(modifier.fillMaxWidth().testTag(ADD_TABS_TAG)) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .testTag(ADD_TABS_TAG)
+            // The targets are 4 dp taller than the selected face (48 vs 44 dp): that part reaches above the row's place
+            // in the sheet (its blank top margin) instead of pushing the sheet's content down.
+            .layout { measurable, constraints ->
+                val reach = TAB_REACH.roundToPx()
+                val p = measurable.measure(constraints)
+                layout(p.width, (p.height - reach).coerceAtLeast(0)) { p.place(0, -reach) }
+            },
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -296,56 +333,60 @@ private fun AddTab(
     val pressed by interaction.collectIsPressedAsState()
     Box(
         modifier
+            // §15: a 48 dp target; the face below keeps its drawn height at the bottom.
+            .heightIn(min = TAB_TARGET)
             .selectable(selected = selected, enabled = enabled, role = Role.Tab, interactionSource = interaction, indication = null, onClick = onClick)
             .semantics { if (recording) stateDescription = recordingText },
         contentAlignment = Alignment.BottomCenter,
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .then(if (enabled) Modifier.hardShadow(shape, PicnicTheme.shadows) else Modifier)
-                .clip(shape)
-                .background(c.stickerWhite)
-                .padding(start = 3.dp, end = 3.dp, top = 3.dp)
-                .clip(shape)
-                .background(
-                    when {
-                        selected -> family.mid
-                        enabled -> family.pastel
-                        else -> c.backing
-                    },
-                )
-                .padding(horizontal = if (large) 2.dp else 6.dp)
-                // 38 dp at rest (3 dp border + 35 dp); the selected tab is 6 dp taller, its label centred. Both grow
-                // with the label (never clipped) and keep the 6 dp step.
-                .padding(vertical = if (selected) TAB_RISE / 2 else 0.dp)
-                .heightIn(min = TAB_FACE),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
-        ) {
-            if (!large) Glyph(glyph, null, tint = ink, size = 20.dp)
-            BasicText(
-                label,
-                style = style,
-                maxLines = 1,
-                // Large text shrinks the label to fit its tab, never under the 13 sp floor (§2.7).
-                autoSize = TextAutoSize.StepBased(minFontSize = 13.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
-                modifier = Modifier.testTag(ADD_TAB_LABEL_TAG).pressedBand(pressed, c.pressedBand),
-            )
-        }
-        if (recording) {
-            Box(
+        Box {
+            Row(
                 Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = (-6).dp, y = 4.dp)
-                    .size(12.dp)
-                    .decorative()
-                    .clip(CircleShape)
+                    .fillMaxWidth()
+                    .then(if (enabled) Modifier.hardShadow(shape, PicnicTheme.shadows) else Modifier)
+                    .clip(shape)
                     .background(c.stickerWhite)
-                    .padding(2.dp)
-                    .clip(CircleShape)
-                    .background(StickerHanko),
-            )
+                    .padding(start = 3.dp, end = 3.dp, top = 3.dp)
+                    .clip(shape)
+                    .background(
+                        when {
+                            selected -> family.mid
+                            enabled -> family.pastel
+                            else -> c.backing
+                        },
+                    )
+                    .padding(horizontal = if (large) 2.dp else 6.dp)
+                    // 38 dp at rest (3 dp border + 35 dp); the selected tab is 6 dp taller, its label centred. Both grow
+                    // with the label (never clipped) and keep the 6 dp step.
+                    .padding(vertical = if (selected) TAB_RISE / 2 else 0.dp)
+                    .heightIn(min = TAB_FACE),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
+            ) {
+                if (!large) Glyph(glyph, null, tint = ink, size = 20.dp)
+                BasicText(
+                    label,
+                    style = style,
+                    maxLines = 1,
+                    // Large text shrinks the label to fit its tab, never under the 13 sp floor (§2.7).
+                    autoSize = TextAutoSize.StepBased(minFontSize = 13.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+                    modifier = Modifier.testTag(ADD_TAB_LABEL_TAG).pressedBand(pressed, c.pressedBand),
+                )
+            }
+            if (recording) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-6).dp, y = 4.dp)
+                        .size(12.dp)
+                        .decorative()
+                        .clip(CircleShape)
+                        .background(c.stickerWhite)
+                        .padding(2.dp)
+                        .clip(CircleShape)
+                        .background(StickerHanko),
+                )
+            }
         }
     }
 }
@@ -353,23 +394,33 @@ private fun AddTab(
 private val TAB_FACE = 35.dp
 private val TAB_RISE = 6.dp
 
+/** §15: every target is ≥ 48 dp. */
+private val TAB_TARGET = 48.dp
+
+/** How far the targets reach above the selected face (3 dp border + 35 + 6 = 44 dp) into the sheet's top margin. */
+private val TAB_REACH = TAB_TARGET - (TAB_FACE + 3.dp + TAB_RISE)
+
 /* ---------------- Write ---------------- */
 
 @Composable
 private fun WriteTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
-    val review = state.review?.takeIf { it.source == ItemSource.AI_TEXT }
+    // A note's review: the answer's card, or its plain lines after a failed request (TYPED, no AI ran).
+    val review = state.review?.takeIf { it.source == ItemSource.AI_TEXT || it.source == ItemSource.TYPED }
     val waiting = (state.phase as? AddPhase.Thinking)?.kind == ItemSource.AI_TEXT
     val failed = (state.phase as? AddPhase.Failed)?.takeIf { review == null }
     if (review != null || waiting) {
         SentNote(state.sentText ?: state.text, onEdit = actions.onEditNote, enabled = !waiting)
         val clock = reveals.main
-        ThinkingBox(
-            steps = review?.steps,
-            recipe = review?.recipe != null,
-            clock = if (review != null) clock else null,
-            family = targetFamily(review),
-            onPop = actions.onCapsulePop,
-        )
+        // Plain lines claim no reading: no thinking box, the rows fan straight into the card.
+        if (review?.plain != true) {
+            ThinkingBox(
+                steps = review?.steps,
+                recipe = review?.recipe != null,
+                clock = if (review != null) clock else null,
+                family = targetFamily(review),
+                onPop = actions.onCapsulePop,
+            )
+        }
         if (waiting) {
             PicnicButton(stringResource(R.string.add_stop), onClick = actions.onCancel, style = PicnicButtonStyle.Text, glyph = PicnicGlyph.Close)
         }
@@ -408,6 +459,17 @@ private fun targetFamily(review: AddReview?): StickerFamily {
     return earth.cora.picnic.ui.theme.AisleLooks.of(row.aisleIndex + 1, row.style).family
 }
 
+/**
+ * What the review says above its rows: the model's own note when it is worth showing (rule 4), else, when nothing came
+ * back to add, a plain line saying so ("Nothing to add from that note."), so the card above "OK" is never blank.
+ */
+@Composable
+internal fun reviewWords(review: AddReview): String? = review.message ?: if (review.mainRows.isEmpty()) {
+    stringResource(if (review.source == ItemSource.PHOTO) R.string.add_nothing_photo else R.string.add_nothing_note)
+} else {
+    null
+}
+
 /** The model's own note on the answer, when it is worth showing (rule 4): one quiet line above the stickers. */
 @Composable
 private fun ReviewMessage(message: String?) {
@@ -427,7 +489,8 @@ private fun SnapTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
     val failed = state.phase as? AddPhase.Failed
     val stacked = LocalDensity.current.fontScale >= LARGE_TEXT
     if (state.photo == null && review == null) {
-        // No photo yet: an empty polaroid, the hint and the "Choose a photo" chip (the picker never needs a gesture).
+        // No photo yet (or one that could not be opened): an empty polaroid, the hint and the "Choose a photo" chip (the
+        // picker never needs a gesture).
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (!stacked) Polaroid(photo = null, reading = false)
             Text(
@@ -451,10 +514,14 @@ private fun SnapTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
         }
     }
     if (review == null) {
-        if (failed != null) ErrorBlock(failed, actions)
+        if (failed != null) {
+            ErrorBlock(failed, actions)
+            // The photo could not be read: another one is a tap away (the footer offers the camera).
+            ChoosePhotoChip(actions.onChoosePhoto)
+        }
         return
     }
-    if (clock?.done != false) ReviewMessage(review.message)
+    if (clock?.done != false) ReviewMessage(reviewWords(review))
     if (review.mainRows.isNotEmpty()) {
         val order = AddRules.photoPopOrder(review.lines, review.mainRows.sortedBy { it.key }.map { it.key })
         PoppedTray(review.mainRows, order, clock, actions.onToggleKeep)
@@ -507,9 +574,12 @@ private fun HeardPart(state: AddUiState, actions: AddActions, reveals: Reveals) 
     val failed = state.phase as? AddPhase.Failed
     if (review != null && review.source == ItemSource.VOICE) {
         val clock = reveals.main
-        ThinkingBox(steps = review.steps, recipe = review.recipe != null, clock = clock, family = targetFamily(review), onPop = actions.onCapsulePop)
+        // A voice note's plain lines (after a failed request) claim no reading: no thinking box.
+        if (!review.plain) {
+            ThinkingBox(steps = review.steps, recipe = review.recipe != null, clock = clock, family = targetFamily(review), onPop = actions.onCapsulePop)
+        }
         if (clock?.popped() != false) {
-            ReviewMessage(review.message)
+            ReviewMessage(reviewWords(review))
             if (review.mainRows.isNotEmpty()) HeardTray(review.mainRows, afterReview = false, clock = clock, onToggleKeep = actions.onToggleKeep)
         }
     }
@@ -518,7 +588,11 @@ private fun HeardPart(state: AddUiState, actions: AddActions, reveals: Reveals) 
         PicnicButton(stringResource(R.string.add_stop), onClick = actions.onCancel, style = PicnicButtonStyle.Text, glyph = PicnicGlyph.Close)
     } else if (review?.heardId != null) {
         val clock = reveals.heard
-        ThinkingBox(steps = review.heardSteps, recipe = false, clock = clock, family = targetFamily(review), onPop = actions.onCapsulePop)
+        // Heard rows from plain lines (a failed request after a review) claim no reading either.
+        val plainHeard = review.heardRows.filter { it.key in review.heardFresh }.let { fresh -> fresh.isNotEmpty() && fresh.all { it.typed } }
+        if (!plainHeard) {
+            ThinkingBox(steps = review.heardSteps, recipe = false, clock = clock, family = targetFamily(review), onPop = actions.onCapsulePop)
+        }
         if (clock?.popped() != false && review.heardRows.isNotEmpty()) {
             HeardTray(review.heardRows, afterReview = true, clock = clock, onToggleKeep = actions.onToggleKeep)
         }
@@ -570,6 +644,10 @@ private fun ErrorBlock(failed: AddPhase.Failed, actions: AddActions) {
             if (failed.needsSettings) {
                 ShortLabelButton(R.string.add_open_settings, R.string.add_open_settings_short, large, actions.onOpenSettings, PicnicGlyph.Settings)
             }
+            // The microphone was turned off: the words say where to allow it, and this takes her there.
+            if (failed.problem == AddProblem.MIC_DENIED) {
+                ShortLabelButton(R.string.add_open_phone_settings, R.string.add_open_phone_settings_short, large, actions.onOpenAppSettings, PicnicGlyph.Settings)
+            }
         }
     }
 }
@@ -617,7 +695,7 @@ private sealed interface FooterKind {
     /** Write: "As typed" and Send. */
     data object Write : FooterKind
 
-    /** Snap with no photo yet: "Take a photo". */
+    /** Snap with no photo yet, or after a photo that could not be read: "Take a photo". */
     data object TakePhoto : FooterKind
 }
 
@@ -638,7 +716,11 @@ private fun footerFor(state: AddUiState, reveals: Reveals): FooterKind? {
     return when (state.mode) {
         AddMode.WRITE -> if (state.phase is AddPhase.Failed || review != null) null else FooterKind.Write
         AddMode.SNAP -> when {
+            // No camera app: "Take a photo" could only fail again ("Choose a photo" stays in the tab).
+            (state.phase as? AddPhase.Failed)?.problem == AddProblem.CAMERA_UNAVAILABLE -> null
             state.photo == null && review == null -> FooterKind.TakePhoto
+            // A photo that could not be read (or an answer that failed): another one.
+            review == null && state.phase is AddPhase.Failed -> FooterKind.TakePhoto
             // The photo is being read: "Reading…" waits where "Stick all" will be (§4.19).
             state.phase is AddPhase.Thinking -> FooterKind.Stick(0, 0, revealing = true, reading = true)
             else -> null

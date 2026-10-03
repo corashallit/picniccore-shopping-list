@@ -46,6 +46,9 @@ class AddRulesTest {
             AddRules.isQuickAdd(answer(f.proposed("Milk", "milk_bag", "dairy-eggs", skip = SkipReason.ALREADY_ON_LIST)), "milk"),
         )
         assertFalse("a message worth showing", AddRules.isQuickAdd(answer(f.proposed("Milk", "milk_bag", null), message = "Bags are 4 L."), "milk"))
+        // Nothing to add is never a quick add: it would commit nothing and wipe her note (it opens the review's "OK").
+        assertFalse("no items, no message", AddRules.isQuickAdd(answer(), "hello"))
+        assertFalse("no items, an echo", AddRules.isQuickAdd(answer(message = "Hello!"), "hello"))
     }
 
     /** Item 296, the add flows' half: every detail line is metric after normalisation; a recipe amount after "·" may be cooking. */

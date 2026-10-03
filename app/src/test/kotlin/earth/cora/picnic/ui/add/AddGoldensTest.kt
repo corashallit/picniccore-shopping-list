@@ -60,7 +60,15 @@ class AddGoldensTest(private val variant: ThemeVariant, private val v: String) {
 
     // ---- the add bar (§6.2) ----
 
-    @Test fun addbarIdle() = bar("addbar_idle_$v", AddBarUi())
+    /**
+     * Idle, through [AddDock] as the List screen docks it (item 115 in the dock): the perforation's bites along the top
+     * edge show the binder behind the bar, never a pad painted behind the dock.
+     */
+    @Test fun addbarIdle() = record("addbar_idle_$v", stage = true) {
+        val rig = remember { addRig(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)) }
+        val flows = rememberAddFlows(rig.vm, remember { RecordingSources() }.sources)
+        BarStage { AddDock(flows, base, tape = WashiPattern.Thanksgiving) }
+    }
 
     @Test fun addbarFocused() = bar("addbar_focused_$v", AddBarUi(), focus = true)
 

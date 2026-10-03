@@ -84,14 +84,15 @@ fun AddFlowsHarness(
                     .fillMaxSize()
                     .testTag(HARNESS_LIST_TAG)
                     .nestedScroll(flows.collapse.nestedScrollConnection),
-                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = 120.dp),
+                // §6.1: the add bar (as measured, with the IME) + 26 dp.
+                contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 12.dp, bottom = flows.dockHeight + 26.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 items(rows, key = { it.id }) { row -> HarnessRowView(row) }
             }
         }
         AddDock(flows, state, tape = tape)
-        ToastHost(toasts, bottomInset = flows.collapse.dockHeight())
+        ToastHost(toasts, bottomInset = flows.dockHeight)
         AddSheetHost(flows, state, onOpenSettings = onOpenSettings, onEditPantry = onEditPantry)
     }
 }

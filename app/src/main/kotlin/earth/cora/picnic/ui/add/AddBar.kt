@@ -38,6 +38,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -649,7 +652,10 @@ private const val BAR_SLIDE_MS = 220
 /**
  * The docked add bar or, folded, the FAB at the bottom-right (§6.1 item 3, §2.9 `addBar` / `fab`), placed by WP5 at the
  * bottom of the List screen. The bar slides down 220 ms as the FAB pops in; tapping the FAB brings the bar back and
- * focuses the field. The bar's pad runs under the navigation bar and it rides above the IME.
+ * focuses the field. The bar's pad runs under the navigation bar and it rides above the IME; the pad is painted only
+ * under the bar and that inset, so the perforation's bites along the bar's top edge show the binder behind it (§6.2).
+ * The dock measures itself into [AddFlows.dockHeight] (the bar as it grows with large text, plus the IME or navigation
+ * bar; the FAB's room when folded) for the toasts and the list's bottom padding.
  */
 @Composable
 fun BoxScope.AddDock(
@@ -671,27 +677,31 @@ fun BoxScope.AddDock(
     }
     LaunchedEffect(state.sheetOpen, otherSheetOpen) { collapse.sheetOpen = state.sheetOpen || otherSheetOpen }
     val c = PicnicTheme.colors
+    val density = LocalDensity.current
+    val bottomInsets = WindowInsets.ime.union(WindowInsets.navigationBars)
     if (slide.value < 1f) {
         Column(
             modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .graphicsLayer { translationY = slide.value * size.height * 1.02f }
-                .background(c.pad)
-                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars).only(WindowInsetsSides.Bottom)),
+                // The layout height (the slide is only drawn): the bar as laid out plus the inset under it.
+                .onSizeChanged { flows.barHeight = with(density) { it.height.toDp() } }
+                .graphicsLayer { translationY = slide.value * size.height * 1.02f },
         ) {
             AddBar(
                 state = state.barUi(),
                 onTextChange = flows.vm::setText,
                 onSend = { flows.vm.send(AddOrigin.BAR) },
-                onSnap = flows.sources.takePhoto,
-                onChoosePhoto = flows.sources.pickPhoto,
-                onSpeak = flows.sources.recordVoice,
+                onSnap = flows::takePhoto,
+                onChoosePhoto = flows::pickPhoto,
+                onSpeak = flows::recordVoice,
                 onStop = flows.vm::cancel,
                 tape = tape,
                 focusRequester = flows.focusRequester,
                 onFocusChange = { collapse.fieldFocused = it },
             )
+            // The pad under the bar, over the navigation bar or the keyboard's room (never behind the bar's bites).
+            Spacer(Modifier.fillMaxWidth().windowInsetsBottomHeight(bottomInsets).background(c.pad))
             // The FAB (or an empty Send) asked for the field: the bar is composed now, so focus it.
             LaunchedEffect(flows.focusPending) { if (flows.focusPending) flows.focusNow() }
         }
@@ -704,10 +714,9 @@ fun BoxScope.AddDock(
         visible = collapse.collapsed,
         modifier = Modifier
             .align(Alignment.BottomEnd)
-            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars).only(WindowInsetsSides.Bottom))
+            // The FAB's room from the bottom: the inset, its 12 dp margin and the 64 dp sticker.
+            .onSizeChanged { flows.fabHeight = with(density) { it.height.toDp() } }
+            .windowInsetsPadding(bottomInsets.only(WindowInsetsSides.Bottom))
             .padding(end = 6.dp, bottom = 12.dp),
     )
 }
-
-/** The dock's height for toasts and the list's bottom padding: the bar (84 dp) or the FAB's room. */
-fun AddBarCollapseState.dockHeight(): Dp = if (collapsed) 96.dp else 84.dp

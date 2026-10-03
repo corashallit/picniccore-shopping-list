@@ -58,6 +58,8 @@ import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import earth.cora.picnic.ui.theme.LoaderKind
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.LocalThemeVariant
+import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicLoader
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -237,12 +239,14 @@ internal val HANKO_STICKER: Dp = 48.dp
 /**
  * The dot equaliser (§4.20): 7 columns × 6 stacked 10 dp puffy dots (1.6 dp white border, a small hard shadow): lemon mid
  * (dots 1–2 from the bottom), peach mid (3–4), sakura mid (5–6); unlit dots are their pastel. Whole dots switch on from
- * the bottom up; never squashed. Decorative (the timer and the REC state carry the information).
+ * the bottom up; never squashed. In Glow the unlit dots sink into the navy sheet (a faint pastel in a dim ring), so the
+ * lit ones read as on, as they do on the Day pad. Decorative (the timer and the REC state carry the information).
  */
 @Composable
 fun DotEqualiser(columns: List<Int>, modifier: Modifier = Modifier) {
     val shadow = PicnicTheme.shadows
     val white = PicnicTheme.colors.stickerWhite
+    val glow = LocalThemeVariant.current == ThemeVariant.Glow
     Canvas(modifier.size(width = EQ_WIDTH, height = EQ_HEIGHT).testTag(EQUALISER_TAG).decorative()) {
         val dot = 10.dp.toPx()
         val ring = 1.6.dp.toPx()
@@ -259,12 +263,24 @@ fun DotEqualiser(columns: List<Int>, modifier: Modifier = Modifier) {
                 val c = Offset(col * (dot + gapX) + dot / 2f, size.height - (row * (dot + gapY) + dot / 2f))
                 val on = row < lit
                 if (on) drawCircle(shadow.color, dot / 2f, c + Offset(1.dp.toPx(), 1.4.dp.toPx()))
-                drawCircle(white, dot / 2f, c)
-                drawCircle(if (on) family.mid else family.pastel.copy(alpha = 0.75f), dot / 2f - ring, c)
+                if (on || !glow) {
+                    // The white die-cut disc, then the mid (lit) or the pastel (unlit, on the Day pad).
+                    drawCircle(white, dot / 2f, c)
+                    drawCircle(if (on) family.mid else family.pastel.copy(alpha = DAY_OFF_FILL), dot / 2f - ring, c)
+                } else {
+                    // Glow, unlit: sunk into the navy sheet, a faint pastel in a dim ring (no white disc behind it).
+                    drawCircle(family.pastel.copy(alpha = GLOW_OFF_FILL), dot / 2f - ring, c)
+                    drawCircle(white.copy(alpha = GLOW_OFF_RING), dot / 2f - ring / 2f, c, style = Stroke(ring))
+                }
             }
         }
     }
 }
+
+/** An unlit dot's pastel: on the Day pad, and sunk into the Glow sheet (with a ring at 40 % white). */
+private const val DAY_OFF_FILL = 0.75f
+private const val GLOW_OFF_FILL = 0.28f
+private const val GLOW_OFF_RING = 0.4f
 
 private val EQ_WIDTH: Dp = 122.dp
 private val EQ_HEIGHT: Dp = 82.dp

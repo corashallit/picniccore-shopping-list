@@ -344,12 +344,26 @@ class AddViewModelTest {
         advanceUntilIdle()
         assertEquals("Try again repeats the request", 2, calls)
 
-        // "Add as plain lines" commits the note line by line.
+        // "Add as plain lines" (ARCHITECTURE §10.4): the note line by line, then a review she can switch rows off in.
         r.vm.usePlainLines()
         advanceUntilIdle()
-        val names = r.store.current().list(f.LIST_ID)!!.items.map { it.name }
-        assertTrue(names.containsAll(listOf("Lemons", "Oat milk")))
+        val plain = r.vm.state.value.review!!
+        assertTrue(plain.plain)
+        assertEquals(ItemSource.TYPED, plain.source)
+        assertEquals(AddMode.WRITE, r.vm.state.value.mode)
+        assertEquals(AddPhase.Preview, r.vm.state.value.phase)
+        assertEquals(listOf("Lemons", "Oat milk"), plain.rows.map { it.item.name })
+        assertTrue("every row can be switched off", plain.rows.all { it.canKeep && it.keep && it.typed })
+        assertEquals("nothing lands before Stick all", f.state, r.store.current())
+        r.vm.toggleKeep(plain.rows.single { it.item.name == "Lemons" }.key)
+        r.vm.commit()
+        advanceUntilIdle()
+        val items = r.store.current().list(f.LIST_ID)!!.items
+        assertFalse("switched off: never added", items.any { it.name == "Lemons" })
+        assertEquals(ItemSource.TYPED, items.single { it.name == "Oat milk" }.source)
         assertFalse(r.vm.state.value.sheetOpen)
+        assertEquals("the note went on: the draft clears", "", r.vm.state.value.text)
+        assertEquals("the typed row is placed in the background", listOf("Oat milk"), r.assistant.recategorized.single().map { it.name })
 
         // NotConfigured offers Open Settings.
         assistant.ingest = { _, _ -> throw LlmError.NotConfigured("no key") }
@@ -357,6 +371,59 @@ class AddViewModelTest {
         r.vm.send()
         advanceUntilIdle()
         assertTrue((r.vm.state.value.phase as AddPhase.Failed).needsSettings)
+    }
+
+    /**
+     * Item 215 / §10.4: a voice note whose reading failed goes through a review as plain lines, so spoken fragments
+     * ("Oh and frozen corn") can be switched off before they land; nothing reaches the list before "Stick all".
+     */
+    @Test
+    fun aVoiceNotesPlainLinesOpenAReview() = runTest {
+        val assistant = FakeAssistant(
+            ingest = { _, _ -> throw LlmError.Network(null) },
+            transcribe = { Transcript("oh and frozen corn, and the big jug of litter for Mochi") },
+        )
+        val clip = tmp.newFile("plain.m4a").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val r = addRig(testAppScope(), f.state, assistant, recorder = FakeRecorder(stopResult = { clip }))
+        r.vm.openSheet(AddMode.SPEAK)
+        r.vm.startRecording()
+        advanceTimeBy(350)
+        r.vm.stopRecording()
+        advanceUntilIdle()
+        assertTrue((r.vm.state.value.phase as AddPhase.Failed).canUsePlainLines)
+
+        r.vm.usePlainLines()
+        advanceUntilIdle()
+        val s = r.vm.state.value
+        val review = s.review!!
+        assertEquals(AddMode.SPEAK, s.mode)
+        assertEquals(ItemSource.VOICE, review.source)
+        assertTrue("no AI ran: no thinking box", review.plain && review.steps.isEmpty())
+        assertEquals(listOf("Oh and frozen corn", "And the big jug of litter for Mochi"), review.rows.map { it.item.name })
+        assertTrue("each fragment has its keep switch", review.rows.all { it.canKeep && it.keep })
+        assertEquals("nothing lands before Stick all", f.state, r.store.current())
+
+        r.vm.toggleKeep(review.rows.first().key)
+        r.vm.commit()
+        advanceUntilIdle()
+        val items = r.store.current().list(f.LIST_ID)!!.items
+        assertFalse(items.any { it.name == "Oh and frozen corn" })
+        assertEquals("plain lines commit as typed (the aisle sort places them)", ItemSource.TYPED, items.single { it.name == "And the big jug of litter for Mochi" }.source)
+    }
+
+    /** Plain lines mark a name already unchecked on her list "already on your list" (rule 7): it pops, never twice. */
+    @Test
+    fun plainLinesKnowWhatIsAlreadyOnTheList() = runTest {
+        val r = addRig(testAppScope(), f.state, FakeAssistant(ingest = { _, _ -> throw LlmError.Timeout() }))
+        r.vm.setText("strawberries, bananas, star fruit")
+        r.vm.send(AddOrigin.SHEET)
+        advanceUntilIdle()
+        r.vm.usePlainLines()
+        advanceUntilIdle()
+        val rows = r.vm.state.value.review!!.rows.associateBy { it.item.name }
+        assertFalse("unchecked on the list: no switch", rows.getValue("Strawberries").canKeep)
+        assertTrue("checked on the list: a row that revives", rows.getValue("Bananas").keep)
+        assertTrue(rows.getValue("Star fruit").keep)
     }
 
     @Test
@@ -368,6 +435,115 @@ class AddViewModelTest {
         assertTrue(failed.retryable)
         assertFalse(failed.canUsePlainLines)
         assertEquals(listOf(Uri.parse("content://test/photo.jpg")), r.photos.discarded)
+    }
+
+    // ---- item 207: a photo that cannot be opened ----
+
+    @Test
+    fun anUnreadablePhotoLeavesNoPolaroid() = runTest {
+        val r = addRig(testAppScope(), f.state, FakeAssistant())
+        r.photos.bytes = { throw java.io.IOException("gone") }
+        r.vm.onPhoto(Uri.parse("content://test/gone.jpg"))
+        advanceUntilIdle()
+        val s = r.vm.state.value
+        assertEquals(AddProblem.PHOTO_UNREADABLE, (s.phase as AddPhase.Failed).problem)
+        assertNull("the Snap tab is back to choosing a photo", s.photo)
+        assertEquals(AddMode.SNAP, s.mode)
+        assertEquals(listOf(Uri.parse("content://test/gone.jpg")), r.photos.discarded)
+        // Another photo reads normally.
+        r.photos.bytes = { byteArrayOf(1, 2, 3) }
+        r.assistant.ingest = { _, _ -> f.photo() }
+        r.vm.onPhoto(Uri.parse("content://test/next.jpg"))
+        advanceUntilIdle()
+        assertEquals(ItemSource.PHOTO, r.vm.state.value.review!!.source)
+    }
+
+    // ---- items 199, 215: Snap and Speak need the key before anything is captured ----
+
+    @Test
+    fun snapAndSpeakNeedTheKeyFirst() = runTest {
+        val r = rig(hasKey = false)
+        var captured = 0
+        r.vm.requireKey(AddMode.SPEAK) { captured++ }
+        advanceUntilIdle()
+        assertEquals("no microphone, no permission prompt", 0, captured)
+        val s = r.vm.state.value
+        assertTrue(s.sheetOpen)
+        assertEquals(AddMode.SPEAK, s.mode)
+        val failed = s.phase as AddPhase.Failed
+        assertEquals(LlmError.NotConfigured("").friendlyMessage, failed.message)
+        assertTrue(failed.needsSettings)
+        r.vm.requireKey(AddMode.SNAP) { captured++ }
+        advanceUntilIdle()
+        assertEquals("no camera either", 0, captured)
+        assertEquals(AddMode.SNAP, r.vm.state.value.mode)
+
+        val keyed = rig(hasKey = true)
+        keyed.vm.requireKey(AddMode.SNAP) { captured++ }
+        advanceUntilIdle()
+        assertEquals("with a key the camera opens at once", 1, captured)
+        assertFalse(keyed.vm.state.value.sheetOpen)
+    }
+
+    /** A key error after a capture keeps the recording: once the key is fixed, Try again picks it up. */
+    @Test
+    fun aKeyErrorKeepsTheRecordingForTryAgain() = runTest {
+        var keyFixed = false
+        val assistant = FakeAssistant(
+            transcribe = { if (keyFixed) Transcript(f.TRANSCRIPT) else throw LlmError.Unauthorized(401) },
+            ingest = { _, _ -> f.voice() },
+        )
+        val clip = tmp.newFile("kept.m4a").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val r = addRig(testAppScope(), f.state, assistant, recorder = FakeRecorder(stopResult = { clip }))
+        r.vm.startRecording()
+        advanceTimeBy(350)
+        r.vm.stopRecording()
+        advanceUntilIdle()
+        val failed = r.vm.state.value.phase as AddPhase.Failed
+        assertTrue(failed.needsSettings)
+        assertTrue("the recording waits: Try again", failed.retryable)
+        keyFixed = true
+        r.vm.retry()
+        advanceUntilIdle()
+        assertEquals(ItemSource.VOICE, r.vm.state.value.review!!.source)
+        assertEquals("the same bytes, no second recording", 2, r.assistant.transcribed.size)
+    }
+
+    // ---- item 206: tabs while something runs ----
+
+    @Test
+    fun tabsWaitWhileSomethingRuns() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<IngestResult>()
+        val r = addRig(testAppScope(), f.state, FakeAssistant(ingest = { _, _ -> gate.await() }))
+        r.vm.onPhoto(Uri.parse("content://test/photo.jpg"))
+        runCurrent()
+        val s = r.vm.state.value
+        assertTrue(s.phase.busy)
+        for (mode in AddMode.entries) assertFalse("$mode while the photo is read", s.tabEnabled(mode))
+        r.vm.setMode(AddMode.WRITE)
+        assertEquals(AddMode.SNAP, r.vm.state.value.mode)
+        gate.complete(f.photo())
+        advanceUntilIdle()
+        assertTrue(r.vm.state.value.tabEnabled(AddMode.SPEAK))
+    }
+
+    // ---- §15: the bar's wait is announced once ----
+
+    @Test
+    fun theBarsWaitIsAnnounced() = runTest {
+        val gate = kotlinx.coroutines.CompletableDeferred<IngestResult>()
+        val r = addRig(testAppScope(), f.state, FakeAssistant(ingest = { _, _ -> gate.await() }))
+        r.vm.setText("pears")
+        r.vm.send(AddOrigin.BAR)
+        runCurrent()
+        assertEquals(listOf("Reading your note…"), r.announcer.messages)
+        r.vm.cancel()
+        // From the sheet the thinking box's own polite headline says it: no second announcement.
+        r.vm.openSheet(AddMode.WRITE)
+        r.vm.send(AddOrigin.SHEET)
+        runCurrent()
+        assertEquals(1, r.announcer.messages.size)
+        r.vm.cancel()
     }
 
     // ---- item 216: As typed ----
@@ -386,6 +562,69 @@ class AddViewModelTest {
         assertEquals(listOf("Potatoes", "Butter tarts"), commit.added.map { it.name })
         assertEquals("907 g", commit.added.first().quantity)
         assertFalse(r.vm.state.value.sheetOpen)
+    }
+
+    /**
+     * Item 216 / ARCHITECTURE §10.3: the aisle sort after As typed runs in the app scope. While it waits on the network,
+     * Send works; closing the sheet (which stops the next request) never stops the sort, so the typed row is placed.
+     */
+    @Test
+    fun theSortAfterAsTypedNeverHoldsOrLosesAnything() = runTest {
+        val sorted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val next = kotlinx.coroutines.CompletableDeferred<IngestResult>()
+        val assistant = FakeAssistant(
+            ingest = { _, _ -> next.await() },
+            recategorize = { items, _ ->
+                sorted.await()
+                items.associate { it.id to "produce" }
+            },
+        )
+        val r = addRig(testAppScope(), f.state, assistant)
+        val events = events(r.vm)
+        r.vm.openSheet(AddMode.WRITE)
+        r.vm.setText("star fruit")
+        r.vm.addAsTyped()
+        advanceUntilIdle()
+        val commit = (events.single { it is AddEvent.Committed } as AddEvent.Committed).commit
+        val star = commit.added.single()
+        assertNull("typed: no aisle yet", star.aisleId)
+        assertEquals("the sort is out", 1, r.assistant.recategorized.size)
+        assertFalse(r.vm.state.value.committing)
+
+        // Send works while the sort waits.
+        r.vm.setText("eggs")
+        r.vm.send(AddOrigin.SHEET)
+        runCurrent()
+        assertEquals(AddPhase.Thinking(ItemSource.AI_TEXT), r.vm.state.value.phase)
+
+        // Closing the sheet stops the request, not the sort.
+        r.vm.closeSheet()
+        sorted.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("produce", r.store.current().list(f.LIST_ID)!!.items.single { it.id == star.id }.aisleId)
+        assertTrue(events.none { it is AddEvent.SortFailed })
+    }
+
+    /** Rule 4: an answer with nothing to add is never a quick add, with or without a message: the draft stays. */
+    @Test
+    fun anEmptyAnswerWithNoMessageKeepsTheDraft() = runTest {
+        for (message in listOf("", "Hello!")) {
+            val r = rig(answer(message = message))
+            val events = events(r.vm)
+            r.vm.setText("hello")
+            r.vm.send(AddOrigin.BAR)
+            advanceUntilIdle()
+            val s = r.vm.state.value
+            assertEquals("\"$message\": the draft stays", "hello", s.text)
+            assertTrue(events.none { it is AddEvent.Committed })
+            assertTrue("the review opens with OK", s.sheetOpen && s.review!!.nothingToKeep)
+            assertNull("an echo is not worth showing (the card says there was nothing to add)", s.review!!.message)
+            r.vm.acknowledge()
+            advanceUntilIdle()
+            assertFalse(r.vm.state.value.sheetOpen)
+            assertEquals("hello", r.vm.state.value.text)
+            assertTrue(events.none { it is AddEvent.Committed })
+        }
     }
 
     // ---- the review ----

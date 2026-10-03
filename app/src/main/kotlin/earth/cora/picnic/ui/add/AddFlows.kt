@@ -14,6 +14,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import earth.cora.picnic.R
@@ -42,6 +44,29 @@ class AddFlows internal constructor(
 ) {
     /** The field takes focus as soon as the bar is on screen ([AddDock] does it; the FAB unfolds the bar first). */
     internal var focusPending by mutableStateOf(false)
+
+    /** The docked bar as [AddDock] laid it out, with the keyboard's or the navigation bar's inset under it. */
+    internal var barHeight by mutableStateOf(84.dp)
+
+    /** The folded dock's room as laid out: the FAB, its 12 dp margin and the inset under it. */
+    internal var fabHeight by mutableStateOf(76.dp)
+
+    /**
+     * How far the dock reaches up from the bottom of the screen, measured: the bar (it grows with large text, §15, and
+     * rides above the keyboard) or, folded, the FAB. Toasts sit 20 dp above it (§4.15: above the add bar, the FAB or
+     * the IME) and the list's bottom padding is this + 26 dp (§6.1).
+     */
+    val dockHeight: Dp get() = if (collapse.collapsed) fabHeight else barHeight
+
+    /**
+     * The camera, the photo picker and the microphone, once there is a key: without one the sheet opens on Snap or
+     * Speak with "Add your OpenAI key in Settings first." and nothing is captured ([AddViewModel.requireKey]).
+     */
+    fun takePhoto() = vm.requireKey(AddMode.SNAP, sources.takePhoto)
+
+    fun pickPhoto() = vm.requireKey(AddMode.SNAP, sources.pickPhoto)
+
+    fun recordVoice() = vm.requireKey(AddMode.SPEAK, sources.recordVoice)
 
     /** Focuses the bar's field and opens the keyboard (the FAB, "Start my list"). */
     fun focusField() {

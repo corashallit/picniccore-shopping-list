@@ -19,6 +19,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performImeAction
@@ -26,6 +27,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -117,6 +119,13 @@ class AddBarTest {
         assertTrue(washi.left < bar.left + 10 * compose.density.density && washi.top < bar.top)
 
         // The perforated top edge is drawn: along a line 1 dp under the bar's top, pad white alternates with the bites.
+        val runs = perforationRuns()
+        // A straight edge would be one run; a bite every 10 dp (with its rim) breaks the pad 29 times or more.
+        assertTrue("a bite every 10 dp across ~290 dp: $runs pad runs", runs in 24..80)
+    }
+
+    /** Pad runs along a line 1.5 dp under the bar's top edge, right of the washi: one for a straight edge. */
+    private fun perforationRuns(): Int {
         val image = compose.onNodeWithTag(ADD_BAR_TAG).captureToImage().asAndroidBitmap()
         val y = (1.5f * compose.density.density).toInt()
         val pad = image.getPixel(image.width / 2, (40 * compose.density.density).toInt())
@@ -129,8 +138,56 @@ class AddBarTest {
             if (isPad && !inPad) runs++
             inPad = isPad
         }
-        // A straight edge would be one run; a bite every 10 dp (with its rim) breaks the pad 29 times or more.
-        assertTrue("a bite every 10 dp across ~290 dp: $runs pad runs", runs in 24..80)
+        return runs
+    }
+
+    /**
+     * Item 115 in the dock: the dock paints its pad only under the bar and the inset below it, so the perforation's
+     * bites along the docked bar's top edge still show the binder (they would vanish into a pad painted behind it).
+     */
+    @Test
+    fun theDockedBarKeepsItsPerforation() {
+        val rig = addRig(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main))
+        compose.setContent {
+            PicnicTheme(ThemeVariant.Day) {
+                val flows = rememberAddFlows(rig.vm, RecordingSources().sources)
+                val state by rig.vm.state.collectAsState()
+                BarStage { AddDock(flows, state) }
+            }
+        }
+        compose.waitForIdle()
+        val runs = perforationRuns()
+        assertTrue("the docked bar's bites show the binder: $runs pad runs", runs in 24..80)
+    }
+
+    /**
+     * Items 199, 215: with no key, Snap and Speak never open the camera, the picker or the microphone (no photo taken or
+     * voice note recorded only to be refused): the sheet says to add the key, with Open Settings.
+     */
+    @Test
+    fun snapAndSpeakNeedTheKeyFirst() {
+        val h = compose.setHarness(hasKey = false)
+        button("Snap a photo of a list").performClick()
+        compose.waitForIdle()
+        assertEquals("no camera", 0, h.sources.photos)
+        assertEquals(AddMode.SNAP, h.vm.state.value.mode)
+        compose.onNodeWithText("Add your OpenAI key in Settings first.").assertExists()
+        compose.onNode(hasText("Open Settings") and hasClickAction()).assertExists()
+        h.vm.closeSheet()
+        compose.waitForIdle()
+
+        button("Snap a photo of a list").performCustomAction("Choose a photo")
+        compose.waitForIdle()
+        assertEquals("no picker", 0, h.sources.picks)
+        h.vm.closeSheet()
+        compose.waitForIdle()
+
+        button("Speak a voice note").performClick()
+        compose.waitForIdle()
+        assertEquals("no microphone, no permission prompt", 0, h.sources.voices)
+        assertEquals(AddMode.SPEAK, h.vm.state.value.mode)
+        compose.onNode(hasText("Open Settings") and hasClickAction()).assertExists()
+        assertTrue("nothing was sent", h.rig.assistant.ingested.isEmpty() && h.rig.assistant.transcribed.isEmpty())
     }
 
     private fun colourDistance(a: Int, b: Int): Int =
