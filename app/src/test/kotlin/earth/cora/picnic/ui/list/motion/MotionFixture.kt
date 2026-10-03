@@ -20,6 +20,7 @@ import earth.cora.picnic.core.model.addItems
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.iconRef
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.markFinaleShown
 import earth.cora.picnic.core.model.moveItemToAisle
 import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.core.model.setOpenAisle
@@ -112,7 +113,7 @@ object MotionFixture {
     /** The default-aisles variant (the app's own 14-aisle text) with the same 24 items filed into it by name. */
     fun defaultAisles(): AppState = unchecked(Aisles.DEFAULT_TEXT)
 
-    /** A list of [n] items over [stops] aisles, all but one checked (the ride with 100 items). */
+    /** A list of [n] items over [stops] aisles, all but the last ("i<n-1>") checked (the ride with 100 items). */
     fun many(n: Int, stops: Int): AppState {
         val names = (1..stops).joinToString("\n") { "Aisle $it" }
         val keys = listOf("strawberry", "banana", "apple", "carrot", "broccoli", "croissant", "baguette", "flour", "sugar", "coffee", "milk_bag", "eggs", "butter", "ice_cream", "toilet_paper", "dish_soap", "cherries", "lemonade")
@@ -122,7 +123,7 @@ object MotionFixture {
             val item = GroceryItem(id = "i$i", name = "Item $i", aisleId = aisleIds[i % aisleIds.size], icon = keys[i % keys.size], iconFit = IconFit.EXACT, addedAt = WRITTEN + i)
             s = s.addItems(LIST_ID, listOf(item), WRITTEN + i).first
         }
-        for (i in 0 until n) s = s.toggleChecked(LIST_ID, "i$i", TRIP_START + i * 10_000L)
+        for (i in 0 until n - 1) s = s.toggleChecked(LIST_ID, "i$i", TRIP_START + i * 10_000L)
         return s
     }
 
@@ -181,6 +182,7 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
 
     /** A check-off tap (or its TalkBack / keyboard / swipe equivalent) on [itemId]. */
     fun toggle(itemId: String): ToggleEvent {
+        syncFinale()
         val before = state
         val beforeGrouped = before.grouped(listId)
         now += 1000
@@ -216,6 +218,8 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
         // D2 / item 90: the next stop opens automatically behind the Next card (the VM sets it; the engine holds the
         // finished aisle open until its fold, then keeps everything folded until the Next card shows).
         if (event.nextSectionId != null) state = state.setOpenAisle(listId, event.nextSectionId)
+        // An un-check that re-opens an aisle keeps her in it (its chain is cancelled before the fold).
+        if (!checked && aisleChanged) state = state.setOpenAisle(listId, sectionId)
         engine.onToggle(event)
         return event
     }
@@ -231,7 +235,40 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
         state = state.setOpenAisle(listId, sectionId)
     }
 
+    /**
+     * The list opens (§7.1, item 154): an owed finale (completed, never shown) plays at once as the in-place form when
+     * the trip completed within 30 min of [now]; later it is only marked shown and PERFECT is pressed in place.
+     */
+    fun resume(): ListChange? {
+        val list = state.list(listId)!!
+        if (!TripRules.finaleOwed(list)) return null
+        val c = ListChange(
+            aisleCompleted = emptySet(),
+            aisleReopened = emptySet(),
+            tripCompleted = true,
+            tripReopened = false,
+            nextSectionId = null,
+            cause = ChangeCause.RESUME,
+            openSectionId = grouped().openSectionId,
+            finaleShown = false,
+            finaleStale = TripRules.finaleIsStale(list, now),
+        )
+        engine.onChange(c)
+        return c
+    }
+
+    /** Mirrors FinaleKeeper on this model's state: the finale is marked shown once the engine started or marked it. */
+    fun syncFinale() {
+        val list = state.list(listId) ?: return
+        if (list.trip?.completedAt == null || list.trip?.finaleShownAt != null) return
+        val shown = engine.eventLog.any {
+            (it is MotionEvent.CelebrationStarted && it.listId == listId) || (it is MotionEvent.FinaleMarked && it.listId == listId)
+        }
+        if (shown) state = state.markFinaleShown(listId, now)
+    }
+
     private fun change(cause: ChangeCause, op: (AppState) -> AppState): ListChange? {
+        syncFinale()
         val before = state
         val bg = before.grouped(listId)
         now += 1000
@@ -257,6 +294,7 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
             finaleShown = al.trip?.finaleShownAt != null,
         )
         if (c.nextSectionId != null) state = state.setOpenAisle(listId, c.nextSectionId)
+        if (reopened.isNotEmpty() && completed.isEmpty()) state = state.setOpenAisle(listId, reopened.first())
         engine.onChange(c)
         return c
     }

@@ -32,6 +32,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -92,6 +94,7 @@ object HarnessTags {
     fun tray(id: String) = "tray_$id"
     fun strip(id: String) = "strip_$id"
     fun twin(slot: Int) = "twin_$slot"
+    fun chevron(id: String) = "chevron_$id"
 }
 
 /** The whole harness: top bar, book, list, add bar, the overlay and the celebration, with the engine running. */
@@ -271,7 +274,11 @@ fun HarnessList(model: HarnessModel, p: ListPresentation, state: LazyListState, 
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         items(g.sections, key = { it.id }) { s ->
-            if (s.id == open) HarnessTray(model, s, p, current = true) else HarnessStrip(model, s, p)
+            val chevron = remember { FocusRequester() }
+            val strip = remember { FocusRequester() }
+            val isOpen = s.id == open
+            FoldFocusEffect(isOpen, chevron, strip)
+            if (isOpen) HarnessTray(model, s, p, current = true, chevron = chevron) else HarnessStrip(model, s, p, strip)
         }
     }
 }
@@ -279,7 +286,7 @@ fun HarnessList(model: HarnessModel, p: ListPresentation, state: LazyListState, 
 private fun minis(s: AisleSection): List<BasketMini> = s.gotten.map { BasketMini(it.id, it.iconRef(), holo = it.rarity != Rarity.NONE, aisleIndex = s.position - 1) }
 
 @Composable
-private fun HarnessStrip(model: HarnessModel, s: AisleSection, p: ListPresentation) {
+private fun HarnessStrip(model: HarnessModel, s: AisleSection, p: ListPresentation, focus: FocusRequester) {
     val c = PicnicTheme.colors
     val look = lookOf(s)
     val clock = model.engine.clock
@@ -292,6 +299,7 @@ private fun HarnessStrip(model: HarnessModel, s: AisleSection, p: ListPresentati
             .height(70.dp)
             .testTag(HarnessTags.strip(s.id))
             .unfoldMotion(ap?.foldT0, clock, reduced)
+            .focusRequester(focus)
             .clickable(role = Role.Button) { model.open(s.id) },
     ) {
         Box(
@@ -360,7 +368,7 @@ private fun Tab(s: AisleSection, look: AisleLook, height: Dp, ballpoint: Boolean
 }
 
 @Composable
-private fun HarnessTray(model: HarnessModel, s: AisleSection, p: ListPresentation, current: Boolean) {
+private fun HarnessTray(model: HarnessModel, s: AisleSection, p: ListPresentation, current: Boolean, chevron: FocusRequester) {
     val c = PicnicTheme.colors
     val look = lookOf(s)
     val clock = model.engine.clock
@@ -387,6 +395,16 @@ private fun HarnessTray(model: HarnessModel, s: AisleSection, p: ListPresentatio
                 Tab(s, look, height = 38.dp, ballpoint = true)
                 s.storeAisle?.let { StoreAisleChip(it) }
             }
+            // The fold chevron (a 48 dp target), between the tab and the basket.
+            Box(
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .offset(x = (-88).dp)
+                    .size(48.dp)
+                    .testTag(HarnessTags.chevron(s.id))
+                    .focusRequester(chevron)
+                    .clickable(role = Role.Button, onClickLabel = "Fold") { model.open("") },
+            )
             with(model.engine.anchors) {
                 MotionBasket(
                     kind = s.basket,

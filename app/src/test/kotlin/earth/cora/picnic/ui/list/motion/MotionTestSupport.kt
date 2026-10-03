@@ -18,9 +18,11 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
 import com.github.takahirom.roborazzi.captureRoboImage
 import earth.cora.picnic.core.model.AppState
-import earth.cora.picnic.platform.FakeAnnouncer
-import earth.cora.picnic.platform.FakeFeedback
+import earth.cora.picnic.core.store.Album
+import earth.cora.picnic.platform.Announcer
+import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.platform.FakeTimeouts
+import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.ui.theme.LocalTimeouts
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.ThemeVariant
@@ -46,11 +48,13 @@ class HarnessRig(
     val nextStopCard: Boolean = true,
     val celebration: Boolean = true,
     val talkBack: Boolean = false,
+    album: Album = Album(),
 ) {
-    val feedback = FakeFeedback()
-    val announcer = FakeAnnouncer()
-    val engine = MotionChoreographer(feedback, announcer, timeouts)
-    val model = HarnessModel(initial, engine)
+    private var engineRef: MotionChoreographer? = null
+    val feedback: TimedFeedback = TimedFeedback { engineRef?.time ?: 0L }
+    val announcer: TimedAnnouncer = TimedAnnouncer { engineRef?.time ?: 0L }
+    val engine: MotionChoreographer = MotionChoreographer(feedback, announcer, timeouts).also { engineRef = it }
+    val model = HarnessModel(initial, engine, album = album)
     val probe = StillnessProbe()
     val toasts = ToastHostState()
 
@@ -127,6 +131,22 @@ class HarnessRig(
         file.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    /**
+     * Advances one frame at a time up to [until] (test-clock ms), recording the presentation at every frame, the
+     * current one first; [each] runs after every frame (and once now).
+     */
+    fun sampleTo(until: Long, each: ((Long) -> Unit)? = null): List<Pair<Long, ListPresentation>> {
+        val out = ArrayList<Pair<Long, ListPresentation>>()
+        out += now to p
+        each?.invoke(now)
+        while (now < until) {
+            frame()
+            out += now to p
+            each?.invoke(now)
+        }
+        return out
+    }
+
     /** A frame strip: [name]_<t>.png at each of [times] ms after [t0] (each frame captured on the first frame at or after it). */
     fun strip(name: String, t0: Long, times: List<Long>, crop: (() -> Rect?)? = null) {
         for (t in times) {
@@ -136,9 +156,46 @@ class HarnessRig(
     }
 }
 
+/** Cues with the engine time they were asked for at (the beat's frame). */
+class TimedFeedback(private val now: () -> Long) : Feedback {
+    val log: MutableList<Pair<Long, Cue>> = ArrayList()
+
+    override fun cue(cue: Cue) {
+        log += now() to cue
+    }
+
+    fun times(cue: Cue): List<Long> = log.filter { it.second == cue }.map { it.first }
+
+    fun count(cue: Cue): Int = log.count { it.second == cue }
+
+    val cues: List<Cue> get() = log.map { it.second }
+}
+
+/** Announcements with the engine time they were made at. */
+class TimedAnnouncer(private val now: () -> Long) : Announcer {
+    val log: MutableList<Pair<Long, String>> = ArrayList()
+
+    override fun polite(text: String) {
+        log += now() to text
+    }
+
+    val messages: List<String> get() = log.map { it.second }
+}
+
+/** Asserts [actual] is [expected] to within one frame after it (beats run on the first frame at or after their time). */
+fun assertBeat(what: String, expected: Long, actual: Long?) {
+    org.junit.Assert.assertNotNull("$what never happened", actual)
+    val d = actual!! - expected
+    org.junit.Assert.assertTrue("$what at +$d ms from its beat (expected within one frame)", d in 0..16)
+}
+
 /** The variant's golden suffix. */
 val ThemeVariant.suffix: String get() = name.lowercase()
 
 /** Remember a value across recompositions in tests. */
 @Composable
 fun <T> rememberOnce(block: () -> T): T = remember { block() }
+
+/** The first sampled time at which [pred] holds (at or after [from]), or null. */
+fun List<Pair<Long, ListPresentation>>.firstTime(from: Long = Long.MIN_VALUE, pred: (ListPresentation) -> Boolean): Long? =
+    firstOrNull { it.first >= from && pred(it.second) }?.first

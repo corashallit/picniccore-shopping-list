@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -13,9 +14,10 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.isScreenReaderOn
-import earth.cora.picnic.ui.theme.LocalReducedMotion
-import kotlinx.coroutines.withContext
 import earth.cora.picnic.ui.theme.FixedMotionScale
+import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.holdOnFrameClock
+import kotlinx.coroutines.withContext
 
 /*
  * Running the engine in a screen, and the row's poses (docs/DESIGN_STICKER.md §8.3, §8.8). WP5's list screen hosts
@@ -158,3 +160,22 @@ fun Modifier.rowHanko(checked: Boolean, phase: RowPhase?, rowStart: Long?, clock
         scaleY = s
         alpha = RowMotion.hankoAlpha(checked, phase, rowStart, clock.now, reduced)
     }
+
+/**
+ * The fold's focus hand-off (§8.5, item 193): when a section opens or folds ([open] changes; not on first composition),
+ * focus moves once the 240 ms fold ([FoldMotion.DURATION], on the frame clock under the fixed motion scale) has run: to
+ * the open tray's chevron ([chevron]) or to the folded strip ([strip]). WP5's list puts one in each section's item.
+ */
+@Composable
+fun FoldFocusEffect(open: Boolean, chevron: FocusRequester, strip: FocusRequester) {
+    val first = remember { booleanArrayOf(true) }
+    LaunchedEffect(open) {
+        if (first[0]) {
+            first[0] = false
+            return@LaunchedEffect
+        }
+        withContext(FixedMotionScale) { holdOnFrameClock(FoldMotion.DURATION) }
+        // The requester may not be attached (the item scrolled away): then focus stays where it is.
+        runCatching { if (open) chevron.requestFocus() else strip.requestFocus() }
+    }
+}
