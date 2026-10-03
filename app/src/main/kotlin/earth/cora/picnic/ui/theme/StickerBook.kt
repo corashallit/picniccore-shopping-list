@@ -42,15 +42,16 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,8 +72,8 @@ import earth.cora.picnic.ui.list.motion.StampCircle
 import earth.cora.picnic.ui.list.motion.bookPageLift
 import earth.cora.picnic.ui.list.motion.drawBookGlint
 import earth.cora.picnic.ui.list.motion.showsNewPage
-import kotlinx.coroutines.withContext
 import kotlin.math.hypot
+import kotlinx.coroutines.withContext
 
 /*
  * The trip's sticker book (docs/DESIGN_STICKER.md §7.3–§7.7): a ring-bound mini album under the app bar. Left page = the
@@ -89,6 +90,7 @@ object BookTags {
     const val RIGHT: String = "picnic_book_right"
     const val NAME_TAG: String = "picnic_book_name_tag"
     const val COLLAPSED: String = "picnic_book_collapsed"
+    const val PAGE_LCD: String = "picnic_book_page_lcd"
     fun twin(slot: Int): String = "picnic_book_twin_$slot"
     fun spot(slot: Int): String = "picnic_book_spot_$slot"
     fun stamp(sectionId: String): String = "picnic_book_stamp_$sectionId"
@@ -160,6 +162,9 @@ fun StickerBook(
         // The saved receipt pokes out of the fore-edge behind the page (§7.3, egg 18).
         if (state.receiptSaved) ReceiptSlip(Modifier.align(Alignment.CenterEnd).offset(x = 9.dp, y = 6.dp))
         val shape = shapes.bookOuter
+        // The page shown (§7.4): the engine's, else the one she swiped to (for 6 s), else the page of the next free spot.
+        val paging = remember { PagingState() }
+        val page = (presentation.fx.showPage ?: paging.userPage ?: layout.shownPage(state.takenSlots)).coerceIn(0, layout.pages - 1)
         Box(
             Modifier
                 .fillMaxWidth()
@@ -171,7 +176,12 @@ fun StickerBook(
                 .clip(shapes.bookPage)
                 .background(c.book.page),
         ) {
-            BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, onOpen)
+            BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, onOpen, paging, page)
+        }
+        // The page number (§7.3) clips onto the page's bottom edge at the right: inside the page it would sit on the
+        // last spot of a full page. It hangs into the 8 dp under the book and ends where the list's viewport begins.
+        if (layout.pages > 1) {
+            PageLcd("${page + 1}/${layout.pages}", Modifier.align(Alignment.BottomEnd).offset(x = (-8).dp, y = PAGE_LCD_DROP))
         }
     }
 }
@@ -222,6 +232,8 @@ private fun BookPages(
     freshTurnElapsed: Long?,
     onStampTap: (Int) -> Unit,
     onOpen: () -> Unit,
+    paging: PagingState,
+    page: Int,
 ) {
     val c = PicnicTheme.colors
     val fx = presentation.fx
@@ -231,6 +243,7 @@ private fun BookPages(
     var tag by remember { mutableStateOf<StampTag?>(null) }
     var boing by remember { mutableStateOf<String?>(null) }
     val resources = LocalResources.current
+    val gridTop = stampTop(dateOnPage)
     Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
             // ---- The stamp page (left) ----
@@ -241,9 +254,9 @@ private fun BookPages(
                     .testTag(BookTags.LEFT)
                     .probe(LocalPieceProbe.current, "bookLeft")
                     .then(if (perfect) Modifier.drawBehind { drawRect(holoBrush(center)) } else Modifier)
-                    .pointerInput(state.stamps, layout) {
+                    .pointerInput(state.stamps, layout, gridTop) {
                         detectTapGestures { pos ->
-                            val hit = nearestStamp(state.stamps, layout, Offset(pos.x / density, pos.y / density), dateOnPage) ?: return@detectTapGestures
+                            val hit = nearestStamp(state.stamps, layout, Offset(pos.x / density, pos.y / density), gridTop) ?: return@detectTapGestures
                             val s = state.stamps[hit]
                             boing = s.sectionId
                             tag = StampTag(s.sectionId, stampTagText(resources, s), System.nanoTime())
@@ -251,21 +264,20 @@ private fun BookPages(
                         }
                     },
             ) {
-                if (dateOnPage) DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = (-1).dp))
-                StampGrid(state.stamps, layout, presentation, clock, anchors, boing, top = if (dateOnPage) DATE_ROOM else STAMP_TOP_NO_DATE)
+                if (dateOnPage) DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = (-1).dp), onPage = true)
+                StampGrid(state.stamps, layout, presentation, clock, anchors, boing, top = gridTop)
             }
             // ---- The spine ----
             Spine(Modifier.width(BookLayout.SPINE.dp).fillMaxHeight())
             // ---- The sticker page (right) ----
-            val paging = remember { PagingState() }
-            val shownPage = layout.shownPage(state.takenSlots)
             LaunchedEffect(paging.userPage, paging.touchedAt) {
                 if (paging.userPage == null) return@LaunchedEffect
                 withContext(FixedMotionScale) { holdOnFrameClock(PAGE_IDLE_MS) }
                 paging.userPage = null
             }
-            val page = (fx.showPage ?: paging.userPage ?: shownPage).coerceIn(0, layout.pages - 1)
             val pageCount = layout.pages
+            // The swipe handler outlives a composition: it reads the page shown now, not the one it was made with.
+            val pageNow by rememberUpdatedState(page)
             Box(
                 Modifier
                     .weight(1f)
@@ -290,7 +302,7 @@ private fun BookPages(
                         detectHorizontalDragGestures(
                             onDragStart = { dx = 0f },
                             onDragEnd = {
-                                val cur = paging.userPage ?: page
+                                val cur = paging.userPage ?: pageNow
                                 val to = when {
                                     dx < -SWIPE_PX * density -> cur + 1
                                     dx > SWIPE_PX * density -> cur - 1
@@ -316,7 +328,6 @@ private fun BookPages(
                         .fillMaxHeight()
                         .drawBehind { if (holo) drawRect(holoBrush(center)) else drawRect(c.book.foreEdge) },
                 )
-                if (pageCount > 1) PageLcd("${page + 1}/$pageCount", Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 2.dp))
                 val t = tag
                 if (t != null) {
                     NameTag(t.text, Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 6.dp))
@@ -351,10 +362,9 @@ internal fun stampTagText(resources: android.content.res.Resources, s: StampUi):
     return if (s.stamped) resources.getString(R.string.list_stamp_tag_stamped, name) else resources.getString(R.string.list_stamp_tag_left, name, s.toGet)
 }
 
-/** The stamp whose centre is nearest [p] (dp, in the left page). */
-internal fun nearestStamp(stamps: List<StampUi>, layout: BookLayout, p: Offset, dateOnPage: Boolean): Int? {
+/** The stamp whose centre is nearest [p] (dp, in the left page whose grid starts at [top]). */
+internal fun nearestStamp(stamps: List<StampUi>, layout: BookLayout, p: Offset, top: Float): Int? {
     if (stamps.isEmpty()) return null
-    val top = if (dateOnPage) DATE_ROOM else STAMP_TOP_NO_DATE
     var best: Int? = null
     var bestD = Float.MAX_VALUE
     for (i in 0 until minOf(stamps.size, layout.circles)) {
@@ -377,7 +387,10 @@ internal fun stampCentre(i: Int, layout: BookLayout, top: Float): Pair<Float, Fl
     return x to y
 }
 
-/** Where the stamp grid starts under the date tag (dp). */
+/** Where the stamp grid starts (dp): under the date tag, or near the page top when the date is a caption (§7.4). */
+internal fun stampTop(dateOnPage: Boolean): Float = if (dateOnPage) DATE_ROOM else STAMP_TOP_NO_DATE
+
+/** Where the stamp grid starts under the 18 dp date tag (dp): two rows of 24 dp stamps then end at the page bottom. */
 private const val DATE_ROOM: Float = 19f
 private const val STAMP_TOP_NO_DATE: Float = 8f
 private const val PAGE_IDLE_MS: Long = 6000
@@ -438,10 +451,17 @@ private fun MoreCircle(n: Int, size: Dp, modifier: Modifier) {
     }
 }
 
-/** The date tag (§7.3): lemon pastel, 18 dp, radius 5 9 9 5, 2 dp white border, hs, −2°, a 12 dp sakura heart. */
+/**
+ * The date tag (§7.3): lemon pastel, 18 dp, radius 5 9 9 5, 2 dp white border, hs, −2°, a 12 dp sakura heart. [onPage]:
+ * the tag is part of the page's art, which keeps its size (§7.4), so it stays 18 dp and clear of the stamp grid up to
+ * font scale 1.3; above it the date leaves the page as a caption that grows with the text. The book's TalkBack line
+ * carries the date either way (the tag itself is decorative).
+ */
 @Composable
-fun DateTag(label: String, modifier: Modifier = Modifier) {
+fun DateTag(label: String, modifier: Modifier = Modifier, onPage: Boolean = false) {
     val c = PicnicTheme.colors
+    val k = if (onPage) 1f / LocalDensity.current.fontScale.coerceAtLeast(1f) else 1f
+    val style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = (13f * k).sp, lineHeight = (14f * k).sp)
     val shape = RoundedCornerShape(topStart = 5.dp, bottomStart = 5.dp, topEnd = 9.dp, bottomEnd = 9.dp)
     Row(
         modifier
@@ -459,7 +479,7 @@ fun DateTag(label: String, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         DecorSticker("heart", size = 12.dp, shadow = false)
-        Text(label, style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 14.sp), maxLines = 1)
+        Text(label, style = style, maxLines = 1)
     }
 }
 
@@ -578,6 +598,7 @@ private fun PageLcd(text: String, modifier: Modifier) {
     Box(
         modifier
             .probe(LocalPieceProbe.current, "pageLcd:$text")
+            .testTag(BookTags.PAGE_LCD)
             .decorative()
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
@@ -747,3 +768,6 @@ fun BookDateCaption(label: String, modifier: Modifier = Modifier) {
     }
 }
 private const val PAGE_TURN_MS: Long = 240
+
+/** How far the page number hangs below the book: the top stack's 8 dp gap above the list (§7.3). */
+private val PAGE_LCD_DROP = 8.dp

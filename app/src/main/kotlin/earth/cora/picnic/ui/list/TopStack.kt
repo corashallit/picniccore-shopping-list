@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -29,6 +30,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
@@ -53,6 +57,7 @@ import earth.cora.picnic.ui.theme.PuffyText
 import earth.cora.picnic.ui.theme.StickerBook
 import earth.cora.picnic.ui.theme.SunSticker
 import earth.cora.picnic.ui.theme.ThemeVariant
+import kotlin.math.ceil
 import kotlinx.coroutines.withContext
 
 /*
@@ -150,7 +155,7 @@ private fun AppBar(
             if (state.storeName.isBlank()) stops else stringResource(R.string.list_subtitle, state.storeName, stops)
         }
     }
-    val large = LocalDensity.current.fontScale > LARGE_TEXT
+    val large = LocalDensity.current.fontScale >= LARGE_TEXT
     val spin = remember { Animatable(0f) }
     LaunchedEffect(ui.sunSpin) {
         if (ui.sunSpin == 0 || reduced) return@LaunchedEffect
@@ -187,9 +192,14 @@ private fun AppBar(
     val subtitleRow: @Composable (Modifier) -> Unit = { m ->
         if (subtitle != null && !collapsed) {
             PadPatch(m.padding(start = 2.dp, bottom = 4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    FlatStar(Modifier.size(13.dp), fill = Families.lemon.mid)
-                    Text(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft))
+                // Large text may wrap the line: the star stays on the first line and the patch hugs the widest one.
+                val style = t.appBarSubtitle.copy(color = c.onPadSoft)
+                val firstLine = with(LocalDensity.current) { style.lineHeight.toDp() }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box(Modifier.heightIn(min = firstLine), contentAlignment = Alignment.Center) {
+                        FlatStar(Modifier.size(13.dp), fill = Families.lemon.mid)
+                    }
+                    SnugText(subtitle, style)
                 }
             }
         }
@@ -259,7 +269,10 @@ private fun AppBar(
     }
 }
 
-/** Above this font scale the bar takes two rows (§4.2, the same threshold as the book's date caption, §7.4). */
+/**
+ * From this font scale the bar takes two rows (§4.2: the bar grows): beside the LCD and More, "Saturday shop" would
+ * already ellipsize at 1.3 even at its 20 sp floor. The book keeps its date on the page up to 1.3 (§7.4).
+ */
 private const val LARGE_TEXT: Float = 1.3f
 
 /**
@@ -274,6 +287,22 @@ private fun Modifier.overhang(w: androidx.compose.ui.unit.Dp, h: androidx.compos
         val lh = h.roundToPx()
         layout(lw, lh) { p.place((lw - p.width) / 2, (lh - p.height) / 2) }
     }
+
+/**
+ * Text that, when it wraps, is only as wide as its widest line (plain Text takes the whole width it was offered), so
+ * the pad patch around a wrapped subtitle has no empty tail.
+ */
+@Composable
+private fun SnugText(text: String, style: TextStyle) {
+    val measurer = rememberTextMeasurer()
+    Layout(content = { Text(text, style = style) }) { measurables, constraints ->
+        val probe = measurer.measure(text, style, constraints = Constraints(maxWidth = constraints.maxWidth))
+        val widest = (0 until probe.lineCount).maxOf { probe.getLineRight(it) - probe.getLineLeft(it) }
+        val w = if (probe.lineCount > 1) ceil(widest).toInt().coerceIn(constraints.minWidth, constraints.maxWidth) else constraints.maxWidth
+        val p = measurables.single().measure(constraints.copy(minWidth = 0, maxWidth = w))
+        layout(p.width, p.height) { p.place(0, 0) }
+    }
+}
 
 /** The sun's layout room by the title (its face is 22 dp, its target 48 dp). */
 private val SUN_ROOM_W = 30.dp

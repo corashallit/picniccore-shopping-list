@@ -1,6 +1,5 @@
 package earth.cora.picnic.ui.list
 
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -38,11 +37,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -82,10 +83,9 @@ import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.FixedMotionScale
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.HankoStamp
-import earth.cora.picnic.ui.theme.LocalPieceProbe
-import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.HankoText
 import earth.cora.picnic.ui.theme.ItemIcon
+import earth.cora.picnic.ui.theme.LocalPieceProbe
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -97,11 +97,12 @@ import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
 import earth.cora.picnic.ui.theme.hankoAngle
 import earth.cora.picnic.ui.theme.highlighterBand
+import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.traySlice
+import kotlin.math.abs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 
 /*
  * A row in its tray (docs/DESIGN_STICKER.md §4.11, §8.3, §8.6): the 52 dp sticker (its ghost once checked), the name over
@@ -206,7 +207,6 @@ internal fun TrayRow(
                 sweepT0 = sweepT0,
                 ambientClock = ambientClock,
                 modifier = m
-                    .padding(horizontal = inset)
                     .pointerInput(row.id, reduced) {
                         detectHorizontalDragGestures(
                             onDragStart = {
@@ -253,15 +253,30 @@ internal fun TrayRow(
             )
         }
         if (!tearing) {
-            content(Modifier.graphicsLayer { translationX = offset })
+            val paper = c.pad
+            content(
+                Modifier
+                    .padding(horizontal = inset)
+                    // While it slides the row is a strip of panel paper over the band, clipped to its slot (§4.11): the
+                    // band shows only in the gap it leaves, and the text keeps its own ground (Glow's light ink included).
+                    // The chain keeps one shape whatever the offset, so the drag's pointer input is never re-created.
+                    .graphicsLayer {
+                        clip = offset != 0f
+                        shape = slotShape
+                    }
+                    .graphicsLayer { translationX = offset }
+                    .drawBehind { if (offset != 0f) drawRect(paper) },
+            )
         } else {
             val e = tearNow
             // The perforation prints in at 62 % (2 frames, 120 ms), then the halves tumble off (600 ms). The halves are
-            // pictures of the row on its way out: no TalkBack node, no test tag twice.
-            Perforation(e, Modifier.matchParentSize().padding(horizontal = inset))
+            // pictures of the row on its way out, each on its own piece of panel paper: no TalkBack node, no test tag
+            // twice.
+            val paper = c.pad
             val f = if (e < TEAR_PERFORATE) 0f else TearEasing.transform(((e - TEAR_PERFORATE).toFloat() / TEAR_FALL).coerceIn(0f, 1f))
             content(
                 Modifier
+                    .padding(horizontal = inset)
                     .clearAndSetSemantics { }
                     .graphicsLayer {
                         clip = true
@@ -271,10 +286,12 @@ internal fun TrayRow(
                         rotationZ = -18f * f
                         alpha = 1f - f * 0.6f
                         transformOrigin = TransformOrigin(0.31f, 0.5f)
-                    },
+                    }
+                    .drawBehind { drawOutline(slotShape.createOutline(size, layoutDirection, this), paper) },
             )
             content(
                 Modifier
+                    .padding(horizontal = inset)
                     .clearAndSetSemantics { }
                     .graphicsLayer {
                         clip = true
@@ -284,8 +301,11 @@ internal fun TrayRow(
                         rotationZ = 24f * f
                         alpha = 1f - f * 0.6f
                         transformOrigin = TransformOrigin(0.81f, 0.5f)
-                    },
+                    }
+                    .drawBehind { drawOutline(slotShape.createOutline(size, layoutDirection, this), paper) },
             )
+            // Printed on the paper, and left on the backing where the row was.
+            Perforation(e, Modifier.matchParentSize().padding(horizontal = inset))
         }
     }
 }

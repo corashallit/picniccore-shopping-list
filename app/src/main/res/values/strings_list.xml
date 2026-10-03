@@ -3,10 +3,10 @@
     <!-- List screen strings: WP5 (list screen, sticker book, baskets; docs/DESIGN_STICKER.md §6.1, §6.5, §6.6, §7, §16). -->
 
     <!-- The app bar (§4.2, §16): "★ Hillcrest Market · 8 stops"; the star is drawn. -->
-    <string name="list_subtitle">%1$s · %2$s</string>
+    <string name="list_subtitle">%1$s\u00A0· %2$s</string>
     <plurals name="list_stops">
-        <item quantity="one">%1$d stop</item>
-        <item quantity="other">%1$d stops</item>
+        <item quantity="one">%1$d\u00A0stop</item>
+        <item quantity="other">%1$d\u00A0stops</item>
     </plurals>
 
     <!-- A folded strip (§4.10): "A3 · 2 left of 5" / "5 of 5 in the basket"; TalkBack "Aisle 1, Produce: 2 left of 5". -->

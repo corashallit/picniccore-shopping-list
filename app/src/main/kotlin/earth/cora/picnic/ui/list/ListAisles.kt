@@ -1,11 +1,11 @@
 package earth.cora.picnic.ui.list
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,14 +30,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -61,12 +62,11 @@ import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.IndexTab
 import earth.cora.picnic.ui.theme.LocalPieceProbe
-import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.LocalTimeouts
-import earth.cora.picnic.ui.theme.PicnicTheme
-import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.PadPatch
+import earth.cora.picnic.ui.theme.PicnicText
+import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.StoreAisleChip
 import earth.cora.picnic.ui.theme.TabSize
 import earth.cora.picnic.ui.theme.ThemeVariant
@@ -74,14 +74,15 @@ import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
 import earth.cora.picnic.ui.theme.drawDashedCircle
 import earth.cora.picnic.ui.theme.groundBacking
+import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.rememberLoopTime
 import earth.cora.picnic.ui.theme.rememberPatternBrush
 import earth.cora.picnic.ui.theme.stripFace
 import earth.cora.picnic.ui.theme.traySlice
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
+import kotlinx.coroutines.withTimeoutOrNull
 
 /*
  * One stop on the list (docs/DESIGN_STICKER.md §4.10): the folded strip, or the open tray's band (the pinned plate when
@@ -348,7 +349,11 @@ internal fun TrayHeader(
                 },
                 probeKey = "trayTab:${section.id}",
             )
-            section.storeAisle?.let { StoreAisleChip(it, Modifier.layoutId("chip").testTag(ListTags.storeChip(section.id)).probe(probe, "chip:${section.id}")) }
+            section.storeAisle?.let {
+                // The chip's face is 22 dp; with large text its "A2" line outgrows that, so the chip grows with it.
+                val chipHeight = with(LocalDensity.current) { maxOf(22.dp, 15.sp.toDp() + 6.dp) }
+                StoreAisleChip(it, Modifier.layoutId("chip").height(chipHeight).testTag(ListTags.storeChip(section.id)).probe(probe, "chip:${section.id}"))
+            }
             section.doodle?.let {
                 Text(
                     it,
@@ -506,7 +511,10 @@ internal fun EndNote(total: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** A skeleton strip while the list loads (§6.1 "loading"): a white strip with a dashed tab spot and a dotted basket spot. */
+/**
+ * A skeleton strip while the list loads (§6.1 "loading"): a white strip with a dashed tab spot, bars for the tab and
+ * the meta line, a dotted basket spot and a disc where the chevron goes.
+ */
 @Composable
 internal fun SkeletonStrip(modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
@@ -516,7 +524,9 @@ internal fun SkeletonStrip(modifier: Modifier = Modifier) {
             val bar = if (c.isDark) c.rule else c.backing
             val r = 11.dp.toPx()
             drawDashedCircle(dash, androidx.compose.ui.geometry.Offset(22.dp.toPx(), 22.dp.toPx()), r, 1.8.dp.toPx(), 3.dp.toPx(), 2.dp.toPx())
-            drawDashedCircle(dash, androidx.compose.ui.geometry.Offset(size.width - 92.dp.toPx(), 28.dp.toPx()), 16.dp.toPx(), 1.8.dp.toPx(), 3.2.dp.toPx(), 2.4.dp.toPx())
+            // The basket's landing spot where a strip's basket sits, and a plain disc for its round chevron button.
+            drawDashedCircle(dash, androidx.compose.ui.geometry.Offset(size.width - 100.dp.toPx(), 28.dp.toPx()), 16.dp.toPx(), 1.8.dp.toPx(), 3.2.dp.toPx(), 2.4.dp.toPx())
+            drawCircle(bar, 14.dp.toPx(), androidx.compose.ui.geometry.Offset(size.width - 34.dp.toPx(), 28.dp.toPx()))
             drawRoundRect(bar, androidx.compose.ui.geometry.Offset(42.dp.toPx(), 14.dp.toPx()), androidx.compose.ui.geometry.Size(110.dp.toPx(), 16.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
             drawRoundRect(bar, androidx.compose.ui.geometry.Offset(12.dp.toPx(), 38.dp.toPx()), androidx.compose.ui.geometry.Size(70.dp.toPx(), 9.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.5.dp.toPx()))
         }

@@ -79,7 +79,18 @@ class PinnedBackingProbeTest {
         val list = compose.boundsOf(ListTags.LIST)
         assertGround(bmp, Rect(1 * dp, book.top + 2 * dp, book.left - 1 * dp, book.bottom - 2 * dp), "$label: left of the book")
         assertGround(bmp, Rect(book.right + 3.5f * dp, book.top + 4 * dp, bmp.width - 1 * dp, book.bottom - 2 * dp), "$label: right of the book")
-        assertGround(bmp, Rect(1 * dp, book.bottom + 4 * dp, bmp.width - 1 * dp, list.top - 0.5f), "$label: between the book and the list")
+        val gapTop = book.bottom + 4 * dp
+        val gapBottom = list.top - 0.5f
+        // A book of more than one page hangs its page number into the gap (§7.3): that chip is the book's, not the list's;
+        // the ground is checked on both sides of it (and of its hard shadow on the right).
+        val lcd = if (compose.exists(BookTags.PAGE_LCD, unmerged = true)) compose.boundsOf(BookTags.PAGE_LCD, unmerged = true) else null
+        if (lcd == null) {
+            assertGround(bmp, Rect(1 * dp, gapTop, bmp.width - 1 * dp, gapBottom), "$label: between the book and the list")
+        } else {
+            assertTrue("$label: the page number ends where the list begins (${lcd.bottom} vs ${list.top})", lcd.bottom <= list.top + 0.5f)
+            assertGround(bmp, Rect(1 * dp, gapTop, lcd.left - 1 * dp, gapBottom), "$label: between the book and the list, left of the page number")
+            assertGround(bmp, Rect(lcd.right + 3.5f * dp, gapTop, bmp.width - 1 * dp, gapBottom), "$label: between the book and the list, right of the page number")
+        }
     }
 
     /**
