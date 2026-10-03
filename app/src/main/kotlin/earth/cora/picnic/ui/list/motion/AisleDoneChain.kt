@@ -329,12 +329,9 @@ private fun pillSize(textW: Int, textH: Int, minW: Dp, minH: Dp, padH: Dp): Pair
 @Composable
 private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, popT0: Long?, clock: MotionClock, still: Boolean) {
     val measurer = rememberTextMeasurer(cacheSize = 4)
-    val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
-    val sp = 13f * minOf(fontScale, BADGE_MAX_SCALE) / fontScale
-    val style = PicnicTheme.type.badgeNumeral.copy(color = look.family.trace, fontSize = sp.sp, lineHeight = (sp * 1.15f).sp)
+    val style = badgeStyle(look.family.trace)
     val shadow = PicnicTheme.shadows
-    val label = if (count > 99) "99+" else count.toString()
-    val layout = measurer.measure(label, style)
+    val layout = measurer.measure(badgeLabel(count), style)
     val d = BasketManifest.BADGE_SIZE_DP.dp
     val (w, h) = pillSize(layout.size.width, layout.size.height, minW = d, minH = d, padH = 10.dp)
     val slotTop = (if (tray) BasketManifest.BADGE_TOP_TRAY_DP else BasketManifest.BADGE_TOP_STRIP_DP).dp
@@ -364,6 +361,31 @@ private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, po
         )
         drawText(layout, topLeft = Offset((size.width - layout.size.width) / 2f, (size.height - layout.size.height) / 2f))
     }
+}
+
+/** The badge's numeral style: 13 sp, following the font scale up to [BADGE_MAX_SCALE]. */
+@Composable
+private fun badgeStyle(color: Color): androidx.compose.ui.text.TextStyle {
+    val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+    val sp = 13f * minOf(fontScale, BADGE_MAX_SCALE) / fontScale
+    return PicnicTheme.type.badgeNumeral.copy(color = color, fontSize = sp.sp, lineHeight = (sp * 1.15f).sp)
+}
+
+private fun badgeLabel(count: Int): String = if (count > 99) "99+" else count.toString()
+
+/**
+ * How far [count]'s badge reaches past the basket box's right edge (the flag slot's 12 dp, more once it grows into a
+ * pill with large text or a long count; 0 when hidden at 0), so a strip or a tray band can keep it clear of the
+ * chevron beside the basket (item 107).
+ */
+@Composable
+internal fun badgeOverhang(count: Int): Dp {
+    if (count <= 0) return 0.dp
+    val measurer = rememberTextMeasurer(cacheSize = 2)
+    val layout = measurer.measure(badgeLabel(count), badgeStyle(Color.Black))
+    val d = BasketManifest.BADGE_SIZE_DP.dp
+    val (w, _) = pillSize(layout.size.width, layout.size.height, minW = d, minH = d, padH = 10.dp)
+    return w - (d - BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp)
 }
 
 /** How far the badge's numeral follows the font scale (§4.12, item 107). */

@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -96,8 +97,10 @@ internal fun PeekNote(section: SectionUi, modifier: Modifier = Modifier, maxHeig
             var shown = lines.size
             var more: androidx.compose.ui.layout.Placeable? = null
             if (constraints.hasBoundedHeight && natural > constraints.maxHeight) {
+                // Ballpoint, which holds on the lemon note in every variant (§2.2: ballpointSoft never sits on a pastel,
+                // and Glow's soft ink is a pale lilac); a lighter weight sets it apart from the items.
                 val moreText: @Composable (Int) -> Unit = { n ->
-                    Text(resources.getQuantityString(earth.cora.picnic.R.plurals.list_peek_more, n, n), style = lineStyle.copy(color = c.inkSoft), maxLines = 1)
+                    Text(resources.getQuantityString(earth.cora.picnic.R.plurals.list_peek_more, n, n), style = lineStyle.copy(fontWeight = FontWeight.Medium), maxLines = 1)
                 }
                 // The last line is one line of text whatever n is: measured, not composed, so it leaves no stray node.
                 val moreHeight = measurer.measure(resources.getQuantityString(earth.cora.picnic.R.plurals.list_peek_more, lines.size, lines.size), lineStyle, maxLines = 1).size.height

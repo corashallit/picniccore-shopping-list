@@ -1,6 +1,7 @@
 package earth.cora.picnic.ui.list
 
 import android.content.res.Resources
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -44,11 +45,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
@@ -70,8 +75,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
@@ -207,6 +217,17 @@ class ListScreenState(
     /** Her own fold and unfold taps (FoldFocusEffect). */
     val toggles = FoldToggles()
 
+    /** Her last tap that opened a folded strip: its tray scrolls into view once it is laid out (§6.1). */
+    internal var openTap by mutableStateOf<OpenTap?>(null)
+    private var openTaps = 0
+
+    /** She opened [sectionId] herself (a tap on its strip, Enter, or TalkBack's "Expand"). */
+    internal fun openedByHer(sectionId: String) {
+        openTap = OpenTap(sectionId, ++openTaps)
+    }
+
+    internal data class OpenTap(val sectionId: String, val n: Int)
+
     internal val stripBounds = mutableStateMapOf<String, Rect>()
     internal var moreBounds by mutableStateOf<Rect?>(null)
 
@@ -233,10 +254,21 @@ class ListScreenState(
         sunSpin++
         syncing = true
     }
+
+    companion object {
+        /**
+         * What survives turning the phone or a dark-mode switch (§6.5, §6.6): the open menu and sheets, and whether the
+         * scroll had folded the bar and the book (the list keeps its own scroll).
+         */
+        val Saver: Saver<ListScreenState, Any> = listSaver(
+            save = { listOf(it.menuOpen, it.newTripOpen, it.tripBookOpen, it.scrolledDown) },
+            restore = { ListScreenState(menuOpen = it[0], newTripOpen = it[1], tripBookOpen = it[2]).apply { scrolledDown = it[3] } },
+        )
+    }
 }
 
 @Composable
-fun rememberListScreenState(): ListScreenState = remember { ListScreenState() }
+fun rememberListScreenState(): ListScreenState = rememberSaveable(saver = ListScreenState.Saver) { ListScreenState() }
 
 /**
  * Stateful List destination: wires [ListViewModel] (its motion engine) and [AddViewModel] (the docked add bar, the FAB,
@@ -439,7 +471,7 @@ fun ListScreen(
     toasts: ToastHostState = remember { ToastHostState() },
     showLists: Boolean = false,
     screen: ListScreenState = rememberListScreenState(),
-    listState: LazyListState = rememberLazyListState(),
+    listState: LazyListState? = null,
     dockHeight: Dp = 84.dp,
     collapse: AddBarCollapseState? = null,
     dock: @Composable BoxScope.() -> Unit = { StaticDock(tape = AddRules.addBarTape(earth.cora.picnic.ui.eggs.SurpriseState(season = state.book?.season))) },
@@ -453,6 +485,20 @@ fun ListScreen(
         if (!screen.syncing) return@LaunchedEffect
         withContext(FixedMotionScale) { holdOnFrameClock(PicnicMotion.floorLcdWord) }
         screen.syncing = false
+    }
+    // Each list keeps its own scroll: another list opens at its top, never at the old one's place (§6.4, item 164).
+    val lazyState = listState ?: key(state.listId) { rememberLazyListState() }
+    // A different list, or this one emptied (the trip cleared, its last item torn out): the scroll that folded the app
+    // bar, the book and the add bar went with it, so they come back (§4.2, §4.21, §6.1; items 116, 164).
+    val emptied = state.total == 0 && !state.loading
+    val seen = remember { arrayOfNulls<Pair<String, Boolean>>(1) }
+    LaunchedEffect(state.listId, emptied) {
+        val before = seen[0]
+        seen[0] = state.listId to emptied
+        if (before != null && (before.first != state.listId || emptied)) {
+            screen.scrolledDown = false
+            collapse?.atTop(true)
+        }
     }
     val density = LocalDensity.current
     val ime = WindowInsets.ime.getBottom(density) > 0
@@ -478,8 +524,8 @@ fun ListScreen(
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when {
                         state.loading -> LoadingList()
-                        state.total == 0 -> EmptyList(state, actions)
-                        else -> AisleList(state, p, engine, actions, screen, listState, dockHeight, collapse)
+                        state.total == 0 -> EmptyList(state, actions, dockHeight)
+                        else -> AisleList(state, p, engine, actions, screen, lazyState, dockHeight, collapse)
                     }
                 }
             }
@@ -555,15 +601,18 @@ private fun LoadingList() {
     }
 }
 
-/** The empty list (§4.21): the fresh sticker sheet, the copy, "Start my list"; no book. */
+/**
+ * The empty list (§4.21): the fresh sticker sheet, the copy, "Start my list"; no book. It scrolls to clear the docked
+ * add bar ([dockHeight], which grows with large text and the navigation bar), so the button is never left under it.
+ */
 @Composable
-private fun EmptyList(state: ListUiState, actions: ListActions) {
+private fun EmptyList(state: ListUiState, actions: ListActions, dockHeight: Dp) {
     Box(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp)
-            .padding(bottom = 96.dp)
+            .padding(bottom = dockHeight)
             .testTag(ListTags.EMPTY),
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -676,6 +725,30 @@ private fun AisleList(
         collapse?.ignoreProgrammaticScroll()
         listState.animateScrollToItem(index)
     }
+    // Her own open scrolls the tray into view (§6.1: smooth, programmatic; the add bar ignores it, item 116) unless its
+    // band and its first three rows already show above the add bar. It waits for the tray to be laid out: a bounded
+    // number of frames, as the engine may hold another aisle open a moment.
+    val latestEntries by rememberUpdatedState(entries)
+    val dockPx by rememberUpdatedState(with(density) { dockHeight.roundToPx() })
+    val snap by rememberUpdatedState(reduced)
+    LaunchedEffect(screen.openTap) {
+        val tap = screen.openTap ?: return@LaunchedEffect
+        fun headerIndex() = latestEntries.indexOfFirst { it is Entry.Header && it.sectionId == tap.sectionId }
+        var waited = 0
+        while (headerIndex() < 0 && waited++ < OPEN_WAIT_FRAMES) withFrameMillis { }
+        // One more frame: the layout with the tray in it has run.
+        withFrameMillis { }
+        val index = headerIndex()
+        if (index < 0) return@LaunchedEffect
+        val cap = latestEntries.indexOfFirst { it is Entry.Cap && it.sectionId == tap.sectionId }
+        val info = listState.layoutInfo
+        val header = info.visibleItemsInfo.firstOrNull { it.index == index }
+        val last = info.visibleItemsInfo.firstOrNull { it.index == minOf(index + OPEN_ROWS_IN_VIEW, cap - 1).coerceAtLeast(index) }
+        val inView = header != null && header.offset >= info.viewportStartOffset && last != null && last.offset + last.size <= info.viewportEndOffset - dockPx
+        if (inView) return@LaunchedEffect
+        collapse?.ignoreProgrammaticScroll()
+        if (snap) listState.scrollToItem(index) else listState.animateScrollToItem(index)
+    }
     // At the top, the bar and the book come back (§4.2, §6.1).
     LaunchedEffect(listState) {
         snapshotFlow { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 }.collect { top ->
@@ -750,9 +823,11 @@ private fun AisleList(
         }
     }
 
+    // Clipped to the viewport: the bunting starts above it (−34 dp) and comes out from under the top stack (R6).
     Box(
         Modifier
             .fillMaxSize()
+            .clipToBounds()
             .onGloballyPositioned { screen.listBounds = it.boundsInWindow() }
             .pointerInput(connection) {
                 // Watches (never consumes) whether a finger is down, for the pull to refresh.
@@ -790,6 +865,7 @@ private fun AisleList(
                             focus = stripFocus,
                             onOpen = {
                                 screen.toggles.bump(s.id)
+                                screen.openedByHer(s.id)
                                 act.onOpenSection(s.id)
                             },
                             onPeek = { held, ms ->
@@ -883,6 +959,10 @@ private val PULL_MAX: Dp = 70.dp
 private val PULL_TRIGGER: Dp = 40.dp
 private const val PULL_FOLLOW: Float = 0.6f
 private const val COLLAPSE_SLOP: Float = 4f
+
+/** How long her open waits for its tray to be laid out (frames, about 1.5 s), and the rows it brings into view. */
+private const val OPEN_WAIT_FRAMES: Int = 90
+private const val OPEN_ROWS_IN_VIEW: Int = 3
 private const val SLOT_CLOSE_MS: Int = 380
 
 /** Placement only: rows and strips move smoothly when the layout changes; reduced motion swaps at once. */
@@ -967,18 +1047,33 @@ private fun PeekLayer(state: ListUiState, screen: ListScreenState, dockHeight: D
 /** The least room the peek note is given (its title and a line or two), even on a cramped screen. */
 private val PEEK_MIN_ROOM: Dp = 72.dp
 
-/** The overflow menu (§4.24) dropping from the More button; a tap outside closes it. */
+/**
+ * The overflow menu (§4.24) dropping from the More button. A tap outside, Back or Escape closes it (§15); with TalkBack
+ * the area outside is a "Close menu" button read after the items, so she never has to pick one to leave.
+ */
 @Composable
 private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScreenState) {
     var origin by remember { mutableStateOf(Offset.Zero) }
     val anchor = screen.moreBounds
     val close = { screen.menuOpen = false }
+    val closeLabel = stringResource(R.string.list_menu_close)
+    // The menu is part of the List screen (the root destination): without this, Back would leave the app.
+    BackHandler(onBack = close)
     Box(
         Modifier
             .fillMaxSize()
             .onGloballyPositioned { origin = it.boundsInWindow().topLeft }
             .clickable(remember { MutableInteractionSource() }, indication = null, onClick = close)
-            .clearAndSetSemantics { },
+            .clearAndSetSemantics {
+                contentDescription = closeLabel
+                role = Role.Button
+                traversalIndex = 1f
+                onClick(label = closeLabel) {
+                    close()
+                    true
+                }
+            }
+            .testTag(LIST_MENU_SCRIM_TAG),
     )
     val items = listOf(
         MenuItem(
@@ -1011,3 +1106,6 @@ private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScree
 
 /** The overflow menu's test tag. */
 const val LIST_MENU_TAG: String = "picnic_list_menu"
+
+/** The area outside the open overflow menu (a tap there, or its TalkBack button, closes the menu). */
+const val LIST_MENU_SCRIM_TAG: String = "picnic_list_menu_scrim"

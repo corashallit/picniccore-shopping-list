@@ -1,8 +1,6 @@
 package earth.cora.picnic.ui.list
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
@@ -200,10 +199,24 @@ private fun AppBar(
     val t = PicnicTheme.type
     val reduced = LocalReducedMotion.current
     val collapsed = ui.barCollapsed
-    val minHeight by animateDpAsState(
-        if (collapsed) PicnicTheme.dimens.appBarCollapsed else PicnicTheme.dimens.appBar,
-        animationSpec = if (reduced) snap() else tween(PicnicMotion.standard.durationMillis, easing = PicnicMotion.standard.easing),
-        label = "appBar",
+    // One animation drives every height change of the bar (§4.2, §6.1, item 161): 1 = expanded, 0 = collapsed. The bar's
+    // height, the subtitle's height and alpha and the title's size all follow it (`standard`, 200 ms, on the fixed motion
+    // scale like the book below it; at once under reduced motion), so nothing snaps in one frame and the list never jumps.
+    val open = remember { Animatable(if (collapsed) 0f else 1f) }
+    LaunchedEffect(collapsed, reduced) {
+        val target = if (collapsed) 0f else 1f
+        if (reduced) {
+            open.snapTo(target)
+        } else {
+            withContext(FixedMotionScale) { open.animateTo(target, tween(PicnicMotion.standard.durationMillis, easing = PicnicMotion.standard.easing)) }
+        }
+    }
+    val e = open.value
+    val minHeight = androidx.compose.ui.unit.lerp(PicnicTheme.dimens.appBarCollapsed, PicnicTheme.dimens.appBar, e)
+    // The title's size in half-sp steps (each a fresh fit of the puffy title): 20 sp collapsed, 24 sp expanded.
+    val titleStyle = t.screenTitle.copy(
+        fontSize = (kotlin.math.round(lerpF(t.screenTitleCollapsed.fontSize.value, t.screenTitle.fontSize.value, e) * 2f) / 2f).sp,
+        lineHeight = (kotlin.math.round(lerpF(t.screenTitleCollapsed.lineHeight.value, t.screenTitle.lineHeight.value, e) * 2f) / 2f).sp,
     )
     val moon = c.variant == ThemeVariant.Dusk || c.variant == ThemeVariant.Glow
     val title = state.title.ifEmpty { stringResource(R.string.app_name) }
@@ -229,7 +242,7 @@ private fun AppBar(
         Row(m, verticalAlignment = Alignment.CenterVertically) {
             PuffyText(
                 title,
-                style = if (collapsed) t.screenTitleCollapsed else t.screenTitle,
+                style = titleStyle,
                 fill = c.ink,
                 stroke = 6.dp,
                 minFontSize = 20.sp,
@@ -251,8 +264,8 @@ private fun AppBar(
         }
     }
     val subtitleRow: @Composable (Modifier) -> Unit = { m ->
-        if (subtitle != null && !collapsed) {
-            PadPatch(m.padding(start = 2.dp, bottom = 4.dp)) {
+        if (subtitle != null && e > 0f) {
+            PadPatch(m.revealHeight(e).graphicsLayer { alpha = e }.padding(start = 2.dp, bottom = 4.dp)) {
                 // Large text may wrap the line: the star stays on the first line and the patch hugs the widest one.
                 val style = t.appBarSubtitle.copy(color = c.onPadSoft)
                 val firstLine = with(LocalDensity.current) { style.lineHeight.toDp() }
@@ -364,6 +377,25 @@ private fun SnugText(text: String, style: TextStyle) {
         layout(p.width, p.height) { p.place(0, 0) }
     }
 }
+
+private fun lerpF(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+/**
+ * Lays the content out at its full height but takes only [fraction] of it, clipped to that (the subtitle folding into
+ * the collapsing bar): the content's top stays put while its bottom edge slides.
+ */
+private fun Modifier.revealHeight(fraction: Float): Modifier =
+    if (fraction >= 1f) {
+        this
+    } else {
+        this
+            .clipToBounds()
+            .layout { measurable, constraints ->
+                val p = measurable.measure(constraints.copy(minHeight = 0))
+                val h = kotlin.math.round(p.height * fraction.coerceIn(0f, 1f)).toInt()
+                layout(p.width, h) { p.place(0, 0) }
+            }
+    }
 
 /** The sun's layout room by the title (its face is 22 dp, its target 48 dp). */
 private val SUN_ROOM_W = 30.dp

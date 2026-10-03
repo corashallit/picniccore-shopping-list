@@ -721,11 +721,15 @@ private fun Spots(state: BookUi, presentation: BookPresentation, clock: MotionCl
     }
 }
 
-/** The page number LCD (§7.3): a small LCD face, "2/3" at pitch 1.2 dp. */
+/**
+ * The page number LCD (§7.3): a small LCD face, "2/3" at pitch 1.2 dp. Above font scale 1.3 its pitch follows the font
+ * scale, up to 1.6× (§7.4), so the number grows with the text round it while the pages keep their size.
+ */
 @Composable
 private fun PageLcd(text: String, modifier: Modifier) {
     val c = PicnicTheme.colors
     val shape = RoundedCornerShape(5.dp)
+    val pitch = PAGE_LCD_PITCH * pageLcdScale(LocalDensity.current.fontScale)
     Box(
         modifier
             .probe(LocalPieceProbe.current, "pageLcd:$text")
@@ -739,9 +743,15 @@ private fun PageLcd(text: String, modifier: Modifier) {
             .background(c.lcd)
             .padding(horizontal = 4.dp, vertical = 3.dp),
     ) {
-        LcdText(text, 1.2.dp)
+        LcdText(text, pitch)
     }
 }
+
+/** The page LCD's pitch at font scale 1.0 (§7.3). */
+private val PAGE_LCD_PITCH = 1.2.dp
+
+/** How much the page LCD's pitch grows at [fontScale] (§7.4): 1 up to 1.3, then the font scale, at most 1.6. */
+internal fun pageLcdScale(fontScale: Float): Float = if (fontScale > 1.3f) fontScale.coerceAtMost(1.6f) else 1f
 
 /**
  * The stamp name tag (§7.7): a small lemon tag clipped onto the right page by the spine, over the release paper. [onPage]:
@@ -812,72 +822,129 @@ private fun ReceiptSlip(modifier: Modifier) {
 }
 
 /**
- * The collapsed book's page (§7.4), inside the book's frame: one strip with the date tag, the stamps as 12 dp dots
- * (stamped dots filled in the aisle trace), and the newest twins at 22 dp, right-aligned, with a "+n" pearl before them.
+ * The collapsed book's page (§7.4), inside the book's frame: one strip with the date tag, the stamps as dots (stamped
+ * dots filled in the aisle trace), and the newest twins at 22 dp, right-aligned, with a "+n" pearl before them. The
+ * twins are fitted first: room for the newest three (and the pearl when more remain) is kept whatever the stops, so the
+ * magic appear always has its newest place to land (item 161). The stamps take what is left: 12 dp dots up to 8 stops,
+ * 10 dp above or when 12 dp ones do not fit, and when even those do not fit, a run that always holds the "now" stop with
+ * a small "+n" pill for the stops it leaves out ([CollapsedDots]). Any room still over goes to more twins, up to six.
  */
 @Composable
 private fun CollapsedPages(state: BookUi, presentation: BookPresentation, clock: MotionClock, dateOnPage: Boolean, modifier: Modifier) {
-    val c = PicnicTheme.colors
-    val variant = PicnicTheme.variant
     val newestFirst = remember(state.stickers) { state.stickers.sortedByDescending { it.slot } }
+    val stamps = state.stamps
+    // The stop the run of dots keeps in view: the current one, else the first not stamped yet, else the last.
+    val anchor = stamps.indexOfFirst { it.now }.takeIf { it >= 0 } ?: stamps.indexOfFirst { !it.stamped }.takeIf { it >= 0 } ?: stamps.lastIndex
+    val probe = LocalPieceProbe.current
     androidx.compose.ui.layout.SubcomposeLayout(modifier.padding(horizontal = 6.dp)) { constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
         val h = constraints.maxHeight
         val w = constraints.maxWidth
         val gap = 6.dp.roundToPx()
         val date = if (dateOnPage) subcompose("date") { DateTag(state.dateLabel, season = state.season) }.map { it.measure(loose) } else emptyList()
-        val dots = subcompose("dots") {
-            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                for (s in state.stamps.take(12)) {
-                    Canvas(Modifier.size(12.dp).decorative()) {
-                        val r = size.minDimension / 2f - 0.75.dp.toPx()
-                        if (s.stamped) {
-                            drawCircle(s.look.stampInk(variant), r)
-                        } else {
-                            drawDashedCircle(if (s.now) Families.strawberry.trace else c.inkSoft, center, r, 1.5.dp.toPx(), 2.4.dp.toPx(), 1.8.dp.toPx())
-                        }
-                    }
-                }
-            }
-        }.map { it.measure(loose) }
         val dateW = date.sumOf { it.width }
         val dotsX = dateW + if (dateW > 0) gap else 0
-        val dotsW = dots.sumOf { it.width }
-        // The newest stickers, right-aligned: as many 22 dp twins (overlapping 3 dp) as fit after the dots and the
-        // "+n" pearl, at most six (§7.4).
+        // The twins' room first: the newest three (22 dp, overlapping 3 dp) and the pearl before them when more remain.
         val twinStep = (22 - 3).dp.roundToPx()
-        val pearlRoom = 34.dp.roundToPx()
-        val room = w - dotsX - dotsW - gap - pearlRoom
-        val fit = ((room - 3.dp.roundToPx()) / twinStep).coerceIn(0, COLLAPSED_TWINS).coerceAtMost(newestFirst.size)
+        val twinEdge = 3.dp.roundToPx()
+        fun twinsWidth(n: Int) = if (n <= 0) 0 else n * twinStep + twinEdge
+        val total = newestFirst.size
+        val least = minOf(BookLayout.COLLAPSED_MIN_TWINS, total)
+        val pearlGap = 4.dp.roundToPx()
+        val pearlRoom = if (total > least) subcompose("pearlRoom") { MorePearl(total - least) }.sumOf { it.measure(loose).width } + pearlGap else 0
+        val pillRoom = subcompose("pillRoom") { MoreDot(stamps.size) }.sumOf { it.measure(loose).width }
+        val dotsRoom = w - dotsX - gap - twinsWidth(least) - pearlRoom
+        val plan = CollapsedDots.plan(stamps.size, anchor, dotsRoom.toDp().value, pillRoom.toDp().value)
+        val dots = subcompose("dots") { CollapsedStamps(stamps, plan, probe) }.map { it.measure(loose) }
+        val dotsEnd = dotsX + dots.sumOf { it.width }
+        // What is left after the dots goes to more twins, up to six.
+        val left = w - dotsEnd - gap
+        val fit = (least..minOf(COLLAPSED_TWINS, total)).lastOrNull { n -> twinsWidth(n) + (if (total > n) pearlRoom else 0) <= left } ?: least
         val shown = newestFirst.take(fit).asReversed()
-        val more = state.stickers.size - shown.size
+        val more = total - shown.size
         val twins = subcompose("twins") {
             Row(horizontalArrangement = Arrangement.spacedBy((-3).dp)) {
                 for (t in shown) {
-                    BookTwin(t.icon, t.slot, presentation.spots[t.slot], clock, Modifier.testTag(BookTags.twin(t.slot)).probe(LocalPieceProbe.current, "collapsedTwin:${t.slot}"), size = 22.dp, holo = t.holo, pixel = state.pixel, aisleIndex = t.aisleIndex)
+                    BookTwin(t.icon, t.slot, presentation.spots[t.slot], clock, Modifier.testTag(BookTags.twin(t.slot)).probe(probe, "collapsedTwin:${t.slot}"), size = 22.dp, holo = t.holo, pixel = state.pixel, aisleIndex = t.aisleIndex)
                 }
             }
         }.map { it.measure(loose) }
-        val pearl = if (more > 0) subcompose("pearl") { MorePearl(more) }.map { it.measure(loose) } else emptyList()
+        val pearl = if (more > 0) subcompose("pearl") { MorePearl(more, Modifier.probe(probe, "collapsedPearl")) }.map { it.measure(loose) } else emptyList()
         layout(w, h) {
             date.forEach { it.place(0, (h - it.height) / 2) }
             dots.forEach { it.place(dotsX, (h - it.height) / 2) }
             val twinsW = twins.sumOf { it.width }
-            var x = w - twinsW
-            twins.forEach { it.place(x, (h - it.height) / 2) }
-            pearl.forEach {
-                x -= it.width + 4.dp.roundToPx()
-                it.place(x, (h - it.height) / 2)
+            twins.forEach { it.place(w - twinsW, (h - it.height) / 2) }
+            // Never back over the dots, whatever the pearl's width.
+            pearl.forEach { it.place(maxOf(dotsEnd + gap, w - twinsW - it.width - pearlGap), (h - it.height) / 2) }
+        }
+    }
+}
+
+/** The collapsed strip's stamps per [plan]: a "+n" pill for the stops left out before the run, the dots, one for after. */
+@Composable
+private fun CollapsedStamps(stamps: List<StampUi>, plan: CollapsedDots, probe: PieceProbe?) {
+    val c = PicnicTheme.colors
+    val variant = PicnicTheme.variant
+    val size = plan.size.dp
+    Row(horizontalArrangement = Arrangement.spacedBy(plan.gap.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (plan.hiddenBefore > 0) MoreDot(plan.hiddenBefore, Modifier.probe(probe, "collapsedMore:before"))
+        for (s in stamps.subList(plan.first, plan.first + plan.count)) {
+            Canvas(Modifier.size(size).decorative().probe(probe, "collapsedDot:${s.sectionId}")) {
+                val k = this.size.minDimension / 12.dp.toPx()
+                val r = this.size.minDimension / 2f - 0.75.dp.toPx() * k
+                if (s.stamped) {
+                    drawCircle(s.look.stampInk(variant), r)
+                } else {
+                    drawDashedCircle(if (s.now) Families.strawberry.trace else c.inkSoft, center, r, 1.5.dp.toPx() * k, 2.4.dp.toPx() * k, 1.8.dp.toPx() * k)
+                }
             }
         }
+        if (plan.hiddenAfter > 0) MoreDot(plan.hiddenAfter, Modifier.probe(probe, "collapsedMore:after"))
+    }
+}
+
+/**
+ * The collapsed strip's "+n" for stops its dots leave out: a 12 dp pill in the undone dots' ink, its numeral at the
+ * page's art scale (10 sp at font scale 1.0, like the stamp page's "+n" circle; the book's pages keep their size, §7.4).
+ * Decorative: the book's TalkBack line counts every stop.
+ */
+@Composable
+private fun MoreDot(n: Int, modifier: Modifier = Modifier) {
+    val c = PicnicTheme.colors
+    val k = 1f / LocalDensity.current.fontScale
+    Box(
+        modifier
+            .height(12.dp)
+            .widthIn(min = 18.dp)
+            .decorative()
+            .drawBehind {
+                val sw = 1.2.dp.toPx()
+                drawRoundRect(
+                    c.inkSoft,
+                    topLeft = Offset(sw / 2f, sw / 2f),
+                    size = Size(size.width - sw, size.height - sw),
+                    cornerRadius = CornerRadius((size.height - sw) / 2f),
+                    style = Stroke(sw),
+                )
+            }
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "+$n",
+            style = PicnicTheme.type.stampNumeral.copy(color = c.inkSoft, fontSize = (10f * k).sp, lineHeight = (11f * k).sp),
+            maxLines = 1,
+            modifier = Modifier.wrapContentHeight(unbounded = true),
+        )
     }
 }
 
 /** The collapsed book's "+n" (§4.12): a white pill with a periwinkle inner ring, DynaPuff 13 sp. Decorative. */
 @Composable
-private fun MorePearl(n: Int) {
+private fun MorePearl(n: Int, modifier: Modifier = Modifier) {
     Box(
-        Modifier
+        modifier
             .height(20.dp)
             .widthIn(min = 30.dp)
             .clip(CircleShape)

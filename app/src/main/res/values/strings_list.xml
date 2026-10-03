@@ -87,6 +87,8 @@
     <string name="list_menu_no_trip">No trip yet</string>
     <string name="list_menu_switch_list">Switch list…</string>
     <string name="list_menu_refresh">Refresh</string>
+    <!-- TalkBack: the tap-outside area behind the open overflow menu (§4.24, §15). -->
+    <string name="list_menu_close">Close menu</string>
     <string name="list_action_refresh">Refresh stickers and aisles</string>
 
     <!-- Sticky notes (§4.15, §16). -->
