@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
@@ -30,6 +31,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import earth.cora.picnic.core.model.Aisles
+import earth.cora.picnic.core.model.displayName
+import earth.cora.picnic.ui.a11y.TextOverflowed
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -210,7 +214,86 @@ class LargeTextComponentsTest {
                 assertEquals("primary face 52 dp (46 inside its border)", 46f * px, face.height, 0.5f)
             }
         }
+        longRealLabelsStayWhole()
     }
+
+    /**
+     * The spec's longest real labels in a 328 dp column (a 360 dp phone's sheet), at 1.0, 1.3 and 2.0: the New trip
+     * sheet's pills, the Edit sheet's "Draw a new sticker", the Add sheet's "Stick all 12 on my list", a disabled
+     * "Reading… 6 of 9" and every default aisle in an aisle chip. Each wraps rather than loses a word: every line whole,
+     * no "…", no TextOverflowed, nothing clipped, inside its face. A label too long even for 2 lines ends in "…" and
+     * says so (TextOverflowed), never silently.
+     */
+    private fun longRealLabelsStayWhole() {
+        val pills = listOf(
+            Triple("Clear what I got", PicnicButtonStyle.Primary, null),
+            Triple("Keep everything, uncheck it all", PicnicButtonStyle.Secondary, null),
+            Triple("Draw a new sticker", PicnicButtonStyle.Secondary, PicnicGlyph.Sparkle),
+            Triple("Stick all 12 on my list", PicnicButtonStyle.Primary, null),
+        )
+        val aisles = Aisles.parse(Aisles.DEFAULT_TEXT)
+        for (scale in listOf(1f, 1.3f, 2f)) {
+            show(scale) {
+                Column(Modifier.width(328.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    pills.forEachIndexed { i, (label, style, glyph) ->
+                        Box(Modifier.testTag("pill$i")) {
+                            PicnicButton(label, onClick = {}, style = style, glyph = glyph, leadingStar = label.startsWith("Stick"))
+                        }
+                    }
+                    Box(Modifier.testTag("pillWide")) {
+                        PicnicButton("Keep everything, uncheck it all", onClick = {}, style = PicnicButtonStyle.Secondary, modifier = Modifier.fillMaxWidth())
+                    }
+                    Box(Modifier.testTag("pillDisabled")) { PicnicButton("Reading… 6 of 9", onClick = {}, enabled = false, busy = true) }
+                    aisles.forEach { a ->
+                        Box(Modifier.testTag("aisle${a.position}")) { AisleChip(a.position, a.displayName(), AisleLooks.of(a.position), selected = a.position == 3, onClick = {}) }
+                    }
+                    Box(Modifier.testTag("aisleElse")) { AisleChip(null, "Everything else", AisleLooks.everythingElse, selected = false, onClick = {}) }
+                    Box(Modifier.testTag("tooLong")) {
+                        SourceChip("Hillcrest Market's weeknight pancakes with maple syrup, berries and a pot of orange pekoe tea for four", onClick = {})
+                    }
+                }
+            }
+            val tags = pills.indices.map { "pill$it" } + listOf("pillWide", "pillDisabled", "aisleElse") + aisles.map { "aisle${it.position}" }
+            for (tag in tags) {
+                val root = node(tag)
+                val texts = walkTexts(root)
+                if (texts.isNotEmpty()) assertTextWhole(root, "$tag at $scale")
+                for (n in walkAll(root)) assertTrue("$tag at $scale: TextOverflowed", n.config.getOrNull(TextOverflowed) != true)
+                // A puffy label (the candy pill): whole, unclipped and inside its face.
+                for (n in walkAll(root).filter { it.config.getOrNull(PuffyFontSize) != null }) {
+                    assertTrue("$tag at $scale: puffy label clipped ${n.clippedAndWhole()}", n.isWhole())
+                    assertTrue("$tag at $scale: puffy label shrank below 15 sp", n.config[PuffyFontSize] >= 15f - 0.01f)
+                }
+                val faces = compose.onAllNodes(androidx.compose.ui.test.hasTestTag(FACE_TAG), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+                val box = root.boundsInRoot
+                val face = faces.firstOrNull { box.contains(it.center) }
+                if (face != null) {
+                    for (t in walkAll(root).filter { it.config.getOrNull(SemanticsProperties.Text) != null }) {
+                        val b = t.boundsInRoot
+                        assertTrue("$tag at $scale: label $b leaves its face $face", b.top >= face.top - 0.5f && b.bottom <= face.bottom + 0.5f && b.left >= face.left - 0.5f && b.right <= face.right + 0.5f)
+                    }
+                }
+            }
+            // At 2.0 the longest labels need their second line: the pill and the chip grew round it.
+            if (scale == 2f) {
+                val keep = walkTexts(node("pill1")).single()
+                val results = mutableListOf<TextLayoutResult>()
+                keep.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+                assertEquals("'Keep everything, uncheck it all' wraps at 2.0", 2, results.single().lineCount)
+            }
+            // Past 2 lines: "…" and TextOverflowed, never a silent cut.
+            val long = walkAll(node("tooLong")).filter { it.config.getOrNull(SemanticsProperties.Text) != null }
+            assertTrue("the too-long source chip reports its cut", walkAll(node("tooLong")).any { it.config.getOrNull(TextOverflowed) == true })
+            val results = mutableListOf<TextLayoutResult>()
+            long.single().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+            assertTrue("the too-long source chip ends in an ellipsis at $scale", (0 until results.single().lineCount).any { results.single().isLineEllipsized(it) })
+        }
+    }
+
+    private fun walkAll(n: SemanticsNode): List<SemanticsNode> = listOf(n) + n.children.flatMap { walkAll(it) }
+
+    private fun walkTexts(n: SemanticsNode): List<SemanticsNode> =
+        walkAll(n).filter { it.config.getOrNull(SemanticsProperties.Text) != null && it.config.getOrNull(SemanticsActions.GetTextLayoutResult) != null }
 
     /**
      * §4.8: a multi-line ruled field draws one rule per text line. At 1.0, 1.3 and 2.0 every rule sits at a line's

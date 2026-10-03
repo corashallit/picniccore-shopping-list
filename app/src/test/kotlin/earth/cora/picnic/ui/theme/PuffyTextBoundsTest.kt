@@ -118,9 +118,9 @@ class PuffyTextBoundsTest {
         }
     }
 
-    private fun show(variant: ThemeVariant, fontScale: Float, content: @Composable () -> Unit) {
+    private fun show(variant: ThemeVariant, fontScale: Float, density: Float = 3f, content: @Composable () -> Unit) {
         screen.show {
-            CompositionLocalProvider(LocalDensity provides Density(3f, fontScale)) {
+            CompositionLocalProvider(LocalDensity provides Density(density, fontScale)) {
                 PicnicTheme(variant) { content() }
             }
         }
@@ -212,42 +212,186 @@ class PuffyTextBoundsTest {
                 if (name == "wordmark") assertTrue("$what: the wordmark is ellipsized", !n.config.contains(earth.cora.picnic.ui.a11y.TextOverflowed))
             }
         }
+        // The wordmark only ever shrinks as its box narrows: one line shrinking, then stacked at the size it reached
+        // (never a 40 sp stack at 232 dp after 25 sp on one line at 248 dp), never ellipsized, never clipped.
+        for (scale in listOf(1f, 1.3f, 2f)) for (compact in listOf(false, true)) {
+            var last = Float.MAX_VALUE
+            for (w in listOf(360, 328, 288, 260, 248, 232, 216)) {
+                show(ThemeVariant.Day, scale) { Box(Modifier.width(w.dp)) { Wordmark("Kirakira Basket", compact = compact) } }
+                val n = compose.onNode(puffy, useUnmergedTree = true).fetchSemanticsNode()
+                val what = "wordmark${if (compact) " (compact)" else ""} in $w dp at ×$scale"
+                val size = n.config[PuffyFontSize]
+                assertTrue("$what: $size sp, bigger than the $last sp it had in a wider box", size <= last + 0.01f)
+                assertTrue("$what: ellipsized", !n.config.contains(earth.cora.picnic.ui.a11y.TextOverflowed))
+                assertTrue("$what: clipped ${n.clippedAndWhole()}", n.isWhole())
+                last = size
+            }
+        }
     }
 
     /**
      * No pinholes or cracks in the stroke (the NEXT "XT" speck, where the hard shadow showed through a point between
-     * two glyphs' halos, and the hairline slits where two halos nearly meet). Each title is drawn as its silhouette
-     * (stroke and fill both white, the shadow pure blue, on pure green): read back at the stroke pass's own
-     * half-coverage threshold, no uncovered region smaller than the pen is cut off from the open ground, or reached
-     * only through a neck 2 px wide or less.
+     * two glyphs' halos, and the hairline slits where two halos nearly meet), at 2.625, 3, 3.5 and 4 px per dp (the
+     * rule is in dp, so every phone closes the same cracks), font scale 1.0 and 2.0, fitting and ellipsized. Each title
+     * is drawn as its silhouette (stroke and fill both white, the shadow pure blue, on pure green) and judged three ways:
+     * - by the finder's own rule, read back at the stroke pass's half-coverage threshold: no uncovered region smaller
+     *   than the pen is cut off from the open ground, or reached only through a crack of about 1 dp;
+     * - by two oracles that know nothing of the finder, read off the pixels alone: no region of ground or shadow is
+     *   sealed inside the white, except a glyph's own counter (found by drawing the fill alone) bigger than a pinhole;
+     *   and no hairline: no run of ground or shadow under 0.5 dp between white on both sides, 0.75 dp long or more
+     *   (a single antialiased point where two arcs meet is no crack).
      */
     @Test
     fun strokeHasNoPinholes() {
-        for (variant in listOf(ThemeVariant.Day, ThemeVariant.Glow)) for (scale in listOf(1f, 2f)) for (t in titles) {
-            show(variant, scale) {
-                Box(Modifier.background(ground).padding(12.dp)) {
-                    Box(Modifier.width(t.width)) {
-                        PuffyText(
-                            AnnotatedString(t.text.text), t.style().copy(color = Color.White), t.stroke, Modifier.testTag("title"),
-                            strokeColor = Color.White, shadow = t.shadow(), shadowColor = probeShadow,
-                            minFontSize = t.minFontSize, maxLines = t.maxLines, textAlign = t.textAlign,
-                        )
+        val cases = listOf(2.625f, 3f, 3.5f, 4f).map { d -> ThemeVariant.Day to d } + listOf(ThemeVariant.Glow to 3f)
+        for ((variant, d) in cases) for (scale in listOf(1f, 2f)) for (narrow in listOf(false, true)) for (t in titles) {
+            fun silhouette(strokeAndShadow: Boolean): android.graphics.Bitmap {
+                show(variant, scale, d) {
+                    Box(Modifier.background(ground).padding(12.dp)) {
+                        Box(Modifier.width(if (narrow) t.narrow else t.width)) {
+                            PuffyText(
+                                AnnotatedString(t.text.text), t.style().copy(color = Color.White), t.stroke, Modifier.testTag("title"),
+                                strokeColor = if (strokeAndShadow) Color.White else Color.Transparent, shadow = t.shadow(),
+                                shadowColor = if (strokeAndShadow) probeShadow else Color.Transparent,
+                                minFontSize = t.minFontSize, maxLines = t.maxLines, textAlign = t.textAlign,
+                            )
+                        }
+                    }
+                }
+                return compose.onNodeWithTag("title").captureToImage().asAndroidBitmap()
+            }
+            val what = "${t.name} ($variant, ${d}x, ×$scale${if (narrow) ", narrow" else ""})"
+            val img = silhouette(true)
+            val w = img.width
+            val h = img.height
+            val px = IntArray(w * h).also { img.getPixels(it, 0, w, 0, 0, w, h) }
+            val fillImg = silhouette(false)
+            assertTrue("$what: the fill-only pass draws the same box", fillImg.width == w && fillImg.height == h)
+            val fillOnly = IntArray(w * h).also { fillImg.getPixels(it, 0, w, 0, 0, w, h) }
+            // The ground and the shadow have no red; white has all of it: red is the silhouette's coverage, read at the
+            // stroke's own half threshold. The capture blends edges in linear light, so a half-covered pixel reads 188
+            // (the sRGB of 50 %), not 128; anything fainter is ground. A pixel or so of antialiasing may still differ
+            // from the mask PuffyText reads, so the finder's check allows the ground 2 px more shore.
+            fun white(i: Int) = ((px[i] shr 16) and 0xFF) >= HALF_COVERED_RED
+            val alpha = IntArray(w * h) { i -> if (white(i)) 255 else 0 }
+            val pen = kotlin.math.ceil(t.stroke.value * d).toInt()
+            val holes = PuffyPinholes.holes(alpha, w, h, pen, PuffyPinholes.neckPx(d), PuffyPinholes.shorePx(d) + 2)?.count { it } ?: 0
+            assertEquals("$what: $holes px of ground or shadow in a pinhole or crack (the finder's rule)", 0, holes)
+            // Oracle 1: sealed regions (8 neighbours: a diagonal leak is no seal).
+            val counters = PuffyPinholes.enclosed(BooleanArray(w * h) { ((fillOnly[it] shr 16) and 0xFF) < HALF_COVERED_RED }, w, h)
+            val reached = BooleanArray(w * h)
+            val queue = IntArray(w * h)
+            var head = 0
+            var tail = 0
+            fun flood(i: Int, mark: BooleanArray) {
+                if (!white(i) && !mark[i]) {
+                    mark[i] = true
+                    queue[tail++] = i
+                }
+            }
+            fun spread(mark: BooleanArray, visit: (Int) -> Unit) {
+                while (head < tail) {
+                    val i = queue[head++]
+                    visit(i)
+                    val x = i % w
+                    val y = i / w
+                    for (dy in -1..1) for (dx in -1..1) {
+                        val nx = x + dx
+                        val ny = y + dy
+                        if (nx in 0 until w && ny in 0 until h && !reached[ny * w + nx]) flood(ny * w + nx, mark)
                     }
                 }
             }
-            val img = compose.onNodeWithTag("title").captureToImage().asAndroidBitmap()
-            val w = img.width
-            val h = img.height
-            val px = IntArray(w * h)
-            img.getPixels(px, 0, w, 0, 0, w, h)
-            // The ground and the shadow have no red; white has all of it: red is the silhouette's coverage, read at the
-            // stroke's own half threshold. The screen renders a little fuller than the mask PuffyText reads, so the
-            // ground may stop a pixel or two short of where the mask let it reach: the check allows it 2 px more shore.
-            val alpha = IntArray(w * h) { i -> if (((px[i] shr 16) and 0xFF) >= 128) 255 else 0 }
-            val pen = kotlin.math.ceil(t.stroke.value * 3f).toInt()
-            val holes = PuffyPinholes.holes(alpha, w, h, pen, shore = PuffyPinholes.SHORE + 2)?.count { it } ?: 0
-            assertEquals("${t.name} ($variant, ×$scale): $holes px of ground or shadow in a pinhole or crack", 0, holes)
+            for (x in 0 until w) { flood(x, reached); flood((h - 1) * w + x, reached) }
+            for (y in 0 until h) { flood(y * w, reached); flood(y * w + w - 1, reached) }
+            spread(reached) {}
+            val seen = BooleanArray(w * h)
+            for (start in 0 until w * h) {
+                if (white(start) || reached[start] || seen[start]) continue
+                head = 0
+                tail = 0
+                flood(start, seen)
+                var inCounter = false
+                spread(seen) { if (counters[it]) inCounter = true }
+                assertTrue("$what: $tail px of ground or shadow sealed in the white (${if (inCounter) "a counter no bigger than a pinhole" else "between glyphs"}) at ${start % w}, ${start / w}", inCounter && tail > pen * pen / 2)
+            }
+            // Oracle 2: hairlines.
+            val thin = maxOf(1, (0.5f * d).toInt())
+            val narrowRun = BooleanArray(w * h)
+            for (y in 0 until h) {
+                var x = 0
+                while (x < w) {
+                    if (white(y * w + x)) { x++; continue }
+                    var end = x
+                    while (end < w && !white(y * w + end)) end++
+                    if (x > 0 && end < w && end - x <= thin) for (k in x until end) narrowRun[y * w + k] = true
+                    x = end
+                }
+            }
+            for (x in 0 until w) {
+                var y = 0
+                while (y < h) {
+                    if (white(y * w + x)) { y++; continue }
+                    var end = y
+                    while (end < h && !white(end * w + x)) end++
+                    if (y > 0 && end < h && end - y <= thin) for (k in y until end) narrowRun[k * w + x] = true
+                    y = end
+                }
+            }
+            val long = kotlin.math.ceil(0.75f * d).toInt()
+            val grouped = BooleanArray(w * h)
+            for (start in 0 until w * h) {
+                if (!narrowRun[start] || grouped[start]) continue
+                val members = ArrayDeque(listOf(start))
+                grouped[start] = true
+                var minX = w; var maxX = 0; var minY = h; var maxY = 0
+                while (members.isNotEmpty()) {
+                    val i = members.removeFirst()
+                    val x = i % w
+                    val y = i / w
+                    minX = minOf(minX, x); maxX = maxOf(maxX, x); minY = minOf(minY, y); maxY = maxOf(maxY, y)
+                    for (dy in -1..1) for (dx in -1..1) {
+                        val nx = x + dx
+                        val ny = y + dy
+                        if (nx in 0 until w && ny in 0 until h && narrowRun[ny * w + nx] && !grouped[ny * w + nx]) {
+                            grouped[ny * w + nx] = true
+                            members.addLast(ny * w + nx)
+                        }
+                    }
+                }
+                val length = maxOf(maxX - minX + 1, maxY - minY + 1)
+                assertTrue("$what: a hairline crack ${length} px long at $minX..$maxX, $minY..$maxY", length < long)
+            }
         }
+    }
+
+    /**
+     * The patch is worked out once per title, size and density ([PuffyPatchCache]): showing NEXT again scans nothing.
+     * In the app ([PinholeWork.Background]) the scan runs off the main thread, and the patch it brings is the one the
+     * inline scan draws: the same pixels once it lands (item 308: no title costs a frame when it appears).
+     */
+    @Test
+    fun pinholePatchIsCachedAndScannedOffTheMainThread() {
+        val next = titles.single { it.name == "next" }
+        PuffyPatchCache.clear()
+        val start = PuffyPinholes.scans
+        show(ThemeVariant.Day, 1f) { Box(Modifier.background(ground).padding(12.dp).testTag("frame")) { Draw(next, next.width, "title") } }
+        assertEquals("the first NEXT is scanned once", start + 1, PuffyPinholes.scans)
+        assertTrue("inline, the scan runs in composition (the main thread)", PuffyPinholes.lastScanOnMain)
+        assertTrue("NEXT's \"XT\" has a pinhole to close", PuffyPinholes.lastScanFilled > 0)
+        val inline = compose.onNodeWithTag("frame").captureToImage().asAndroidBitmap()
+        show(ThemeVariant.Day, 1f) { Box(Modifier.background(ground).padding(12.dp)) { Draw(next, next.width, "again") } }
+        show(ThemeVariant.Day, 1f) { Box(Modifier.background(ground).padding(12.dp).testTag("frame")) { Draw(next, next.width, "title") } }
+        assertEquals("NEXT seen again scans nothing", start + 1, PuffyPinholes.scans)
+        PuffyPatchCache.clear()
+        show(ThemeVariant.Day, 1f) {
+            CompositionLocalProvider(LocalPinholeWork provides PinholeWork.Background) {
+                Box(Modifier.background(ground).padding(12.dp).testTag("frame")) { Draw(next, next.width, "title") }
+            }
+        }
+        compose.waitUntil(5_000) { PuffyPinholes.scans == start + 2 }
+        assertTrue("in the app, the scan runs off the main thread", !PuffyPinholes.lastScanOnMain)
+        compose.waitUntil(5_000) { compose.onNodeWithTag("frame").captureToImage().asAndroidBitmap().sameAs(inline) }
     }
 
     /** The pinhole finder itself: an enclosed hole smaller than the pen fills, a larger one and an open one do not. */
@@ -276,6 +420,15 @@ class PuffyTextBoundsTest {
         assertNull(PuffyPinholes.holes(grid(intArrayOf(0, 0, 30, 3), intArrayOf(12, 3, 17, 20)), w, h, pen = 6))
         // A shallow dip in the outline (2 px deep) stays as drawn.
         assertNull(PuffyPinholes.holes(grid(intArrayOf(0, 0, 30, 3), intArrayOf(14, 3, 16, 5)), w, h, pen = 6))
+        // The 10 × 10 counter with a pen of 6 stays open inside a glyph, but the same hole between two glyphs (closed only
+        // by their halos) is a stroke artefact and fills, up to 4 pens across.
+        val big = grid(intArrayOf(15, 5, 25, 15))
+        assertNull(PuffyPinholes.holes(big, w, h, pen = 6, inGlyph = BooleanArray(w * h) { it % w in 15 until 25 && it / w in 5 until 15 }))
+        assertTrue(requireNotNull(PuffyPinholes.holes(big, w, h, pen = 6, inGlyph = BooleanArray(w * h)))[10 * w + 20])
+        assertNull("wider than 4 pens: left as drawn", PuffyPinholes.holes(big, w, h, pen = 2, inGlyph = BooleanArray(w * h)))
+        // The box's edge is open air: a sliver between the edge and a halo nearer than the neck is no hole.
+        val sliver = grid(intArrayOf(0, 4, 2, 16))
+        assertNull(PuffyPinholes.holes(sliver, w, h, pen = 6, neck = 2, shore = 3))
     }
 
     /** "Everything…", never "Everything …"; spans and their colour carry over to the "…". */
@@ -300,5 +453,8 @@ class PuffyTextBoundsTest {
     private companion object {
         val PicnicTheme_wordmarkMin: TextUnit = 24.sp
         val probeShadow = Color(0xFF0000FF)
+
+        /** A half-covered white edge on a red-free ground, as the capture blends it (linear light: sRGB of 50 %). */
+        const val HALF_COVERED_RED = 188
     }
 }

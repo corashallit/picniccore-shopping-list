@@ -879,10 +879,10 @@ class AislesViewModel(store, aisleSync, baskets, appScope)   // save(): setStore
 
 // ui/settings (amendment A1: the OpenAI key + draw-icons only)
 data class SettingsUiState(val tokenInput: String = "", val hasToken: Boolean, val tokenHint: String?, val drawIcons: Boolean,
-    val test: ConnectionTestUi = ConnectionTestUi.Idle, val appVersion: String, val tokenVisible: Boolean = false,
+    val test: ConnectionTestUi = ConnectionTestUi.Idle, val tokenVisible: Boolean = false,
     val canSave: Boolean = false, val loading: Boolean = true, val notice: String? = null /* failed write */)
 sealed interface ConnectionTestUi { Idle; Running; Ok(latencyMs: Long); Failed(message: String) }
-class SettingsViewModel(settings: SettingsRepository, assistant: GroceryAssistant, appVersion: String)
+class SettingsViewModel(settings: SettingsRepository, assistant: GroceryAssistant, places: PlaceSource, listTitle: Flow<String>)
     // setTokenInput, toggleTokenVisible(), saveConnection() (save, then test), clearToken(), setDrawIcons(on), testConnection()
 ```
 
@@ -890,7 +890,7 @@ class SettingsViewModel(settings: SettingsRepository, assistant: GroceryAssistan
 
 **Art pass, part 2 (WP6; consumers: WP5, WP9; DESIGN_STICKER §8, §19.2).** `Choreographer` adds `keepCelebration()` (§0.4 Q7: a tap on the summary keeps it open) and `onUserOpen(sectionId?)` (her own tap on a strip, or `null` for the open tray's chevron, wins at once over an aisle-done chain; WP5 calls it from those handlers only). `ToggleEvent.newBook` marks the check-off that started a new sticker book on its own (A6: the book turns to the fresh page); its Undo is a `ListChange` with cause `NEW_BOOK_UNDO`, empty aisle sets and `slot` (the spot the item takes again), shown with `SpotPhase.Appearing(t0, inPlace = true)` (a 120 ms fade, no bloom). `FoldToggles` counts her own fold and unfold taps per section and `FoldFocusEffect` moves focus after her fold (item 193).
 
-- **Settings screen content:** a "Your OpenAI key" card (a short intro, a write-only key field with Show/Hide that shows `tokenHint` once saved, Save, Remove key, the note "Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.", and Test connection with the result inline), an "Icons" card ("Draw new icons with AI" switch plus the cost note), and an "About your key" card (hard monthly budget, restricted key with its three permissions, a line saying whoever made the key has a step-by-step guide (that guide is `docs/OPENAI_KEY.md`; the repository is private, so the app names no path or link), and what is sent). The app version is the footer. Nothing about models or server addresses.
+- **Settings screen content:** a "Your OpenAI key" card (a short intro, a write-only key field with Show/Hide that shows `tokenHint` once saved, Save, Remove key, the note "Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.", and Test connection with the result inline), an "Icons" card ("Draw new icons with AI" switch plus the cost note), and an "About your key" card (hard monthly budget, restricted key with its three permissions, a line saying whoever made the key has a step-by-step guide (that guide is `docs/OPENAI_KEY.md`; the repository is private, so the app names no path or link), and what is sent). The app version is not on Settings: it shows on About & licences (DESIGN_STICKER §6.9, `AboutUiState.appVersion`). Nothing about models or server addresses.
 - **Lifecycle of saves.** Commits, deletes, edits and aisle syncs run in `appScope` (via the store), so closing a sheet or screen doesn't cancel a save. LLM calls the user is waiting for run in `viewModelScope`, so they are cancelled when the user dismisses the sheet.
 - **Snackbars.** Swipe-to-delete emits `ListEvent.Deleted`. The screen shows "Removed <name>" with **Undo**, which calls `undoDelete(item, index)`.
 - **Edit sheet:** rename, quantity and note use `saveEdit`; "Move to aisle" uses `moveToAisle` (learned correction); "Change icon" shows a grid of catalog keys, starting with the item's category, and calls `setIcon` (learned override); "Draw a new icon" calls `redrawIcon` (shown when `canDraw`).

@@ -48,7 +48,6 @@ data class SettingsUiState(
     val tokenHint: String? = null,
     val drawIcons: Boolean = true,
     val test: ConnectionTestUi = ConnectionTestUi.Idle,
-    val appVersion: String = "",
     /** The key field shows its text (the eye button). */
     val tokenVisible: Boolean = false,
     /** A key is typed and not saved yet. */
@@ -77,7 +76,6 @@ sealed interface ConnectionTestUi {
 class SettingsViewModel(
     private val settings: SettingsRepository,
     private val assistant: GroceryAssistant,
-    private val appVersion: String,
     private val places: PlaceSource = PlaceSource.Toronto,
     listTitle: Flow<String> = flowOf(""),
 ) : ViewModel() {
@@ -94,7 +92,7 @@ class SettingsViewModel(
     private var areaJob: Job? = null
 
     val state: StateFlow<SettingsUiState> = combine(settings.settings, inputs, listTitle) { s, i, title -> build(s, i, title) }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState(appVersion = appVersion))
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState())
 
     init {
         // "Use my area": the nearest forecast city whenever the switch is (or turns) on; off, the stored area is deleted
@@ -230,7 +228,6 @@ class SettingsViewModel(
         tokenHint = s.tokenHint,
         drawIcons = s.drawIcons,
         test = i.test,
-        appVersion = appVersion,
         tokenVisible = i.tokenVisible,
         canSave = i.token.isNotBlank(),
         loading = false,
@@ -241,9 +238,9 @@ class SettingsViewModel(
     )
 
     companion object {
-        fun factory(c: AppContainer, appVersion: String): ViewModelProvider.Factory = viewModelFactory {
+        fun factory(c: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                SettingsViewModel(c.settings, c.assistant, appVersion, c.places, c.store.states.map { it.currentList().title })
+                SettingsViewModel(c.settings, c.assistant, c.places, c.store.states.map { it.currentList().title })
             }
         }
     }

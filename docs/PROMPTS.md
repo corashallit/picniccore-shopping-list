@@ -298,7 +298,7 @@ Item 23 comes from the polish package (2026-10-03, measured in §10.3):
 | "lait, 2 citrons, oeufs, pain tranché, fromage râpé" (CLI) | French names and a French message | 3.3 s |
 | "ingredients for kuku sabzi for 4" (CLI) | one web search; 15 sensible items; sources returned | 9.2 s |
 | Handwritten photo (12 lines, one crossed out, one margin note, bananas on the list) | 12 items; spinach and bananas skipped; quantities kept; 4 L bag → `milk_bag` | 6.3-7.5 s |
-| Voice note (23 s m4a) → transcript → ingest | transcript correct, including "Oatly"; paper towels dropped after "scratch the paper towels" | 2.4 s + 3.5 s |
+| Voice note (23 s m4a) → transcript → ingest | transcript correct, including the oat-milk brand she names; paper towels dropped after "scratch the paper towels" | 2.4 s + 3.5 s |
 | 2 s of silence | empty transcript | 0.9 s |
 | recategorize (7 trap items) | diapers → health/baby, chocolate chips → baking, edamame → frozen, cat litter → household | 1.8 s |
 | assignBaskets (14 default aisles) | all sensible; identical to the keyword heuristic | 2.4 s |
@@ -414,7 +414,7 @@ Every row is re-scored against the final `cases.json`, so the rows are comparabl
 
 **Message rule (2026-10-03, §8 item 22), one run each on the shipped `ModelDefaults`:** `recipe-pancakes`, `list-canadian-shorthand`, `list-french`, `list-vague-sam`, `list-already-on-list`, `list-learned-corrections`, `nothing-to-buy`, `pantry-plain-list`: **8/8 clean**, recall, precision, aisle and icon 100%, checks 46/46, latency median 2.7 s, US$0.067 in all. The four plain lists answered with an empty message; the recipe ("Butter is already on your list."), the duplicates, the vague item ("check with Sam") and the small talk each said why.
 
-**Message rule, corrections (2026-10-03, §8 item 23), one run each on the shipped `ModelDefaults`:** `voice-feta-oatly`, `voice-cat-food` (the two `self-correction` cases), `list-canadian-shorthand`, `list-french`, `pantry-plain-list`, `recipe-pancakes`, `list-already-on-list`, `nothing-to-buy`: **6/8 clean**, recall and precision 97.4% (37/38), aisle and icon 100%, checks 63/64, ingest latency median 3.3 s, US$0.074 in all. Every message check passed: the three plain lists answered with an empty message; the two voice notes said what they corrected ("Skipped paper towels—you said you already have some.", "Updated the potatoes to 1 kg."); the recipe, the duplicates and the small talk each said why. The two unclean runs are not about the message: the known transcription miss (§10.6) and "Cat wet food" for the expected "cat food".
+**Message rule, corrections (2026-10-03, §8 item 23), one run each on the shipped `ModelDefaults`:** the two `self-correction` voice cases (`voice-feta-oat-milk`, `voice-cat-food`), `list-canadian-shorthand`, `list-french`, `pantry-plain-list`, `recipe-pancakes`, `list-already-on-list`, `nothing-to-buy`: **6/8 clean**, recall and precision 97.4% (37/38), aisle and icon 100%, checks 63/64, ingest latency median 3.3 s, US$0.074 in all. Every message check passed: the three plain lists answered with an empty message; the two voice notes said what they corrected ("Skipped paper towels—you said you already have some.", "Updated the potatoes to 1 kg."); the recipe, the duplicates and the small talk each said why. The two unclean runs are not about the message: the known transcription miss (§10.6) and "Cat wet food" for the expected "cat food".
 
 **Pantry gate (pantry-final, 3 runs):** pantry-covered worked-out items skipped **18/18** (flour, sugar, salt and baking powder in every pancake run; cinnamon and nutmeg in every spiced banana bread run); named items skipped for the pantry **0/21** ("flour, milk" and the photographed salt were kept every time); almond flour kept 3/3. The one unclean run was "Ground cinnamon" / "Ground nutmeg" answered approximate (fixed afterwards in the catalog, §8 item 21). pantry-v1 and v2 misses were eval gaps (macarons with a pinch of salt and a buttercream, brown sugar in a spiced loaf), fixed in `cases.json`. The art pass spent about **US$0.42** (the runs above and one CLI probe).
 
@@ -480,7 +480,7 @@ This study spent about **US$2.77**: the eval runs, probes and the two generated 
 
 ### 10.6 Known misses in the final run
 
-- **Transcription.** "Oatly" is transcribed as "oatley". The ingest still writes "Oatly", so only the transcript shown on screen is affected. Names already on the list are sent as `keywords[]`, so a brand already on the list is spelled right.
+- **Transcription.** The oat-milk brand in the voice note is transcribed misspelled. The ingest still writes it right, so only the transcript shown on screen is affected. Names already on the list are sent as `keywords[]`, so a brand already on the list is spelled right.
 - **IconDecider.** "PC chicken burgers" → `chicken_breast`: 1 of 40 names, on effort `none`.
 - **Lasagna for 12.** It adds béchamel (flour, butter, milk) on top of ricotta in 1 of 2 runs.
 - **Condiments.** Salsa landed in "Baking & spices" once. The default store has no condiments aisle, so placements vary between canned, pasta and snacks. A learned correction fixes it for the user.

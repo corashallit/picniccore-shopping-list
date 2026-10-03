@@ -139,7 +139,7 @@ fun PicnicAppRoot(
             }
             composable<SettingsRoute> {
                 SettingsDestination(
-                    vm = viewModel(factory = SettingsViewModel.factory(container, BuildConfig.VERSION_NAME)),
+                    vm = viewModel(factory = SettingsViewModel.factory(container)),
                     onBack = appNav.back,
                     onOpenAbout = appNav.openAbout,
                     onBackToList = appNav.backToList,

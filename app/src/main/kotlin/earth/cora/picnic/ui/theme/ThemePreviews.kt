@@ -185,6 +185,39 @@ internal fun ChipsKit() {
     }
 }
 
+/**
+ * The kit under a large font (item 337, goldens kit_large_text_fs130 / fs200): the chips (a label, the longest default
+ * aisle, a source, store A12, shiny and jackpot, a rarity chip squeezed into 56 dp), the candy, secondary and disabled
+ * pills with the longest real labels, number circles of 24 and 20 dp, and a four-line ruled field, in a 332 dp column.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun LargeTextKit() {
+    Column(Modifier.width(332.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            PicnicChip("Favourites", selected = true, onClick = {}, family = Families.sakura)
+            AisleChip(3, "Pasta, rice & international", AisleLooks.of(3), selected = false, onClick = {})
+            SourceChip("pancake recipe", onClick = {})
+            Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { StoreAisleChip(12) }
+            Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { RarityChip(jackpot = false) }
+            Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { RarityChip(jackpot = true) }
+            Box(Modifier.heightIn(min = 48.dp).width(56.dp), contentAlignment = Alignment.Center) { RarityChip(jackpot = true) }
+        }
+        PicnicButton("Clear what I got", onClick = {})
+        PicnicButton("Keep everything, uncheck it all", onClick = {}, style = PicnicButtonStyle.Secondary)
+        PicnicButton("Stick all 12 on my list", onClick = {}, leadingStar = true)
+        PicnicButton("Reading… 6 of 9", onClick = {}, enabled = false, busy = true)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            NumberCircle(4, AisleLooks.of(4), size = 24.dp)
+            NumberCircle(12, AisleLooks.of(12), size = 24.dp)
+            NumberCircle(8, AisleLooks.of(8), size = 20.dp)
+            NumberCircle(24, AisleLooks.of(24), size = 20.dp)
+            NumberCircle(null, AisleLooks.everythingElse, size = 24.dp)
+        }
+        PicnicTextField("pancakes\nmaple syrup\nberries\nflour", {}, label = "Note", minLines = 4, modifier = Modifier.fillMaxWidth())
+    }
+}
+
 @Composable
 internal fun SwitchKit() {
     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {

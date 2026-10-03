@@ -433,40 +433,51 @@ private fun inkRight(layout: TextLayoutResult): Float {
     return right
 }
 
-/** A title's rasterised silhouette (stroke and fill): coverage [alpha] per px, and the rule's sizes in px. */
-internal class Silhouette(val alpha: IntArray, val w: Int, val h: Int, val pen: Int, val neck: Int, val shore: Int)
+/**
+ * A title's rasterised silhouette (stroke and fill): coverage [alpha] per px, the rule's sizes in px, and [inGlyph]: the
+ * px inside a glyph's own counters (enclosed by the fill alone, the inside of an "o"), told apart from the spaces between
+ * glyphs that only the stroke's halos close.
+ */
+internal class Silhouette(val alpha: IntArray, val w: Int, val h: Int, val pen: Int, val neck: Int, val shore: Int, val inGlyph: BooleanArray?)
 
 /**
  * The stroke pass's pinholes and cracks (see the file header). [silhouette] rasterises the silhouette (stroke and fill)
  * once, on the thread that draws the title (it uses the layouts' paints); [patch] is the pure pass over its pixels,
  * safe on any thread, and returns what to fill as an opaque mask cropped to it ([PinholePatch.None] when there is
  * nothing, the usual case), drawn tinted in the stroke colour between the stroke and fill passes. The rule's sizes
- * are in dp (§2.7): the ground passes no neck narrower than about 1 dp ([NECK_DP] on each side), and reaches [SHORE_DP]
- * into what it borders.
+ * are in dp (§2.7): the ground never passes a crack [CRACK_DP] wide or narrower, at any density, and reaches one
+ * antialiased pixel past its clearance into what it borders, so a notch between two halos ends rounded, at the blade's
+ * width, instead of in a hairline.
  */
 internal object PuffyPinholes {
     /** A pixel counts as covered from this alpha up (the stroke's antialiased rim is half covered). */
     private const val COVERED = 128
 
-    /** The open ground stops this far (dp) short of a covered pixel: it never passes a neck twice as narrow. */
-    const val NECK_DP = 0.4f
-
-    /** The open ground reaches this far (dp) into the gaps it borders: shallow dips between halos stay as drawn. */
-    const val SHORE_DP = 1f
+    /** A crack this wide (dp) or narrower always closes: a hairline between two halos, never a gap between words. */
+    const val CRACK_DP = 1f
 
     /** The default shore (px) for [holes] at xxhdpi. */
     const val SHORE = 3
 
-    /** The neck rule in px at [density]: never under 1 px. */
-    fun neckPx(density: Float): Int = max(1, ceil(NECK_DP * density - 0.001f).toInt())
+    /** A hole between glyphs (never a counter) is filled up to this many pens across. */
+    const val BETWEEN_PENS = 4
 
-    /** The shore in px at [density]: never under 1 px. */
-    fun shorePx(density: Float): Int = max(1, kotlin.math.round(SHORE_DP * density).toInt())
+    /**
+     * The neck rule in px at [density]: the ground keeps this far from every covered pixel, so it never passes a crack
+     * twice as wide. Half of [CRACK_DP], rounded up to whole px, so a 1 dp crack closes at every density (2 px each side
+     * from 2.5 to 4 px per dp: cracks up to 1 to 1.6 dp close; gaps between words, 1.7 dp and more, stay open).
+     */
+    fun neckPx(density: Float): Int = max(1, ceil(CRACK_DP * density / 2f - 0.001f).toInt())
 
-    /** Tests: how many scans have run, and whether the last one ran on the main thread. */
+    /** The shore in px at [density]: the ground's clearance and one antialiased pixel. */
+    fun shorePx(density: Float): Int = neckPx(density) + 1
+
+    /** Tests: how many scans have run, whether the last one ran on the main thread, and how many px it filled. */
     @Volatile internal var scans = 0
 
     @Volatile internal var lastScanOnMain = false
+
+    @Volatile internal var lastScanFilled = 0
 
     /** Rasterises and scans in one go ([PinholeWork.Inline]). */
     fun find(fit: PuffyFit, density: Density): PinholePatch = silhouette(fit, density)?.let(::patch) ?: PinholePatch.None
@@ -486,14 +497,50 @@ internal object PuffyPinholes {
         val alpha = IntArray(w * h)
         mask.readPixels(alpha)
         for (i in alpha.indices) alpha[i] = (alpha[i] ushr 24) and 0xFF
-        return Silhouette(alpha, w, h, pen = ceil(fit.half * 2).toInt(), neck = neckPx(density.density), shore = shorePx(density.density))
+        // The fill alone: what it encloses by itself is a glyph's counter.
+        val fillMask = ImageBitmap(w, h, ImageBitmapConfig.Argb8888)
+        CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(fillMask), Size(w.toFloat(), h.toFloat())) {
+            translate(fit.half, fit.half) { drawText(fit.fill, Color.Black, drawStyle = Fill) }
+        }
+        val fill = IntArray(w * h)
+        fillMask.readPixels(fill)
+        val inGlyph = enclosed(BooleanArray(w * h) { ((fill[it] ushr 24) and 0xFF) < COVERED }, w, h)
+        return Silhouette(alpha, w, h, pen = ceil(fit.half * 2).toInt(), neck = neckPx(density.density), shore = shorePx(density.density), inGlyph = inGlyph)
+    }
+
+    /** The [open] px of a [w] × [h] grid the box's edge cannot reach through other open px (4 neighbours). */
+    fun enclosed(open: BooleanArray, w: Int, h: Int): BooleanArray {
+        val reached = BooleanArray(w * h)
+        val queue = IntArray(w * h)
+        var head = 0
+        var tail = 0
+        fun seed(i: Int) {
+            if (open[i] && !reached[i]) {
+                reached[i] = true
+                queue[tail++] = i
+            }
+        }
+        for (x in 0 until w) { seed(x); seed((h - 1) * w + x) }
+        for (y in 0 until h) { seed(y * w); seed(y * w + w - 1) }
+        while (head < tail) {
+            val i = queue[head++]
+            val x = i % w
+            val y = i / w
+            if (x > 0) seed(i - 1)
+            if (x < w - 1) seed(i + 1)
+            if (y > 0) seed(i - w)
+            if (y < h - 1) seed(i + w)
+        }
+        return BooleanArray(w * h) { open[it] && !reached[it] }
     }
 
     /** The patch for [s]: pure, any thread. */
     fun patch(s: Silhouette): PinholePatch {
         scans++
         lastScanOnMain = android.os.Looper.myLooper() == android.os.Looper.getMainLooper()
-        val fill = holes(s.alpha, s.w, s.h, s.pen, s.neck, s.shore) ?: return PinholePatch.None
+        val fill = holes(s.alpha, s.w, s.h, s.pen, s.neck, s.shore, s.inGlyph)
+        lastScanFilled = fill?.count { it } ?: 0
+        if (fill == null) return PinholePatch.None
         var minX = s.w
         var minY = s.h
         var maxX = -1
@@ -517,14 +564,16 @@ internal object PuffyPinholes {
 
     /**
      * Which pixels of a [w] × [h] coverage [alpha] map to fill, or null when none: the uncovered pixels (alpha below
-     * [COVERED]) the open ground cannot reach, in regions no bigger than the pen ([pen] × [pen] in area, 2 pens across),
-     * each with its partly covered rim. The ground floods in from the edges of the box but never through a neck
+     * [COVERED]) the open ground cannot reach, each region with its partly covered rim. A region inside a glyph's own
+     * counter ([inGlyph]; every region when it is null) is filled only when it is no bigger than the pen ([pen] × [pen]
+     * in area, 2 pens across): a larger counter stays open. A region between glyphs, closed only by their halos, is
+     * always a stroke artefact and is filled up to [BETWEEN_PENS] pens across. The ground floods in from the edges of the box but never through a neck
      * 2 × [neck] px wide or less (it keeps [neck] px clear of every covered pixel), then reaches [shore] px further into
-     * what it borders. So an enclosed pinhole and the far end of a hairline crack between two halos are filled; open
+     * what it borders (from the box's edge too, which borders the air outside). So an enclosed pinhole and the far end of a hairline crack between two halos are filled; open
      * ground, the gaps between words, shallow dips along the outline and counters bigger than the pen are not. Every
      * pass is linear in the pixels (the clearance is a running window along rows, then columns). Pure (unit-tested).
      */
-    fun holes(alpha: IntArray, w: Int, h: Int, pen: Int, neck: Int = 1, shore: Int = SHORE): BooleanArray? {
+    fun holes(alpha: IntArray, w: Int, h: Int, pen: Int, neck: Int = 1, shore: Int = SHORE, inGlyph: BooleanArray? = null): BooleanArray? {
         val n = w * h
         if (n == 0) return null
         // A pixel the ground cannot pass: within [neck] px (both ways) of a covered pixel. Rows first...
@@ -575,8 +624,18 @@ internal object PuffyPinholes {
             if (y > 0) seed(i - w)
             if (y < h - 1) seed(i + w)
         }
+        // The box's edge borders the open air outside it: its not fully covered pixels are ground too, even where a
+        // halo comes nearer to the edge than the neck.
+        fun edge(i: Int) {
+            if (!open[i] && alpha[i] < 255) {
+                open[i] = true
+                queue[tail++] = i
+            }
+        }
+        for (x in 0 until w) { edge(x); edge((h - 1) * w + x) }
+        for (y in 0 until h) { edge(y * w); edge(y * w + w - 1) }
         // Its shore: every pixel not fully covered within [shore] px (8 neighbours) of it (the outline's antialiased rim
-        // included), grown a ring at a time from the ground; and the not fully covered edge of the box.
+        // included), grown a ring at a time from the ground.
         var from = 0
         var until = tail
         for (step in 0 until shore) {
@@ -600,8 +659,6 @@ internal object PuffyPinholes {
             from = until
             until = tail
         }
-        for (x in 0 until w) for (y in intArrayOf(0, h - 1)) if (alpha[y * w + x] < 255) open[y * w + x] = true
-        for (y in 0 until h) for (x in intArrayOf(0, w - 1)) if (alpha[y * w + x] < 255) open[y * w + x] = true
         // What is left not fully covered and unreached, region by region (4 neighbours). Its partly covered pixels go
         // too: another renderer may cover them a little less (the stroke's own threshold is half).
         val seen = BooleanArray(n)
@@ -617,10 +674,12 @@ internal object PuffyPinholes {
             var maxX = -1
             var minY = h
             var maxY = -1
+            var counter = inGlyph == null
             while (head < tail) {
                 val i = queue[head++]
                 val x = i % w
                 val y = i / w
+                if (!counter && inGlyph!![i]) counter = true
                 if (x < minX) minX = x
                 if (x > maxX) maxX = x
                 if (y < minY) minY = y
@@ -636,7 +695,9 @@ internal object PuffyPinholes {
                 if (y > 0) visit(i - w)
                 if (y < h - 1) visit(i + w)
             }
-            if (tail > pen * pen || maxX - minX + 1 > pen * 2 || maxY - minY + 1 > pen * 2) continue
+            val across = max(maxX - minX + 1, maxY - minY + 1)
+            if (counter && (tail > pen * pen || across > pen * 2)) continue
+            if (!counter && across > pen * BETWEEN_PENS) continue
             any = true
             for (k in 0 until tail) {
                 val i = queue[k]

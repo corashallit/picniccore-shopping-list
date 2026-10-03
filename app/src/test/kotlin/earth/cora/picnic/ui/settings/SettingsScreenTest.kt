@@ -139,7 +139,7 @@ class SettingsScreenTest {
     @Test
     fun pasteFillsTheKeyFromTheClipboard() {
         val settings = InMemorySettingsRepository()
-        val vm = SettingsViewModel(settings, FakeAssistant(), "0.4.0")
+        val vm = SettingsViewModel(settings, FakeAssistant())
         val clipboard = FakeClipboard("  sk-proj-pasted0123456789abcd \n")
         compose.setContent {
             PicnicTheme {
