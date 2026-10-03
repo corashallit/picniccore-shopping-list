@@ -215,7 +215,7 @@ fun DrawScope.drawBookGlint(fx: BookFx, now: Long) {
 @Composable
 fun SpinePerfect(fx: BookFx, clock: MotionClock, modifier: Modifier = Modifier, size: Dp = 40.dp) {
     val reduced = LocalReducedMotion.current
-    val measurer = rememberTextMeasurer(cacheSize = 4)
+    val measurer = rememberTextMeasurer(cacheSize = 0)
     val style = PicnicTheme.type.hanko
     val color = PicnicTheme.colors.hanko
     val t0 = fx.perfectT0

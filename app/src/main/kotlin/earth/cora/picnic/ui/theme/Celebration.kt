@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -203,7 +204,7 @@ fun CelebrationScene(
             Confetti(sc, w, h)
             SceneContent(sc, content, copy, anchors, onSummaryCard)
             AlbumCorner(sc, content.bonus, w, h)
-            BottomBand(sc, copy, w, anchors, onDone)
+            BottomBand(sc, copy, w, anchors, onSummaryCard, onDone)
         }
         Flash(sc)
         if (probe != null) ProbeReports(sc, probe, anchors, origin, sceneSize)
@@ -398,14 +399,27 @@ private fun steppedFall(e: Long, fall: Long): Float {
 
 /** Where the content's pieces landed (root px), for the riders' paths and the kira stars. */
 private class SceneAnchors {
-    var title: Rect = Rect.Zero
-    var shelf: List<Rect> = emptyList()
-    var hamper: Rect = Rect.Zero
-    var origin: Offset = Offset.Zero
-    var sceneRight: Float = 0f
+    // Snapshot state: the kira stars and the riders read these in their offset and layer blocks, which must run again
+    // once the first layout has measured the title, the shelf and the hamper.
+    var title: Rect by mutableStateOf(Rect.Zero)
+    var shelf: List<Rect> by mutableStateOf(emptyList())
+    var hamper: Rect by mutableStateOf(Rect.Zero)
+    var origin: Offset by mutableStateOf(Offset.Zero)
+    var sceneRight: Float by mutableStateOf(0f)
 
     /** Every text plate's laid-out bounds (root px, before its own motion), by tag. */
     val plates: MutableMap<String, Rect> = LinkedHashMap()
+
+    /** The summary's content and its closing bar (root px): together they are "the summary" a tap keeps open. */
+    var content: Rect? = null
+    var closing: Rect? = null
+
+    /** The summary card: the content and, while it shows, the closing bar along its bottom edge. */
+    fun card(): Rect? {
+        val a = content ?: return closing
+        val b = closing ?: return a
+        return Rect(min(a.left, b.left), min(a.top, b.top), max(a.right, b.right), max(a.bottom, b.bottom))
+    }
 }
 
 /** Records this text plate's laid-out bounds (put it before the plate's motion layer). */
@@ -425,6 +439,7 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
                 anchors.sceneRight = b.right
             },
     ) {
+        Ribbon(sc, anchors)
         Column(
             Modifier
                 .fillMaxWidth()
@@ -434,7 +449,8 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
                 .onGloballyPositioned {
                     val b = it.boundsInRoot()
                     anchors.plates[CelebrationTags.SUMMARY_CARD] = b
-                    onSummaryCard(b)
+                    anchors.content = b
+                    anchors.card()?.let(onSummaryCard)
                 },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -546,36 +562,39 @@ private fun Shelf(sc: SceneClock, content: CelebrationContent, anchors: SceneAnc
     val stops = content.stops.take(24)
     val (rows, basketW) = shelfGrid(stops.size)
     val perRow = ceil(stops.size / rows.toFloat()).toInt().coerceAtLeast(1)
-    val basketH = basketW * 0.8f
     val rects = remember(stops.size) { arrayOfNulls<Rect>(stops.size) }
     val riders = content.riders
-    Column(
-        Modifier.testTag(CelebrationTags.SHELF),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        for (r in 0 until rows) {
-            Row(horizontalArrangement = Arrangement.spacedBy(if (rows == 1) 0.dp else 2.dp)) {
-                for (i in r * perRow until min(stops.size, (r + 1) * perRow)) {
-                    val stop = stops[i]
-                    // A basket's minis leave as their riders depart; the rest go at 2.2 s ("shelf baskets empty").
-                    val e = sc.t()
-                    val departed = riders.withIndex().filter { (k, rider) -> rider.stopIndex == i && e >= riderStart(k) }.size
-                    val gone = e >= 2200
-                    val minis = if (gone) emptyList() else stop.gotten.drop(departed).mapIndexed { k, icon -> BasketMini("$i-$k", icon) }
-                    MotionBasket(
-                        kind = stop.basket,
-                        look = stop.look,
-                        gotten = minis,
-                        toGet = 0,
-                        complete = false,
-                        presentation = BasketPresentation(),
-                        clock = sc.clock,
-                        size = DpSize(basketW * 1.18f, basketH * 1.18f),
-                        modifier = Modifier
-                            .graphicsLayer { alpha = 1f }
-                            .onGloballyPositioned { rects[i] = it.boundsInRoot(); anchors.shelf = rects.filterNotNull() },
-                    )
+    val gap = if (rows == 1) 0.dp else 2.dp
+    BoxWithConstraints(Modifier.testTag(CelebrationTags.SHELF), contentAlignment = Alignment.Center) {
+        // A basket's art box is 1.18 × the shelf size (the art has margins round it), shrunk to fit the row: a full
+        // row of 8 on a 360 dp phone gets 42 dp boxes rather than running off the screen.
+        val box = min(basketW.value * 1.18f, (maxWidth.value - gap.value * (perRow - 1)) / perRow).dp
+        Column(
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            for (r in 0 until rows) {
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    for (i in r * perRow until min(stops.size, (r + 1) * perRow)) {
+                        val stop = stops[i]
+                        // A basket's minis leave as their riders depart; the rest go at 2.2 s ("shelf baskets empty").
+                        val e = sc.t()
+                        val departed = riders.withIndex().filter { (k, rider) -> rider.stopIndex == i && e >= riderStart(k) }.size
+                        val gone = e >= 2200
+                        val minis = if (gone) emptyList() else stop.gotten.drop(departed).mapIndexed { k, icon -> BasketMini("$i-$k", icon) }
+                        MotionBasket(
+                            kind = stop.basket,
+                            look = stop.look,
+                            gotten = minis,
+                            toGet = 0,
+                            complete = false,
+                            presentation = BasketPresentation(),
+                            clock = sc.clock,
+                            size = DpSize(box, box * 0.8f),
+                            modifier = Modifier
+                                .onGloballyPositioned { rects[i] = it.boundsInRoot(); anchors.shelf = rects.filterNotNull() },
+                        )
+                    }
                 }
             }
         }
@@ -595,7 +614,7 @@ private fun StampCard(sc: SceneClock, content: CelebrationContent, anchors: Scen
     val stamp = if (stops.size <= 8) 26.dp else 22.dp
     val cardW = stamp * cols + 6.dp * (cols - 1) + 28.dp
     val cardH = stamp * rows + 6.dp * (rows - 1) + 24.dp
-    val measurer = rememberTextMeasurer(cacheSize = 4)
+    val measurer = rememberTextMeasurer(cacheSize = 0)
     val hankoStyle = PicnicTheme.type.hanko
     val hanko = PicnicTheme.colors.hanko
     Box(
@@ -914,7 +933,12 @@ private fun BonusCard(sc: SceneClock, bonus: BonusSticker?, copy: CelebrationCop
                 BonusArt(bonus, 52.dp, ghost = inPocket)
                 if (inPocket) DecorSticker("heart", Modifier.align(Alignment.TopEnd), size = 16.dp)
             }
-            androidx.compose.material3.Text(copy.bonus, style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint), maxLines = 2)
+            PicnicText(
+                copy.bonus,
+                style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint, fontSize = 15.sp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 2,
+            )
         }
     }
 }
@@ -958,10 +982,10 @@ private fun cubic(a: Offset, b: Offset, c: Offset, d: Offset, t: Float): Offset 
 }
 
 @Composable
-private fun Riders(sc: SceneClock, content: CelebrationContent, anchors: SceneAnchors) {
+private fun Ribbon(sc: SceneClock, anchors: SceneAnchors) {
     if (sc.reduced) return
-    val riders = content.riders
-    // The ribbon: white 13 dp under sakura 8 dp with a dotted stitch, drawn in 12 steps over 1.2 s, gone by 2.75 s.
+    // The ribbon: white 13 dp under sakura 8 dp with a dotted stitch, drawn in 12 steps over 1.2 s, gone by 2.75 s;
+    // behind every plate, so the rising stamp card covers it rather than wearing it.
     Canvas(Modifier.fillMaxSize()) {
         val e = sc.since(BeatName.RibbonDraw)
         if (e < 0 || sc.t() > 2750) return@Canvas
@@ -983,6 +1007,13 @@ private fun Riders(sc: SceneClock, content: CelebrationContent, anchors: SceneAn
             style = Stroke(1.5.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))),
         )
     }
+}
+
+/** The riders: the newest gotten stickers ride the ribbon from their baskets into the hamper (in front of it all). */
+@Composable
+private fun Riders(sc: SceneClock, content: CelebrationContent, anchors: SceneAnchors) {
+    if (sc.reduced) return
+    val riders = content.riders
     Box(Modifier.fillMaxSize()) {
         riders.forEachIndexed { k, rider ->
             ItemIcon(
@@ -1037,12 +1068,14 @@ private fun KiraStars(sc: SceneClock, anchors: SceneAnchors) {
                     IntOffset((r.left - anchors.origin.x).roundToInt(), (r.top - anchors.origin.y).roundToInt())
                 }
                 .graphicsLayer {
+                    // Read the clock first, so this block runs again every frame whatever the anchors say.
+                    val e = sc.since(BeatName.Kira) - k * 50L
                     val r = kiraRect(anchors, k, density.density)
                     if (r == Rect.Zero) {
                         alpha = 0f
                         return@graphicsLayer
                     }
-                    val e = sc.since(BeatName.Kira) - k * 50L
+                    alpha = 1f
                     val pop = when {
                         sc.reduced -> 1f
                         e < 0 -> 0f
@@ -1061,20 +1094,31 @@ private fun KiraStars(sc: SceneClock, anchors: SceneAnchors) {
     }
 }
 
-/** Kira star [k]'s bounds (root px): beside the title, clear of it; Zero when there is no room. */
+/**
+ * Kira star [k]'s bounds (root px), clear of every text plate: the upper pair beside the title (as big as the room
+ * there allows, 44 dp at most), the lower pair smaller, tucked under the title's ends beside the chip. Zero when there
+ * is no room (a long title at font scale 2).
+ */
 private fun kiraRect(anchors: SceneAnchors, k: Int, density: Float): Rect {
     val title = anchors.title
     if (title == Rect.Zero) return Rect.Zero
     val left = k % 2 == 0
-    val upper = k < 2
     val gap = 4f * density
-    // As big as the room beside the title allows (44 dp at most); none when there is no room (a long title at 2x).
-    val room = if (left) title.left - anchors.origin.x - gap else anchors.sceneRight - title.right - gap
-    val size = min(44f * density, room)
-    if (size < 18f * density) return Rect.Zero
-    val cy = if (upper) title.top + title.height * 0.3f else title.bottom - title.height * 0.15f
-    val x = if (left) title.left - gap - size else title.right + gap
-    return Rect(Offset(x, cy - size / 2f), Size(size, size))
+    val room = if (left) title.left - anchors.origin.x - 2 * gap else anchors.sceneRight - title.right - 2 * gap
+    val upper = min(44f * density, room)
+    if (upper < 18f * density) return Rect.Zero
+    val r = if (k < 2) {
+        val x = if (left) title.left - gap - upper else title.right + gap
+        Rect(Offset(x, title.top + upper * 0.1f), Size(upper, upper))
+    } else {
+        val size = upper * 0.72f
+        val tuck = 8f * density
+        val x = if (left) title.left + tuck - size else title.right - tuck
+        Rect(Offset(x, title.bottom + 2f * density), Size(size, size))
+    }
+    // Never over another plate (the chip grows with the font scale).
+    val crosses = anchors.plates.any { (tag, b) -> tag != CelebrationTags.SUMMARY_CARD && b.overlaps(r) }
+    return if (crosses) Rect.Zero else r
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -1188,7 +1232,7 @@ private fun pocketRects(w: Float, h: Float, density: androidx.compose.ui.unit.De
  * ------------------------------------------------------------------------------------------------ */
 
 @Composable
-private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, w: Dp, anchors: SceneAnchors, onDone: () -> Unit) {
+private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, w: Dp, anchors: SceneAnchors, onSummaryCard: (Rect) -> Unit, onDone: () -> Unit) {
     val c = PicnicTheme.colors
     val cele = sc.cele
     Box(Modifier.fillMaxSize().padding(start = 12.dp, bottom = 14.dp), contentAlignment = Alignment.BottomStart) {
@@ -1217,45 +1261,72 @@ private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, w: Dp, anchors: Sc
             if (kept) {
                 PicnicButton(copy.done, onDone, Modifier.testTag(CelebrationTags.DONE))
             } else {
-                ClosingBar(sc, copy, summaryAt, Modifier.width(w - CORNER - 20.dp))
+                DisposableEffect(Unit) {
+                    onDispose {
+                        anchors.closing = null
+                        anchors.card()?.let(onSummaryCard)
+                    }
+                }
+                ClosingBar(
+                    sc, copy, summaryAt,
+                    Modifier
+                        .width(w - CORNER - 20.dp)
+                        .onGloballyPositioned {
+                            anchors.closing = it.boundsInRoot()
+                            anchors.card()?.let(onSummaryCard)
+                        },
+                )
             }
         }
     }
 }
 
-/** The washi-tape progress bar: fills left to right over the summary hold (stepped under reduced motion). */
+/**
+ * The washi-tape progress bar (§0.4 Q7): its label "Closing… tap to keep it" on a lemon slip, and under it a strip of
+ * lemon-dot washi that fills with sakura stripe left to right over the summary hold (8 steps under reduced motion). The
+ * label sits above the strip so no part of the fill is ever hidden.
+ */
 @Composable
 private fun ClosingBar(sc: SceneClock, copy: CelebrationCopy, summaryAt: Long, modifier: Modifier) {
     val c = PicnicTheme.colors
     val hold = sc.plan.summaryHold
     val start = if (sc.reduced) 120L else summaryAt
-    Box(
+    Column(
         modifier
             .testTag(CelebrationTags.CLOSING)
-            .height(34.dp)
             .graphicsLayer {
-                val e = sc.cele.let { sc.clock.now - it.t0 } - start
+                val e = sc.clock.now - sc.cele.t0 - start
                 alpha = if (e < 0) 0f else 1f
             },
-        contentAlignment = Alignment.CenterStart,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Canvas(Modifier.fillMaxWidth().height(22.dp).graphicsLayer { rotationZ = -1.5f }) {
-            drawWashi(WashiPattern.LemonDots)
-            val e = (sc.clock.now - sc.cele.t0 - start).coerceAtLeast(0)
-            val raw = (e.toFloat() / hold).coerceIn(0f, 1f)
-            val p = if (sc.reduced) Stepped(8).transform(raw) else raw
-            if (p > 0f) clipRect(right = size.width * p) { drawWashi(WashiPattern.SakuraStripe) }
-        }
         Box(
             Modifier
-                .padding(start = 10.dp)
+                .padding(start = 4.dp)
                 .clip(RoundedCornerShape(5.dp))
                 .background(Families.lemon.pastel)
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         ) {
-            androidx.compose.material3.Text(copy.closing, style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 17.sp), maxLines = 1)
+            PicnicText(copy.closing, style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 17.sp), maxLines = 2)
+        }
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(18.dp)
+                .graphicsLayer { rotationZ = -1.2f },
+        ) {
+            drawWashi(WashiPattern.LemonDots)
+            val p = closingProgress(sc, start, hold)
+            if (p > 0f) clipRect(right = size.width * p) { drawWashi(WashiPattern.SakuraStripe) }
         }
     }
+}
+
+/** How far the closing bar has filled (0..1), stepped in 8 under reduced motion. */
+private fun closingProgress(sc: SceneClock, start: Long, hold: Long): Float {
+    val e = (sc.clock.now - sc.cele.t0 - start).coerceAtLeast(0)
+    val raw = (e.toFloat() / hold).coerceIn(0f, 1f)
+    return if (sc.reduced) Stepped(8).transform(raw) else raw
 }
 
 /* ------------------------------------------------------------------------------------------------

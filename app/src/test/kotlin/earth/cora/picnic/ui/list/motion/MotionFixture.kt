@@ -213,6 +213,9 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
             aisleWasOpen = beforeGrouped.openSectionId == sectionId,
             finaleShown = beforeList.trip?.finaleShownAt != null,
         )
+        // D2 / item 90: the next stop opens automatically behind the Next card (the VM sets it; the engine holds the
+        // finished aisle open until its fold, then keeps everything folded until the Next card shows).
+        if (event.nextSectionId != null) state = state.setOpenAisle(listId, event.nextSectionId)
         engine.onToggle(event)
         return event
     }
@@ -253,6 +256,7 @@ class HarnessModel(initial: AppState, val engine: MotionChoreographer, var now: 
             openSectionId = bg.openSectionId,
             finaleShown = al.trip?.finaleShownAt != null,
         )
+        if (c.nextSectionId != null) state = state.setOpenAisle(listId, c.nextSectionId)
         engine.onChange(c)
         return c
     }

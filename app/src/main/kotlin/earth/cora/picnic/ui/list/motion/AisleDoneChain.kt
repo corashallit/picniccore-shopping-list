@@ -104,7 +104,7 @@ fun MotionBasket(
     val lidOpen = rememberVectorArt(art.lidOpen)
     val lidClosed = rememberVectorArt(art.lidClosed)
     val shadows = PicnicTheme.shadows
-    val measurer = rememberTextMeasurer(cacheSize = 4)
+    val measurer = rememberTextMeasurer(cacheSize = 0)
     val hankoStyle = PicnicTheme.type.hanko
     Box(
         modifier
