@@ -167,6 +167,8 @@ fun MotionBasket(
                             }
                         }
                         if (peeking) translationY = BasketMotion.ambientPeek(ambientClock!!.now - ambientT0!!) * density
+                        // A peek (§5.3, WP5): the lid opens and the minis rise 8 dp while she holds the basket.
+                        if (p?.peek == true && !reduced) translationY -= PEEK_RISE_DP * density
                     },
             )
         }
@@ -251,6 +253,9 @@ fun MotionBasket(
         }
     }
 }
+
+/** How far the minis rise while a folded basket is peeked (§5.3). */
+private const val PEEK_RISE_DP: Float = 8f
 
 /** Draws a basket layer: its `cut` group tinted as the hard shadow, then the art. */
 internal fun DrawScope.drawBasketLayer(art: VectorArt, shadow: Color, dx: Float, dy: Float, alpha: Float = 1f) {

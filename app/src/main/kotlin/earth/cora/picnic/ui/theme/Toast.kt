@@ -67,6 +67,8 @@ data class ToastMessage(
     val undo: Boolean = actionLabel != null && onAction != null,
     val merge: ((current: ToastMessage, incoming: ToastMessage) -> ToastMessage)? = null,
     val id: Long = ToastIds.next(),
+    /** A higher reading floor than the toast's 4000 ms (the nudge holds max(6000, readHold), §6.1, §9). */
+    val minHoldMs: Long = 0,
 )
 
 internal object ToastIds {
@@ -76,7 +78,7 @@ internal object ToastIds {
 
 /** The toast's still hold (§4.15, §9): max(4000, readHold(words)), then Android's "Time to take action" setting. */
 fun toastHold(message: ToastMessage, timeouts: Timeouts): Long {
-    val hold = readHold(words(message.text + " " + (message.actionLabel ?: "")), PicnicMotion.floorToast)
+    val hold = readHold(words(message.text + " " + (message.actionLabel ?: "")), maxOf(PicnicMotion.floorToast, message.minHoldMs))
     return timeouts.recommended(hold, controls = message.actionLabel != null)
 }
 
