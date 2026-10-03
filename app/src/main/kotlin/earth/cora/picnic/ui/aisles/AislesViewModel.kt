@@ -17,6 +17,7 @@ import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.commitAislesText
+import earth.cora.picnic.core.model.displayName
 import earth.cora.picnic.core.model.moveAisle
 import earth.cora.picnic.core.model.renameAisle
 import earth.cora.picnic.core.model.setAisleBasket
@@ -155,14 +156,23 @@ class AislesViewModel(
     /** A new name for the label (renameAisle: its items, basket, style, corrections and the open aisle follow). */
     fun rename(aisleId: String, name: String) = writeThen(
         op = { it.renameAisle(aisleId, name, clock()) },
-        then = { before, after ->
-            val position = before.store.aisles().indexOfFirst { it.id == aisleId }
-            if (position >= 0 && editing.value == aisleId) editing.value = after.store.aisles().getOrNull(position)?.id
-        },
+        then = { before, after -> followRename(aisleId, before, after) },
     )
 
-    /** The store's own aisle number ("store aisle 2"); null = none of her own (the name's prefix, if any, shows). */
-    fun setStoreAisle(aisleId: String, number: Int?) = restyle(aisleId) { it.copy(storeAisle = number) }
+    /**
+     * The store's own aisle number ("store aisle 2", §4.26: blank = none). See [withStoreAisle]: a number in the name
+     * changes with the name, so the name, the raw text and the A-chip always agree.
+     */
+    fun setStoreAisle(aisleId: String, number: Int?) = writeThen(
+        op = { it.withStoreAisle(aisleId, number, clock()) },
+        then = { before, after -> followRename(aisleId, before, after) },
+    )
+
+    /** The open label stays open on its aisle when a rename gave the aisle a new id (ids are slugs of the name). */
+    private fun followRename(aisleId: String, before: AppState, after: AppState) {
+        val position = before.store.aisles().indexOfFirst { it.id == aisleId }
+        if (position >= 0 && editing.value == aisleId) editing.value = after.store.aisles().getOrNull(position)?.id
+    }
 
     fun setFamily(aisleId: String, family: String) = restyle(aisleId) { it.copy(family = family) }
 
@@ -187,10 +197,16 @@ class AislesViewModel(
         },
     )
 
-    /** "Add aisle": a new label at the end, open for editing (its name field focused). */
+    /**
+     * "Add aisle": a new label called [name] ("New aisle") at the end, open for editing (its name field focused and
+     * empty). While a label added this way still has that name, another tap opens it again instead of adding a second.
+     */
     fun addAisle(name: String) = writeThen(
-        op = { s -> s.commitAislesText(s.store.aislesText.trimEnd('\n', ' ') + "\n" + name, baskets::guess, clock()) },
-        then = { _, after -> editing.value = after.store.aisles().lastOrNull()?.id },
+        op = { s ->
+            if (s.store.aisles().any { it.name == name }) s
+            else s.commitAislesText(s.store.aislesText.trimEnd('\n', ' ') + "\n" + name, baskets::guess, clock())
+        },
+        then = { _, after -> editing.value = (after.store.aisles().lastOrNull { it.name == name } ?: after.store.aisles().lastOrNull())?.id },
     )
 
     /* ---------------- re-sort, leaving ---------------- */
@@ -313,6 +329,39 @@ class AislesViewModel(
         }
     }
 }
+
+/**
+ * Sets [aisleId]'s store number (§4.26; null = none). A name without a number keeps it in its style
+ * ([AisleStyle.storeAisle]). A name that carries one ("Aisle 2 - Baking & spices") is where the number lives, so the
+ * name changes instead, through renameAisle (its items, basket, style and the open aisle follow): cleared, the prefix
+ * goes ("Baking & spices"); another number, the prefix says it in the same words ("Aisle 5 - Baking & spices"). A name
+ * that is only a number ("Aisle 7") keeps it: without it there would be no name. Unknown id -> this.
+ */
+internal fun AppState.withStoreAisle(aisleId: String, number: Int?, now: Long): AppState {
+    val aisles = store.aisles()
+    val index = aisles.indexOfFirst { it.id == aisleId }
+    if (index < 0) return this
+    val aisle = aisles[index]
+    val inName = storeAisleNumber(aisle.name)
+    fun AppState.styled(id: String, storeAisle: Int?): AppState {
+        val style = store.aisleStyles[id] ?: AisleStyle()
+        return if (style.storeAisle == storeAisle) this else setAisleStyle(id, style.copy(storeAisle = storeAisle))
+    }
+    if (inName == null) return styled(aisleId, number)
+    val trimmed = aisle.name.trim()
+    val display = aisle.displayName()
+    val newName = when {
+        number == null || number == inName -> if (number == null) display else trimmed
+        display == trimmed -> trimmed.replaceFirst(DIGITS, number.toString())
+        else -> trimmed.removeSuffix(display).replaceFirst(DIGITS, number.toString()) + display
+    }
+    val renamed = if (newName != trimmed) renameAisle(aisleId, newName, now) else this
+    val id = renamed.store.aisles().getOrNull(index)?.id ?: return renamed
+    // The name holds the number now (or there is none): no separate one in the style.
+    return renamed.styled(id, null)
+}
+
+private val DIGITS = Regex("\\d{1,3}")
 
 /** The basket kinds in the editor's sticker row (§4.26: 17 kinds), in catalog order. */
 val EditorBaskets: List<BasketKind> = BasketKind.entries.toList()

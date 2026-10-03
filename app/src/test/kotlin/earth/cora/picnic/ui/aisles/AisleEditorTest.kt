@@ -24,6 +24,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
@@ -37,6 +38,7 @@ import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.displayName
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import earth.cora.picnic.core.model.findItem
 import earth.cora.picnic.core.store.InMemoryStateStore
 import earth.cora.picnic.ui.common.FakeAssistant
@@ -181,14 +183,141 @@ class AisleEditorTest {
         compose.onNodeWithTag(AislesTags.nameField()).assertExists()
     }
 
+    /**
+     * "Add aisle" (§4.26): a label at the end, open, its name field focused and EMPTY with "New aisle" as its hint, so she
+     * types the name straight away; a second tap while it is still unnamed opens it again instead of adding another.
+     */
     @Test
     fun addAisle() {
         val store = launch()
+        val before = store.now().store.aisles().size
         compose.onNodeWithText("Add aisle").performScrollTo().performClick()
         waitFor(store) { s -> s.store.aisles().last().name == "New aisle" }
         val count = store.now().store.aisles().size
+        assertEquals(before + 1, count)
         compose.onNodeWithTag(AislesTags.label(count)).assertExists()
-        compose.onNodeWithContentDescription("Aisle name").assertIsFocused()
+        val field = compose.onNodeWithContentDescription("Aisle name")
+        field.assertIsFocused()
+        assertEquals("", field.fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        // The label's name and the field's hint.
+        assertEquals(2, compose.onAllNodesWithText("New aisle", useUnmergedTree = true).fetchSemanticsNodes().size)
+
+        compose.onNodeWithText("Add aisle").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals("still one new label", count, store.now().store.aisles().size)
+
+        compose.onNodeWithContentDescription("Aisle name").performTextReplacement("Frozen treats")
+        compose.onNodeWithContentDescription("Aisle name").performImeAction()
+        waitFor(store) { s -> s.store.aisles().last().name == "Frozen treats" }
+        assertEquals(count, store.now().store.aisles().size)
+    }
+
+    /** Left blank, the new label keeps "New aisle". */
+    @Test
+    fun addAisleLeftBlankKeepsDefault() {
+        val store = launch()
+        compose.onNodeWithText("Add aisle").performScrollTo().performClick()
+        waitFor(store) { s -> s.store.aisles().last().name == "New aisle" }
+        compose.onNodeWithContentDescription("Aisle name").performImeAction()
+        compose.waitForIdle()
+        assertEquals("New aisle", store.now().store.aisles().last().name)
+    }
+
+    /**
+     * §4.26 "blank = none": clearing the store number of "Aisle 2 - Baking & spices" takes the number out of the name
+     * (its items follow the renamed aisle), so no A-chip and no "store aisle 2" come back; another number on a numbered
+     * name says it in the name, so the name, the raw text and the chip agree.
+     */
+    @Test
+    fun clearingStoreNumberRemovesIt() {
+        val store = launch()
+        compose.onNodeWithContentDescription("Edit Baking & spices").performScrollTo().performClick()
+        val number = compose.onNodeWithContentDescription("store aisle")
+        assertEquals("2", number.fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        number.performTextReplacement("")
+        number.performImeAction()
+        waitFor(store) { s -> s.store.aisles().any { it.name == "Baking & spices" } }
+        val s = store.now()
+        val baking = s.store.aisles().first { it.name == "Baking & spices" }
+        assertEquals(baking.id, s.findItem("i-flour")?.aisleId)
+        assertEquals(baking.id, s.findItem("i-bp")?.aisleId)
+        assertNull(s.store.aisleStyles[baking.id]?.storeAisle)
+        assertTrue("the raw text says it too", s.store.aislesText.lines().any { it.trim() == "Baking & spices" })
+        // The label stays open on the renamed aisle, its number field blank, and the label shows no store number.
+        compose.waitForIdle()
+        assertEquals("", compose.onNodeWithContentDescription("store aisle").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        compose.onNodeWithContentDescription("Baking & spices, aisle ${baking.position}").assertExists()
+        // Closed and opened again: still none.
+        compose.onNodeWithContentDescription("Done editing Baking & spices").performClick()
+        compose.onNodeWithContentDescription("Edit Baking & spices").performScrollTo().performClick()
+        assertEquals("", compose.onNodeWithContentDescription("store aisle").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        compose.onNodeWithContentDescription("Done editing Baking & spices").performClick()
+
+        // Another number on a numbered name: the name says it.
+        compose.onNodeWithContentDescription("Edit Pasta, rice & international").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("store aisle").performTextReplacement("5")
+        compose.onNodeWithContentDescription("store aisle").performImeAction()
+        waitFor(store) { st -> st.store.aisles().any { it.name == "Aisle 5 - Pasta, rice & international" } }
+        val pasta = store.now().store.aisles().first { it.name == "Aisle 5 - Pasta, rice & international" }
+        assertEquals(pasta.id, store.now().findItem("i-gochujang")?.aisleId)
+        compose.onNodeWithContentDescription("Aisle 5 - Pasta, rice & international, aisle ${pasta.position}, store aisle 5").assertExists()
+    }
+
+    /**
+     * §4.26 with the 14 default aisles the sheet is taller than the screen: holding a lifted label near the bottom edge
+     * scrolls the page under it, so one gesture carries Produce from the top of the store to the bottom.
+     */
+    @Test
+    fun dragAutoScrolls() {
+        val store = launch()
+        assertEquals(14, store.now().store.aisles().size)
+        val root = compose.onRoot().getBoundsInRoot()
+        val handle = compose.onNodeWithTag(AislesTags.handle(1), useUnmergedTree = true)
+        val start = handle.getBoundsInRoot()
+        val last = compose.onNodeWithTag(AislesTags.label(14)).getUnclippedBoundsInRoot()
+        assertTrue("the last label starts off screen", last.top > root.bottom)
+        compose.mainClock.autoAdvance = false
+        handle.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 12f))
+            // To 24 dp above the bottom of the screen: inside the 64 dp edge.
+            val to = with(compose.density) { (root.bottom - start.top - 24.dp).toPx() } - center.y
+            repeat(20) { moveBy(Offset(0f, (to - 12f) / 20f)) }
+        }
+        // Hold still: the page scrolls on its own, the label with it.
+        repeat(300) {
+            shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeByFrame()
+        }
+        // The page scrolled to its end under the held label: the last label is now near the top of the screen.
+        assertTrue(compose.onNodeWithTag(AislesTags.label(14)).getUnclippedBoundsInRoot().bottom < root.bottom)
+        handle.performTouchInput { up() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        waitFor(store) { s -> s.store.aisles().last().name == "Produce" }
+        assertEquals("produce", store.now().findItem("i-lemons")?.aisleId)
+        assertEquals("Bakery", store.now().store.aisles().first().name)
+    }
+
+    /** Held in the middle of the page, nothing scrolls: the drop is where the finger is. */
+    @Test
+    fun noAutoScrollAwayFromTheEdges() {
+        val store = launch()
+        val slot = with(compose.density) { 54.dp.toPx() }
+        compose.mainClock.autoAdvance = false
+        val handle = compose.onNodeWithTag(AislesTags.handle(1), useUnmergedTree = true)
+        handle.performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 12f))
+            repeat(10) { moveBy(Offset(0f, (slot - 12f) / 10f)) }
+        }
+        repeat(120) {
+            shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeByFrame()
+        }
+        handle.performTouchInput { up() }
+        compose.mainClock.autoAdvance = true
+        waitFor(store) { s -> s.store.aisles().map { it.name }.take(2) == listOf("Bakery", "Produce") }
     }
 
     @Test

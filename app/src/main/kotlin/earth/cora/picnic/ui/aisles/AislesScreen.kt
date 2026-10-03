@@ -59,6 +59,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
@@ -215,6 +224,12 @@ object AislesTags {
 /** The gap between two labels on the sheet. */
 private val LabelGap: Dp = 6.dp
 
+/** A lifted label held this close to the page's top or bottom edge scrolls the page (§4.26). */
+private val AutoScrollEdge: Dp = 64.dp
+
+/** The auto-scroll's speed at the very edge, per frame (about 720 dp/s at 60 fps); it ramps up from 0 across the edge. */
+private val AutoScrollMax: Dp = 12.dp
+
 /** The label name's line height. */
 private val LabelLine = 20.sp
 
@@ -248,7 +263,9 @@ fun AislesScreen(
         toasts = toasts,
         actions = { DoneButton(actions.onDone) },
     ) {
-        ScreenColumn(state = scroll, spacing = 18.dp) {
+        // The scrolling page's window bounds: a lifted label scrolls the page when held near its top or bottom edge.
+        var viewport by remember { mutableStateOf(Rect.Zero) }
+        ScreenColumn(modifier = Modifier.onGloballyPositioned { viewport = it.boundsInWindow() }, state = scroll, spacing = 18.dp) {
             PadCard {
                 var focused by remember { mutableStateOf(false) }
                 val commit by rememberUpdatedState(actions.onCommitStoreName)
@@ -269,7 +286,7 @@ fun AislesScreen(
                         },
                 )
             }
-            StickerSheet(state, actions, initialDrag)
+            StickerSheet(state, actions, initialDrag, scroll) { viewport }
             PadCard {
                 var focused by remember { mutableStateOf(false) }
                 val commit by rememberUpdatedState(actions.onCommitText)
@@ -299,7 +316,13 @@ fun AislesScreen(
  * whose centre it passes moves one lifted-label slot the other way.
  */
 @Composable
-private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDrag: DragPreview?) {
+private fun StickerSheet(
+    state: AislesUiState,
+    actions: AislesActions,
+    initialDrag: DragPreview?,
+    scroll: ScrollState,
+    viewport: () -> Rect,
+) {
     val c = PicnicTheme.colors
     val density = LocalDensity.current
     val gap = with(density) { LabelGap.toPx() }
@@ -308,6 +331,36 @@ private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDr
     val heights = remember { mutableStateMapOf<Int, Int>() }
     var dragging by remember { mutableIntStateOf(initialDrag?.index ?: -1) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    // The finger's window y while a label is lifted, and where it went down (NaN when nothing is lifted).
+    var fingerY by remember { mutableFloatStateOf(Float.NaN) }
+    var fingerStartY by remember { mutableFloatStateOf(Float.NaN) }
+    val bottomInset = WindowInsets.navigationBars.union(WindowInsets.ime).getBottom(density)
+    // Auto-scroll (§4.26 with 14 to 24 aisles the sheet is taller than the screen): while a label is held within 64 dp
+    // of the page's top or bottom edge, having moved that way, the page scrolls (faster the deeper into the edge) and the
+    // label moves with it, so it stays under the finger and one gesture can carry it the whole length of the store.
+    val held = dragging >= 0 && !fingerY.isNaN()
+    LaunchedEffect(held) {
+        if (!held) return@LaunchedEffect
+        val zone = with(density) { AutoScrollEdge.toPx() }
+        val fastest = with(density) { AutoScrollMax.toPx() }
+        while (true) {
+            withFrameNanos { }
+            val y = fingerY
+            val v = viewport()
+            if (y.isNaN() || v.height <= 0f) continue
+            val top = v.top
+            val bottom = v.bottom - bottomInset
+            val speed = when {
+                y > bottom - zone && y > fingerStartY -> fastest * ((y - (bottom - zone)) / zone).coerceIn(0f, 1f)
+                y < top + zone && y < fingerStartY -> -fastest * ((top + zone - y) / zone).coerceIn(0f, 1f)
+                else -> 0f
+            }
+            if (speed != 0f) {
+                val moved = scroll.scrollBy(speed)
+                if (moved != 0f) dragOffset += moved
+            }
+        }
+    }
     // A golden's held drag ([DragPreview]) is given in slots of the label it moves over; it becomes px once measured.
     var previewSlots by remember { mutableStateOf(initialDrag?.offsetSlots) }
     fun slot(i: Int): Float = (heights[i] ?: 0) + gap
@@ -368,19 +421,26 @@ private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDr
                         .zIndex(if (lifted) 1f else 0f)
                         .graphicsLayer { translationY = if (lifted) offset else animatedShift }
                         .onSizeChanged { heights[i] = it.height },
-                    onDragStart = {
+                    onDragStart = { y ->
                         if (state.editing != null) actions.onStopEditing()
                         previewSlots = null
                         dragging = i
                         dragOffset = 0f
+                        fingerY = y
+                        fingerStartY = y
                     },
-                    onDrag = { dy -> dragOffset += dy },
+                    onDrag = { dy, y ->
+                        dragOffset += dy
+                        fingerY = y
+                    },
                     onDragEnd = {
                         val to = targetNow()
                         val from = dragging
                         dragging = -1
                         dragOffset = 0f
                         previewSlots = null
+                        fingerY = Float.NaN
+                        fingerStartY = Float.NaN
                         if (from >= 0 && to >= 0 && to != from) actions.onMove(from, to)
                     },
                 )
@@ -517,8 +577,8 @@ private fun AisleLabel(
     liftedPastHalf: Boolean,
     actions: AislesActions,
     modifier: Modifier,
-    onDragStart: () -> Unit,
-    onDrag: (Float) -> Unit,
+    onDragStart: (windowY: Float) -> Unit,
+    onDrag: (dy: Float, windowY: Float) -> Unit,
     onDragEnd: () -> Unit,
 ) {
     val c = PicnicTheme.colors
@@ -542,6 +602,9 @@ private fun AisleLabel(
     val drag by rememberUpdatedState(onDrag)
     val dragEnd by rememberUpdatedState(onDragEnd)
     val large = LocalDensity.current.fontScale >= LARGE_TEXT
+    // The handle's coordinates, to give the finger's window position (lifted-label translation included).
+    val handleAt = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    fun windowY(local: Offset): Float = handleAt[0]?.takeIf { it.isAttached }?.localToWindow(local)?.y ?: Float.NaN
     Column(
         modifier
             .fillMaxWidth()
@@ -563,16 +626,17 @@ private fun AisleLabel(
                     Modifier
                         .size(48.dp)
                         .testTag(AislesTags.handle(position))
+                        .onGloballyPositioned { handleAt[0] = it }
                         .then(
                             if (enabled) {
                                 Modifier.pointerInput(position) {
                                     detectDragGestures(
-                                        onDragStart = { dragStart() },
+                                        onDragStart = { at -> dragStart(windowY(at)) },
                                         onDragEnd = { dragEnd() },
                                         onDragCancel = { dragEnd() },
                                         onDrag = { change, amount ->
                                             change.consume()
-                                            drag(amount.y)
+                                            drag(amount.y, windowY(change.position))
                                         },
                                     )
                                 }
@@ -697,7 +761,11 @@ private fun Swatch(look: AisleLook, modifier: Modifier = Modifier) {
 @Composable
 private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesActions) {
     val id = label.aisle.id
-    var name by remember(id) { mutableStateOf(label.aisle.name) }
+    // A just-added label still called "New aisle" opens with its name field empty (the default as its placeholder), so
+    // she types the name straight away; left blank, it stays "New aisle".
+    val defaultName = stringResource(R.string.aisles_new_name)
+    val unnamed = label.aisle.name == defaultName
+    var name by remember(id) { mutableStateOf(if (unnamed) "" else label.aisle.name) }
     var number by remember(id) { mutableStateOf(label.storeAisle?.toString().orEmpty()) }
     val nameFocus = remember { FocusRequester() }
     // The name field takes focus once it is on screen: a frame later, so its focus underline (a strawberry line and the
@@ -724,6 +792,7 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
                 value = name,
                 onValueChange = { name = it },
                 label = stringResource(R.string.aisles_name_field),
+                placeholder = if (unnamed) defaultName else null,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { commitName() }),
