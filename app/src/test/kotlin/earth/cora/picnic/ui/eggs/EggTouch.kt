@@ -2,6 +2,7 @@ package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import earth.cora.picnic.ui.list.motion.AnchorRegistry

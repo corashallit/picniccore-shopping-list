@@ -34,7 +34,6 @@ class EggMidnightTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val EggRig.variant: ThemeVariant get() = sandbox.variants.variant.value
 
     @Test
     fun midnightOnEntry() {
@@ -43,7 +42,7 @@ class EggMidnightTest {
         day.close()
 
         val r = EggRig(compose, startAt = torontoMs(LocalTime.of(23, 30))).start()
-        assertEquals("Glow even with the system light", ThemeVariant.Glow, r.variant)
+        assertEquals("Glow even with the system light", ThemeVariant.Glow, r.resolved)
         assertTrue(r.eggs.midnight)
         assertEquals(EggRules.SNACK, r.eggs.lcdWord?.text)
         assertEquals("frozen", r.eggs.snackSectionId)
@@ -61,7 +60,7 @@ class EggMidnightTest {
     @Test
     fun crossingElevenWhileOpen() {
         val r = EggRig(compose, startAt = torontoMs(LocalTime.of(22, 59, 30))).start()
-        assertEquals(ThemeVariant.Day, r.variant)
+        assertEquals(ThemeVariant.Day, r.resolved)
         assertNull(r.eggs.lcdWord)
         r.advance(40_000)
         // The minute tick (ThemeVariantSource's onTick in the app) re-reads the clock.
@@ -70,7 +69,7 @@ class EggMidnightTest {
             runBlocking { r.sandbox.variants.tickNow() }
         }
         assertTrue(r.eggs.midnight)
-        assertEquals(ThemeVariant.Glow, r.variant)
+        assertEquals(ThemeVariant.Glow, r.resolved)
         assertEquals(EggRules.SNACK, r.eggs.lcdWord?.text)
     }
 
@@ -97,7 +96,7 @@ class EggMidnightTest {
     @Test
     fun reducedMotionAppliesInPlace() {
         val r = EggRig(compose, reduced = true, startAt = torontoMs(LocalTime.of(23, 30))).start()
-        assertEquals(ThemeVariant.Glow, r.variant)
+        assertEquals(ThemeVariant.Glow, r.resolved)
         assertEquals(EggRules.SNACK, r.eggs.lcdWord?.text)
         assertEquals("frozen", r.eggs.snackSectionId)
     }

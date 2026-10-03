@@ -19,6 +19,8 @@ import earth.cora.picnic.core.model.ResolvedIcon
 import earth.cora.picnic.core.model.applyIconDecisions
 import earth.cora.picnic.core.model.attachCustomIcon
 import earth.cora.picnic.core.model.normalizeName
+import earth.cora.picnic.core.model.Rarity
+import earth.cora.picnic.core.model.setRarity
 import earth.cora.picnic.core.store.AlbumStore
 import earth.cora.picnic.core.store.StateStore
 import earth.cora.picnic.platform.PicnicLog
@@ -65,6 +67,21 @@ fun interface SheetSource {
 }
 
 /**
+ * Egg 13's hooks (docs/DESIGN_STICKER.md §12.2; owner WP9, the app passes its SurpriseEngine): told when an automatic
+ * live drawing starts for an APPROXIMATE item (its capsule may draw gold while it waits), and how it ended. [drawn]
+ * returns the new sticker's rarity (1 in 100 JACKPOT), which the repository saves on the item. Default: nothing.
+ */
+interface LiveDrawJackpot {
+    fun drawing(item: GroceryItem) = Unit
+
+    fun drawn(item: GroceryItem): Rarity = Rarity.NONE
+
+    fun failed(item: GroceryItem) = Unit
+
+    object None : LiveDrawJackpot
+}
+
+/**
  * Production [IconRepository]: the device side of the icon cascade (docs/ARCHITECTURE.md §8) with live stickers v4
  * (docs/DESIGN_STICKER.md §18.3 step 5).
  *
@@ -103,6 +120,7 @@ class AppIconRepository internal constructor(
     private val tuning: IconQueueTuning,
     private val compute: CoroutineDispatcher,
     private val io: CoroutineDispatcher,
+    private val jackpot: LiveDrawJackpot = LiveDrawJackpot.None,
 ) : IconRepository {
 
     /**
@@ -121,6 +139,7 @@ class AppIconRepository internal constructor(
         bundled: BundledIcons = BundledIcons(app),
         album: AlbumStore? = null,
         onIconReplaced: (String) -> Unit = {},
+        jackpot: LiveDrawJackpot = LiveDrawJackpot.None,
     ) : this(
         store = store,
         settings = settings,
@@ -138,6 +157,7 @@ class AppIconRepository internal constructor(
         tuning = IconQueueTuning(),
         compute = Dispatchers.Default,
         io = Dispatchers.IO,
+        jackpot = jackpot,
     )
 
     private val drawer = LiveIconDrawer(
@@ -401,6 +421,9 @@ class AppIconRepository internal constructor(
 
     private suspend fun drawLoop() {
         for (job in drawQueue) {
+            // Egg 13: an automatic drawing for an APPROXIMATE item may come out a jackpot.
+            val lucky = luckyItem(job)
+            lucky?.let { jackpot.drawing(it.second) }
             try {
                 draw(job)
             } catch (e: CancellationException) {
@@ -411,7 +434,37 @@ class AppIconRepository internal constructor(
             } finally {
                 release(job.key)
             }
+            lucky?.let { (listId, item) -> settleJackpot(listId, item) }
         }
+    }
+
+    /** The APPROXIMATE item an automatic drawing is for (egg 13), with its list id; null for redraws or without hooks. */
+    private suspend fun luckyItem(job: DrawJob): Pair<String, GroceryItem>? {
+        if (job.forced || job.replaces != null || jackpot === LiveDrawJackpot.None) return null
+        val state = try {
+            store.current()
+        } catch (e: IOException) {
+            return null
+        }
+        return state.lists.firstNotNullOfOrNull { list ->
+            list.items.firstOrNull { it.iconFit == IconFit.APPROXIMATE && it.customIconId == null && normalizeName(it.name) == job.key }
+                ?.let { list.id to it }
+        }
+    }
+
+    /** Egg 13: the drawing was attached, so the sticker gets its rarity (saved); otherwise the gold capsule goes. */
+    private suspend fun settleJackpot(listId: String, item: GroceryItem) {
+        val now = try {
+            store.current().lists.firstOrNull { it.id == listId }?.items?.firstOrNull { it.id == item.id }
+        } catch (e: IOException) {
+            null
+        }
+        if (now?.customIconId == null) {
+            jackpot.failed(item)
+            return
+        }
+        val rarity = jackpot.drawn(now)
+        if (rarity != Rarity.NONE) safeUpdate { it.setRarity(listId, item.id, rarity) }
     }
 
     private suspend fun draw(job: DrawJob) {

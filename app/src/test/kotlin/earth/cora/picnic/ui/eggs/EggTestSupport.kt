@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.Density
 import com.github.takahirom.roborazzi.captureRoboImage
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.platform.FakeTimeouts
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.list.motion.TimedAnnouncer
@@ -133,16 +134,22 @@ class EggRig(
     /** Captures the root (or [crop], root px) as golden [name]. */
     fun capture(name: String, crop: Rect? = null) {
         frame()
-        val full = compose.onRoot().captureToImage().asAndroidBitmap()
-        val bmp = if (crop == null) full else {
-            val l = crop.left.toInt().coerceIn(0, full.width - 1)
-            val t = crop.top.toInt().coerceIn(0, full.height - 1)
-            val w = crop.width.toInt().coerceAtMost(full.width - l).coerceAtLeast(1)
-            val h = crop.height.toInt().coerceAtMost(full.height - t).coerceAtLeast(1)
-            Bitmap.createBitmap(full, l, t, w, h)
-        }
-        bmp.captureRoboImage("$EGG_SHOTS/$name.png")
+        grab(crop).captureRoboImage("$EGG_SHOTS/$name.png")
     }
+
+    /** The root as it is now (or [crop], root px), without a frame first: one frame of a strip. */
+    fun grab(crop: Rect? = null): Bitmap {
+        val full = compose.onRoot().captureToImage().asAndroidBitmap()
+        if (crop == null) return full
+        val l = crop.left.toInt().coerceIn(0, full.width - 1)
+        val t = crop.top.toInt().coerceIn(0, full.height - 1)
+        val w = crop.width.toInt().coerceAtMost(full.width - l).coerceAtLeast(1)
+        val h = crop.height.toInt().coerceAtMost(full.height - t).coerceAtLeast(1)
+        return Bitmap.createBitmap(full, l, t, w, h)
+    }
+
+    /** The variant the sandbox resolves right now (§2.5: Dusk, Golden and midnight Glow on its own clock). */
+    val resolved: ThemeVariant get() = sandbox.variants.variant.value
 
     /** The golden suffix of this rig's variant ("day" / "glow"). */
     val v: String get() = if (variant == ThemeVariant.Glow) "glow" else "day"
@@ -150,3 +157,39 @@ class EggRig(
 
 /** Day and Glow, for ParameterizedRobolectricTestRunner. */
 fun dayAndGlow(): List<Array<Any>> = listOf(arrayOf(ThemeVariant.Day), arrayOf(ThemeVariant.Glow))
+
+/** The fixture with every item checked, the last ones [minutes] after the trip started: complete, its shop time frozen. */
+fun completedFixture(minutes: Long = 41): AppState {
+    val s = PracticeFixture.state()
+    val at = PracticeFixture.TRIP_START + minutes * PracticeFixture.MIN
+    return s.list(PracticeFixture.LIST_ID)!!.items.filter { !it.checked }
+        .foldIndexed(s) { i, acc, item -> acc.toggleChecked(PracticeFixture.LIST_ID, item.id, at - (13 - i).coerceAtLeast(0) * 1_000L) }
+}
+
+/**
+ * A frame-strip golden (§20 "strip"): [frames] in rows of [cols], each scaled by [scale] and labelled with its time in
+ * ms, on white.
+ */
+fun stripOf(frames: List<Pair<Long, Bitmap>>, cols: Int = 4, scale: Float = 0.5f): Bitmap {
+    val w = (frames.maxOf { it.second.width } * scale).toInt()
+    val h = (frames.maxOf { it.second.height } * scale).toInt()
+    val label = 40
+    val gap = 12
+    val rows = (frames.size + cols - 1) / cols
+    val out = Bitmap.createBitmap(cols * (w + gap) + gap, rows * (h + label + gap) + gap, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(out)
+    canvas.drawColor(android.graphics.Color.WHITE)
+    val text = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(0x2E, 0x3A, 0x8C)
+        textSize = 28f
+        typeface = android.graphics.Typeface.MONOSPACE
+    }
+    val filter = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
+    frames.forEachIndexed { i, (t, bmp) ->
+        val x = gap + (i % cols) * (w + gap)
+        val y = gap + (i / cols) * (h + label + gap)
+        canvas.drawText("$t ms", x.toFloat(), (y + 30).toFloat(), text)
+        canvas.drawBitmap(bmp, null, android.graphics.Rect(x, y + label, x + (bmp.width * scale).toInt(), y + label + (bmp.height * scale).toInt()), filter)
+    }
+    return out
+}

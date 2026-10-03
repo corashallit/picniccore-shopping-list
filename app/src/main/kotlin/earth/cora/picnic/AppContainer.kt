@@ -23,6 +23,7 @@ import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.icons.AppIconRepository
 import earth.cora.picnic.icons.AppStickerArt
 import earth.cora.picnic.icons.IconRepository
+import earth.cora.picnic.icons.LiveDrawJackpot
 import earth.cora.picnic.icons.StickerArt
 import earth.cora.picnic.platform.AndroidAnnouncer
 import earth.cora.picnic.platform.AndroidFeedback
@@ -46,6 +47,8 @@ import earth.cora.picnic.ui.eggs.SurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseLabViewModel
 import earth.cora.picnic.ui.eggs.ThemeVariantSource
 import earth.cora.picnic.core.model.ItemSource
+import earth.cora.picnic.core.model.GroceryItem
+import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.itemsNeedingAisle
 import earth.cora.picnic.platform.Captures
 import earth.cora.picnic.platform.PicnicLog
@@ -153,7 +156,7 @@ class AppContainer(private val app: Application) {
     val places: PlaceSource by lazy { AreaPlaceSource.create(app, settings, clock) }
 
     /**
-     * Today's weather for eggs 13 and 15 (§12.4, §0.4): the Environment Canada forecast city nearest [places]' point,
+     * Today's weather for eggs 11 and 16 (§12.4, §0.4): the Environment Canada forecast city nearest [places]' point,
      * fetched at most every 3 h while Surprises → Weather is on, cached in DataStore.
      */
     val weather: WeatherService by lazy {
@@ -213,6 +216,14 @@ class AppContainer(private val app: Application) {
             clock = clock,
             album = album,
             onIconReplaced = appStickerArt::evict,
+            // Egg 13 (WP9): a live drawing for an APPROXIMATE item comes out a jackpot 1 in 100.
+            jackpot = object : LiveDrawJackpot {
+                override fun drawing(item: GroceryItem) = surprises.onIconDrawing(item)
+
+                override fun drawn(item: GroceryItem): Rarity = surprises.onIconDrawn(item)
+
+                override fun failed(item: GroceryItem) = surprises.onIconDrawFailed(item)
+            },
         )
     }
 

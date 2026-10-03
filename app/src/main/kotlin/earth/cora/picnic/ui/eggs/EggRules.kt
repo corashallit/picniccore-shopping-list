@@ -215,16 +215,16 @@ object EggRules {
     /**
      * The album after egg 14's rules: every fourth complete trip in a row (4, 8, …) makes every book's stamp page holo
      * for 7 days from that filing (`perfectUntil`) and unlocks the sakura sheet; ten finished trips open the back pocket
-     * ("sticker sheet 2 of 2"). Idempotent: a week already granted for the newest filing is not granted again.
+     * ("sticker sheet 2 of 2"). Idempotent: the week a filing granted is granted once.
      */
     fun perfectWeek(album: Album): Album {
         var a = album
-        val newest = a.books.firstOrNull()
+        // Every finished filing moves the streak, so with a streak of 4, 8, … the newest finished book is the one that
+        // made it; a book with no sticker (not a finished trip) never grants or extends a week.
+        val newest = a.books.firstOrNull { it.stickers.isNotEmpty() }
         if (newest != null && a.perfectStreak > 0 && a.perfectStreak % PERFECT_WEEK_TRIPS == 0) {
-            val until = a.perfectUntil
-            if (until == null || until < newest.closedAt) {
-                a = a.copy(perfectUntil = newest.closedAt + PERFECT_WEEK_MS).unlockSheet(SAKURA_SHEET)
-            }
+            val until = newest.closedAt + PERFECT_WEEK_MS
+            if (a.perfectUntil != until) a = a.copy(perfectUntil = until).unlockSheet(SAKURA_SHEET)
         }
         if (a.finishedTrips >= BACK_POCKET_TRIPS && !a.backPocketOpen) {
             a = a.copy(backPocketOpen = true).unlockSheet(SHEET_2)

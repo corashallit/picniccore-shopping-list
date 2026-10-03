@@ -2,6 +2,14 @@ package earth.cora.picnic.ui.eggs
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.unit.dp
+import earth.cora.picnic.ui.a11y.Decorative
+import earth.cora.picnic.ui.theme.DecorSticker
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -221,4 +229,53 @@ fun SurpriseEngine.onTitleStickerTap(state: SurpriseState, variant: earth.cora.p
         state.dusk -> onMoonTap()
         else -> onSunTap()
     }
+}
+
+/**
+ * A page sticker (§4.1 decor taxonomy: the bee, the ladybug, the nap cat, the umbrella; at most 3 per screen). Test-visible
+ * only: DecorBudgetTest counts the nodes carrying it; nothing reaches accessibility services (the node is [Decorative]).
+ */
+val PageSticker: SemanticsPropertyKey<String> = SemanticsPropertyKey("PageSticker")
+
+/** Marks a page sticker named [name]: no semantics besides the test-visible markers ([tag] for tests). */
+fun Modifier.pageSticker(name: String, tag: String? = null): Modifier = clearAndSetSemantics {
+    this[Decorative] = Unit
+    this[PageSticker] = name
+    if (tag != null) testTag = tag
+}
+
+/**
+ * The list's standing bee (§4.1, §4.27): a 22 dp bee flying a small loop over the current tray's header, one lap per
+ * 2.4 s in 12 fps poses, tilted toward where it flies; still under reduced motion. A page sticker. WP5's tray places it
+ * at the header's top right; the practice list does the same.
+ */
+@Composable
+fun TrayBee(modifier: Modifier = Modifier) {
+    val reduced = LocalReducedMotion.current
+    val t by rememberLoopTime(enabled = !reduced)
+    val pose = if (reduced) EggBeats.beeLoop(0) else EggBeats.beeLoop(t)
+    Box(modifier.size(48.dp, 30.dp)) {
+        DecorSticker(
+            "bee",
+            Modifier
+                .offset(pose.center.x.dp, pose.center.y.dp)
+                .graphicsLayer { rotationZ = pose.rotation }
+                .pageSticker("bee"),
+            size = 22.dp,
+        )
+    }
+}
+
+/**
+ * The list's standing ladybug on the open tray's end cap (§4.1, §4.27): 14 dp, waddling ±5° every 250 ms (still under
+ * reduced motion). It steps off while the nap cat and the umbrella both show ([SurpriseState.ladybugStepsOff]), so the
+ * screen never holds more than 3 page stickers. A page sticker.
+ */
+@Composable
+fun EndCapLadybug(state: SurpriseState, modifier: Modifier = Modifier) {
+    if (state.ladybugStepsOff) return
+    val reduced = LocalReducedMotion.current
+    val t by rememberLoopTime(enabled = !reduced)
+    val waddle = if (reduced) 0f else if ((t / LadybugMotion.WADDLE_MS) % 2 == 0L) -5f else 5f
+    DecorSticker("ladybug", modifier.graphicsLayer { rotationZ = 90f + waddle }.pageSticker("ladybug"), size = 14.dp)
 }

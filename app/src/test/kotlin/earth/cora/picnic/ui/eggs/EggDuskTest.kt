@@ -29,7 +29,6 @@ class EggDuskTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val EggRig.variant: ThemeVariant get() = sandbox.variants.variant.value
 
     private fun EggRig.duskSaved(): Boolean = runBlocking { sandbox.settings.current().duskBinder }
 
@@ -47,10 +46,10 @@ class EggDuskTest {
         assertTrue("saved at once", r.duskSaved())
         // The sun sets behind the title first (600 ms): still Day.
         r.advanceTo(t7 + 400)
-        assertEquals(ThemeVariant.Day, r.variant)
+        assertEquals(ThemeVariant.Day, r.resolved)
         // Then the Dusk palette washes in, the moon rises; done by 1.2 s.
         r.advanceTo(t7 + EggRules.DUSK_SINK_MS + 50)
-        assertEquals(ThemeVariant.Dusk, r.variant)
+        assertEquals(ThemeVariant.Dusk, r.resolved)
         r.advanceTo(t7 + EggRules.DUSK_TRANSITION_MS + 100)
         assertNull("the transition has played out", r.eggs.duskFx)
         assertTrue(r.eggs.dusk)
@@ -62,7 +61,7 @@ class EggDuskTest {
         r.tapSun(7, EggRules.SUN_TAP_GAP_MS + 100)
         r.advance(1500)
         assertNull(r.eggs.duskFx)
-        assertEquals(ThemeVariant.Day, r.variant)
+        assertEquals(ThemeVariant.Day, r.resolved)
         assertFalse(r.duskSaved())
     }
 
@@ -71,14 +70,14 @@ class EggDuskTest {
         val r = EggRig(compose).start()
         r.tapSun(7, 300)
         r.advance(1500)
-        assertEquals(ThemeVariant.Dusk, r.variant)
+        assertEquals(ThemeVariant.Dusk, r.resolved)
         // The sticker by the title is the moon now: one tap undoes Dusk.
         r.tapSun(1, 0)
         val fx = r.eggs.duskFx
         assertNotNull(fx)
         assertFalse(fx!!.toDusk)
         r.advance(1500)
-        assertEquals(ThemeVariant.Day, r.variant)
+        assertEquals(ThemeVariant.Day, r.resolved)
         assertFalse(r.duskSaved())
         assertFalse(r.eggs.dusk)
     }
@@ -88,10 +87,10 @@ class EggDuskTest {
         val r = EggRig(compose).start()
         r.fire(12)
         r.advance(300)
-        assertEquals(ThemeVariant.Golden, r.variant)
+        assertEquals(ThemeVariant.Golden, r.resolved)
         r.tapSun(7, 300)
         r.advance(1500)
-        assertEquals(ThemeVariant.Dusk, r.variant)
+        assertEquals(ThemeVariant.Dusk, r.resolved)
     }
 
     @Test
@@ -101,7 +100,7 @@ class EggDuskTest {
         r.advance(1500)
         assertNull(r.eggs.duskFx)
         assertFalse(r.duskSaved())
-        assertEquals(ThemeVariant.Glow, r.variant)
+        assertEquals(ThemeVariant.Glow, r.resolved)
     }
 
     @Test
@@ -135,7 +134,7 @@ class EggDuskTest {
         assertNotNull(fx)
         assertTrue("a 120 ms fade, no sunset", fx!!.reduced)
         r.frame()
-        assertEquals(ThemeVariant.Dusk, r.variant)
+        assertEquals(ThemeVariant.Dusk, r.resolved)
         r.advance(300)
         assertNull(r.eggs.duskFx)
         assertTrue(r.feedback.log.none { it.second == Cue.CELEBRATION })

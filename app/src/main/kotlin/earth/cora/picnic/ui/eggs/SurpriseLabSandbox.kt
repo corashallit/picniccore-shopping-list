@@ -11,6 +11,7 @@ import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.SectionKind
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.NewTripMode
 import earth.cora.picnic.core.model.markFinaleShown
 import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.core.model.setOpenAisle
@@ -18,6 +19,7 @@ import earth.cora.picnic.core.model.setRarity
 import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.core.model.tripBook
 import earth.cora.picnic.core.store.InMemoryAlbumStore
+import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.core.store.file
 import earth.cora.picnic.core.weather.WeatherToday
 import earth.cora.picnic.platform.Announcer
@@ -110,6 +112,23 @@ class SurpriseLabSandbox(
     )
 
     val model = PracticeModel(store, album, engine, catalog, clock::now, feedback, announcer, timeouts)
+
+    init {
+        // The practice album collects what the practice list checks off, as her album does (§7.2): holo pulls included.
+        TripFiling.launchAlbumSync(scope, store, album, catalog, clock::now)
+    }
+
+    /**
+     * New trip on the practice list (§6.5): its book is filed into the practice album (a printed receipt with it, as
+     * saved), then the list starts over ([mode]). Runs in the sandbox's scope.
+     */
+    fun newTrip(mode: NewTripMode = NewTripMode.CLEAR_GOTTEN) {
+        if (closed) return
+        scope.launch {
+            TripFiling.newTrip(store, album, listId, mode, clock.now())
+            model.set { it }
+        }
+    }
 
     /** The practice list's own variant (§2.5 on the sandbox clock and settings; the phone's dark mode still applies). */
     val variants = ThemeVariantSource(settings, clock::now, SunClock, PlaceSource.Toronto, zone, duskShown = engine.state.map { it.dusk }).also {

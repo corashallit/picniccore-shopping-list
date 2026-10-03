@@ -1,10 +1,9 @@
 package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.platform.FakeTimeouts
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -28,13 +27,8 @@ class EggLadybugTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private fun EggRig.holdBasket(sectionId: String, ms: Long) {
-        val node = compose.onNodeWithTag(PracticeTags.basket(sectionId))
-        node.performTouchInput { down(center) }
-        advance(ms)
-        node.performTouchInput { up() }
-        frame()
-    }
+    /** A real press on [sectionId]'s folded basket, held [ms] on the test clock. */
+    private fun EggRig.holdBasket(sectionId: String, ms: Long) = holdAt(anchor(AnchorRegistry.basketKey(sectionId)).center, ms)
 
     @Test
     fun aOneSecondHoldSendsTheLadybug() {
@@ -51,9 +45,9 @@ class EggLadybugTest {
         val steps = r.probe.frames.filter { it.tag == "ladybug" }
         assertTrue("it walked", steps.map { it.center.x }.distinct().size >= 6)
         steps.forEach { f -> assertTrue("over text at ${f.time} ms", text.none { it.overlaps(f.bounds.deflate(2f)) }) }
-        // Along the strip's bottom edge.
+        // Along the strip's bottom edge (its centre 2 dp below it, its feet on the binder).
         val strip = r.anchor(EggAnchors.strip("produce"))
-        steps.forEach { f -> assertEquals(strip.bottom, f.center.y, 3f) }
+        steps.forEach { f -> assertEquals(strip.bottom + 2 * 3f, f.center.y, 3f) }
         r.advanceTo(t0 + LadybugMotion.DURATION + 100)
         assertNull(r.eggs.ladybug)
     }
@@ -70,10 +64,22 @@ class EggLadybugTest {
     fun touchAndHoldDelayLengthensIt() {
         // "Touch & hold delay" at 1.5 s: the ladybug waits for 1.5 s + 560 ms.
         val r = EggRig(compose, timeouts = FakeTimeouts(holdThresholdMs = 1_500)).start()
-        r.holdBasket("produce", 1_200)
-        assertNull("1.2 s is not enough with a 1.5 s hold delay", r.eggs.ladybug)
+        // 1.8 s is past the delay (a hold: it only peeks and opens nothing) but short of the delay + 560 ms.
+        r.holdBasket("produce", 1_800)
+        assertNull("1.8 s is not enough with a 1.5 s hold delay", r.eggs.ladybug)
+        assertEquals("a hold never opens the strip", "aisle-2-baking", r.model.grouped().openSectionId)
         r.holdBasket("produce", 2_100)
         assertNotNull(r.eggs.ladybug)
+    }
+
+    @Test
+    fun underALongDelayAShortPressIsStillATap() {
+        // With "Touch & hold delay" at 1.5 s, a 1.2 s press is a tap: it opens the strip and sends no ladybug.
+        val r = EggRig(compose, timeouts = FakeTimeouts(holdThresholdMs = 1_500)).start()
+        r.holdBasket("produce", 1_200)
+        r.advance(300)
+        assertNull(r.eggs.ladybug)
+        assertEquals("produce", r.model.grouped().openSectionId)
     }
 
     @Test

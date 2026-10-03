@@ -285,9 +285,9 @@ private fun Probe(tag: String, time: Long, localBounds: Rect, rotation: Float, o
     SideEffect { probe.record(tag, time, localBounds.translate(origin), rotation) }
 }
 
-/** A sticker of [size] centred at [pose] (overlay px), decorative. */
+/** A sticker of [size] centred at [pose] (overlay px), decorative; a [page] sticker counts toward the §4.1 budget. */
 @Composable
-private fun PlacedSticker(name: String, pose: EggPose, size: Dp, modifier: Modifier = Modifier) {
+private fun PlacedSticker(name: String, pose: EggPose, size: Dp, modifier: Modifier = Modifier, page: String? = null, tag: String? = null) {
     val half = with(LocalDensity.current) { size.toPx() / 2f }
     DecorSticker(
         name,
@@ -298,7 +298,8 @@ private fun PlacedSticker(name: String, pose: EggPose, size: Dp, modifier: Modif
                 scaleX = pose.scaleX
                 scaleY = pose.scaleY
                 alpha = pose.alpha
-            },
+            }
+            .then(if (page != null) Modifier.pageSticker(page, tag) else Modifier),
         size = size,
     )
 }
@@ -326,7 +327,8 @@ private fun DuskSun(fx: DuskFx, sun: Rect?, engine: SurpriseEngine, feedback: Fe
         LaunchedEffect(fx.id) {
             withContext(FixedMotionScale) { holdOnFrameClock(DuskMotion.SINK_MS) }
             engine.onDuskSunset(fx.id)
-            withContext(FixedMotionScale) { holdOnFrameClock(DuskMotion.RISE_MS) }
+            // "kira" with the moon's sparkle burst.
+            withContext(FixedMotionScale) { holdOnFrameClock(DuskMotion.BURST_AT - DuskMotion.SINK_MS) }
             feedback.cue(Cue.MAGIC_APPEAR)
         }
     }
@@ -419,7 +421,7 @@ private fun Umbrella(addBar: Rect) {
     val size = 36.dp
     val center = Offset(addBar.left + 30 * d, addBar.top)
     val pose = if (reduced) EggPose(center, alpha = (t / 120f).coerceIn(0f, 1f)) else EggBeats.magicAppear(t).copy(center = center, rotation = -10f + EggBeats.magicAppear(t).rotation)
-    Box(Modifier.testTag(EggTags.UMBRELLA)) { PlacedSticker("umbrella", pose, size) }
+    PlacedSticker("umbrella", pose, size, page = "umbrella", tag = EggTags.UMBRELLA)
     Probe("umbrella", t, Rect(Offset.Zero, Size.Zero).sized(center, 36 * d), pose.rotation, origin())
 }
 
@@ -474,7 +476,7 @@ internal fun NapCatPiece(sectionId: String, center: Offset, rimY: Float, engine:
             .fillMaxSize()
             .drawWithContent { clipAbove(right = size.width, bottom = rimY) { this@drawWithContent.drawContent() } },
     ) {
-        PlacedSticker("cat", pop.copy(scaleX = pop.scaleX * breath, scaleY = pop.scaleY * breath), catSize)
+        PlacedSticker("cat", pop.copy(scaleX = pop.scaleX * breath, scaleY = pop.scaleY * breath), catSize, page = "nap cat")
     }
     if (!reduced) {
         val (z, big) = NapMotion.z(breathing)
@@ -510,11 +512,11 @@ private fun NapLeaving(fx: NapLeaveFx, anchors: AnchorRegistry, local: (Rect) ->
     val d = LocalDensity.current.density
     val center = Offset(basket.center.x - 2 * d, basket.top + basket.height * 0.45f - 3 * d)
     if (fx.reduced) {
-        PlacedSticker("cat", EggPose(center, alpha = 1f - (t / 120f).coerceIn(0f, 1f)), 34.dp)
+        PlacedSticker("cat", EggPose(center, alpha = 1f - (t / 120f).coerceIn(0f, 1f)), 34.dp, page = "nap cat")
         return
     }
     val pose = NapMotion.leave(t, 160f) ?: return
-    PlacedSticker("cat", EggPose(center + Offset(pose.center.x * d, pose.center.y * d), pose.rotation, pose.scaleX, pose.scaleY), 34.dp)
+    PlacedSticker("cat", EggPose(center + Offset(pose.center.x * d, pose.center.y * d), pose.rotation, pose.scaleX, pose.scaleY), 34.dp, page = "nap cat")
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -628,24 +630,45 @@ private fun ShinyBurst(fx: ShinyFx, anchors: AnchorRegistry, local: (Rect) -> Re
 @Composable
 private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine, feedback: Feedback) {
     val d = LocalDensity.current.density
-    // The path is laid out once every anchor it needs is there (the list may still be scrolling to the aisle).
+    val o = origin()
+    // Its line: the new row once it is placed (the aisle may be opening in this very frame, so the anchors are read on
+    // the frame clock, after layout); the folded strip it joins only if no row shows up; nothing at all, and the item is
+    // simply on its line.
     val path = remember(fx.id) { mutableStateOf<RollingPath?>(null) }
-    if (path.value == null) {
-        val o = origin()
-        // Its line: the row if the aisle is open, else the folded strip it joins.
-        val row = (anchors.bounds(AnchorRegistry.rowKey(fx.itemId)) ?: anchors.bounds(EggAnchors.strip(fx.sectionId)))?.let(local)
-        val mouth = anchors.mouth(AnchorRegistry.basketKey(fx.sectionId))?.let { it - o }
-        val bar = anchors.bounds(AnchorRegistry.ADD_BAR)?.let(local)
-        if (row != null && mouth != null && bar != null) {
-            path.value = RollingMotion.path(row.center, mouth, bar.top, bar.width, d, fx.hop)
-        } else {
-            // Nothing to roll to (the row or its basket never laid out): the item is simply on its line.
-            EffectTimer(fx.id, 1500) { if (path.value == null) engine.effectDone(fx.id) }
-            return
+    val lineKey = remember(fx.id) { mutableStateOf(AnchorRegistry.rowKey(fx.itemId)) }
+    LaunchedEffect(fx.id) {
+        withContext(FixedMotionScale) {
+            var frames = 0
+            while (path.value == null) {
+                withFrameMillis { }
+                frames++
+                val stripKey = EggAnchors.strip(fx.sectionId)
+                val key = when {
+                    anchors.isLaidOut(AnchorRegistry.rowKey(fx.itemId)) -> AnchorRegistry.rowKey(fx.itemId)
+                    frames >= RollingMotion.ROW_WAIT_FRAMES && anchors.isLaidOut(stripKey) -> stripKey
+                    else -> null
+                }
+                val row = key?.let { anchors.bounds(it) }
+                val mouth = anchors.mouth(AnchorRegistry.basketKey(fx.sectionId))
+                val bar = anchors.bounds(AnchorRegistry.ADD_BAR)
+                if (key != null && row != null && mouth != null && bar != null) {
+                    val b = local(bar)
+                    lineKey.value = key
+                    path.value = RollingMotion.path(local(row).center, mouth - o, b.top, b.width, d, fx.hop)
+                } else if (frames >= RollingMotion.GIVE_UP_FRAMES) {
+                    engine.effectDone(fx.id)
+                    break
+                }
+            }
         }
     }
-    val p = path.value!!
+    val laid = path.value ?: return
     val t by rememberEffectTime(fx.id, RollingMotion.DURATION) { engine.effectDone(fx.id) }
+    // The list may still be scrolling its aisle into view: the row and the basket are followed where they are now (the
+    // launch point in the add bar stays put, so the turn still follows the sideways travel exactly, θ = Δx ⁄ r).
+    val liveRow = anchors.bounds(lineKey.value)?.let(local)?.center
+    val liveMouth = anchors.mouth(AnchorRegistry.basketKey(fx.sectionId))?.let { it - o }
+    val p = RollingMotion.follow(laid, liveRow, liveMouth)
     LaunchedEffect(fx.id) {
         withContext(FixedMotionScale) { holdOnFrameClock(RollingMotion.BUMP_AT) }
         feedback.cue(Cue.LAND)

@@ -105,7 +105,7 @@ class EngineRig(
         id = id,
         name = name,
         aisleId = aisle,
-        icon = icon ?: catalog.match(name)?.key ?: "generic",
+        icon = icon ?: catalog.match(name)?.key ?: "paper_bag",
         iconFit = if (icon != null || catalog.match(name) != null) IconFit.EXACT else IconFit.APPROXIMATE,
         addedAt = clock.now(),
         source = ItemSource.TYPED,

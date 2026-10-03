@@ -26,7 +26,8 @@ import kotlinx.coroutines.flow.emptyFlow
  * - [SurpriseEngine.onReceiptTap], [SurpriseEngine.onNapTap]: taps on the printed receipt and the nap cat (EggOverlays).
  * - [SurpriseEngine.onMotionEvent]: WP6's MotionEvents (the pet chomps at each landing); EggOverlays forwards them.
  * - [SurpriseEngine.onImeVisible]: the ants never march while the keyboard is open.
- * - [SurpriseEngine.onIconDrawing]: a live drawing started (egg 13's capsule is gold while it draws).
+ * - [SurpriseEngine.onIconDrawing], [SurpriseEngine.onIconDrawFailed]: a live drawing started or failed (egg 13's
+ *   capsule is gold while it draws). AppIconRepository calls them, with [onIconDrawn], through `LiveDrawJackpot`.
  * - [SurpriseEngine.refresh]: the minute tick (midnight, golden hour, seasons); ThemeVariantSource and EggOverlays call it.
  * - [SurpriseEngine.effectDone], [SurpriseEngine.setReducedMotion], [SurpriseEngine.onDuskSunset],
  *   [SurpriseEngine.onBasketHello]: the overlays report when an effect has played out on the frame clock (and egg 3's
@@ -94,6 +95,9 @@ interface SurpriseEngine {
 
     /** Egg 13: a live drawing started for an APPROXIMATE [item]; the gold roll happens now, so the capsule draws gold. */
     fun onIconDrawing(item: GroceryItem) = Unit
+
+    /** Egg 13: [item]'s live drawing failed or was dropped: its capsule stops drawing gold (no jackpot). */
+    fun onIconDrawFailed(item: GroceryItem) = Unit
 
     /** Re-reads the clock (the minute tick, on resume): midnight, golden hour, the season. */
     fun refresh() = Unit
@@ -248,9 +252,12 @@ data class JackpotFx(val id: Long, val itemId: String, val icon: IconRef, val re
 @Immutable
 data class LcdWord(val id: Long, val text: String, val holdMs: Long)
 
-/** Egg 18: the receipt printed for [listId] ([receipt]'s frozen values); [reduced]: it fades in printed. */
+/**
+ * Egg 18: the receipt printed for [listId]'s trip [tripId] ([receipt]'s frozen values); [reduced]: it fades in printed.
+ * It goes when that trip is filed (New trip, the list deleted) or the receipt is tucked in.
+ */
 @Immutable
-data class ReceiptFx(val id: Long, val listId: String, val listTitle: String, val receipt: Receipt, val reduced: Boolean)
+data class ReceiptFx(val id: Long, val listId: String, val listTitle: String, val receipt: Receipt, val reduced: Boolean, val tripId: String? = null)
 
 /** Egg 8: the cat leaving [sectionId]'s basket. */
 @Immutable

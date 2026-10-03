@@ -7,6 +7,7 @@ import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.GroceryList
 import earth.cora.picnic.core.model.GroupedList
+import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.ListGrouping
 import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.SectionIds
@@ -115,7 +116,8 @@ class AppSurpriseEngine(
     private var imeOpen = false
     private var antsSeen = false
     private var startTucked = false
-    private val goldRolls = HashMap<String, Boolean>()
+    /** Egg 13: each drawing's roll, from its start (the icon repository calls from its own threads). */
+    private val goldRolls = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     /** Trips whose cat was sent off this session (before the store has saved it, it must not come back). */
     private val napGone = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
@@ -135,6 +137,7 @@ class AppSurpriseEngine(
                     tuckAllOnStart(s)
                 }
                 if (before != null && before.currentListId != s.currentListId) onListSwitched(s.currentListId)
+                dropFiledReceipt(s)
                 derive()
             }
         }
@@ -390,7 +393,7 @@ class AppSurpriseEngine(
         scope.launch { safely { store.update { it.printReceipt(list.id, receipt) } } }
         _state.update {
             it.copy(
-                receipt = ReceiptFx(nextId(), list.id, list.title, receipt, reduced = reducedMotion),
+                receipt = ReceiptFx(nextId(), list.id, list.title, receipt, reduced = reducedMotion, tripId = list.trip?.id),
                 receiptTuckId = null,
                 lcdWord = LcdWord(nextId(), EggRules.PRINT, EggRules.PRINT_MS),
             )
@@ -417,7 +420,8 @@ class AppSurpriseEngine(
 
     override fun onIconDrawn(item: GroceryItem): Rarity {
         if (!eggsOn) return Rarity.NONE
-        val gold = goldRolls.remove(item.id) ?: rollGold()
+        // Only a drawing for an item with no catalog fit can come out gold (the lab's forced one aside).
+        val gold = goldRolls.remove(item.id) ?: (luckyFit(item) && rollGold())
         _state.update { it.copy(goldCapsules = it.goldCapsules - item.id) }
         if (!gold) return Rarity.NONE
         _state.update { it.copy(jackpot = JackpotFx(nextId(), item.id, item.iconRef(), reduced = reducedMotion)) }
@@ -437,11 +441,19 @@ class AppSurpriseEngine(
     // =============================================================================================
 
     override fun onIconDrawing(item: GroceryItem) {
-        if (!eggsOn || item.id in goldRolls) return
+        if (!eggsOn || goldRolls.containsKey(item.id) || !luckyFit(item)) return
         val gold = rollGold()
         goldRolls[item.id] = gold
         if (gold) _state.update { it.copy(goldCapsules = it.goldCapsules + item.id) }
     }
+
+    override fun onIconDrawFailed(item: GroceryItem) {
+        goldRolls.remove(item.id)
+        _state.update { it.copy(goldCapsules = it.goldCapsules - item.id) }
+    }
+
+    /** Egg 13 rolls for an APPROXIMATE item (no catalog fit), or for the one the Surprise lab forces. */
+    private fun luckyFit(item: GroceryItem): Boolean = item.iconFit == IconFit.APPROXIMATE || forceJackpotNext
 
     override fun onListShown(listId: String) {
         val wasShown = listShown && shownListId == listId
@@ -608,6 +620,16 @@ class AppSurpriseEngine(
         val fx = _state.value.receipt
         if (fx != null && fx.listId != listId) tuckPrinted(silent = true)
         if (_state.value.bonusStage) endBonusStage()
+    }
+
+    /**
+     * §13.2: a printed receipt still waiting for its tap goes with its trip when the trip is filed some other way (New
+     * trip, the list deleted: StateOps file it as saved). No poof, no toast.
+     */
+    private fun dropFiledReceipt(s: AppState) {
+        val fx = _state.value.receipt ?: return
+        if (s.list(fx.listId)?.trip?.id == fx.tripId) return
+        _state.update { it.copy(receipt = it.receipt?.takeIf { r -> r.id != fx.id }) }
     }
 
     /** On the next start after the process died: every printed receipt that was never tapped is tucked in (§13.2). */

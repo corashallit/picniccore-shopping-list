@@ -530,7 +530,8 @@ private fun PracticeTab(s: AisleSection, look: AisleLook, height: androidx.compo
     }
 }
 
-private fun minis(s: AisleSection, pixel: Boolean): List<BasketMini> =
+/** What [s]'s basket holds as the practice list draws it (holo pulls stay holo, R4). */
+internal fun minis(s: AisleSection, pixel: Boolean): List<BasketMini> =
     s.gotten.map { BasketMini(it.id, it.iconRef(), holo = it.rarity != Rarity.NONE, aisleIndex = s.position - 1, pixel = pixel) }
 
 @Composable

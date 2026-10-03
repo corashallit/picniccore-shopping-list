@@ -65,19 +65,37 @@ object RollingMotion {
     const val RADIUS_DP: Float = 22f
 
     // Beats (ms from the commit): the toss out of the add bar, the roll to the basket, the bump, the drop onto its line,
-    // the roll home, the settle. The basket is reached well inside the 3 s, and it is settled on its line by 3.2 s.
+    // the roll home, the settle. The basket is reached well inside the 3 s, and it is settled on its line by 3.2 s even
+    // when its row takes a few frames to be placed (ROW_WAIT_FRAMES).
     const val RISE_END: Long = 300
     const val ROLL_END: Long = 1500
     const val BUMP_END: Long = 1950
     const val DROP_END: Long = 2150
-    const val HOME_END: Long = 3000
-    const val SETTLE_END: Long = 3160
+    const val HOME_END: Long = 2920
+    const val SETTLE_END: Long = 3040
 
     /** The bump happens here (the basket wobbles hello, a rim heart, "pff"). */
     const val BUMP_AT: Long = ROLL_END
 
     /** The whole travel (the overlay is done; the row's own sticker shows again). */
     const val DURATION: Long = SETTLE_END
+
+    /** Frames to wait for the new row to be placed before rolling to the folded strip it joins instead (~200 ms). */
+    const val ROW_WAIT_FRAMES: Int = 12
+
+    /** Frames after which, with no row, strip, basket or add bar placed, it gives up (the item is simply on its line). */
+    const val GIVE_UP_FRAMES: Int = 90
+
+    /**
+     * [p] with its row and basket where they are now ([row], [mouth]; null = where they were): the list may scroll its
+     * aisle into view while the sticker travels. The launch point stays put, so the turn still follows the sideways
+     * travel exactly (θ = Δx ⁄ r).
+     */
+    fun follow(p: RollingPath, row: Offset?, mouth: Offset?): RollingPath = p.copy(
+        row = row ?: p.row,
+        laneY = mouth?.let { it.y - p.radius * 0.6f } ?: p.laneY,
+        basketX = mouth?.x ?: p.basketX,
+    )
 
     /**
      * The path for a sticker whose row sticker sits at [row] and whose basket mouth is at [mouth], launched from the add
@@ -468,8 +486,11 @@ object ReceiptMotion {
 object DuskMotion {
     const val SINK_MS: Long = 600
     const val RISE_MS: Long = 600
-    const val BURST_MS: Long = 450
-    const val DURATION: Long = SINK_MS + RISE_MS + BURST_MS
+
+    /** The six-star burst plays while the moon rises (from its second pose), so the whole change takes 1.2 s. */
+    const val BURST_AT: Long = SINK_MS + RISE_MS / 3
+    const val BURST_MS: Long = RISE_MS - RISE_MS / 3
+    const val DURATION: Long = SINK_MS + RISE_MS
     const val UNDO_MS: Long = 720
     const val FADE_MS: Long = 120
 
@@ -484,9 +505,9 @@ object DuskMotion {
         return floatArrayOf(24f, 12f, 4f)[(t * 3 / RISE_MS).toInt()]
     }
 
-    /** The 6-star sparkle burst around the moon, from 1.2 s: (reach 0–1, scale), or null. */
+    /** The 6-star sparkle burst around the rising moon, 800–1200 ms in 3 poses: (reach 0–1, scale), or null. */
     fun burst(elapsed: Long): Pair<Float, Float>? {
-        val t = elapsed - SINK_MS - RISE_MS
+        val t = elapsed - BURST_AT
         if (t < 0 || t >= BURST_MS) return null
         val i = (t * 3 / BURST_MS).toInt()
         return floatArrayOf(0.45f, 0.8f, 1f)[i] to floatArrayOf(0.8f, 1.1f, 0.7f)[i]
@@ -574,6 +595,20 @@ object EggBeats {
         if (elapsed < 0 || elapsed >= 360) return 0f
         return floatArrayOf(-6f, 5f, -2f, 0f)[(elapsed / 90).toInt()]
     }
+
+    /**
+     * The standing bee's loop over the current tray (§4.27): a figure of eight 26 × 10 dp flown once per 2.4 s in 12 fps
+     * poses, tilted toward where it flies. The offset is in dp from the top left of its 48 × 30 dp box.
+     */
+    fun beeLoop(elapsed: Long): EggPose {
+        val t = stepped(elapsed % BEE_LAP_MS, POSE_MS).toFloat() / BEE_LAP_MS
+        val a = (t * 2 * PI).toFloat()
+        val x = 13f + 13f * kotlin.math.sin(a)
+        val y = 4f + 4f * kotlin.math.sin(2 * a)
+        return EggPose(Offset(x, y), if (kotlin.math.cos(a) >= 0f) 8f else -8f)
+    }
+
+    const val BEE_LAP_MS: Long = 2400
 
     /** The pet's bob (2 steps per second) and its 2-frame chomp (520 ms). */
     fun petBob(elapsed: Long): Boolean = (elapsed / 500) % 2 == 1L
