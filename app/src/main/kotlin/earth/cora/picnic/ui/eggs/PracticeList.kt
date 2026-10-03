@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -61,6 +62,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -342,15 +344,19 @@ private fun PracticeBook(
                         Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                             for (s in r) {
                                 with(anchors) {
-                                    StampCircle(
-                                        look = lookOf(s, state),
-                                        number = s.position.takeIf { it > 0 },
-                                        stamped = s.complete,
-                                        now = s.id == grouped.nowSectionId,
-                                        phase = p.stamps[s.id],
-                                        clock = clock,
-                                        modifier = Modifier.anchor(AnchorRegistry.stampKey(s.id)),
-                                    )
+                                    Box(contentAlignment = Alignment.Center) {
+                                        StampCircle(
+                                            look = lookOf(s, state),
+                                            number = s.position.takeIf { it > 0 },
+                                            stamped = s.complete,
+                                            now = s.id == grouped.nowSectionId,
+                                            phase = p.stamps[s.id],
+                                            clock = clock,
+                                            modifier = Modifier.anchor(AnchorRegistry.stampKey(s.id)),
+                                        )
+                                        // "Everything else" has no number: its circle carries the capsule glyph (§5).
+                                        if (s.position <= 0 && !s.complete) CapsuleGlyph(if (s.id == grouped.nowSectionId) Families.strawberry.trace else c.ballpointSoft)
+                                    }
                                 }
                             }
                         }
@@ -369,12 +375,15 @@ private fun PracticeBook(
                     .background(book.releasePaper)
                     .padding(start = 6.dp, top = 3.dp),
             ) {
+                // Eight columns always fit: a narrower page (the lab's framed practice list) takes narrower cells.
+                BoxWithConstraints {
+                val cell = minOf(23.dp, maxWidth / 8)
                 Column {
                     for (r in 0 until 3) {
                         Row {
                             for (col in 0 until 8) {
                                 val slot = r * 8 + col
-                                Box(Modifier.size(23.dp, 22.dp), contentAlignment = Alignment.Center) {
+                                Box(Modifier.size(cell, 22.dp), contentAlignment = Alignment.Center) {
                                     if (slot >= items.size) return@Box
                                     with(anchors) {
                                         Canvas(Modifier.size(13.dp).anchor(AnchorRegistry.spotKey(slot))) {
@@ -404,6 +413,7 @@ private fun PracticeBook(
                         }
                     }
                 }
+                }
             }
             // The fore-edge.
             Box(Modifier.width(5.dp).fillMaxHeight().background(book.foreEdge))
@@ -420,6 +430,15 @@ private fun PracticeBook(
                 appearingId = eggs.receiptTuckId,
             )
         }
+    }
+}
+
+/** The capsule glyph in the "Everything else" stamp's circle, in [ink]. Decorative. */
+@Composable
+private fun CapsuleGlyph(ink: Color) {
+    val art = rememberVectorArt(DecorManifest.pictograms.getValue("capsule"))
+    Canvas(Modifier.size(14.dp).decorative()) {
+        drawArt(art, size, paint = { path, _ -> if (path.name == "ink") androidx.compose.ui.graphics.SolidColor(ink) else null })
     }
 }
 
@@ -496,11 +515,13 @@ private fun PracticeTab(s: AisleSection, look: AisleLook, height: androidx.compo
     val c = PicnicTheme.colors
     val shape = PicnicTheme.shapes.tab
     val name = if (s.kind == SectionKind.UNSORTED) stringResource(R.string.egg_practice_everything_else) else s.displayName
+    // Large text: the tab grows with its words and the number circle with its numeral (up to 1.6×).
+    val grow = LocalDensity.current.fontScale.coerceIn(1f, 1.6f)
     with(model.anchors) {
         Row(
             Modifier
                 .anchor(EggAnchors.tab(s.id))
-                .height(height)
+                .heightIn(min = height)
                 .hardShadow(shape, PicnicTheme.shadows)
                 .clip(shape)
                 .background(c.stickerWhite)
@@ -513,23 +534,40 @@ private fun PracticeTab(s: AisleSection, look: AisleLook, height: androidx.compo
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Box(
-                Modifier.size(24.dp).clip(CircleShape).background(Color.White).border(2.dp, look.family.trace, CircleShape),
+                Modifier.size(24.dp * grow).clip(CircleShape).background(Color.White).border(2.dp, look.family.trace, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 if (s.position > 0) {
                     Text(s.position.toString(), style = PicnicTheme.type.tabNumber.copy(color = look.family.trace), modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "num:" + s.id))
                 } else {
-                    DecorSticker("star", size = 14.dp, shadow = false)
+                    CapsuleGlyph(look.family.trace)
                 }
             }
-            Text(
+            TabName(
                 name,
-                style = PicnicTheme.type.aisleTab.copy(color = if (current) c.ballpoint else look.family.trace, fontSize = 19.sp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "tab:" + s.id),
+                PicnicTheme.type.aisleTab.copy(color = if (current) c.ballpoint else look.family.trace, fontSize = 19.sp),
+                Modifier.anchor(EggAnchors.TEXT_PREFIX + "tab:" + s.id),
             )
         }
+    }
+}
+
+/**
+ * A tab's name at large text: it wraps between words onto a second line rather than losing words, and steps its size
+ * down (never under 13 sp, §2.7) until its longest word fits on a line, so no word is ever broken mid-way.
+ */
+@Composable
+private fun TabName(name: String, style: androidx.compose.ui.text.TextStyle, modifier: Modifier = Modifier) {
+    val measurer = androidx.compose.ui.text.rememberTextMeasurer(cacheSize = 8)
+    BoxWithConstraints(modifier) {
+        val room = constraints.maxWidth
+        val longest = name.split(' ').filter { it.isNotEmpty() }
+        var size = style.fontSize.value
+        fun fits(sp: Float) = longest.all { word ->
+            measurer.measure(word, style.copy(fontSize = sp.sp), maxLines = 1, softWrap = false).size.width <= room
+        }
+        while (size > 13f && room != Constraints.Infinity && !fits(size)) size -= 0.5f
+        Text(name, style = style.copy(fontSize = size.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -546,27 +584,33 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
     val anchors = model.anchors
     val threshold = earth.cora.picnic.ui.theme.LocalTimeouts.current.holdThresholdMs
     val engine by rememberUpdatedState(model.engine)
+    val density = LocalDensity.current
+    // The strip's height (it grows with large text) and where its words end, for the ribbon (§4.10 folded strip).
+    var stripPx by remember { mutableStateOf(0) }
+    var tabPx by remember { mutableStateOf(0) }
+    var metaPx by remember { mutableStateOf(0) }
     with(anchors) {
-        Box(
+        BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
-                .height(70.dp)
+                .heightIn(min = 70.dp)
+                .onSizeChanged { stripPx = it.height }
                 .testTag(PracticeTags.strip(s.id))
                 .semantics(mergeDescendants = true) { role = Role.Button }
                 .clickable(remember { MutableInteractionSource() }, indication = null) { model.open(s.id) },
         ) {
             Box(
                 Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .align(Alignment.BottomStart)
+                    .matchParentSize()
+                    .padding(top = STRIP_TOP)
                     .anchor(EggAnchors.strip(s.id))
                     .hardShadow(shape, PicnicTheme.shadows)
                     .clip(shape)
                     .background(c.pad),
             )
-            Column(Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 6.dp)) {
-                Row {
+            // The words keep clear of the basket (its 80 dp box sits 44 dp in from the end) at any font scale.
+            Column(Modifier.padding(start = 6.dp, top = 11.dp, bottom = 6.dp, end = STRIP_TEXT_END)) {
+                Row(Modifier.onSizeChanged { tabPx = it.width }) {
                     PracticeTab(s, look, 32.dp, current = false, model = model)
                     SnackDoodle(eggs, s.id, Modifier.padding(start = 4.dp).offset(y = (-2).dp))
                 }
@@ -575,11 +619,24 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
                     Text(
                         if (toGet == 0) "${s.total} of ${s.total} in the basket" else "$toGet left of ${s.total}",
                         style = PicnicTheme.type.stripMeta.copy(color = c.inkSoft),
-                        modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + s.id),
+                        modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + s.id).onSizeChanged { metaPx = it.width },
                     )
                 }
             }
-            if (s.complete) StripRibbon(true, p.aisles[s.id], clock, 56.dp, Modifier.align(Alignment.BottomStart).offset(x = 196.dp))
+            if (s.complete && stripPx > 0) {
+                // The ribbon is placed from the words, never over them: 12 dp after the farther of the tab and the meta
+                // line, and at most 22 dp before the basket; with no such gap, the bow alone ties at the basket's left
+                // shoulder, tied behind it (§4.10).
+                val textEnd = with(density) { 6.dp + maxOf(tabPx, metaPx + 4.dp.roundToPx()).toDp() }
+                val basketLeft = maxWidth - 124.dp
+                val band = textEnd + 12.dp
+                val height = with(density) { stripPx.toDp() } - STRIP_TOP
+                if (band + 5.dp <= basketLeft - 22.dp) {
+                    StripRibbon(true, p.aisles[s.id], clock, height, Modifier.offset(x = band - 10.dp, y = STRIP_TOP))
+                } else {
+                    StripRibbon(true, p.aisles[s.id], clock, 30.dp, Modifier.offset(x = basketLeft + 6.dp, y = STRIP_TOP - 6.dp), bowOnly = true)
+                }
+            }
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
@@ -622,6 +679,12 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
     }
 }
 
+/** The folded strip's white body starts this far down its box (the tab pokes above it). */
+private val STRIP_TOP = 14.dp
+
+/** The strip's words end this far before its end: no further than the basket's art (its 80 dp box sits 44 dp in). */
+private val STRIP_TEXT_END = 120.dp
+
 @Composable
 private fun Chevron(modifier: Modifier, up: Boolean) {
     val c = PicnicTheme.colors
@@ -650,6 +713,7 @@ private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseSt
     val shape = RoundedCornerShape(12.dp)
     val ring = if (c.variant == earth.cora.picnic.ui.theme.ThemeVariant.Glow) c.glowStar else Families.lemon.mid
     with(model.anchors) {
+      Box(Modifier.fillMaxWidth()) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -662,8 +726,15 @@ private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseSt
                 .clip(RoundedCornerShape(9.dp))
                 .background(look.family.pastel),
         ) {
-            Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 5.dp)) {
-                Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 5.dp)) {
+                // The tab and the store-aisle chip keep clear of the basket (64 dp, 52 dp in); with large text the chip
+                // wraps under the tab rather than sliding behind the basket.
+                androidx.compose.foundation.layout.FlowRow(
+                    Modifier.align(Alignment.CenterStart).padding(top = 6.dp, bottom = 6.dp, end = 122.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
                     PracticeTab(s, look, 38.dp, current = true, model = model)
                     s.storeAisle?.let { StoreAisleChip(it, Modifier.anchor(EggAnchors.TEXT_PREFIX + "chip:" + s.id)) }
                     SnackDoodle(eggs, s.id)
@@ -686,8 +757,6 @@ private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseSt
                 Box(Modifier.align(Alignment.CenterEnd).clickable(remember { MutableInteractionSource() }, indication = null) { model.open("") }) {
                     Chevron(Modifier, up = true)
                 }
-                // The standing bee flies its loop over the current aisle's basket (§4.27).
-                if (current) TrayBee(Modifier.align(Alignment.TopEnd).offset(x = (-58).dp, y = (-12).dp))
             }
             Column(
                 Modifier
@@ -706,6 +775,10 @@ private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseSt
                 EndCapLadybug(eggs, Modifier.align(Alignment.BottomStart).offset(x = 30.dp, y = (-1).dp))
             }
         }
+        // The standing bee flies its loop over the current aisle's basket (§4.27), outside the tray's clip so its loop
+        // can rise over the tray's top edge as the mockup's does (header content edge: 9 dp in, 5 dp padding).
+        if (current) TrayBee(Modifier.align(Alignment.TopEnd).offset(x = (-72).dp, y = (-3).dp))
+      }
     }
 }
 

@@ -13,8 +13,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollToIndex
 import com.github.takahirom.roborazzi.captureRoboImage
 import androidx.compose.ui.unit.dp
@@ -76,11 +76,19 @@ class EggGoldensTest(private val variant: ThemeVariant) {
             }
         }
         compose.waitForIdle()
-        compose.onNodeWithContentDescription("Try LCD pet").performScrollTo().performClick()
-        repeat(40) {
+        // Its click action (no test scroll on the held clock: the lab brings the practice list into view itself).
+        compose.onNodeWithContentDescription("Try LCD pet").performSemanticsAction(SemanticsActions.OnClick)
+        fun frames(n: Int) = repeat(n) {
             androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
             compose.waitForIdle()
             compose.mainClock.advanceTimeByFrame()
+        }
+        frames(60)
+        if (!day) {
+            // Glow is the phone's dark mode, which the practice list follows as it does on the phone (the test's
+            // Robolectric configuration is light, so the sandbox is told directly, after its frame has started).
+            compose.runOnIdle { lab.sandbox!!.variants.onSystemDark(true) }
+            frames(6)
         }
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("$EGG_SHOTS/surprise_lab_practice_list_${if (day) "day" else "glow"}.png")
@@ -193,7 +201,8 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         val cake = r.list.items.single { it.name == "Birthday cake" }
         val row = r.anchors.bounds(AnchorRegistry.rowKey(cake.id))!!
         val check = r.anchors.bounds(AnchorRegistry.checkKey(cake.id))!!
-        r.capture("row_hanko_birthday_${r.v}", Rect(row.left - 12 * px, row.top - 10 * px, check.right + 10 * px, check.bottom + 10 * px))
+        // The row alone: from just above its sticker to just under its check spot (no neighbour's sticker or end cap).
+        r.capture("row_hanko_birthday_${r.v}", Rect(row.left - 12 * px, row.top - 3 * px, check.right + 10 * px, maxOf(row.bottom, check.bottom) + 4 * px))
     }
 
     /** Egg 10: stage start + 0.5 s; `list_bonus_stage_<v>` (item 247). */
