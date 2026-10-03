@@ -12,12 +12,12 @@ import kotlinx.coroutines.flow.asStateFlow
  * to LlmConfig.DEFAULT_BASE_URL (api.openai.com; the opt-in weather feed is the one exception); models are
  * fixed in core's ModelDefaults; reduced motion follows the system. The key itself is never part of this
  * class: only whether one is set and a masked hint.
- * PHASE 0: the A4 fields exist with their defaults so packages compile against them; WP8 adds the DataStore
- * keys (eggs, sounds, haptics, next_stop_card, celebration, weather, use_my_area, dusk_binder, surprise_lab)
- * and the setters.
+ * DataStore keys (DataStoreSettingsRepository): eggs, sounds, haptics, next_stop_card, celebration, weather,
+ * use_my_area, dusk_binder, surprise_lab; and seen_books (the album's shown trip books, §7.8). Consumers ask [allows] for a Surprises switch, so SurprisesGatingTest
+ * covers every gate in one table.
  */
 data class AppSettings(
-    /** "Draw new icons with AI" (icon cascade step 3; about 10 s and 1.5 US cents per icon). */
+    /** "Draw new icons with AI" (icon cascade step 3; about 10 s per icon, on her OpenAI key). */
     val drawIcons: Boolean = true,
     /** Read-only for UI: a key is stored and decryptable. */
     val hasToken: Boolean = false,
@@ -41,7 +41,45 @@ data class AppSettings(
     val duskBinder: Boolean = false,
     /** The Surprise lab is unlocked (7 taps on the version line, §6.9). */
     val surpriseLab: Boolean = false,
-)
+) {
+    /** Whether the Surprises switch [surprise] is on (§6.8). Each switch gates exactly its own feature (item 228). */
+    fun allows(surprise: Surprise): Boolean = when (surprise) {
+        Surprise.EasterEggs -> eggs
+        Surprise.Sounds -> sounds
+        Surprise.Haptics -> haptics
+        Surprise.NextStopCard -> nextStopCard
+        Surprise.Celebration -> celebration
+        Surprise.Weather -> weather
+        Surprise.UseMyArea -> useMyArea
+    }
+
+    /** These settings with the Surprises switch [surprise] set to [on]. */
+    fun with(surprise: Surprise, on: Boolean): AppSettings = when (surprise) {
+        Surprise.EasterEggs -> copy(eggs = on)
+        Surprise.Sounds -> copy(sounds = on)
+        Surprise.Haptics -> copy(haptics = on)
+        Surprise.NextStopCard -> copy(nextStopCard = on)
+        Surprise.Celebration -> copy(celebration = on)
+        Surprise.Weather -> copy(weather = on)
+        Surprise.UseMyArea -> copy(useMyArea = on)
+    }
+}
+
+/**
+ * The switches of the Settings "Surprises" card (§6.8, §0.4), in the card's order, with their DataStore [key] and
+ * default. Easter eggs gate every egg (§2.5); Sounds and Haptics gate Feedback (§14.1); the Next stop card and the
+ * Celebration gate their scenes (§10, §11); Weather surprises gate the Environment Canada feed (eggs 11 and 16,
+ * §12.4); Use my area gates the approximate location behind sunset and the forecast (PlaceSource, §0.4 Q6).
+ */
+enum class Surprise(val key: String, val default: Boolean) {
+    EasterEggs("eggs", true),
+    Sounds("sounds", false),
+    Haptics("haptics", true),
+    NextStopCard("next_stop_card", true),
+    Celebration("celebration", true),
+    Weather("weather", false),
+    UseMyArea("use_my_area", false),
+}
 
 interface SettingsRepository {
     /** Emits the persisted settings (defaults for anything never changed), then every change. */
@@ -50,6 +88,24 @@ interface SettingsRepository {
     suspend fun current(): AppSettings
 
     suspend fun setDrawIcons(enabled: Boolean)
+
+    /** Turns one Surprises switch on or off (§6.8). */
+    suspend fun setSurprise(surprise: Surprise, on: Boolean)
+
+    /** Egg 1: the Dusk binder is saved (true) or the moon was tapped (false). Kept while eggs are off (§2.5). */
+    suspend fun setDuskBinder(on: Boolean)
+
+    /** The Surprise lab is unlocked (7 taps on the version line, §6.9); persisted. */
+    suspend fun setSurpriseLab(unlocked: Boolean)
+
+    /**
+     * Filed trip books (TripBook.id) whose album row has played its magic appear (§7.8: a newly filed book's row blooms
+     * in once, the next time the album opens). Device-local, like the rest of these settings.
+     */
+    val seenBooks: Flow<Set<String>>
+
+    /** Marks the filed trip books [ids] as shown in the album. */
+    suspend fun markBooksSeen(ids: Collection<String>)
 
     /** Stores the OpenAI key encrypted (Android Keystore AES-GCM); null or blank clears it. Never logs it. */
     suspend fun setToken(token: String?)
@@ -73,6 +129,25 @@ class InMemorySettingsRepository(
 
     override suspend fun setDrawIcons(enabled: Boolean) {
         state.value = state.value.copy(drawIcons = enabled)
+    }
+
+    override suspend fun setSurprise(surprise: Surprise, on: Boolean) {
+        state.value = state.value.with(surprise, on)
+    }
+
+    override suspend fun setDuskBinder(on: Boolean) {
+        state.value = state.value.copy(duskBinder = on)
+    }
+
+    override suspend fun setSurpriseLab(unlocked: Boolean) {
+        state.value = state.value.copy(surpriseLab = unlocked)
+    }
+
+    private val seen = MutableStateFlow<Set<String>>(emptySet())
+    override val seenBooks: Flow<Set<String>> = seen.asStateFlow()
+
+    override suspend fun markBooksSeen(ids: Collection<String>) {
+        seen.value = seen.value + ids
     }
 
     override suspend fun setToken(token: String?) {

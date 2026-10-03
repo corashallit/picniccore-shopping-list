@@ -1,6 +1,12 @@
 package earth.cora.picnic.ui.settings
 
 import earth.cora.picnic.core.llm.LlmError
+import earth.cora.picnic.platform.AreaLookup
+import earth.cora.picnic.platform.AreaPlaceSource
+import earth.cora.picnic.platform.CoarseLocator
+import earth.cora.picnic.platform.EcSites
+import earth.cora.picnic.platform.InMemoryPlaceCache
+import earth.cora.picnic.platform.LatLon
 import earth.cora.picnic.settings.AppSettings
 import earth.cora.picnic.settings.InMemorySettingsRepository
 import earth.cora.picnic.settings.SettingsRepository
@@ -37,6 +43,43 @@ class SettingsViewModelTest {
         val vm = SettingsViewModel(settings, assistant, "0.1.0-test")
         advanceUntilIdle()
         return Fixture(vm, settings, assistant)
+    }
+
+    /**
+     * "Use my area" with no fix (location services off, airplane mode, no last-known fix): Finding while it looks, then
+     * NoFix, never a city; with a fix the forecast city's name.
+     */
+    @Test
+    fun areaLookupWithoutAFix() = runTest {
+        val settings = InMemorySettingsRepository(AppSettings(useMyArea = true))
+        val answer = CompletableDeferred<LatLon?>()
+        val source = AreaPlaceSource(
+            useMyArea = { settings.current().useMyArea },
+            locator = object : CoarseLocator {
+                override fun hasPermission() = true
+                override suspend fun locate(): LatLon? = answer.await()
+            },
+            cache = InMemoryPlaceCache(),
+            clock = { 0L },
+        )
+        val vm = SettingsViewModel(settings, FakeAssistant(), "0.1.0-test", places = source)
+        runCurrent()
+        assertEquals(AreaLookup.Finding, vm.state.value.area)
+        answer.complete(null)
+        advanceUntilIdle()
+        assertEquals(AreaLookup.NoFix, vm.state.value.area)
+        assertNull(vm.state.value.areaCity)
+
+        // Asked again with a fix (Settings resumed): the city.
+        val located = AreaPlaceSource({ true }, object : CoarseLocator {
+            override fun hasPermission() = true
+            override suspend fun locate(): LatLon? = LatLon(45.42, -75.69)
+        }, InMemoryPlaceCache(), { 0L })
+        val vm2 = SettingsViewModel(settings, FakeAssistant(), "0.1.0-test", places = located)
+        advanceUntilIdle()
+        val found = vm2.state.value.area as AreaLookup.Found
+        assertEquals(EcSites.nearest(LatLon(45.4, -75.7)).name, found.city)
+        assertEquals(found.city, vm2.state.value.areaCity)
     }
 
     @Test

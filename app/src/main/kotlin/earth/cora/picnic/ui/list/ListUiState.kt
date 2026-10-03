@@ -34,7 +34,11 @@ data class ListUiState(
     val checked: Int get() = total - remaining
 }
 
-data class ListSummary(val id: String, val title: String, val remaining: Int, val current: Boolean)
+/**
+ * One list in the switcher (§6.4). [bookStickers]: stickers in its open trip's book (its checked items while it has a
+ * trip, else 0); the delete confirm sheet says "Its sticker book goes into your album." when it is above 0 (checklist 144).
+ */
+data class ListSummary(val id: String, val title: String, val remaining: Int, val current: Boolean, val bookStickers: Int = 0)
 
 /**
  * PHASE-0 BRIDGE (docs/DESIGN_STICKER.md §19.1, §21.3): core's grouping no longer has a CHECKED section
@@ -215,7 +219,13 @@ internal fun buildListUiState(
         listId = list.id,
         title = list.title,
         lists = state.lists.map { l ->
-            ListSummary(id = l.id, title = l.title, remaining = l.items.count { !it.checked }, current = l.id == list.id)
+            ListSummary(
+                id = l.id,
+                title = l.title,
+                remaining = l.items.count { !it.checked },
+                current = l.id == list.id,
+                bookStickers = if (l.trip == null) 0 else l.items.count { it.checked },
+            )
         },
         sections = sections + listOfNotNull(checkedSection),
         remaining = grouped.total - grouped.checked,
