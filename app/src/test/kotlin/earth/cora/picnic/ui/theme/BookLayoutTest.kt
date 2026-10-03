@@ -98,6 +98,8 @@ class BookLayoutTest {
         val roomy = CollapsedDots.plan(8, 2, 200f, pill)
         assertEquals(CollapsedDots(12f, 3f, 0, 8, 0, 0), roomy)
         assertEquals(117f, roomy.width(pill))
+        // 8 stops in 112 dp (a date tag with its season mark): the 12 dp dots on 2 dp gaps.
+        assertEquals(CollapsedDots(12f, 2f, 0, 8, 0, 0), CollapsedDots.plan(8, 2, 112f, pill))
         // 8 stops in 100 dp (large text): the 10 dp dots, all of them.
         assertEquals(CollapsedDots(10f, 2f, 0, 8, 0, 0), CollapsedDots.plan(8, 2, 100f, pill))
         // 14 stops always take the small dots; 166 dp holds all 14.
@@ -125,5 +127,14 @@ class BookLayoutTest {
         assertEquals(114f, middle.width(pill))
         val end = CollapsedDots.plan(14, 13, 120f, pill)
         assertEquals("a pill, then the last stops", CollapsedDots(10f, 2f, 6, 8, 6, 0), end)
+    }
+
+    /** §7.4: above font scale 1.3 the page LCD's pitch follows the font scale, up to 1.6×; at 1.3 and below it stays 1.2 dp. */
+    @Test
+    fun pageLcdPitchFollowsLargeText() {
+        assertEquals(1f, pageLcdScale(1f))
+        assertEquals(1f, pageLcdScale(1.3f))
+        assertEquals(1.5f, pageLcdScale(1.5f))
+        assertEquals(1.6f, pageLcdScale(2f))
     }
 }

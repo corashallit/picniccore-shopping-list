@@ -53,6 +53,10 @@ class ListBookGoldensTest {
     @Test
     fun bookPage2() = book("book_page2", ListFixture.ui(ListFixture.stops(8, 4, 25)))
 
+    /** Page 2 at font scale 2.0 (§7.4): the pages keep their size, the page LCD's pitch grows 1.6×. */
+    @Test
+    fun bookPage2Fs200() = book("book_page2_fs200", ListFixture.ui(ListFixture.stops(8, 4, 25)), fontScale = 2f)
+
     @Test
     fun bookFull() = book("book_full", ListFixture.ui(ListFixture.allBut(emptyList()), now = ListFixture.TRIP_START + 42 * ListFixture.MIN))
 

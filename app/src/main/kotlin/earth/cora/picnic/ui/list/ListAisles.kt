@@ -586,5 +586,8 @@ private fun basketGap(section: SectionUi, least: Dp): Dp = maxOf(least, badgeOve
 /** The chevron's round face starts this far inside its 48 dp target (ChevronFace: a 30 dp face in a 34 dp canvas). */
 private val CHEVRON_FACE_INSET = 8.dp
 
-/** Air between the badge's white face and the chevron's face (its 1.6 dp hard shadow sits in it). */
-private val BADGE_CLEARANCE = 4.dp
+/**
+ * Air between the badge's white face and the chevron's face: the strip's spacing at font scale 1.0 (a 22 dp badge, 6 dp
+ * between the basket's box and the chevron's target), kept as the badge grows; its 1.6 dp hard shadow sits in it.
+ */
+private val BADGE_CLEARANCE = 2.dp

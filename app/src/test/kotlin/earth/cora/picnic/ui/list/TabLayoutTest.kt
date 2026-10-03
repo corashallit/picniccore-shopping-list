@@ -153,9 +153,11 @@ class TabLayoutTest {
         if (grows) assertTrue("fs $fontScale: \"10\" is a pill wider than the 22 dp circle (${badge.width / dp} dp)", badge.width > 23 * dp)
         val chevron = compose.boundsOf(ListTags.chevron(id))
         val shadow = 1.6f * dp
+        // The air between the badge's shadow and the chevron's face: at least what the 22 dp badge has on a strip at
+        // font scale 1.0 (2 dp from face to face, the 1.6 dp shadow in it), however wide the badge grows.
         fun air(badgeRight: Float, chevronLeft: Float) = (chevronLeft + CHEVRON_FACE_INSET * dp - badgeRight - shadow) / dp
         val trayAir = air(badge.right, chevron.left)
-        assertTrue("fs $fontScale, tray: the badge and its shadow end before the chevron's face ($trayAir dp of air)", trayAir >= 2f)
+        assertTrue("fs $fontScale, tray: the badge and its shadow end before the chevron's face ($trayAir dp of air)", trayAir >= 0.3f)
 
         // The folded strip (another aisle open): the same badge, on the strip's basket, before the strip's chevron.
         compose.runOnIdle { rig.vm.openSection("produce") }
@@ -166,7 +168,7 @@ class TabLayoutTest {
         val basket = probe["basket:$id"]
         val stripBadgeRight = basket.right - 10 * dp + badge.width
         val stripAir = air(stripBadgeRight, strip.right - 48 * dp)
-        assertTrue("fs $fontScale, strip: the badge and its shadow end before the chevron's face ($stripAir dp of air)", stripAir >= 2f)
+        assertTrue("fs $fontScale, strip: the badge and its shadow end before the chevron's face ($stripAir dp of air)", stripAir >= 0.3f)
     }
 
     private companion object {

@@ -107,9 +107,10 @@ data class BookLayout(
 
 /**
  * The collapsed strip's stamps (§7.4), laid out in the room the newest twins and their "+n" pearl leave them: every stop
- * as a dot when they fit, 12 dp on 3 dp gaps up to 8 stops, else 10 dp on 2 dp gaps; when even those do not fit, a run of
- * [count] dots from [first] that always holds the anchor (the "now" stop), with a "+n" pill for the [hiddenBefore] stops
- * before it and one for the [hiddenAfter] after it, so no stop goes missing without a sign. All sizes in dp.
+ * as a dot when they fit, 12 dp on 3 dp gaps up to 8 stops (2 dp gaps when that is what fits), else 10 dp on 2 dp gaps;
+ * when even those do not fit, a run of [count] dots from [first] that always holds the anchor (the "now" stop), with a
+ * "+n" pill for the [hiddenBefore] stops before it and one for the [hiddenAfter] after it, so no stop goes missing
+ * without a sign. All sizes in dp.
  */
 @Immutable
 data class CollapsedDots(
@@ -142,6 +143,8 @@ data class CollapsedDots(
             if (stops <= 0) return CollapsedDots(DOT, DOT_GAP, 0, 0, 0, 0)
             fun row(n: Int, size: Float, gap: Float) = n * size + (n - 1) * gap
             if (stops <= 8 && row(stops, DOT, DOT_GAP) <= room) return CollapsedDots(DOT, DOT_GAP, 0, stops, 0, 0)
+            // Up to 8 stops the 12 dp dots stay when closing their gaps to 2 dp is enough (a grown date tag).
+            if (stops <= 8 && row(stops, DOT, SMALL_GAP) <= room) return CollapsedDots(DOT, SMALL_GAP, 0, stops, 0, 0)
             if (row(stops, SMALL_DOT, SMALL_GAP) <= room) return CollapsedDots(SMALL_DOT, SMALL_GAP, 0, stops, 0, 0)
             val step = SMALL_DOT + SMALL_GAP
             val a = anchor.coerceIn(0, stops - 1)
