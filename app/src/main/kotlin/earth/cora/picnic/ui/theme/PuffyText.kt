@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
@@ -78,10 +79,12 @@ fun PuffyText(
     maxLines: Int = 1,
     textAlign: TextAlign = TextAlign.Start,
     heading: Boolean = false,
+    /** Paints the fill with this brush instead of [fill] (egg 7's holo title, read at draw time). */
+    fillBrush: (() -> Brush)? = null,
 ) {
     PuffyText(
         AnnotatedString(text), style.copy(color = fill), stroke, modifier, strokeColor, shadow, shadowColor,
-        minFontSize, maxLines, textAlign, heading,
+        minFontSize, maxLines, textAlign, heading, fillBrush,
     )
 }
 
@@ -99,6 +102,8 @@ fun PuffyText(
     maxLines: Int = 1,
     textAlign: TextAlign = TextAlign.Start,
     heading: Boolean = false,
+    /** Paints the fill with this brush instead of the style's colours (egg 7's holo title, read at draw time). */
+    fillBrush: (() -> Brush)? = null,
 ) {
     // No layout cache: TextMeasurer's cache ignores colour, and each pass is laid out in its own colour.
     val measurer = rememberTextMeasurer(cacheSize = 0)
@@ -136,7 +141,8 @@ fun PuffyText(
                             }
                         }
                         drawText(fit.outline, strokeColor, drawStyle = strokeStyle)
-                        drawText(fit.fill, drawStyle = Fill)
+                        val brush = fillBrush?.invoke()
+                        if (brush != null) drawText(fit.fill, brush, drawStyle = Fill) else drawText(fit.fill, drawStyle = Fill)
                     }
                 },
         )

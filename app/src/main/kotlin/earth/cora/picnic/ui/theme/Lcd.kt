@@ -282,7 +282,8 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
     val moon = variant == ThemeVariant.Dusk || variant == ThemeVariant.Glow
     val shown = when (state.mode) {
         LcdMode.Count -> "${state.count}/${state.total}★"
-        LcdMode.Pet -> "${state.count}/${state.total}"
+        // The pet's own words (egg 15's "FED") show beside it; otherwise the count.
+        LcdMode.Pet -> state.text.ifEmpty { "${state.count}/${state.total}" }
         else -> state.text
     }
     val label = pluralStringResource(R.plurals.theme_lcd_count, state.total, state.count, state.total)

@@ -40,6 +40,8 @@ class ThemeVariantSource(
     private val places: PlaceSource = PlaceSource.Toronto,
     private val zone: ZoneId = ZoneId.of("America/Toronto"),
     private val duskShown: Flow<Boolean>? = null,
+    /** Called on every minute tick (AppContainer: the SurpriseEngine re-reads the clock: midnight, golden hour, seasons). */
+    private val onTick: (() -> Unit)? = null,
 ) {
     private val resolved = MutableStateFlow(ThemeVariant.Day)
 
@@ -57,22 +59,34 @@ class ThemeVariantSource(
         resolve()
     }
 
-    /** Collects the settings (and [duskShown]) and re-resolves once a minute, on the minute, in [scope]. Idempotent. */
-    fun start(scope: CoroutineScope) {
+    /**
+     * Collects the settings (and [duskShown]) and, with [everyMinute], re-resolves once a minute, on the minute, in
+     * [scope]. Idempotent. (The Surprise lab's sandbox moves its fake clock by hand and calls [tick] instead.)
+     */
+    fun start(scope: CoroutineScope, everyMinute: Boolean = true) {
         if (job != null) return
         job = scope.launch {
             launch { settings.settings.collect { current = it; resolve() } }
             duskShown?.let { flow -> launch { flow.collect { dusk = it; resolve() } } }
-            while (true) {
-                refreshSunset()
-                resolve()
+            refreshSunset()
+            resolve()
+            while (everyMinute) {
                 val now = clock()
                 delay(MINUTE - Math.floorMod(now, MINUTE) + 1)
+                refreshSunset()
+                resolve()
+                onTick?.invoke()
             }
         }
     }
 
-    /** Re-reads the clock now (a resume, a test). */
+    /** Re-reads the clock now (a resume, a moved test clock): the sunset of a new day too. */
+    suspend fun tickNow() {
+        refreshSunset()
+        resolve()
+    }
+
+    /** Re-reads the clock now with the sunset already known (a resume). */
     fun tick() = resolve()
 
     /** The variant the rules give right now. */

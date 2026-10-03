@@ -38,8 +38,12 @@ import earth.cora.picnic.platform.VoiceRecorder
 import earth.cora.picnic.settings.DataStoreSettingsRepository
 import earth.cora.picnic.settings.KeystoreTokenStore
 import earth.cora.picnic.settings.SettingsRepository
-import earth.cora.picnic.ui.eggs.NoOpSurpriseEngine
+import earth.cora.picnic.core.weather.EnvironmentCanadaWeather
+import earth.cora.picnic.platform.DataStoreWeatherCache
+import earth.cora.picnic.platform.WeatherService
+import earth.cora.picnic.ui.eggs.AppSurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseEngine
+import earth.cora.picnic.ui.eggs.SurpriseLabViewModel
 import earth.cora.picnic.ui.eggs.ThemeVariantSource
 import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.core.model.itemsNeedingAisle
@@ -148,11 +152,41 @@ class AppContainer(private val app: Application) {
      */
     val places: PlaceSource by lazy { AreaPlaceSource.create(app, settings, clock) }
 
-    /** Every Easter-egg trigger (§12). Phase 0: no eggs until WP9's engine lands. */
-    val surprises: SurpriseEngine get() = NoOpSurpriseEngine
+    /**
+     * Today's weather for eggs 13 and 15 (§12.4, §0.4): the Environment Canada forecast city nearest [places]' point,
+     * fetched at most every 3 h while Surprises → Weather is on, cached in DataStore.
+     */
+    val weather: WeatherService by lazy {
+        WeatherService(EnvironmentCanadaWeather(place = { places.place() }), DataStoreWeatherCache.create(app), clock)
+    }
 
-    /** Day / Glow / Dusk / Golden (§2.5); MainActivity feeds it the system dark mode (WP4). */
-    val themeVariants: ThemeVariantSource by lazy { ThemeVariantSource(settings, clock, SunClock, places) }
+    /** Every Easter-egg trigger (§12, WP9). */
+    val surprises: SurpriseEngine by lazy {
+        AppSurpriseEngine(
+            store = store,
+            album = album,
+            settings = settings,
+            catalog = catalog,
+            scope = appScope,
+            clock = clock,
+            feedback = feedback,
+            timeouts = timeouts,
+            weather = weather,
+            places = places,
+        )
+    }
+
+    /** Day / Glow / Dusk / Golden (§2.5); MainActivity feeds it the system dark mode (WP4). Ticks once a minute. */
+    val themeVariants: ThemeVariantSource by lazy {
+        ThemeVariantSource(
+            settings, clock, SunClock, places,
+            duskShown = surprises.state.map { it.dusk },
+            onTick = { surprises.refresh() },
+        ).also { it.start(appScope) }
+    }
+
+    /** The Surprise lab's practice list (§6.9): a sandbox per visit, with the phone's sounds, haptics and timeouts. */
+    val surpriseLab: () -> SurpriseLabViewModel get() = SurpriseLabViewModel.factory(feedback, announcer, timeouts)
 
     /**
      * Sticker art for ItemIcon (§3.3, §19.2), provided to the theme as LocalStickerArt: library vectors from
