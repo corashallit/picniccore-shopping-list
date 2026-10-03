@@ -2,6 +2,7 @@ package earth.cora.picnic.ui.add
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,9 +15,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -34,7 +38,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import earth.cora.picnic.R
@@ -54,7 +61,6 @@ import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.PostageCard
-import earth.cora.picnic.ui.theme.SourceChip
 import earth.cora.picnic.ui.theme.StoreAisleChip
 import earth.cora.picnic.ui.theme.patternFill
 
@@ -123,7 +129,7 @@ fun RecipeCard(
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         review.sources.take(MAX_SOURCES).forEach { source ->
-                            SourceChip(
+                            SourceLink(
                                 text = source.title?.takeIf { it.length <= MAX_SOURCE_TITLE } ?: hostOf(source.url),
                                 onClick = { runCatching { uriHandler.openUri(source.url) } },
                             )
@@ -153,7 +159,7 @@ private fun MetaRow(review: AddReview, rows: List<ReviewRow>) {
         modifier = Modifier.padding(top = 4.dp),
     ) {
         if (review.webSearch) {
-            ChipFace(fill = Families.ramune.pastel, height = 30.dp) {
+            ChipFace(fill = Families.ramune.pastel, height = chipHeight(30.dp)) {
                 Glyph(PicnicGlyph.Web, null, tint = c.ballpoint, size = 16.dp)
                 Text(stringResource(R.string.add_card_web), style = t.label.copy(color = c.ballpoint), maxLines = 1)
             }
@@ -182,26 +188,40 @@ internal fun AisleTray(rows: List<ReviewRow>, clock: RevealClock?, onToggleKeep:
             .background(look.family.pastel)
             .border(PicnicTheme.dimens.border, c.stickerWhite, shape),
     ) {
-        Row(
+        val kept = stringResource(R.string.add_tray_kept, rows.count { it.keep }, rows.size)
+        // From font scale 1.3 the store chip and the count move under the name, so the name never breaks inside a word.
+        val stacked = LocalDensity.current.fontScale >= LARGE_TEXT
+        Column(
             Modifier.fillMaxWidth().padding(start = 10.dp, end = 12.dp, top = 8.dp, bottom = 6.dp).semantics(mergeDescendants = true) { heading() },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            NumberCircle(if (first.aisleIndex < 0) null else first.aisleIndex + 1, look)
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    name,
-                    style = t.aisleTab.copy(color = look.family.trace),
-                    maxLines = 2,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                first.storeAisle?.let { StoreAisleChip(it) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FixedSizeBadge { NumberCircle(if (first.aisleIndex < 0) null else first.aisleIndex + 1, look) }
+                if (stacked) {
+                    Text(name, style = t.aisleTab.copy(color = look.family.trace), modifier = Modifier.weight(1f))
+                } else {
+                    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            name,
+                            style = t.aisleTab.copy(color = look.family.trace),
+                            maxLines = 2,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        first.storeAisle?.let { FixedSizeBadge { StoreAisleChip(it) } }
+                    }
+                    Text(kept, style = t.label.copy(color = c.ballpoint), maxLines = 1)
+                }
             }
-            Text(
-                stringResource(R.string.add_tray_kept, rows.count { it.keep }, rows.size),
-                style = t.label.copy(color = c.ballpoint),
-                maxLines = 1,
-            )
+            if (stacked) {
+                Row(
+                    Modifier.padding(start = 32.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    first.storeAisle?.let { FixedSizeBadge { StoreAisleChip(it) } }
+                    Text(kept, style = t.label.copy(color = c.ballpoint))
+                }
+            }
         }
         Column(
             Modifier
@@ -246,24 +266,23 @@ internal fun ReviewRowView(
     val faded = !row.keep
     val detail = rowDetail(row)
     val label = spokenItemLabel(row.item.name, detail)
-    Row(
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = PicnicTheme.dimens.rowCompact)
-            .drawBehind { if (ruleAbove) drawRect(c.rule, Offset.Zero, androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }
-            .then(
-                if (row.canKeep) {
-                    Modifier.toggleable(value = row.keep, role = Role.Switch, onValueChange = { onToggleKeep(row.key) })
-                        .semantics { contentDescription = label }
-                } else {
-                    Modifier.clearAndSetSemantics { contentDescription = label }
-                },
-            )
-            .graphicsLayer { alpha = if (shown) 1f else 0f }
-            .padding(start = 8.dp, end = 2.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+    // From font scale 1.5 the words get the row's whole width under the sticker and the switch (no word breaks).
+    val stacked = LocalDensity.current.fontScale >= VERY_LARGE_TEXT
+    val rowModifier = modifier
+        .fillMaxWidth()
+        .heightIn(min = PicnicTheme.dimens.rowCompact)
+        .drawBehind { if (ruleAbove) drawRect(c.rule, Offset.Zero, androidx.compose.ui.geometry.Size(size.width, 1.dp.toPx())) }
+        .then(
+            if (row.canKeep) {
+                Modifier.toggleable(value = row.keep, role = Role.Switch, onValueChange = { onToggleKeep(row.key) })
+                    .semantics { contentDescription = label }
+            } else {
+                Modifier.clearAndSetSemantics { contentDescription = label }
+            },
+        )
+        .graphicsLayer { alpha = if (shown) 1f else 0f }
+        .padding(start = 8.dp, end = 2.dp, top = 4.dp, bottom = 4.dp)
+    val sticker = @Composable {
         ItemIcon(
             row.icon,
             contentDescription = null,
@@ -273,10 +292,14 @@ internal fun ReviewRowView(
                 .graphicsLayer { scaleX = pop; scaleY = pop }
                 .then(if (faded) Modifier.skippedSticker() else Modifier),
         )
-        Column(Modifier.weight(1f).clearAndSetSemantics { }) {
+    }
+    val words = @Composable { m: Modifier ->
+        Column(m.clearAndSetSemantics { }) {
             Text(row.item.name, style = t.itemNameCompact.copy(color = if (faded) c.ballpointSoft else c.ballpoint))
-            if (detail != null) Text(detail, style = t.itemDetailCompact.copy(color = c.ballpointSoft))
+            if (detail != null) Text(AddRules.keepTogether(detail), style = t.itemDetailCompact.copy(color = c.ballpointSoft))
         }
+    }
+    val switch = @Composable {
         if (row.canKeep) {
             // The row is the switch; the spot is its picture (no second TalkBack node).
             KeepSwitch(row.keep, onCheckedChange = { onToggleKeep(row.key) }, modifier = Modifier.clearAndSetSemantics { })
@@ -284,6 +307,46 @@ internal fun ReviewRowView(
             Spacer(Modifier.size(48.dp))
         }
     }
+    if (stacked) {
+        Column(rowModifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                sticker()
+                Spacer(Modifier.weight(1f))
+                switch()
+            }
+            words(Modifier.fillMaxWidth().padding(end = 6.dp))
+        }
+    } else {
+        Row(rowModifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            sticker()
+            words(Modifier.weight(1f))
+            switch()
+        }
+    }
+}
+
+/** From this font scale the tray headers stack (§15: nothing clips, names never break inside a word). */
+internal const val LARGE_TEXT: Float = 1.3f
+
+/** From this font scale the review rows stack their words under the sticker and the switch. */
+internal const val VERY_LARGE_TEXT: Float = 1.5f
+
+/**
+ * The number circle and the store chip are fixed-size badges (24 dp, 22 dp) whose numerals would clip at large text;
+ * they keep their drawn size (TalkBack still hears the aisle in the header's words).
+ */
+@Composable
+internal fun FixedSizeBadge(content: @Composable () -> Unit) {
+    val d = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1f)), content = content)
+}
+
+/** A chip's height that grows with the text (never below [min]): the label's line plus its padding. */
+@Composable
+internal fun chipHeight(min: Dp): Dp {
+    val lineHeight = PicnicTheme.type.label.lineHeight
+    val grown = with(LocalDensity.current) { lineHeight.toDp() } + 12.dp
+    return max(min, grown)
 }
 
 /** A row's detail line (§4.17): the reason for a skipped row, else the pack size · recipe amount · note. */
@@ -296,6 +359,26 @@ internal fun rowDetail(row: ReviewRow): String? = when (row.skipReason) {
     }
     SkipReason.OPTIONAL -> stringResource(R.string.add_reason_optional)
     SkipReason.NONE -> AddRules.detailLine(row.item)
+}
+
+/**
+ * A source chip (§4.17): the theme's SourceChip look (ramune pastel, link glyph, label type) on a chip that grows with
+ * the text, so a title never clips at large text.
+ */
+@Composable
+private fun SourceLink(text: String, onClick: () -> Unit) {
+    val c = PicnicTheme.colors
+    Box(
+        Modifier
+            .minimumInteractiveComponentSize()
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        ChipFace(fill = Families.ramune.pastel, height = chipHeight(32.dp)) {
+            Glyph(PicnicGlyph.Link, null, tint = c.ballpoint, size = 15.dp)
+            Text(text, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
+        }
+    }
 }
 
 /** "allrecipes.com" for a source chip. */

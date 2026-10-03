@@ -270,7 +270,8 @@ private fun AddTab(
                 label,
                 style = style,
                 maxLines = 1,
-                autoSize = TextAutoSize.StepBased(minFontSize = 13.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+                // Large text shrinks the label before it would clip (13 sp at font scale 1; the floor scales too).
+                autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
             )
         }
         if (recording) {
@@ -295,7 +296,7 @@ private fun AddTab(
 @Composable
 private fun WriteTab(state: AddUiState, actions: AddActions, reveals: Reveals, feedback: Feedback?) {
     val review = state.review?.takeIf { it.source == ItemSource.AI_TEXT }
-    val waiting = state.phase is AddPhase.Thinking && (state.phase as AddPhase.Thinking).kind == ItemSource.AI_TEXT
+    val waiting = (state.phase as? AddPhase.Thinking)?.kind == ItemSource.AI_TEXT
     val failed = (state.phase as? AddPhase.Failed)?.takeIf { review == null }
     if (review != null || waiting) {
         SentNote(state.sentText ?: state.text, onEdit = actions.onEditNote, enabled = !waiting)
@@ -330,7 +331,8 @@ private fun SentNote(text: String, onEdit: () -> Unit, enabled: Boolean) {
             Text(text, style = t.fieldValue.copy(color = c.ink), modifier = Modifier.weight(1f).padding(vertical = 4.dp))
             if (enabled) PicnicIconButton(PicnicGlyph.Edit, stringResource(R.string.add_edit_note), onEdit)
         }
-        FieldRule(focused = enabled)
+        // Read-only under review: the resting underline (the strawberry trace means the field has focus).
+        FieldRule(focused = false)
     }
 }
 
@@ -348,7 +350,7 @@ private fun SnapTab(state: AddUiState, actions: AddActions, reveals: Reveals, fe
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val review = state.review?.takeIf { it.source == ItemSource.PHOTO }
-    val reading = state.phase is AddPhase.Thinking && (state.phase as AddPhase.Thinking).kind == ItemSource.PHOTO
+    val reading = (state.phase as? AddPhase.Thinking)?.kind == ItemSource.PHOTO
     val failed = state.phase as? AddPhase.Failed
     val stacked = LocalDensity.current.fontScale >= 1.3f
     if (state.photo == null && review == null) {
@@ -398,7 +400,7 @@ private fun ChoosePhotoChip(onClick: () -> Unit) {
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        ChipFace(fill = Families.ramune.pastel) {
+        ChipFace(fill = Families.ramune.pastel, height = chipHeight(32.dp)) {
             Glyph(PicnicGlyph.Gallery, null, tint = c.ballpoint, size = 16.dp)
             Text(stringResource(R.string.add_snap_choose), style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
         }
@@ -425,7 +427,7 @@ private fun SpeakAfterPhoto(state: AddUiState, actions: AddActions, reveals: Rev
 @Composable
 private fun HeardPart(state: AddUiState, actions: AddActions, reveals: Reveals, feedback: Feedback?, afterPhoto: Boolean) {
     val review = state.review
-    val thinking = state.phase is AddPhase.Thinking && (state.phase as AddPhase.Thinking).kind == ItemSource.VOICE
+    val thinking = (state.phase as? AddPhase.Thinking)?.kind == ItemSource.VOICE
     val failed = state.phase as? AddPhase.Failed
     if (thinking) {
         ThinkingBox(steps = null, recipe = false, clock = null, family = Families.melon, feedback = feedback)
@@ -453,7 +455,7 @@ private fun SpeakTab(state: AddUiState, actions: AddActions, reveals: Reveals, f
         phase = voicePhase,
         transcript = state.transcript,
         afterPhoto = afterPhoto,
-        heardNames = (if (afterPhoto) review?.heardRows else review?.mainRows).orEmpty().map { it.item.name },
+        heardNames = (if (afterPhoto) review.heardRows else review?.mainRows).orEmpty().map { it.item.name },
         onRecord = actions.onRecord,
         onStop = actions.onStopRecording,
     )
@@ -556,13 +558,20 @@ private fun AddFooter(kind: FooterKind, state: AddUiState, actions: AddActions) 
                     kept == 0 -> stringResource(R.string.add_stick_none)
                     else -> pluralStringResource(R.plurals.add_stick, kept, kept)
                 }
+                // The pill keeps one line: at very large text it shows the short words and TalkBack hears the long ones.
+                val short = when {
+                    LocalDensity.current.fontScale < VERY_LARGE_TEXT -> label
+                    kind.revealing -> stringResource(R.string.add_reading)
+                    kept == 0 -> stringResource(R.string.add_stick_none_short)
+                    else -> pluralStringResource(R.plurals.add_stick_short, kept, kept)
+                }
                 PicnicButton(
-                    label,
+                    short,
                     onClick = actions.onCommit,
                     enabled = !kind.revealing && !busy && kept > 0,
                     busy = kind.revealing || busy,
                     leadingStar = !kind.revealing,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).then(if (short != label) Modifier.semantics { contentDescription = label } else Modifier),
                 )
             }
             FooterKind.Write -> {

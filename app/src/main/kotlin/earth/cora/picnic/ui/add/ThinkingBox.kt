@@ -95,6 +95,8 @@ fun ThinkingBox(
             if (popped && popAge in 0..(2L * PicnicMotion.pose)) feedback.cue(Cue.CAPSULE_POP)
         }
     }
+    // At large text the steps run long: the capsule stays by the headline instead of floating mid-box.
+    val large = androidx.compose.ui.platform.LocalDensity.current.fontScale >= LARGE_TEXT
     PaperTheme {
         val c = PicnicTheme.colors
         val shape = PicnicTheme.shapes.section
@@ -107,7 +109,7 @@ fun ThinkingBox(
                 .background(c.backing)
                 .border(PicnicTheme.dimens.border, c.stickerWhite, shape)
                 .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = if (large) Alignment.Top else Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {

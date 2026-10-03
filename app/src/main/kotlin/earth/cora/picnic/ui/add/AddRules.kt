@@ -100,6 +100,13 @@ object AddRules {
         return normalizeMetric(q).substringAfter('·').trim().takeIf { it.isNotEmpty() }
     }
 
+    /**
+     * For display: a number stays with its unit ("2\u00A0cups") and the " · " never starts a line, so a wrapped detail
+     * line reads "in your pantry ·" / "2 cups", not "in your pantry · 2" / "cups". TalkBack hears the same words.
+     */
+    fun keepTogether(detail: String): String =
+        detail.replace(NUMBER_THEN_WORD, "$1\u00A0").replace(" · ", "\u00A0· ")
+
     /** "2.5 kg bag·2 cups" → "2.5 kg bag · 2 cups". */
     private fun tidyDots(text: String): String = text.split('·').joinToString(" · ") { it.trim() }
 
@@ -214,4 +221,5 @@ object AddRules {
         )
 
     private val WHITESPACE = Regex("\\s+")
+    private val NUMBER_THEN_WORD = Regex("([0-9½¼¾⅓⅔][0-9.,/½¼¾⅓⅔]*) (?=\\p{L})")
 }

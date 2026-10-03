@@ -98,7 +98,8 @@ class AddGoldensTest(private val variant: ThemeVariant, private val v: String) {
         ),
     )
 
-    @Test fun recipeCard() = sheet("recipe_card_$v", recipeState(withPantry = false))
+    // Scrolled to the kept rows (Baking, Breakfast, Dairy & eggs): kept stars, skipped rows with their reasons.
+    @Test fun recipeCard() = sheet("recipe_card_$v", recipeState(withPantry = false), scrollTo = EDIT_ROW_EGGS)
 
     @Test fun recipeCardPantry() = sheet("recipe_card_pantry_$v", recipeState(withPantry = true), scrollTo = EDIT_PANTRY_TAG)
 
@@ -220,7 +221,8 @@ class AddGoldensTest(private val variant: ThemeVariant, private val v: String) {
             compose.mainClock.advanceTimeBy(800)
         }
         if (scrollTo != null) {
-            compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag(scrollTo))
+            val target = if (scrollTo == EDIT_ROW_EGGS) reviewRow("Eggs") else hasTestTag(scrollTo)
+            compose.onNode(hasScrollAction()).performScrollToNode(target)
             compose.waitForIdle()
         }
         compose.waitForIdle()
@@ -230,6 +232,9 @@ class AddGoldensTest(private val variant: ThemeVariant, private val v: String) {
 }
 
 internal const val PANCAKES = "ingredients for pancakes from scratch"
+
+/** AddGoldensTest's scroll target for the recipe card: the Eggs row. */
+private const val EDIT_ROW_EGGS = "row:Eggs"
 
 /** A minute of mic levels (0..1), 100 ms apart. */
 internal val LEVELS: List<Float> = listOf(0.2f, 0.45f, 0.8f, 0.55f, 0.3f, 0.65f, 0.95f, 0.7f, 0.4f, 0.6f, 0.85f, 0.5f, 0.35f, 0.72f)

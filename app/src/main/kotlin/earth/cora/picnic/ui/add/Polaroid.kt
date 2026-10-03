@@ -207,7 +207,8 @@ private fun PhotoLineRow(line: PhotoLine, landed: Boolean) {
             withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough, color = c.inkSoft)) { append(line.text) }
         } else if (correction != null) {
             withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough, color = c.inkSoft)) { append(correction) }
-            append(" → ")
+            // The arrow stays with the correction's new word when the line wraps.
+            append(" →\u00A0")
             append(line.text)
         } else {
             append(line.text)
@@ -371,7 +372,7 @@ private fun StickerCell(row: ReviewRow, clock: RevealClock?, onToggleKeep: (Int)
         )
         Column(Modifier.weight(1f).clearAndSetSemantics { }) {
             Text(row.item.name, style = t.itemNameCompact.copy(color = if (faded) c.ballpointSoft else c.ballpoint))
-            if (detail != null) Text(detail, style = t.itemDetailCompact.copy(color = c.ballpointSoft))
+            if (detail != null) Text(AddRules.keepTogether(detail), style = t.itemDetailCompact.copy(color = c.ballpointSoft))
         }
     }
 }
