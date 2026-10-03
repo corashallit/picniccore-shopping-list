@@ -95,6 +95,7 @@ class AppSurpriseEngine(
     @Volatile private var appState: AppState? = null
     @Volatile private var albumNow: Album? = null
     @Volatile private var calendar: Calendar = Calendar()
+    @Volatile private var sunsetCache: Pair<String, LocalTime>? = null
     @Volatile private var weatherRain: Boolean = false
     @Volatile private var firstSnow: LocalDate? = null
     @Volatile private var duskPending: Boolean = false
@@ -184,7 +185,7 @@ class AppSurpriseEngine(
                     midnight = cal.midnight,
                     golden = cal.goldenMinutesLeft != null,
                     goldenMinutesLeft = cal.goldenMinutesLeft,
-                    season = EggRules.season(cal.date, firstSnow.takeIf { st?.weather == true || forceEggs }),
+                    season = if (cal.date == LocalDate.MIN) null else EggRules.season(cal.date, firstSnow.takeIf { st?.weather == true || forceEggs }),
                     rain = weatherRain && (st?.weather == true || forceEggs),
                     napSectionId = g?.let { EggRules.napSection(list, it) }?.takeIf { list?.trip?.id?.let { id -> id in napGone } != true },
                     pet = list?.trip?.pet == true,
@@ -205,8 +206,6 @@ class AppSurpriseEngine(
         val midnight: Boolean = false,
         val goldenMinutesLeft: Int? = null,
     )
-
-    private var sunsetCache: Pair<String, LocalTime>? = null
 
     override fun refresh() {
         val now = clock()

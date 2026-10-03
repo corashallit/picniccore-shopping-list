@@ -107,16 +107,9 @@ fun previewLab(factory: () -> SurpriseLabSandbox = { SurpriseLabSandbox(feedback
 @Composable
 fun PracticeFrame(sandbox: SurpriseLabSandbox, modifier: Modifier = Modifier, height: androidx.compose.ui.unit.Dp = 640.dp) {
     val fired by sandbox.fired.collectAsState()
-    val followUp by sandbox.followUp.collectAsState()
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(fired, sandbox) { if (fired != null) requester.bringIntoView() }
-    followUp?.let { f ->
-        LaunchedEffect(f.id, f.afterMs) {
-            withContext(FixedMotionScale) { holdOnFrameClock(f.afterMs) }
-            f.run()
-            sandbox.followUpDone(f.id)
-        }
-    }
+    SandboxFollowUps(sandbox)
     val dark = isSystemInDarkTheme()
     LaunchedEffect(dark) { sandbox.variants.onSystemDark(dark) }
     val variant by sandbox.variants.variant.collectAsState()
@@ -145,6 +138,19 @@ fun PracticeFrame(sandbox: SurpriseLabSandbox, modifier: Modifier = Modifier, he
                     modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
                 )
             }
+        }
+    }
+}
+
+/** Runs the sandbox's follow-ups (the cake's check-off, the jackpot's arrival) on the frame clock. */
+@Composable
+fun SandboxFollowUps(sandbox: SurpriseLabSandbox) {
+    val followUp by sandbox.followUp.collectAsState()
+    followUp?.let { f ->
+        LaunchedEffect(f.id, f.afterMs) {
+            withContext(FixedMotionScale) { holdOnFrameClock(f.afterMs) }
+            f.run()
+            sandbox.followUpDone(f.id)
         }
     }
 }

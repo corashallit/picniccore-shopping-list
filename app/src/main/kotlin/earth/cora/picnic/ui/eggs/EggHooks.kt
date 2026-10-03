@@ -1,6 +1,16 @@
 package earth.cora.picnic.ui.eggs
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
+import earth.cora.picnic.core.model.BasketKind
+import earth.cora.picnic.ui.theme.gen.BasketManifest
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -158,5 +168,44 @@ fun Modifier.basketHello(state: SurpriseState, sectionId: String): Modifier {
     return graphicsLayer {
         rotationZ = angle
         transformOrigin = TransformOrigin(0.5f, 0.9f)
+    }
+}
+
+/**
+ * Egg 5: the snack-time star sticker and the "snack?" doodle, for the list to place right after [sectionId]'s tab (it
+ * scrolls with its strip). Draws nothing unless it is midnight and [sectionId] is the frozen aisle. Decorative.
+ */
+@Composable
+fun SnackDoodle(state: SurpriseState, sectionId: String, modifier: Modifier = Modifier) {
+    if (!state.enabled || state.snackSectionId != sectionId) return
+    SnackDoodleContent(modifier)
+}
+
+/**
+ * Egg 8: the nap cat curled in [sectionId]'s basket, drawn by the list over the basket itself (call it inside the
+ * basket's box, the size the basket art is drawn at), so it scrolls with its strip. [kind] places the rim; [chainsDone]
+ * is false while the check-off chain that finished the other stops still plays (the cat curls up after it). Pair it
+ * with `EggOverlays(listPlacesDecor = true)`.
+ */
+@Composable
+fun BoxScope.NapCatInBasket(state: SurpriseState, sectionId: String, kind: BasketKind, engine: SurpriseEngine, chainsDone: Boolean = true) {
+    if (!state.enabled || state.napSectionId != sectionId) return
+    if (!rememberNapSettled(sectionId, chainsDone)) return
+    var box by remember { mutableStateOf(IntSize.Zero) }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    Box(
+        Modifier
+            .matchParentSize()
+            .onGloballyPositioned {
+                box = it.size
+                origin = it.positionInWindow()
+            },
+    ) {
+        if (box == IntSize.Zero) return@Box
+        val d = LocalDensity.current.density
+        val rimFraction = (BasketManifest.art(kind.key)?.rimY ?: 30f) / BasketManifest.VIEWPORT_HEIGHT
+        val rimY = box.height * rimFraction + 6 * d
+        val center = Offset(box.width / 2f - 2 * d, rimY - 9 * d)
+        NapCatPiece(sectionId, center, rimY, engine, origin)
     }
 }

@@ -509,8 +509,8 @@ object DuskMotion {
  * ------------------------------------------------------------------------------------------------ */
 
 object NapMotion {
-    /** The cat curls up this long after the empty basket's last neighbour is done (the chain end, §12.3). */
-    const val SETTLE_DELAY_MS: Long = 1500
+    /** The cat curls up this long after the chain that finished the last other stop has played out (§12.3). */
+    const val SETTLE_DELAY_MS: Long = 120
     const val BREATH_MS: Long = 2600
     const val Z_MS: Long = 2400
     const val STRETCH_MS: Long = 250

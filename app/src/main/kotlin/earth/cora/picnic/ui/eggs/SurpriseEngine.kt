@@ -211,6 +211,9 @@ data class SurpriseState(
     /** Egg 3: the row's own sticker hides while its rolling twin travels (it settles on its line at the end). */
     fun hidesRowSticker(itemId: String): Boolean = rolling?.itemId == itemId
 
+    /** Egg 13: the row's empty check spot steps aside while JACK / POT! is stamped over its column (1.8 s). */
+    fun hidesCheckSpot(itemId: String): Boolean = jackpot?.itemId == itemId
+
     companion object {
         /** Eggs off: nothing shows. */
         val Off: SurpriseState = SurpriseState(enabled = false)

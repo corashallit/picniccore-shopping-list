@@ -59,6 +59,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -77,6 +78,7 @@ import earth.cora.picnic.core.model.iconRef
 import earth.cora.picnic.core.model.ingestContext
 import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.platform.NoOpFeedback
+import earth.cora.picnic.platform.ShakeEffect
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.add.AddBar
 import earth.cora.picnic.ui.add.AddBarUi
@@ -182,6 +184,8 @@ fun PracticeList(
         engine.onListShown(model.listId)
         onDispose { engine.onListHidden() }
     }
+    // Egg 4 on the practice copy too: a shake while it shows.
+    ShakeEffect(enabled = eggs.enabled) { engine.onShake() }
     val list = model.list(state)
     val grouped = model.grouped(state)
     val open = p.openSection(grouped.openSectionId)
@@ -191,6 +195,24 @@ fun PracticeList(
         val r = rolling ?: return@LaunchedEffect
         val i = grouped.sections.indexOfFirst { it.id == r.sectionId }
         if (i >= 0) listState.animateScrollToItem(i)
+    }
+    // An add brings its aisle into view if it is not wholly on screen (egg 9's cake row, egg 6's shiny row).
+    val focus = model.focus
+    LaunchedEffect(focus) {
+        val f = focus ?: return@LaunchedEffect
+        val i = grouped.sections.indexOfFirst { it.id == f.sectionId }
+        if (i < 0) return@LaunchedEffect
+        androidx.compose.runtime.withFrameNanos { } // the row the add made is laid out
+        val info = listState.layoutInfo
+        val seen = info.visibleItemsInfo.firstOrNull { it.index == i }
+        val bottom = info.viewportEndOffset - info.afterContentPadding
+        if (seen == null || seen.offset < 0 || seen.offset + seen.size > bottom) listState.animateScrollToItem(i)
+    }
+    // Egg 8: the basket the cat sleeps in comes into view (two strips above it stay on screen).
+    LaunchedEffect(eggs.napSectionId) {
+        val nap = eggs.napSectionId ?: return@LaunchedEffect
+        val i = grouped.sections.indexOfFirst { it.id == nap }
+        if (i >= 0) listState.animateScrollToItem((i - 2).coerceAtLeast(0))
     }
     Box(modifier.fillMaxSize().testTag(PracticeTags.ROOT)) {
         PicnicBackground {
@@ -212,7 +234,7 @@ fun PracticeList(
             PracticeAddBar(model, eggs, Modifier.align(Alignment.BottomCenter))
         }
         MotionOverlay(motion, p, model.toasts, bottomInset = 84.dp) {
-            EggOverlays(engine, anchors, model.toasts, motion, feedback)
+            EggOverlays(engine, anchors, model.toasts, motion, feedback, listPlacesDecor = true)
         }
         CelebrationHost(motion, p)
     }
@@ -418,7 +440,7 @@ private fun DateTag(date: String, season: Season?, modifier: Modifier = Modifier
     Row(
         modifier
             .graphicsLayer { rotationZ = -2f }
-            .height(18.dp)
+            .heightIn(min = 18.dp)
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
             .background(c.stickerWhite)
@@ -430,7 +452,16 @@ private fun DateTag(date: String, season: Season?, modifier: Modifier = Modifier
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         DecorSticker("heart", size = 11.dp, shadow = false)
-        Text(date, style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 14.sp), maxLines = 1)
+        Text(
+            date,
+            style = PicnicTheme.type.label.copy(
+                color = c.ballpoint,
+                fontSize = 13.sp,
+                lineHeight = 13.sp,
+                lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+            ),
+            maxLines = 1,
+        )
         val pictogram = season?.let { seasonPictogram(it) }
         if (pictogram != null) {
             val art = rememberVectorArt(DecorManifest.pictograms.getValue(pictogram))
@@ -442,8 +473,8 @@ private fun DateTag(date: String, season: Season?, modifier: Modifier = Modifier
 /** The pictogram on the book's date label for [season] (§4.13). */
 fun seasonPictogram(season: Season): String = when (season) {
     Season.CANADA_DAY -> "maple"
-    Season.THANKSGIVING -> "maple"
-    Season.HALLOWEEN -> "pumpkin"
+    Season.THANKSGIVING -> "pumpkin"
+    Season.HALLOWEEN -> "ghost"
     Season.FIRST_SNOW -> "snowflake"
     Season.VALENTINES -> "heart"
     Season.LUNAR_NEW_YEAR -> "envelope"
@@ -530,12 +561,15 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
                     .background(c.pad),
             )
             Column(Modifier.align(Alignment.BottomStart).padding(start = 6.dp, bottom = 6.dp)) {
-                PracticeTab(s, look, 32.dp, current = false, model = model)
+                Row {
+                    PracticeTab(s, look, 32.dp, current = false, model = model)
+                    SnackDoodle(eggs, s.id, Modifier.padding(start = 4.dp).offset(y = (-2).dp))
+                }
                 val toGet = s.toGet + (p.baskets[s.id]?.toGetLag ?: 0)
                 Row(Modifier.padding(start = 4.dp, top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         if (toGet == 0) "${s.total} of ${s.total} in the basket" else "$toGet left of ${s.total}",
-                        style = PicnicTheme.type.stripMeta.copy(color = c.ballpointSoft),
+                        style = PicnicTheme.type.stripMeta.copy(color = c.inkSoft),
                         modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + s.id),
                     )
                 }
@@ -568,6 +602,7 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
                     size = DpSize(80.dp, 64.dp),
                     modifier = Modifier.basketAnchor(s.id, s.basket, priority = 0).basketHello(eggs, s.id),
                 )
+                NapCatInBasket(eggs, s.id, s.basket, engine, chainsDone = p.chainsDone)
             }
             Chevron(Modifier.align(Alignment.BottomEnd).offset(y = (-4).dp), up = false)
         }
@@ -589,7 +624,7 @@ private fun Chevron(modifier: Modifier, up: Boolean) {
                 lineTo(center.x, center.y + h / 2)
                 lineTo(center.x + w / 2, center.y - h / 2)
             }
-            drawPath(path, c.ballpoint, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+            drawPath(path, c.ink, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
         }
     }
 }
@@ -618,6 +653,7 @@ private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseSt
                 Row(Modifier.align(Alignment.CenterStart), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     PracticeTab(s, look, 38.dp, current = true, model = model)
                     s.storeAisle?.let { StoreAisleChip(it, Modifier.anchor(EggAnchors.TEXT_PREFIX + "chip:" + s.id)) }
+                    SnackDoodle(eggs, s.id)
                 }
                 Box(Modifier.align(Alignment.CenterEnd).offset(x = (-52).dp)) {
                     MotionBasket(
@@ -632,6 +668,7 @@ private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseSt
                         tray = true,
                         modifier = Modifier.basketAnchor(s.id, s.basket, priority = 1).basketHello(eggs, s.id),
                     )
+                    NapCatInBasket(eggs, s.id, s.basket, model.engine, chainsDone = p.chainsDone)
                 }
                 Box(Modifier.align(Alignment.CenterEnd).clickable(remember { MutableInteractionSource() }, indication = null) { model.open("") }) {
                     Chevron(Modifier, up = true)
@@ -708,12 +745,17 @@ private fun PracticeRow(model: PracticeModel, item: GroceryItem, s: AisleSection
             with(anchors) {
                 Text(
                     item.name,
-                    style = t.itemName.copy(color = if (item.checked) c.ballpointSoft else c.ballpoint),
+                    style = t.itemName.copy(color = if (item.checked) c.inkSoft else c.ink),
                     modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "name:" + item.id).strike(item.checked, c.hanko),
                 )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // The rarity chip wraps under a long detail (never squeezed or cut, at any font scale).
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
                     item.quantity?.let {
-                        Text(it, style = t.itemDetail.copy(color = c.ballpointSoft), modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "detail:" + item.id))
+                        Text(it, style = t.itemDetail.copy(color = c.inkSoft), modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "detail:" + item.id))
                     }
                     if (item.rarity != Rarity.NONE) RarityChip(jackpot = item.rarity == Rarity.JACKPOT, modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "chip:" + item.id))
                 }
@@ -722,7 +764,7 @@ private fun PracticeRow(model: PracticeModel, item: GroceryItem, s: AisleSection
         with(anchors) {
             Box(Modifier.size(48.dp).anchor(AnchorRegistry.checkKey(item.id)), contentAlignment = Alignment.Center) {
                 val lifting = RowMotion.liftsHanko(phase)
-                if (!item.checked && !lifting) StickerSpot()
+                if (!item.checked && !lifting && !eggs.hidesCheckSpot(item.id)) StickerSpot()
                 if (item.checked || lifting) {
                     if (lifting) StickerSpot()
                     Box(Modifier.size(48.dp).rowHanko(item.checked, phase, start, clock, reduced)) {
@@ -774,3 +816,6 @@ private fun PracticeAddBar(model: PracticeModel, eggs: SurpriseState, modifier: 
         )
     }
 }
+
+/** WP6's check-off chains have played out (no hop in flight, no burst, no celebration): the nap cat may curl up. */
+private val ListPresentation.chainsDone: Boolean get() = flights.isEmpty() && bursts.isEmpty() && celebration == null

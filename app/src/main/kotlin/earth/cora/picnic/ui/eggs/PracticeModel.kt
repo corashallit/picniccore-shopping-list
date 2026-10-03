@@ -34,6 +34,8 @@ import earth.cora.picnic.ui.list.motion.MotionSection
 import earth.cora.picnic.ui.list.motion.ToggleEvent
 import earth.cora.picnic.ui.theme.AisleLooks
 import earth.cora.picnic.ui.theme.ToastHostState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -85,6 +87,20 @@ class PracticeModel(
         motion.listId = listId
         motion.setSections(sections(store.value))
         motion.celebrationSource = { albumNow?.let { CelebrationContent.from(store.value, listId, it, catalog) } }
+    }
+
+    /** A section the practice list should bring into view (an add lands there), with a fresh [seq] per request. */
+    data class Focus(val sectionId: String, val seq: Int)
+
+    /** The latest [Focus] request (the practice list scrolls to it if it is not fully on screen). */
+    var focus: Focus? by androidx.compose.runtime.mutableStateOf(null)
+        private set
+
+    private var focusSeq = 0
+
+    /** Asks the practice list to bring [sectionId] into view. */
+    fun focus(sectionId: String) {
+        focus = Focus(sectionId, ++focusSeq)
     }
 
     /** The album as last read (the celebration's bonus rule reads it). */
@@ -185,6 +201,7 @@ class PracticeModel(
             motion.onChange(ListChange(emptySet(), reopened, false, tripReopened, null, ChangeCause.ADD, openSectionId = bg.openSectionId))
         }
         val committed = list(after).items.filter { it.id in added }
+        committed.firstOrNull()?.let { first -> ag.sections.firstOrNull { s -> s.rows.any { it.id == first.id } }?.let { focus(it.id) } }
         if (committed.isNotEmpty()) engine.onCommitted(committed)
         return added
     }

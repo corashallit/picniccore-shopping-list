@@ -202,6 +202,7 @@ class SurpriseLabSandbox(
 
     /** Egg 3: adds "Strawberries" (they hop); the next time, "Lemons" (they roll and spin). */
     private fun rolling() {
+        model.set { it.setOpenAisle(listId, PRODUCE) }
         rollToggle = !rollToggle
         if (rollToggle) {
             replaceAndAdd("Strawberries", "1 L basket", "produce", "strawberry")
@@ -213,6 +214,7 @@ class SurpriseLabSandbox(
     /** Egg 6: forces a shiny on the next add, adds "Maple syrup". */
     private fun shiny() {
         engine.forceShinyNext = true
+        model.set { it.setOpenAisle(listId, BREAKFAST) }
         replaceAndAdd("Maple syrup", "540 mL tin", "breakfast", "maple_syrup")
     }
 
@@ -359,6 +361,8 @@ class SurpriseLabSandbox(
 
     private companion object {
         const val FROZEN = "frozen"
+        const val PRODUCE = "produce"
+        const val BREAKFAST = "breakfast"
         const val JACKPOT_ROW = "baking-powder"
         const val WEEK = 7L * 24 * 60 * 60 * 1000
     }

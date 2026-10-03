@@ -132,6 +132,11 @@ fun BoxScope.EggOverlays(
     motion: MotionChoreographer? = null,
     feedback: Feedback = NoOpFeedback,
     onOpenAlbum: () -> Unit = {},
+    /**
+     * True when the list draws the nap cat and the snack doodle in its own content ([NapCatInBasket], [SnackDoodle]),
+     * so they scroll with their strip; false draws them here from the anchors (a list that does not place them).
+     */
+    listPlacesDecor: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val state by engine.state.collectAsState()
@@ -181,7 +186,6 @@ fun BoxScope.EggOverlays(
     if (!state.enabled) return
 
     var origin by remember { mutableStateOf(Offset.Zero) }
-    val density = LocalDensity.current.density
     Box(
         modifier
             .matchParentSize()
@@ -192,9 +196,11 @@ fun BoxScope.EggOverlays(
         val local = { r: Rect -> r.translate(-origin) }
         val keepOut = { keepOutRects(anchors).map(local) }
         state.duskFx?.let { DuskSun(it, anchors.bounds(AnchorRegistry.SUN)?.let(local), engine, feedback) }
-        state.snackSectionId?.let { SnackStar(it, anchors, local) }
+        if (!listPlacesDecor) state.snackSectionId?.let { SnackStar(it, anchors, local) }
         if (state.umbrella) anchors.bounds(AnchorRegistry.ADD_BAR)?.let { Umbrella(local(it)) }
-        state.napSectionId?.let { NapCat(it, anchors, local, engine) }
+        // The cat curls up once the chain that finished the other stops has played out (§12.3: chain end + 0.5 s).
+        val chainsDone = motion?.current?.value?.let { p -> p.flights.isEmpty() && p.bursts.isEmpty() && p.celebration == null } ?: true
+        if (!listPlacesDecor) state.napSectionId?.let { NapCat(it, anchors, local, engine, chainsDone) }
         state.napLeaving?.let { NapLeaving(it, anchors, local, engine) }
         state.ladybug?.let { Ladybug(it, anchors, local, engine) }
         // The bursts: clipped clear of every text box.
@@ -210,7 +216,6 @@ fun BoxScope.EggOverlays(
         state.receiptTuckId?.let { ReceiptPoof(it, engine) }
       }
     }
-    @Suppress("UNUSED_VARIABLE") val unused = density
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -386,7 +391,13 @@ private fun SnackStar(sectionId: String, anchors: AnchorRegistry, local: (Rect) 
         basket != null -> Offset(basket.left - 74 * d, basket.top + 4 * d)
         else -> return
     }
-    Box(Modifier.offset { IntOffset(at.x.roundToInt(), at.y.roundToInt()) }.decorative()) {
+    SnackDoodleContent(Modifier.offset { IntOffset(at.x.roundToInt(), at.y.roundToInt()) })
+}
+
+/** The snack-time star sticker and the "snack?" doodle (decorative). */
+@Composable
+internal fun SnackDoodleContent(modifier: Modifier = Modifier) {
+    Box(modifier.decorative()) {
         DecorSticker("glowstar", Modifier.offset(y = 2.dp), size = 20.dp)
         Text(
             androidx.compose.ui.res.stringResource(R.string.egg_snack_doodle),
@@ -417,23 +428,47 @@ private fun Umbrella(addBar: Rect) {
  * ------------------------------------------------------------------------------------------------ */
 
 @Composable
-private fun NapCat(sectionId: String, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine) {
+private fun NapCat(sectionId: String, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine, chainsDone: Boolean) {
+    if (!rememberNapSettled(sectionId, chainsDone)) return
     val basket = anchors.bounds(AnchorRegistry.basketKey(sectionId))?.let(local) ?: return
     val o = origin()
     val mouth = anchors.mouth(AnchorRegistry.basketKey(sectionId))?.let { it - o }
-    val reduced = LocalReducedMotion.current
-    // The cat curls up once the chain that finished the other stops has played out (§12.3: chain end + 0.5 s).
-    val appear by rememberEffectTime("nap:$sectionId", NapMotion.SETTLE_DELAY_MS + 320)
-    val breathing by rememberLoopTime(enabled = !reduced)
-    val since = appear - NapMotion.SETTLE_DELAY_MS
-    if (since < 0) return
     val d = LocalDensity.current.density
-    val catSize = 34.dp
     val rimY = (mouth?.y ?: (basket.top + basket.height * 0.45f)) + 6 * d
     val center = Offset(basket.center.x - 2 * d, rimY - 9 * d)
+    NapCatPiece(sectionId, center, rimY, engine, o)
+}
+
+/**
+ * The cat waits for the check-off chain that finished the other stops (the hop, the stamp's burst) to play out, then a
+ * beat ([NapMotion.SETTLE_DELAY_MS]), then curls up (§12.3: chain end + 0.5 s). True once it may show.
+ */
+@Composable
+internal fun rememberNapSettled(sectionId: String, chainsDone: Boolean): Boolean {
+    val settled = remember(sectionId) { mutableStateOf(false) }
+    if (!settled.value && chainsDone) {
+        LaunchedEffect(sectionId) {
+            withContext(FixedMotionScale) { holdOnFrameClock(NapMotion.SETTLE_DELAY_MS) }
+            settled.value = true
+        }
+    }
+    return settled.value
+}
+
+/**
+ * The curled cat at [center] (px in the enclosing box), clipped at the basket's rim [rimY] so it lies IN the basket,
+ * breathing, with "z" / "Z" floating up, and its 48 dp tap target ([SurpriseEngine.onNapTap]). [probeOrigin] maps the
+ * box to the window for the test probe.
+ */
+@Composable
+internal fun NapCatPiece(sectionId: String, center: Offset, rimY: Float, engine: SurpriseEngine, probeOrigin: Offset) {
+    val reduced = LocalReducedMotion.current
+    val since by rememberEffectTime("nap:$sectionId", 320)
+    val breathing by rememberLoopTime(enabled = !reduced)
+    val d = LocalDensity.current.density
+    val catSize = 34.dp
     val pop = if (reduced) EggPose(center, alpha = (since / 120f).coerceIn(0f, 1f)) else EggBeats.magicAppear(since).copy(center = center)
     val breath = if (reduced) 1f else NapMotion.breath(breathing)
-    // Clipped at the rim, so it lies IN the basket.
     Box(
         Modifier
             .fillMaxSize()
@@ -461,7 +496,7 @@ private fun NapCat(sectionId: String, anchors: AnchorRegistry, local: (Rect) -> 
             .testTag(EggTags.NAP_CAT)
             .pointerInput(sectionId) { detectTapGestures { engine.onNapTap() } },
     )
-    Probe("nap", appear, Rect(Offset.Zero, Size.Zero).sized(center, 34 * d), 0f, origin())
+    Probe("nap", since, Rect(Offset.Zero, Size.Zero).sized(center, 34 * d), 0f, probeOrigin)
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.clipAbove(right: Float, bottom: Float, block: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit) =
@@ -519,7 +554,7 @@ private fun Petals(id: Long, anchors: AnchorRegistry, local: (Rect) -> Rect, eng
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
-        val petals = remember(id, w, h) { PetalMotion.petals(w, top = 150 * d, bottom = (bar?.top ?: h) - 30 * d, inset = 7 * d) }
+        val petals = remember(id, w, h) { PetalMotion.petals(w, top = 150 * d, bottom = (bar?.top ?: h) - 30 * d, inset = 10 * d) }
         petals.forEachIndexed { i, p ->
             PetalMotion.at(p, t, d)?.let {
                 PlacedSticker("petal", it, 14.dp)
@@ -597,7 +632,8 @@ private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rec
     val path = remember(fx.id) { mutableStateOf<RollingPath?>(null) }
     if (path.value == null) {
         val o = origin()
-        val row = anchors.bounds(AnchorRegistry.rowKey(fx.itemId))?.let(local)
+        // Its line: the row if the aisle is open, else the folded strip it joins.
+        val row = (anchors.bounds(AnchorRegistry.rowKey(fx.itemId)) ?: anchors.bounds(EggAnchors.strip(fx.sectionId)))?.let(local)
         val mouth = anchors.mouth(AnchorRegistry.basketKey(fx.sectionId))?.let { it - o }
         val bar = anchors.bounds(AnchorRegistry.ADD_BAR)?.let(local)
         if (row != null && mouth != null && bar != null) {
@@ -688,7 +724,7 @@ private fun Jackpot(fx: JackpotFx, anchors: AnchorRegistry, local: (Rect) -> Rec
     }
     if (hanko != null) {
         // Over the row's checkbox column, where its GOT IT would sit: beside the sticker's row, never over its name.
-        val center = check?.center ?: Offset(row.right + 240 * d, row.center.y)
+        val center = check?.center?.let { it - Offset(6 * d, 0f) } ?: Offset(row.right + 240 * d, row.center.y)
         val half = 30 * d
         HankoStamp(
             HankoText.JackPot,
