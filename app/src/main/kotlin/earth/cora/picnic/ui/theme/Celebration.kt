@@ -28,6 +28,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -418,7 +419,7 @@ private class SceneAnchors {
     var shelf: List<Rect> by mutableStateOf(emptyList())
     var hamper: Rect by mutableStateOf(Rect.Zero)
     var origin: Offset by mutableStateOf(Offset.Zero)
-    var sceneRight: Float by mutableStateOf(0f)
+    var sceneRight: Float by mutableFloatStateOf(0f)
 
     /** Inside the shake layer, and where that layer sits at rest (root px): plates are measured from it, unshaken. */
     var stage: androidx.compose.ui.layout.LayoutCoordinates? = null
