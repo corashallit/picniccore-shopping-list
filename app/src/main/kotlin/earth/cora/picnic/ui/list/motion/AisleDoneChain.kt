@@ -405,8 +405,11 @@ fun StampCircle(
     val ink = SolidColor(look.stampInk(variant))
     val turn by rememberLoopTime(enabled = isNow && !reduced)
     val measurer = rememberTextMeasurer(cacheSize = 4)
-    val numeral = (if (size <= 20.dp) PicnicTheme.type.stampNumeral.copy(fontSize = 11.sp) else PicnicTheme.type.stampNumeral)
-        .copy(color = if (isNow) Families.strawberry.trace else c.inkSoft)
+    val base = if (size <= 20.dp) PicnicTheme.type.stampNumeral.copy(fontSize = 11.sp) else PicnicTheme.type.stampNumeral
+    // The numeral repeats the stop's number: it grows with the font only as far as its circle holds it (§4.13, R2).
+    val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+    val sp = minOf(base.fontSize.value * fontScale, size.value * 0.55f) / fontScale
+    val numeral = base.copy(fontSize = sp.sp, lineHeight = (sp * 1.15f).sp, color = if (isNow) Families.strawberry.trace else c.inkSoft)
     Box(modifier.size(size).decorative(), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {
             val r = this.size.minDimension / 2f - 1.dp.toPx()

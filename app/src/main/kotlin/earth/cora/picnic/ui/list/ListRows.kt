@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
@@ -156,6 +157,8 @@ internal fun TrayRow(
             .fillMaxWidth()
             .heightIn(min = minH)
             .testTag(ListTags.rowSlot(row.id))
+            // The torn halves tumble over the rows and the cap below (§8.6).
+            .zIndex(if (tearT0 != null) 1f else 0f)
             .traySlice(TrayPart.Row, section.look, ring, shadows.color, c.pad, c.rule, first = first, last = last),
     ) {
         val inset = TrayMetrics.panelInset

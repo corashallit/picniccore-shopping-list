@@ -150,53 +150,53 @@ private fun AppBar(
             if (state.storeName.isBlank()) stops else stringResource(R.string.list_subtitle, state.storeName, stops)
         }
     }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = minHeight)
-            .padding(start = 8.dp, end = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PuffyText(
-                    title,
-                    style = if (collapsed) t.screenTitleCollapsed else t.screenTitle,
-                    fill = c.ink,
-                    stroke = 6.dp,
-                    minFontSize = 20.sp,
-                    heading = true,
-                    modifier = Modifier.weight(1f, fill = false),
+    val large = LocalDensity.current.fontScale > LARGE_TEXT
+    val spin = remember { Animatable(0f) }
+    LaunchedEffect(ui.sunSpin) {
+        if (ui.sunSpin == 0 || reduced) return@LaunchedEffect
+        withContext(FixedMotionScale) {
+            spin.snapTo(0f)
+            spin.animateTo(360f, tween(400))
+            spin.snapTo(0f)
+        }
+    }
+    val titleRow: @Composable (Modifier) -> Unit = { m ->
+        Row(m, verticalAlignment = Alignment.CenterVertically) {
+            PuffyText(
+                title,
+                style = if (collapsed) t.screenTitleCollapsed else t.screenTitle,
+                fill = c.ink,
+                stroke = 6.dp,
+                minFontSize = 20.sp,
+                // Large text: the bar grows and the title may take a second line rather than lose its words (§4.2).
+                maxLines = if (large) 2 else 1,
+                heading = true,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            with(anchors) {
+                SunSticker(
+                    onTap = if (moon) actions.onMoonTap else actions.onSunTap,
+                    modifier = Modifier
+                        .overhang(SUN_ROOM_W, SUN_ROOM_H)
+                        .anchor(AnchorRegistry.SUN)
+                        .graphicsLayer { rotationZ = spin.value },
                 )
-                val spin = remember { Animatable(0f) }
-                LaunchedEffect(ui.sunSpin) {
-                    if (ui.sunSpin == 0 || reduced) return@LaunchedEffect
-                    withContext(FixedMotionScale) {
-                        spin.snapTo(0f)
-                        spin.animateTo(360f, tween(400))
-                        spin.snapTo(0f)
-                    }
-                }
-                with(anchors) {
-                    SunSticker(
-                        onTap = if (moon) actions.onMoonTap else actions.onSunTap,
-                        modifier = Modifier
-                            .overhang(SUN_ROOM_W, SUN_ROOM_H)
-                            .anchor(AnchorRegistry.SUN)
-                            .graphicsLayer { rotationZ = spin.value },
-                    )
-                }
             }
-            if (subtitle != null && !collapsed) {
-                PadPatch(Modifier.padding(start = 2.dp, bottom = 4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                        FlatStar(Modifier.size(13.dp), fill = Families.lemon.mid)
-                        Text(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft))
-                    }
+        }
+    }
+    val subtitleRow: @Composable (Modifier) -> Unit = { m ->
+        if (subtitle != null && !collapsed) {
+            PadPatch(m.padding(start = 2.dp, bottom = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    FlatStar(Modifier.size(13.dp), fill = Families.lemon.mid)
+                    Text(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft))
                 }
             }
         }
-        if (!state.loading) {
+    }
+    val lcdChip: @Composable () -> Unit = {
+        // An empty list has nothing to count: the LCD comes with the first item (§4.21).
+        if (!state.loading && state.total > 0) {
             val lcd = when {
                 ui.syncing -> state.lcd.copy(mode = LcdMode.Text, text = SYNC)
                 else -> {
@@ -213,6 +213,8 @@ private fun AppBar(
                 )
             }
         }
+    }
+    val more: @Composable () -> Unit = {
         Box(
             Modifier
                 .testTag(ListTags.MORE)
@@ -221,7 +223,44 @@ private fun AppBar(
             PicnicIconButton(PicnicGlyph.More, stringResource(R.string.theme_more_options), onMore)
         }
     }
+    if (large) {
+        // Large text (§4.2): the title and More on the first row, the subtitle (wrapping) and the LCD under them.
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = minHeight)
+                .padding(start = 8.dp, end = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                titleRow(Modifier.weight(1f))
+                more()
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Box(Modifier.weight(1f)) { subtitleRow(Modifier) }
+                lcdChip()
+            }
+        }
+    } else {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = minHeight)
+                .padding(start = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                titleRow(Modifier)
+                subtitleRow(Modifier)
+            }
+            lcdChip()
+            more()
+        }
+    }
 }
+
+/** Above this font scale the bar takes two rows (§4.2, the same threshold as the book's date caption, §7.4). */
+private const val LARGE_TEXT: Float = 1.3f
 
 /**
  * Lays out a 48 dp target as [w] × [h] dp, centred on it, so the 22 dp sun sits by the title without taking the

@@ -205,7 +205,7 @@ class ListScreenState(
     /** Her own fold and unfold taps (FoldFocusEffect). */
     val toggles = FoldToggles()
 
-    internal val stripBounds = HashMap<String, Rect>()
+    internal val stripBounds = mutableStateMapOf<String, Rect>()
     internal var moreBounds by mutableStateOf<Rect?>(null)
     internal val focus = HashMap<String, Pair<FocusRequester, FocusRequester>>()
 
@@ -624,7 +624,7 @@ private fun AisleList(
     val entries = remember(state.sections, openId) { planEntries(state.sections, openId) }
     // The current aisle wears the lemon ring, the bee and the ladybug (§4.10, D2). While a chain holds a finished aisle
     // open (the engine's override), it keeps them until it folds; a finished aisle she reopens herself is not current.
-    val currentId = if (openId != null && openId != state.openSectionId) openId else state.currentSectionId
+    val currentId = if (openId != null && openId != state.openSectionId) openId else state.nowSectionId
     val scope = rememberCoroutineScope()
     val act by rememberUpdatedState(actions)
     val rowActions = remember(actions) {

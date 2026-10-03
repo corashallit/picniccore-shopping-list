@@ -495,11 +495,12 @@ internal fun SkeletonStrip(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(56.dp).stripFace().decorative()) {
         Canvas(Modifier.fillMaxWidth().height(56.dp)) {
             val dash = c.ghostDash
+            val bar = if (c.isDark) c.rule else c.backing
             val r = 11.dp.toPx()
             drawDashedCircle(dash, androidx.compose.ui.geometry.Offset(22.dp.toPx(), 22.dp.toPx()), r, 1.8.dp.toPx(), 3.dp.toPx(), 2.dp.toPx())
             drawDashedCircle(dash, androidx.compose.ui.geometry.Offset(size.width - 92.dp.toPx(), 28.dp.toPx()), 16.dp.toPx(), 1.8.dp.toPx(), 3.2.dp.toPx(), 2.4.dp.toPx())
-            drawRoundRect(c.backing, androidx.compose.ui.geometry.Offset(42.dp.toPx(), 14.dp.toPx()), androidx.compose.ui.geometry.Size(110.dp.toPx(), 16.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
-            drawRoundRect(c.backing, androidx.compose.ui.geometry.Offset(12.dp.toPx(), 38.dp.toPx()), androidx.compose.ui.geometry.Size(70.dp.toPx(), 9.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.5.dp.toPx()))
+            drawRoundRect(bar, androidx.compose.ui.geometry.Offset(42.dp.toPx(), 14.dp.toPx()), androidx.compose.ui.geometry.Size(110.dp.toPx(), 16.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
+            drawRoundRect(bar, androidx.compose.ui.geometry.Offset(12.dp.toPx(), 38.dp.toPx()), androidx.compose.ui.geometry.Size(70.dp.toPx(), 9.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(4.5.dp.toPx()))
         }
     }
 }
