@@ -5,6 +5,7 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.theme.ThemeVariant
@@ -19,13 +20,15 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Item 259 (§4.1, §12.1): egg overlays never cover text. Every overlay piece reports where it is drawn on every frame
- * (EggProbe). Pieces drawn as they are (the ladybug, the nap cat, JACK / POT!, the umbrella) never overlap a text node;
- * the bursts (the Dusk sparkles, petals, ants, confetti, the shiny row's burst) and the produce rolling across the page
- * are drawn with every text box cut out, so wherever one crosses a text node that text must be one of the boxes they
- * cut out (they pass behind the words). Sampled over each egg's whole run on the practice list, Day and Glow.
+ * (EggProbe). The pieces that go about the page (the ladybug, the nap cat, JACK / POT!, the umbrella, the rolling
+ * produce, the confetti and the petals in their edge lanes, the Dusk sparkles) never overlap a text node at all: they
+ * go round the words, so nothing is ever cut out of them. The roll home along the new row's own line is drawn by the row
+ * beneath its words (it may pass under that row's words only). The ants on the add bar's edge and the shiny row's burst
+ * keep to their lanes and are clipped clear of any word all the same, so where one crosses words those words must be one
+ * of the boxes their clip cuts out. Sampled over each egg's whole run on the practice list, Day and Glow.
  *
  * The printed receipt is not decoration but an interactive card with its own words, which waits over the list until it
- * is tapped (§13.2), as the Next card and the toasts do; it is checked only against the title.
+ * is tapped (§13.2), as the Next card and the toasts do: ReceiptPrintTest keeps it and its slot line off every word.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -40,25 +43,8 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
         16 to 1_000L, 17 to 6_100L, 18 to 2_400L,
     )
 
-    /** The bursts and the roller: drawn with every text box cut out. */
-    private val clipped = listOf("dusk", "petal", "ant", "confetti", "shiny", "roller")
-
-    /**
-     * Every text node on screen (unmerged), in root px: the visible part of each, since the list scrolls under the
-     * opaque add bar (a row's words under the bar are hidden by it; the bar's own words are not).
-     */
-    private fun texts(bar: Rect): List<Pair<String, Rect>> {
-        val out = ArrayList<Pair<String, Rect>>()
-        fun walk(n: SemanticsNode, inBar: Boolean) {
-            val mine = inBar || n.config.getOrNull(SemanticsProperties.TestTag) == PracticeTags.ADD_BAR
-            val text = n.config.getOrNull(SemanticsProperties.Text)
-            val box = n.boundsInRoot.let { b -> if (mine) b else Rect(b.left, b.top, b.right, minOf(b.bottom, bar.top)) }
-            if (text != null && box.width > 0f && box.height > 0f) out += text.joinToString() to box
-            n.children.forEach { walk(it, mine) }
-        }
-        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode(), false)
-        return out
-    }
+    /** Clipped clear of words as well as kept to their lanes. */
+    private val clipped = listOf("ant", "shiny")
 
     @Test
     fun neverOverText() {
@@ -71,7 +57,7 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
         val wrong = LinkedHashSet<String>()
         while (r.now < until) {
             r.advance(48)
-            val text = texts(r.anchor(AnchorRegistry.ADD_BAR))
+            val text = textBoxes(compose)
             val cutOut = keepOutRects(r.anchors)
             val frames = r.probe.frames.filter { it.time >= 0 }.groupBy { it.tag }.mapValues { it.value.last() }
             r.probe.clear()
@@ -80,9 +66,14 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
                 if (piece.width <= 0f || piece.height <= 0f) continue
                 val over = text.filter { (_, box) -> box.overlaps(piece) }
                 val kind = tag.trimEnd { it.isDigit() }
-                if (tag == "receipt") {
-                    val title = r.anchors.bounds(EggAnchors.TEXT_PREFIX + "title")!!
-                    if (title.deflate(2f).overlaps(piece)) wrong += "the receipt over the title"
+                if (tag == "receipt" || tag == "slot") {
+                    continue
+                } else if (tag == "rollhome") {
+                    // Beneath its own row's words only.
+                    val row = r.list.items.lastOrNull { it.name == "Strawberries" || it.name == "Lemons" }
+                    val line = row?.let { compose.onNodeWithTag(PracticeTags.row(it.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot }
+                    over.filterNot { (_, box) -> line != null && line.inflate(1f).contains(box.topLeft) && line.inflate(1f).contains(box.bottomRight) }
+                        .forEach { (words, _) -> wrong += "the roll home under \"$words\", not its own row's words" }
                 } else if (clipped.any { tag.startsWith(it) }) {
                     // Wherever a clipped piece crosses words, they are one of the boxes its clip cuts out.
                     over.filterNot { (_, box) -> cutOut.any { it.inflate(1f).contains(box.topLeft) && it.inflate(1f).contains(box.bottomRight) } }

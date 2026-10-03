@@ -163,6 +163,8 @@ fun AddBar(
     tape: WashiPattern = WashiPattern.SakuraStripe,
     focusRequester: FocusRequester = remember { FocusRequester() },
     onFocusChange: (Boolean) -> Unit = {},
+    /** Snap, Choose a photo and Speak can run (false: the Surprise lab's practice list, which has no camera or microphone). */
+    captureEnabled: Boolean = true,
 ) {
     val c = PicnicTheme.colors
     val choose = stringResource(R.string.add_bar_choose_photo)
@@ -212,15 +214,17 @@ fun AddBar(
                     AddBarButtonKind.Snap,
                     stringResource(R.string.add_bar_snap),
                     onClick = onSnap,
-                    enabled = !state.waiting,
+                    enabled = !state.waiting && captureEnabled,
                     modifier = Modifier
-                        .longPressShortcut(enabled = !state.waiting, timeoutMillis = longPress) {
+                        .longPressShortcut(enabled = !state.waiting && captureEnabled, timeoutMillis = longPress) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             choosePhoto()
                         }
-                        .semantics { customActions = listOf(CustomAccessibilityAction(choose) { choosePhoto(); true }) },
+                        .then(
+                            if (captureEnabled) Modifier.semantics { customActions = listOf(CustomAccessibilityAction(choose) { choosePhoto(); true }) } else Modifier,
+                        ),
                 )
-                AddBarButton(AddBarButtonKind.Speak, stringResource(R.string.add_bar_speak), onClick = onSpeak, enabled = !state.waiting)
+                AddBarButton(AddBarButtonKind.Speak, stringResource(R.string.add_bar_speak), onClick = onSpeak, enabled = !state.waiting && captureEnabled)
                 if (state.waiting) {
                     WaitingCapsule(onStop)
                 } else {

@@ -10,7 +10,9 @@ import earth.cora.picnic.core.model.ListGrouping
 import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.SectionKind
 import earth.cora.picnic.core.model.TripRules
+import earth.cora.picnic.core.model.AddOutcome
 import earth.cora.picnic.core.model.addItems
+import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.iconRef
 import earth.cora.picnic.core.model.list
@@ -36,7 +38,11 @@ import earth.cora.picnic.ui.theme.AisleLooks
 import earth.cora.picnic.ui.theme.ToastHostState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import earth.cora.picnic.ui.add.AddCommit
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -184,15 +190,16 @@ class PracticeModel(
     fun add(items: List<GroceryItem>, now: Long = clock()): List<String> {
         val before = store.value
         val bg = grouped(before)
-        var added: List<String> = emptyList()
+        var outcome = AddOutcome.NONE
         val after = store.apply { s ->
-            val (next, outcome) = s.addItems(listId, items, now)
-            added = outcome.added
-            added.fold(next) { acc, id ->
+            val (next, o) = s.addItems(listId, items, now)
+            outcome = o
+            o.added.fold(next) { acc, id ->
                 val rarity = engine.rollRarity()
                 if (rarity == Rarity.NONE) acc else acc.setRarity(listId, id, rarity)
             }
         }
+        val added = outcome.added
         val ag = grouped(after)
         motion.setSections(sections(after))
         val reopened = bg.sections.filter { s -> s.complete && ag.sections.firstOrNull { it.id == s.id }?.complete == false }.map { it.id }.toSet()
@@ -200,10 +207,41 @@ class PracticeModel(
         if (reopened.isNotEmpty() || tripReopened) {
             motion.onChange(ListChange(emptySet(), reopened, false, tripReopened, null, ChangeCause.ADD, openSectionId = bg.openSectionId))
         }
-        val committed = list(after).items.filter { it.id in added }
+        val al = list(after)
+        val committed = al.items.filter { it.id in added }
         committed.firstOrNull()?.let { first -> ag.sections.firstOrNull { s -> s.rows.any { it.id == first.id } }?.let { focus(it.id) } }
+        // The add flows' sticky note (§6.2, §16: "Added Maple syrup to Breakfast ♡ ★ shiny!"), with its Undo.
+        val home = committed.singleOrNull()?.let { one -> ag.sections.firstOrNull { s -> s.rows.any { it.id == one.id } } }
+        _commits.tryEmit(
+            AddCommit(
+                id = ++commitSeq,
+                listId = listId,
+                listTitle = al.title,
+                added = committed,
+                alreadyThere = al.items.filter { it.id in outcome.alreadyThere },
+                revived = al.items.filter { it.id in outcome.revived },
+                aisleTitle = home?.let { if (it.kind == SectionKind.UNSORTED) "" else it.displayName },
+            ),
+        )
         if (committed.isNotEmpty()) engine.onCommitted(committed)
         return added
+    }
+
+    private val _commits = MutableSharedFlow<AddCommit>(extraBufferCapacity = 8)
+
+    /** Each add, for the practice list's sticky note (the add flows' own words and Undo, WP7's [AddCommit.toast]). */
+    val commits: SharedFlow<AddCommit> = _commits.asSharedFlow()
+
+    private var commitSeq = 0L
+
+    /** The note's Undo: the added rows go, and rows the add put back on the list are checked again. */
+    fun undo(commit: AddCommit, now: Long = clock()) {
+        set { s ->
+            val removed = commit.added.fold(s) { acc, it -> acc.removeItem(listId, it.id, now) }
+            commit.revived.fold(removed) { acc, it ->
+                if (acc.list(listId)?.items?.firstOrNull { row -> row.id == it.id }?.checked == false) acc.toggleChecked(listId, it.id, now) else acc
+            }
+        }
     }
 
     companion object {

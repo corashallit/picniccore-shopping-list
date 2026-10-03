@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.ui.theme.gen.BasketManifest
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -160,7 +161,11 @@ fun holoTitleBrush(phase: Float): Brush {
  * stroke): strawberry, ramune, mint, lemon and grape deeps (§2.2), mirrored so the sweep never shows a seam.
  */
 private val HOLO_TEXT: List<Color> = listOf(
-    Color(0xFFEC587A), Color(0xFF5EA9DB), Color(0xFF53B594), Color(0xFFDAB632), Color(0xFF9B7CDE),
+    earth.cora.picnic.ui.theme.Families.strawberry.deep,
+    earth.cora.picnic.ui.theme.Families.ramune.deep,
+    earth.cora.picnic.ui.theme.Families.mint.deep,
+    earth.cora.picnic.ui.theme.Families.lemon.deep,
+    earth.cora.picnic.ui.theme.Families.grape.deep,
 )
 
 /**
@@ -278,4 +283,82 @@ fun EndCapLadybug(state: SurpriseState, modifier: Modifier = Modifier) {
     val t by rememberLoopTime(enabled = !reduced)
     val waddle = if (reduced) 0f else if ((t / LadybugMotion.WADDLE_MS) % 2 == 0L) -5f else 5f
     DecorSticker("ladybug", modifier.graphicsLayer { rotationZ = 90f + waddle }.pageSticker("ladybug"), size = 14.dp)
+}
+
+/**
+ * Egg 3's last stretch, shared by the overlay and the list (§12.2, §4.1): the sticker rolls home along its own line,
+ * drawn by its ROW beneath the row's words (RowRoller), so the words stay whole and on top. The overlay publishes the
+ * travel ([show]); a row showing [RollingFx.itemId] draws it from the drop onwards. A list that has no RowRoller for the
+ * item (it is not on screen) leaves the overlay to draw it. Provide one per list with [LocalRollHome].
+ */
+@androidx.compose.runtime.Stable
+class RollHome {
+    internal var fx by mutableStateOf<RollingFx?>(null)
+
+    /** The travel in WINDOW px. */
+    internal var path by mutableStateOf<RollingPath?>(null)
+    internal var time by mutableStateOf<androidx.compose.runtime.State<Long>?>(null)
+
+    /** The items whose rows can draw it. */
+    internal val rows: MutableSet<String> = androidx.compose.runtime.snapshots.SnapshotStateSet()
+
+    internal fun show(fx: RollingFx, windowPath: RollingPath, time: androidx.compose.runtime.State<Long>) {
+        if (this.fx != fx) this.fx = fx
+        if (path != windowPath) path = windowPath
+        if (this.time !== time) this.time = time
+    }
+
+    internal fun clear(id: Long) {
+        if (fx?.id != id) return
+        fx = null
+        path = null
+        time = null
+    }
+}
+
+/** The list's [RollHome] (null: the overlay draws the whole roll itself). */
+val LocalRollHome = androidx.compose.runtime.staticCompositionLocalOf<RollHome?> { null }
+
+/**
+ * Egg 3: the rolling sticker on its own line, beneath the row's words. Call it inside the row's box BEFORE the row's
+ * content (so the words draw over it), filling the row ([itemId]: the row's item).
+ */
+@Composable
+fun BoxScope.RowRoller(itemId: String) {
+    val home = LocalRollHome.current ?: return
+    DisposableEffect(home, itemId) {
+        home.rows += itemId
+        onDispose { home.rows -= itemId }
+    }
+    val fx = home.fx?.takeIf { it.itemId == itemId } ?: return
+    val path = home.path ?: return
+    val t = home.time?.value ?: return
+    if (!RollingMotion.home(path, t)) return
+    val pose = RollingMotion.at(path, t) ?: return
+    var origin by remember { mutableStateOf<Offset?>(null) }
+    val d = LocalDensity.current.density
+    val half = RollingMotion.SIZE_DP * d / 2f
+    Box(
+        Modifier
+            .matchParentSize()
+            .onGloballyPositioned { origin = it.positionInWindow() },
+    ) {
+        val o = origin ?: return@Box
+        earth.cora.picnic.ui.theme.ItemIcon(
+            fx.icon,
+            contentDescription = null,
+            size = RollingMotion.SIZE_DP.dp,
+            holo = fx.holo,
+            aisleIndex = fx.aisleIndex,
+            modifier = Modifier
+                .clearAndSetSemantics { this[Decorative] = Unit }
+                .offset { androidx.compose.ui.unit.IntOffset((pose.center.x - o.x - half).toInt(), (pose.center.y - o.y - half).toInt()) }
+                .graphicsLayer {
+                    rotationZ = pose.rotation
+                    scaleX = pose.scaleX
+                    scaleY = pose.scaleY
+                },
+        )
+        Probe("rollhome", t, androidx.compose.ui.geometry.Rect(pose.center.x - half, pose.center.y - half, pose.center.x + half, pose.center.y + half), pose.rotation, Offset.Zero)
+    }
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
@@ -204,15 +205,17 @@ fun BoxScope.EggOverlays(
         if (!listPlacesDecor) state.napSectionId?.let { NapCat(it, anchors, local, engine, chainsDone) }
         state.napLeaving?.let { NapLeaving(it, anchors, local, engine) }
         state.ladybug?.let { Ladybug(it, anchors, local, engine) }
-        // The bursts, and the produce rolling across the page: clipped clear of every text box (they pass behind words).
+        // The bursts: they keep to lanes with no words (the gutters, the checkbox column); clipped clear of every text box
+        // all the same, should a layout ever put words there.
         KeepOut(keepOut) {
             state.duskFx?.let { DuskBurst(it, anchors.bounds(AnchorRegistry.SUN)?.let(local)) }
             state.petalsId?.let { Petals(it, anchors, local, engine) }
             state.antsId?.let { Ants(it, anchors, local, engine) }
             state.confettiId?.let { Confetti(it, anchors, local, engine) }
             state.shinyBursts.forEach { ShinyBurst(it, anchors, local, engine) }
-            state.rolling?.let { Rolling(it, anchors, local, engine, feedback) }
         }
+        // The produce rolling across the page goes round every word (its row draws the roll home beneath its words).
+        state.rolling?.let { Rolling(it, anchors, local, engine, feedback) }
         state.jackpot?.let { Jackpot(it, anchors, local, engine, feedback) }
         state.receipt?.let { ReceiptPrint(it, anchors, local, engine, feedback) }
         state.receiptTuckId?.let { ReceiptPoof(it, engine) }
@@ -623,8 +626,13 @@ private fun Confetti(id: Long, anchors: AnchorRegistry, local: (Rect) -> Rect, e
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
         val pieces = remember(id, w) { ConfettiMotion.pieces(w, d) }
+        // From under the binder top's words (the title, the subtitle, the LCD) down to the add bar's edge, where they
+        // fall out of sight behind the bar: the lanes hold no words in between.
+        val ceiling = listOf("title", "subtitle", "lcd").mapNotNull { anchors.bounds(EggAnchors.TEXT_PREFIX + it)?.let(local)?.bottom }.maxOrNull() ?: 0f
+        val floor = bar?.top ?: h
         pieces.forEachIndexed { i, p ->
-            ConfettiMotion.at(p, t, top = 0f, bottom = bar?.top ?: h, density = d)?.let {
+            val size = p.sizeDp * d
+            ConfettiMotion.at(p, t, top = ceiling + 1.5f * size, bottom = floor - 1.5f * size, density = d)?.let {
                 PlacedSticker(p.kind, it, p.sizeDp.dp)
                 Probe("confetti$i", t, Rect(Offset.Zero, Size.Zero).sized(it.center, p.sizeDp * d), it.rotation, origin())
             }
@@ -659,6 +667,7 @@ private fun ShinyBurst(fx: ShinyFx, anchors: AnchorRegistry, local: (Rect) -> Re
 private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine, feedback: Feedback) {
     val d = LocalDensity.current.density
     val o = origin()
+    val home = LocalRollHome.current
     // Its line: the new row once it is placed (the aisle may be opening in this very frame, so the anchors are read on
     // the frame clock, after layout); the folded strip it joins only if no row shows up; nothing at all, and the item is
     // simply on its line.
@@ -680,9 +689,11 @@ private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rec
                 val mouth = anchors.mouth(AnchorRegistry.basketKey(fx.sectionId))
                 val bar = anchors.bounds(AnchorRegistry.ADD_BAR)
                 if (key != null && row != null && mouth != null && bar != null) {
-                    val b = local(bar)
                     lineKey.value = key
-                    path.value = RollingMotion.path(local(row).center, mouth - o, b.top, b.width, d, fx.hop)
+                    val intoStrip = key != AnchorRegistry.rowKey(fx.itemId)
+                    // Its column: the row's checkbox column (no words), or the folded strip's chevron edge.
+                    val column = if (intoStrip) local(row).right - 30 * d else anchors.bounds(AnchorRegistry.checkKey(fx.itemId))?.let { local(it).center.x } ?: (local(row).right + 220 * d)
+                    path.value = RollingMotion.path(local(row).center, column, mouth - o, local(bar), d, fx.hop, intoStrip)
                 } else if (frames >= RollingMotion.GIVE_UP_FRAMES) {
                     engine.effectDone(fx.id)
                     break
@@ -691,9 +702,10 @@ private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rec
         }
     }
     val laid = path.value ?: return
-    val t by rememberEffectTime(fx.id, RollingMotion.DURATION) { engine.effectDone(fx.id) }
+    val time = rememberEffectTime(fx.id, RollingMotion.DURATION) { engine.effectDone(fx.id) }
+    val t by time
     // The list may still be scrolling its aisle into view: the row and the basket are followed where they are now (the
-    // launch point in the add bar stays put, so the turn still follows the sideways travel exactly, θ = Δx ⁄ r).
+    // launch point stays put, so the turn still follows the sideways travel exactly, θ = Δx ⁄ r).
     val liveRow = anchors.bounds(lineKey.value)?.let(local)?.center
     val liveMouth = anchors.mouth(AnchorRegistry.basketKey(fx.sectionId))?.let { it - o }
     val p = RollingMotion.follow(laid, liveRow, liveMouth)
@@ -702,9 +714,17 @@ private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rec
         feedback.cue(Cue.LAND)
         engine.onBasketHello(fx.sectionId)
     }
+    // The roll home along its own line is drawn by its row, beneath the row's words (RowRoller), when the row can.
+    val rowDraws = home != null && fx.itemId in home.rows
+    if (home != null) {
+        SideEffect { home.show(fx, p.copy(launch = p.launch + o, row = p.row + o, columnX = p.columnX + o.x, basketX = p.basketX + o.x, laneY = p.laneY + o.y), time) }
+        DisposableEffect(fx.id) { onDispose { home.clear(fx.id) } }
+    }
+    if (rowDraws && RollingMotion.home(p, t)) return
     val pose = RollingMotion.at(p, t) ?: return
     val size = RollingMotion.SIZE_DP.dp
     val half = RollingMotion.SIZE_DP * d / 2f
+    val bar = anchors.bounds(AnchorRegistry.ADD_BAR)?.let(local)
     ItemIcon(
         fx.icon,
         contentDescription = null,
@@ -714,10 +734,22 @@ private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rec
         modifier = Modifier
             .decorative()
             .offset { IntOffset((pose.center.x - half).roundToInt(), (pose.center.y - half).roundToInt()) }
+            // It comes up out of the add bar: whatever of it is still inside the bar is behind it.
+            .drawWithContent {
+                val b = bar
+                if (b == null) {
+                    drawContent()
+                } else {
+                    val dx = pose.center.x - half
+                    val dy = pose.center.y - half
+                    clipRect(b.left - dx, b.top - dy, b.right - dx, b.bottom - dy, ClipOp.Difference) { this@drawWithContent.drawContent() }
+                }
+            }
             .graphicsLayer {
                 rotationZ = pose.rotation
                 scaleX = pose.scaleX
                 scaleY = pose.scaleY
+                alpha = pose.alpha
             },
     )
     // The basket's hello: a rim heart rising off it at the bump.
@@ -726,7 +758,10 @@ private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rec
         val (rise, scale, alpha) = heart
         PlacedSticker("heart", EggPose(Offset(p.basketX, p.laneY + 10 * d - rise * d), 0f, scale, alpha = alpha), 14.dp)
     }
-    Probe("roller", t, Rect(Offset.Zero, Size.Zero).sized(pose.center, RollingMotion.SIZE_DP * d), pose.rotation, origin())
+    // Out of sight inside the bar it is not drawn over anything: the probe sees it once it shows.
+    val shown = bar?.let { b -> Rect(Offset.Zero, Size.Zero).sized(pose.center, RollingMotion.SIZE_DP * d).let { r -> Rect(r.left, r.top, r.right, minOf(r.bottom, b.top)) } }
+        ?: Rect(Offset.Zero, Size.Zero).sized(pose.center, RollingMotion.SIZE_DP * d)
+    if (shown.height > 0f) Probe("roller", t, shown, pose.rotation, origin())
 }
 
 /* ------------------------------------------------------------------------------------------------

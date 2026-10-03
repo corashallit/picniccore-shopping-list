@@ -10,6 +10,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -73,8 +75,8 @@ class EggRollingTest {
         val produce = r.model.grouped().sections.single { it.id == "produce" }
         assertEquals("it never enters the basket", gottenBefore, produce.gotten.size)
         assertTrue(produce.rows.any { it.id == row.id })
-        // Its last pose sat on its row's sticker.
-        val last = r.probe.frames.last { it.tag == "roller" }
+        // Its last pose sat on its row's sticker (drawn by its row, beneath the row's words).
+        val last = r.probe.frames.last { it.tag == "rollhome" }
         val spot = r.anchor(earth.cora.picnic.ui.list.motion.AnchorRegistry.rowKey(row.id))
         assertEquals(spot.center.x, last.center.x, 4f * px)
         assertEquals(spot.center.y, last.center.y, 4f * px)
@@ -115,7 +117,8 @@ class EggRollingTest {
         r.probe.clear()
         val t0 = r.addProduce("Lemons")
         r.advanceTo(t0 + RollingMotion.DURATION + 100)
-        val frames = r.probe.frames.filter { it.tag == "roller" }.distinctBy { it.time }.sortedBy { it.time }
+        // The overlay's frames, then its row's (the roll home along its line, beneath the words): one travel.
+        val frames = r.probe.frames.filter { it.tag == "roller" || it.tag == "rollhome" }.distinctBy { it.time }.sortedBy { it.time }
         assertTrue("sampled the roll", frames.size > 20)
         val radius = RollingMotion.RADIUS_DP * px
         var right = 0
@@ -141,11 +144,45 @@ class EggRollingTest {
                 }
             }
         }
-        assertTrue("it rolled right", right > 3)
+        assertTrue("it rolled right (back from the basket to its column)", right > 0)
         assertTrue("it rolled left", left > 3)
         assertTrue("it dropped", drops > 0)
+        // It lands upright on its spot: a whole number of turns.
+        val end = frames.last().rotation
+        val off = ((end % 360f) + 360f) % 360f
+        assertEquals("upright on its line (${end}°)", 0f, if (off > 180f) off - 360f else off, 5f)
         // One full turn per 2πr = 138 dp.
         assertEquals(138.2f, (2 * PI * RollingMotion.RADIUS_DP).toFloat(), 0.1f)
+    }
+
+    /**
+     * Item 259 for egg 3: on its way it never crosses a word (up its checkbox column, along its basket's lane, down onto
+     * its line), and the roll home along its own line is drawn by its row beneath the row's words.
+     */
+    @Test
+    fun itGoesRoundEveryWord() {
+        val r = EggRig(compose).start()
+        r.probe.clear()
+        val t0 = r.addProduce("Lemons")
+        val row = r.list.items.single { it.name == "Lemons" }
+        var overlay = 0
+        var home = 0
+        while (r.now < t0 + RollingMotion.DURATION) {
+            r.advance(48)
+            val words = textBoxes(compose)
+            r.probe.frames.filter { it.tag == "roller" }.forEach { f ->
+                overlay++
+                words.filter { (_, box) -> box.overlaps(f.bounds.deflate(2f)) }.forEach { (w, _) -> fail("at ${f.time} ms the sticker crosses \"$w\"") }
+            }
+            r.probe.frames.filter { it.tag == "rollhome" }.forEach { f ->
+                home++
+                val line = compose.onNodeWithTag(PracticeTags.row(row.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                assertTrue("at ${f.time} ms it rolls home on its own line", line.inflate(1f).contains(f.bounds.center))
+            }
+            r.probe.clear()
+        }
+        assertTrue(overlay > 10)
+        assertTrue("its row drew the roll home", home > 5)
     }
 
     @Test

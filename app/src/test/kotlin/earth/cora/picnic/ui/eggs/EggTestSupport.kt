@@ -16,6 +16,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.semantics.getOrNull
 import com.github.takahirom.roborazzi.captureRoboImage
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.list
@@ -192,5 +193,29 @@ fun stripOf(frames: List<Pair<Long, Bitmap>>, cols: Int = 4, scale: Float = 0.5f
         canvas.drawText("$t ms", x.toFloat(), (y + 30).toFloat(), text)
         canvas.drawBitmap(bmp, null, android.graphics.Rect(x, y + label, x + (bmp.width * scale).toInt(), y + label + (bmp.height * scale).toInt()), filter)
     }
+    return out
+}
+
+/**
+ * Every text node on screen (unmerged), in root px: the visible part of each, since the list scrolls under the opaque
+ * add bar (a row's words under the bar are hidden by it; the bar's own words are not).
+ */
+fun textBoxes(compose: ComposeContentTestRule): List<Pair<String, Rect>> {
+    val root = compose.onRoot(useUnmergedTree = true).fetchSemanticsNode()
+    var barTop = Float.MAX_VALUE
+    fun find(n: androidx.compose.ui.semantics.SemanticsNode) {
+        if (n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) == PracticeTags.ADD_BAR) barTop = n.boundsInRoot.top
+        n.children.forEach(::find)
+    }
+    find(root)
+    val out = ArrayList<Pair<String, Rect>>()
+    fun walk(n: androidx.compose.ui.semantics.SemanticsNode, inBar: Boolean) {
+        val mine = inBar || n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) == PracticeTags.ADD_BAR
+        val text = n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)
+        val box = n.boundsInRoot.let { b -> if (mine) b else Rect(b.left, b.top, b.right, minOf(b.bottom, barTop)) }
+        if (text != null && box.width > 0f && box.height > 0f) out += text.joinToString() to box
+        n.children.forEach { walk(it, mine) }
+    }
+    walk(root, false)
     return out
 }

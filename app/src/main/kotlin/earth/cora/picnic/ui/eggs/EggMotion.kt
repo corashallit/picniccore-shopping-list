@@ -40,13 +40,21 @@ internal const val SPARKLE_MS: Long = 125
 /* ------------------------------------------------------------------------------------------------
  * Egg 3: rolling produce. θ = Δx / r: one full turn per 2πr of sideways travel, clockwise while it moves right,
  * anticlockwise while it moves left, and no turn at all while it only rises or drops (Cora, 2 October; item 335).
+ *
+ * Its way never crosses a word (§4.1, item 259): it pops up out of the add bar in its row's checkbox column (no words
+ * there), rolls left along the lane at its basket's mouth (past the chevron) and bumps the basket, rolls back to the
+ * column, drops down it onto its own line, and rolls home along that line to its sticker spot, drawn by its row beneath
+ * the row's words, so the words stay whole over it (RowRoller). It starts out of sight inside the add bar a whole
+ * number of turns to the right of its spot, so it lands upright exactly where its row sticker is.
  * ------------------------------------------------------------------------------------------------ */
 
 /** Egg 3's travel, laid out once from the anchors when it starts (px). */
 @Immutable
 data class RollingPath(
-    /** Where it pops out of the add bar (the sticker's centre). */
+    /** Where it starts, out of sight inside the add bar: its spot's x + a whole number of turns, so it lands upright. */
     val launch: Offset,
+    /** The column it rises in and drops down (its row's checkbox column: no words). */
+    val columnX: Float,
     /** The lane it rolls along to the basket (centre height) and the basket mouth's x. */
     val laneY: Float,
     val basketX: Float,
@@ -57,6 +65,8 @@ data class RollingPath(
     /** Berries hop in arcs instead of rolling. */
     val hop: Boolean,
     val density: Float,
+    /** Its line is a folded strip (no row shows): after the bump it settles into the strip at its basket. */
+    val intoStrip: Boolean = false,
 )
 
 object RollingMotion {
@@ -64,13 +74,16 @@ object RollingMotion {
     const val SIZE_DP: Float = 44f
     const val RADIUS_DP: Float = 22f
 
-    // Beats (ms from the commit): the toss out of the add bar, the roll to the basket, the bump, the drop onto its line,
-    // the roll home, the settle. The basket is reached well inside the 3 s, and it is settled on its line by 3.2 s even
-    // when its row takes a few frames to be placed (ROW_WAIT_FRAMES).
-    const val RISE_END: Long = 300
+    // Beats (ms from the commit): inside the add bar to its column (out of sight), tossed up out of the bar to the lane,
+    // the roll to the basket, the bump, back to the column, the drop onto its line, the roll home, the settle. The
+    // basket is reached well inside the 3 s, and it is settled on its line by 3.2 s even when its row takes a few frames
+    // to be placed (ROW_WAIT_FRAMES).
+    const val HIDDEN_END: Long = 150
+    const val RISE_END: Long = 450
     const val ROLL_END: Long = 1500
     const val BUMP_END: Long = 1950
-    const val DROP_END: Long = 2150
+    const val BACK_END: Long = 2150
+    const val DROP_END: Long = 2350
     const val HOME_END: Long = 2920
     const val SETTLE_END: Long = 3040
 
@@ -98,112 +111,133 @@ object RollingMotion {
     )
 
     /**
-     * The path for a sticker whose row sticker sits at [row] and whose basket mouth is at [mouth], launched from the add
-     * bar whose top edge is at [addBarTop], on a screen [width] wide. The launch x is chosen one full turn (2πr) to the
-     * right of the row, so that rolling right to the basket and then left home leaves it upright exactly where its row
-     * sticker is: Δx home − launch = −2πr, θ = −360°. Clamped inside the screen, it uses two turns or none instead.
+     * The path for a sticker whose row sticker sits at [row], whose checkbox column is at [columnX] and whose basket mouth
+     * is at [mouth], out of the add bar [addBar] (px). The start inside the bar is the whole number of turns (2πr) right
+     * of the row's sticker nearest the column, so the turn it has made when it reaches its spot is a whole number of
+     * turns: it lands upright.
      */
-    fun path(row: Offset, mouth: Offset, addBarTop: Float, width: Float, density: Float, hop: Boolean): RollingPath {
+    fun path(row: Offset, columnX: Float, mouth: Offset, addBar: androidx.compose.ui.geometry.Rect, density: Float, hop: Boolean, intoStrip: Boolean = false): RollingPath {
         val r = RADIUS_DP * density
         val turn = (2 * PI * r).toFloat()
-        val margin = r + 6 * density
-        var launchX = row.x + turn
-        if (launchX > width - margin) launchX = row.x
-        if (launchX < margin) launchX = row.x + 2 * turn
-        val laneY = mouth.y - r * 0.6f
-        val launch = Offset(launchX, addBarTop - r - 2 * density)
-        return RollingPath(launch, laneY, mouth.x, row, r, hop, density)
+        var k = ((columnX - row.x) / turn).roundToInt().coerceAtLeast(1)
+        while (k > 1 && row.x + k * turn > addBar.right - r) k--
+        val launch = Offset(row.x + k * turn, addBar.top + r + 6 * density)
+        return RollingPath(launch, columnX, mouth.y - r * 0.6f, mouth.x, row, r, hop, density, intoStrip)
     }
 
-    /** The pose at [elapsed] ms (stepped at 12 fps); null once settled. */
+    /** The pose at [elapsed] ms (stepped at 12 fps); null once settled (or, into a strip, once it has gone in). */
     fun at(p: RollingPath, elapsed: Long): EggPose? {
         if (elapsed >= DURATION) return null
+        if (p.intoStrip && elapsed >= BACK_END) return null
         val t = stepped(elapsed, POSE_MS)
         return if (p.hop) hopAt(p, t) else rollAt(p, t)
     }
 
+    /** Out of sight inside the add bar (it pops up out of the bar's top edge after this). */
+    fun hidden(elapsed: Long): Boolean = elapsed < HIDDEN_END
+
+    /** From here its row draws it, beneath the row's words (the roll home along its own line). */
+    fun home(p: RollingPath, elapsed: Long): Boolean = !p.intoStrip && stepped(elapsed, POSE_MS) >= DROP_END
+
     /** θ (degrees) for a centre at x: the turn its sideways travel from the launch point makes, without slipping. */
     fun theta(p: RollingPath, x: Float): Float = ((x - p.launch.x) / p.radius * 180.0 / PI).toFloat()
 
-    private fun rollAt(p: RollingPath, t: Long): EggPose {
-        val bounceDy = 6 * p.density
-        return when {
-            t < RISE_END -> {
-                // Tossed straight up out of the add bar: no sideways travel, so no turn (it keeps its angle).
-                val f = easeOut(t.toFloat() / RISE_END)
-                val c = Offset(p.launch.x, lerp(p.launch.y, p.laneY, f))
-                EggPose(c, theta(p, c.x), scaleX = lerp(0.6f, 1f, clamp01(t / 160f)))
-            }
-            t < ROLL_END -> {
-                val f = (t - RISE_END).toFloat() / (ROLL_END - RISE_END)
-                val c = Offset(lerp(p.launch.x, p.basketX, f), p.laneY)
+    private fun rollAt(p: RollingPath, t: Long): EggPose = when {
+        t < HIDDEN_END -> {
+            // Inside the bar, out of sight: along to its column.
+            val c = Offset(lerp(p.launch.x, p.columnX, t.toFloat() / HIDDEN_END), p.launch.y)
+            EggPose(c, theta(p, c.x))
+        }
+        t < RISE_END -> {
+            // Tossed straight up out of the add bar: no sideways travel, so no turn (it keeps its angle).
+            val f = easeOut((t - HIDDEN_END).toFloat() / (RISE_END - HIDDEN_END))
+            EggPose(Offset(p.columnX, lerp(p.launch.y, p.laneY, f)), theta(p, p.columnX))
+        }
+        t < ROLL_END -> {
+            val f = (t - RISE_END).toFloat() / (ROLL_END - RISE_END)
+            val c = Offset(lerp(p.columnX, p.basketX, f), p.laneY)
+            EggPose(c, theta(p, c.x))
+        }
+        t < BUMP_END -> bump(p, t, theta(p, p.basketX))
+        t < BACK_END -> {
+            if (p.intoStrip) {
+                // Into the folded strip at its basket: it shrinks in, turning nowhere.
+                val f = (t - BUMP_END).toFloat() / (BACK_END - BUMP_END)
+                EggPose(Offset(p.basketX, p.laneY), theta(p, p.basketX), lerp(1f, 0.2f, f), alpha = 1f - f)
+            } else {
+                val f = easeOut((t - BUMP_END).toFloat() / (BACK_END - BUMP_END))
+                val c = Offset(lerp(p.basketX, p.columnX, f), p.laneY)
                 EggPose(c, theta(p, c.x))
             }
-            t < BUMP_END -> {
-                // The bump: up 6 dp and squashed (1.1 / .9), then .95 / 1.05, then rest; it only moves up and down.
-                val i = ((t - BUMP_AT) * 3 / (BUMP_END - BUMP_AT)).toInt().coerceIn(0, 2)
-                val c = Offset(p.basketX, p.laneY - if (i == 0) bounceDy else 0f)
-                val (sx, sy) = when (i) {
-                    0 -> 1.1f to 0.9f
-                    1 -> 0.95f to 1.05f
-                    else -> 1f to 1f
-                }
-                EggPose(c, theta(p, c.x), sx, sy)
-            }
-            t < DROP_END -> {
-                // Drops onto its own line: straight down, no turn.
-                val f = easeIn((t - BUMP_END).toFloat() / (DROP_END - BUMP_END))
-                EggPose(Offset(p.basketX, lerp(p.laneY, p.row.y, f)), theta(p, p.basketX))
-            }
-            t < HOME_END -> {
-                val f = easeOut((t - DROP_END).toFloat() / (HOME_END - DROP_END))
-                val c = Offset(lerp(p.basketX, p.row.x, f), p.row.y)
-                EggPose(c, theta(p, c.x))
-            }
-            else -> {
-                // Settles on its line with a little squash (1.12 / .88 → 1).
-                val i = ((t - HOME_END) / POSE_MS).toInt()
-                EggPose(p.row, theta(p, p.row.x), if (i == 0) 1.12f else 1f, if (i == 0) 0.88f else 1f)
-            }
+        }
+        t < DROP_END -> {
+            // Drops down its column onto its own line: straight down, no turn.
+            val f = easeIn((t - BACK_END).toFloat() / (DROP_END - BACK_END))
+            EggPose(Offset(p.columnX, lerp(p.laneY, p.row.y, f)), theta(p, p.columnX))
+        }
+        t < HOME_END -> {
+            val f = easeOut((t - DROP_END).toFloat() / (HOME_END - DROP_END))
+            val c = Offset(lerp(p.columnX, p.row.x, f), p.row.y)
+            EggPose(c, theta(p, c.x))
+        }
+        else -> {
+            // Settles on its line with a little squash (1.12 / .88 → 1).
+            val i = ((t - HOME_END) / POSE_MS).toInt()
+            EggPose(p.row, theta(p, p.row.x), if (i == 0) 1.12f else 1f, if (i == 0) 0.88f else 1f)
         }
     }
 
-    /** Berries hop in three arcs to the basket (apexes 40, 34, 26 dp; tilts −8°, +8°, −6°), bump, then hop home. */
+    /** The bump: up 6 dp and squashed (1.1 / .9), then .95 / 1.05, then rest; it only moves up and down. */
+    private fun bump(p: RollingPath, t: Long, rotation: Float): EggPose {
+        val i = ((t - BUMP_AT) * 3 / (BUMP_END - BUMP_AT)).toInt().coerceIn(0, 2)
+        val (sx, sy) = when (i) {
+            0 -> 1.1f to 0.9f
+            1 -> 0.95f to 1.05f
+            else -> 1f to 1f
+        }
+        return EggPose(Offset(p.basketX, p.laneY - if (i == 0) 6 * p.density else 0f), rotation, sx, sy)
+    }
+
+    /**
+     * Berries hop instead: up out of the bar, three arcs to the basket (apexes 24, 20, 14 dp, low enough to stay by their
+     * tray; tilts −8°, +8°, −6°), the
+     * bump, one arc back to the column, the drop, and three small skips home along their line (5 dp: they stay in their
+     * row, under its words).
+     */
     private fun hopAt(p: RollingPath, t: Long): EggPose {
         val d = p.density
-        val start = Offset(min(p.launch.x, p.basketX - 150 * d).coerceAtLeast(p.radius + 6 * d), p.laneY)
         return when {
+            t < HIDDEN_END -> EggPose(Offset(lerp(p.launch.x, p.columnX, t.toFloat() / HIDDEN_END), p.launch.y))
             t < RISE_END -> {
-                val f = easeOut(t.toFloat() / RISE_END)
-                EggPose(Offset(start.x, lerp(p.launch.y, p.laneY, f)), scaleX = lerp(0.6f, 1f, clamp01(t / 160f)))
+                val f = easeOut((t - HIDDEN_END).toFloat() / (RISE_END - HIDDEN_END))
+                EggPose(Offset(p.columnX, lerp(p.launch.y, p.laneY, f)))
             }
-            t < ROLL_END -> {
-                val f = (t - RISE_END).toFloat() / (ROLL_END - RISE_END)
-                val hop = min(2, floor(f * 3).toInt())
-                val local = f * 3 - hop
-                val apex = floatArrayOf(40f, 34f, 26f)[hop] * d
-                val tilt = floatArrayOf(-8f, 8f, -6f)[hop]
-                val x = lerp(start.x, p.basketX, f)
-                val y = p.laneY - apex * 4 * local * (1 - local)
-                EggPose(Offset(x, y), tilt * (1 - kotlin.math.abs(local * 2 - 1)))
-            }
-            t < BUMP_END -> {
-                val i = ((t - BUMP_AT) * 3 / (BUMP_END - BUMP_AT)).toInt().coerceIn(0, 2)
-                val (sx, sy) = when (i) {
-                    0 -> 1.1f to 0.9f
-                    1 -> 0.95f to 1.05f
-                    else -> 1f to 1f
+            t < ROLL_END -> arcs(p.columnX, p.basketX, p.laneY, (t - RISE_END).toFloat() / (ROLL_END - RISE_END), floatArrayOf(24f, 20f, 14f), floatArrayOf(-8f, 8f, -6f), d)
+            t < BUMP_END -> bump(p, t, 0f)
+            t < BACK_END -> {
+                if (p.intoStrip) {
+                    val f = (t - BUMP_END).toFloat() / (BACK_END - BUMP_END)
+                    EggPose(Offset(p.basketX, p.laneY), 0f, lerp(1f, 0.2f, f), alpha = 1f - f)
+                } else {
+                    arcs(p.basketX, p.columnX, p.laneY, (t - BUMP_END).toFloat() / (BACK_END - BUMP_END), floatArrayOf(20f), floatArrayOf(6f), d)
                 }
-                EggPose(Offset(p.basketX, p.laneY - if (i == 0) 6 * d else 0f), 0f, sx, sy)
             }
-            t < HOME_END -> {
-                val f = (t - BUMP_END).toFloat() / (HOME_END - BUMP_END)
-                val x = lerp(p.basketX, p.row.x, f)
-                val base = lerp(p.laneY, p.row.y, f)
-                EggPose(Offset(x, base - 30 * d * 4 * f * (1 - f)), -6f * (1 - kotlin.math.abs(f * 2 - 1)))
+            t < DROP_END -> {
+                val f = easeIn((t - BACK_END).toFloat() / (DROP_END - BACK_END))
+                EggPose(Offset(p.columnX, lerp(p.laneY, p.row.y, f)))
             }
+            t < HOME_END -> arcs(p.columnX, p.row.x, p.row.y, (t - DROP_END).toFloat() / (HOME_END - DROP_END), floatArrayOf(5f, 5f, 5f), floatArrayOf(-6f, 6f, -4f), d)
             else -> EggPose(p.row, 0f, 1.12f, 0.88f)
         }
+    }
+
+    /** [f] (0–1) of the way from [fromX] to [toX] on [y] in as many arcs as [apex] has (dp), tilting [tilt] at each top. */
+    private fun arcs(fromX: Float, toX: Float, y: Float, f: Float, apex: FloatArray, tilt: FloatArray, d: Float): EggPose {
+        val n = apex.size
+        val hop = min(n - 1, floor(f * n).toInt())
+        val local = f * n - hop
+        val x = lerp(fromX, toX, f)
+        return EggPose(Offset(x, y - apex[hop] * d * 4 * local * (1 - local)), tilt[hop] * (1 - kotlin.math.abs(local * 2 - 1)))
     }
 
     private fun easeOut(t: Float) = 1 - (1 - clamp01(t)) * (1 - clamp01(t))
@@ -352,7 +386,7 @@ object AntMotion {
 }
 
 /* ------------------------------------------------------------------------------------------------
- * Egg 9: the confetti rain (lanes avoid the text column; text keep-outs clip the rest).
+ * Egg 9: the confetti rain, in the edge lanes beside every word.
  * ------------------------------------------------------------------------------------------------ */
 
 object ConfettiMotion {
@@ -364,9 +398,9 @@ object ConfettiMotion {
     data class Piece(val kind: String, val x: Float, val sizeDp: Float, val delay: Long, val fallMs: Long, val spin: Float, val sway: Float)
 
     /**
-     * 26 die-cut confetti stickers (18–26 dp), each falling 1.3–1.8 s, all started inside the 2 s, in the side lanes of a
-     * [width]-wide screen: the gutter and sticker column on the left, the checkbox column on the right (§4.11), so they
-     * fall beside the text, never over it.
+     * 26 die-cut confetti stickers (12–16 dp), each falling 1.3–1.8 s, all started inside the 2 s, in the two edge lanes
+     * of a [width]-wide screen: the binder gutter on the left (no list words start before 18 dp) and the strip past the
+     * checkbox and chevron column on the right, so they rain beside every word, never over one (§4.1), with nothing cut.
      */
     fun pieces(width: Float, density: Float, seed: Int = 9): List<Piece> {
         var s = seed.toLong() and 0x7fffffff
@@ -374,12 +408,11 @@ object ConfettiMotion {
             s = (s * 1103515245L + 12345L) and 0x7fffffff
             return (s % 10_000).toFloat() / 10_000f
         }
-        val lane = 52 * density
         return List(COUNT) { i ->
             val left = i % 2 == 0
-            val x = if (left) 4 * density + next() * lane else width - 4 * density - next() * lane
+            val x = if (left) (5f + next() * 2f) * density else width - (10f + next() * 2f) * density
             val fall = 1300L + (next() * 500).toLong()
-            Piece(kinds[i % kinds.size], x, 18f + next() * 8f, ((RAIN_MS - fall) * next()).toLong(), fall, (if (next() < 0.5f) -1 else 1) * (140f + next() * 180f), (next() - 0.5f) * 16f)
+            Piece(kinds[i % kinds.size], x, 12f + next() * 4f, ((RAIN_MS - fall) * next()).toLong(), fall, (if (next() < 0.5f) -1 else 1) * (140f + next() * 180f), (next() - 0.5f) * 2f)
         }
     }
 
