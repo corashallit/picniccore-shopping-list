@@ -130,10 +130,10 @@ def _c3_yeast(cx, cy, rot):
     x = cx
     ticks = ''.join(f'M{fmt(cx - w / 2 + 1.6 + k * (w - 3.2) / 6)} {fmt(y0)}V{fmt(y0 + 2.4)}' for k in range(7) for y0 in (cy - h / 2 + .8, cy + h / 2 - 3.2))
     return [F(('rect', cx - w / 2, cy - h / 2, w, h, 2.2), 'lemon', 'm', band=.16, band_t='deep', tf=tf,
-              tex=[f'M0 {fmt(cy - h / 2 + 2)}H48', f'M0 {fmt(cy + h / 2 - 2)}H48'], tex_t='#DAB632', tex_w=3.6, det=[ticks], det_t='tr', det_w=1.1),
+              tex=[f'M0 {fmt(cy - h / 2 + 2)}H48', f'M0 {fmt(cy + h / 2 - 2)}H48'], tex_t='#DAB632', tex_w=3.6, det=[ticks], det_t='tr', det_w=1.2),
             F(('path', f'M{fmt(x - 2.8)} {fmt(cy + 2)}C{fmt(x - 2.8)} {fmt(cy - 2)} {fmt(x + 2.8)} {fmt(cy - 2)} {fmt(x + 2.8)} {fmt(cy + 2)}'
                        f'Q{fmt(x + 2.8)} {fmt(cy + 3.2)} {fmt(x + 1.6)} {fmt(cy + 3.2)}H{fmt(x - 1.6)}Q{fmt(x - 2.8)} {fmt(cy + 3.2)} {fmt(x - 2.8)} {fmt(cy + 2)}Z'),
-              'cocoa', 'm', ol=1.2, cut=False, tf=tf, det=[f'M{fmt(x - .9)} {fmt(cy - .4)}l-.7 1.3M{fmt(x + 1.1)} {fmt(cy - .4)}l-.7 1.3'], det_t='p', det_w=1)]
+              'cocoa', 'm', ol=1.2, cut=False, tf=tf, det=[f'M{fmt(x - .9)} {fmt(cy - .4)}l-.7 1.3M{fmt(x + 1.1)} {fmt(cy - .4)}l-.7 1.3'], det_t='p', det_w=1.2)]
 
 
 add('yeast', 'Yeast', [
@@ -188,7 +188,7 @@ add('sprinkles', 'Sprinkles', [
       det=[_c3_dots([(19.6, 12.4), (24, 11), (28.4, 12.4), (21.8, 14), (26.2, 14)])], det_t='#FFFFFF', det_w=1.8),
     F(('path', 'M14.6 19.6H33.4Q36.6 19.6 36.6 22.8V38.4Q36.6 42 33 42H15Q11.4 42 11.4 38.4V22.8Q11.4 19.6 14.6 19.6Z'), 'ramune', 'w', band=.2, band_t='p'),
     *[LINE(_c3_rod(x, y, a), 'ramune', 2.2, t=c, cut=False) for x, y, a, c in _C3_RODS],
-    F(('rect', 12.6, 14.4, 22.8, 6, 2.6), 'sakura', 'p', det=['M15.4 16V18.8M18.6 16V18.8M21.8 16V18.8M25 16V18.8M28.2 16V18.8M31.4 16V18.8'], det_t='m', det_w=1.1),
+    F(('rect', 12.6, 14.4, 22.8, 6, 2.6), 'sakura', 'p', det=['M15.4 16V18.8M18.6 16V18.8M21.8 16V18.8M25 16V18.8M28.2 16V18.8M31.4 16V18.8'], det_t='m', det_w=1.2),
     F(('path', _c3_stick(38.4, 41, 41.4, 37.2, 2.6)), 'sakura', 'm', ol=1.4),
     F(('path', _c3_stick(39.6, 32.4, 41.6, 28.6, 2.6)), 'lemon', 'm', ol=1.4),
     F(('path', _c3_stick(7, 38.4, 10.6, 40.4, 2.6)), 'ramune', 'm', ol=1.4),
@@ -229,9 +229,9 @@ add('spice_jar', 'Spices', [
     F(('rect', 11.6, 27.6, 20.8, 7.6), 'peach', 'w', ol=0, cut=False, det=['M11.6 27.6H32.4', 'M11.6 35.2H32.4'], det_w=1.4),
     LINE('M16.6 31.4H27.4', 'peach', 1.6, t='m', cut=False),
     F(('rect', 30.2, 15.6, 5.2, 26, 2.4), 'cocoa', 'm', band=.2, tf=_C3_CIN, det=['M32.4 18V39'], det_t='deep', det_w=1.3),
-    F(('ellipse', 32.8, 16.6, 2.6, 1.4), 'cocoa', 'p', ol=1.3, tf=_C3_CIN, det=['M32.2 16.6Q32.8 15.8 33.6 16.6'], det_w=1),
+    F(('ellipse', 32.8, 16.6, 2.6, 1.4), 'cocoa', 'p', ol=1.3, tf=_C3_CIN, det=['M32.2 16.6Q32.8 15.8 33.6 16.6'], det_w=1.2),
     F(('rect', 34.8, 15, 5.2, 26.6, 2.4), 'cocoa', 'm', band=.2, tf=_C3_CIN, det=['M37 17.4V39'], det_t='deep', det_w=1.3),
-    F(('ellipse', 37.4, 16, 2.6, 1.4), 'cocoa', 'p', ol=1.3, tf=_C3_CIN, det=['M36.8 16Q37.4 15.2 38.2 16'], det_w=1),
+    F(('ellipse', 37.4, 16, 2.6, 1.4), 'cocoa', 'p', ol=1.3, tf=_C3_CIN, det=['M36.8 16Q37.4 15.2 38.2 16'], det_w=1.2),
 ], qty='45 g jar', aisle='condiments')
 
 # salad dressing: a tall bottle of creamy dressing flecked with herbs, a green flip cap, a light-green label with a leaf
@@ -241,19 +241,19 @@ add('salad_dressing', 'Salad dressing', [
       tex=['M16.6 21.4l1.4 .6M20.6 18.8l1.4 -.6M25.6 18.4l1.2 .8M30 21l1.4 -.4M18.6 24l1 -1M28 23.8l1.2 .6M23.2 21.8l1.2 -.6', 'M16.4 38.8l1.4 -.4M22.6 39.6l1.2 .6M28.8 38.6l1.4 -.6'],
       tex_t='#6FBF62', tex_w=1.5),
     F(('rect', 15.8, 25.8, 16.4, 11.4, 3), 'melon', 'p', ol=1.5, cut=False),
-    F(('path', 'M19.4 34.6C18.8 30.4 22.4 27.4 28.4 28C28.8 32.4 25.2 35.4 19.4 34.6Z'), 'melon', 'm', ol=1.3, cut=False, det=['M20.8 33.2Q24 30.8 27 29.2'], det_w=1),
+    F(('path', 'M19.4 34.6C18.8 30.4 22.4 27.4 28.4 28C28.8 32.4 25.2 35.4 19.4 34.6Z'), 'melon', 'm', ol=1.3, cut=False, det=['M20.8 33.2Q24 30.8 27 29.2'], det_w=1.2),
 ], qty='475 mL bottle', aisle='condiments')
 
 # canola oil: a clear jug of golden oil (a side handle, a yellow cap, a white label with an oil drop and a leaf)
 add('canola_oil', 'Canola & vegetable oil', [
-    F(('rect', 15.4, 6.4, 9.6, 6.2, 2), 'lemon', 'm', det=['M17.8 8V11M20.2 8V11M22.6 8V11'], det_w=1.1),
+    F(('rect', 15.4, 6.4, 9.6, 6.2, 2), 'lemon', 'm', det=['M17.8 8V11M20.2 8V11M22.6 8V11'], det_w=1.2),
     TUBE('M32.6 19.6C40.6 19.6 40.6 32.6 32.6 32.6', 'lemon', 5.2, 'p'),
     F(('path', 'M17.2 11.8H23.2V14.4C29.8 15 33.6 18 33.6 23V38.4Q33.6 42 30 42H10.4Q6.8 42 6.8 38.4V23C6.8 18 10.6 15 17.2 14.4Z'), 'lemon', 'w'),
     F(('path', 'M7.8 22.6C11.2 21.4 14.6 23.2 18.2 22.2C21.8 21.2 25.4 22.8 28.8 21.8C30.2 21.4 31.6 21.6 32.6 22.2V38Q32.6 41 29.6 41H10.8Q7.8 41 7.8 38Z'), 'lemon', 'm', ol=0, cut=False,
       band='M5 35.4H36V44H5Z', band_t='deep'),
     F(('rect', 11.4, 25.6, 17.6, 11.4, 3), 'lemon', 'w', ol=1.4, cut=False),
     F(('path', _c3_drop(18.2, 31.4, .95)), 'lemon', 'm', ol=1.2, cut=False),
-    F(('path', 'M22 34.2C21.4 30.8 23.6 28.4 27.2 28.4C27.6 31.8 25.4 34.2 22 34.2Z'), 'melon', 'm', ol=1.1, cut=False, det=['M22.8 33.4Q24.6 31.2 26.4 29.4'], det_w=.9),
+    F(('path', 'M22 34.2C21.4 30.8 23.6 28.4 27.2 28.4C27.6 31.8 25.4 34.2 22 34.2Z'), 'melon', 'm', ol=1.2, cut=False, det=['M22.8 33.4Q24.6 31.2 26.4 29.4'], det_w=1.2),
 ], qty='3 L jug', aisle='condiments')
 
 # vinegar: a conical glass cruet with a knob stopper and a blank tag on a string, amber vinegar in the lower half
@@ -274,9 +274,9 @@ _C3_SALSA_BITS = [(13.6, 26.6, 2.6, 2.2, 14, 'w'), (20.6, 29.4, 2.4, 2.4, -10, '
 add('salsa', 'Salsa', [
     F(('path', _c3_mound(10.4, 33.6, 20.6, 9.6, 5, .14)), 'strawberry', 'm'),
     F(('path', 'M11.6 20.6H32.4Q35.4 20.6 35.4 23.6V38Q35.4 42 31.4 42H12.6Q8.6 42 8.6 38V23.6Q8.6 20.6 11.6 20.6Z'), 'strawberry', 'm', band=.2),
-    *[F(('rect', x - w / 2, y - h / 2, w, h, .9, a), 'melon' if c == 'g' else 'strawberry', {'g': 'm', 'w': 'w', 'd': 'deep'}[c], ol=1.1, cut=False) for x, y, w, h, a, c in _C3_SALSA_BITS],
-    F(('rect', 9.8, 18.4, 24.4, 4.6, 2.3), 'strawberry', 'w', det=['M13 19.8V21.6M17 19.8V21.6M21 19.8V21.6M25 19.8V21.6M29 19.8V21.6'], det_t='p', det_w=1.1),
-    F(cyl(29.8, 42, 36.4, 42, 2), 'melon', 'm', band=.4, band_t='deep', det=['M32 38.4V40.4M35 38.8V41M38 38.8V41M40.4 38.4V40.2'], det_t='p', det_w=1.1),
+    *[F(('rect', x - w / 2, y - h / 2, w, h, .9, a), 'melon' if c == 'g' else 'strawberry', {'g': 'm', 'w': 'w', 'd': 'deep'}[c], ol=1.2, cut=False) for x, y, w, h, a, c in _C3_SALSA_BITS],
+    F(('rect', 9.8, 18.4, 24.4, 4.6, 2.3), 'strawberry', 'w', det=['M13 19.8V21.6M17 19.8V21.6M21 19.8V21.6M25 19.8V21.6M29 19.8V21.6'], det_t='p', det_w=1.2),
+    F(cyl(29.8, 42, 36.4, 42, 2), 'melon', 'm', band=.4, band_t='deep', det=['M32 38.4V40.4M35 38.8V41M38 38.8V41M40.4 38.4V40.2'], det_t='p', det_w=1.2),
     F(ell_top(29.8, 42, 36.4, 2), 'melon', 'p'),
 ], qty='650 mL jar', aisle='condiments')
 
@@ -288,7 +288,7 @@ _C3_ELBOWS = [(13.6, 22.6, 3, 160), (19.6, 18.2, 3, 210), (26.6, 16.4, 3, 120), 
 add('mac_and_cheese', 'Mac & cheese', [
     F(('path', _c3_mound(8.6, 39.4, 27.4, 13.6, 5, .08)), 'peach', 'p'),
     F(('path', _c3_stick(30.6, 21.4, 37.8, 7.4, 3.4)), 'ramune', 'p', ol=1.8),
-    *[F(('path', _c3_arc(x, y, r, a, a + 190, 3.4)), 'peach', 'm', ol=1.5, det=[_c3_line(_c3_arc_pts(x, y, r, a + 40, a + 150, 8))], det_t='deep', det_w=1)
+    *[F(('path', _c3_arc(x, y, r, a, a + 190, 3.4)), 'peach', 'm', ol=1.5, det=[_c3_line(_c3_arc_pts(x, y, r, a + 40, a + 150, 8))], det_t='deep', det_w=1.2)
       for x, y, r, a in _C3_ELBOWS],
     F(('path', 'M6.6 26.2H41.4C41.4 34.4 35.2 39.4 28.4 39.4H19.6C12.8 39.4 6.6 34.4 6.6 26.2Z'), 'ramune', 'm', band=.28,
       tex=[_c3_dots([(12, 30), (18, 33.4), (24, 30), (30, 33.4), (36, 30), (15, 36.4), (21, 37.2), (27, 37.2), (33, 36.4)])], tex_t='#FFFFFF', tex_w=2.2),
@@ -329,7 +329,7 @@ add('lentils', 'Lentils & dried beans', [
 
 # broth & stock: a pale-yellow carton with a golden band (a bay leaf), a screw cap, two bouillon cubes stacked beside it
 add('broth', 'Broth & stock', [
-    F(('rect', 21.4, 6.2, 7.2, 5.8, 2), 'peach', 'm', det=['M23.4 7.8V10.8M25 7.8V10.8M26.6 7.8V10.8'], det_w=1),
+    F(('rect', 21.4, 6.2, 7.2, 5.8, 2), 'peach', 'm', det=['M23.4 7.8V10.8M25 7.8V10.8M26.6 7.8V10.8'], det_w=1.2),
     F(('path', 'M9.4 14.2Q9.4 11.2 12.4 11.2H28.6Q31.6 11.2 31.6 14.2V39Q31.6 42 28.6 42H12.4Q9.4 42 9.4 39Z'), 'lemon', 'p', band=.16, det=['M10 15.6H31']),
     F(('rect', 10.3, 21.2, 20.4, 12.8), 'lemon', 'm', ol=0, cut=False, det=['M10.3 21.2H30.7', 'M10.3 34H30.7'], det_w=1.4),
     F(('path', 'M14 31.6C14.8 26.6 20.2 23.6 26.8 24.2C26 29.2 20.6 32.4 14 31.6Z'), 'lemon', 'w', ol=1.4, cut=False,
@@ -341,13 +341,13 @@ add('broth', 'Broth & stock', [
 # pickles: a Mason jar of brine packed with bumpy dill pickles, a dill sprig and a garlic clove, a gold lid
 _C3_PICKLE_DOTS = lambda x, y: _c3_dots([(x - 1.2, y - 5), (x + 1, y - 2.4), (x - 1, y + .4), (x + 1.2, y + 3.2), (x - .8, y + 6)])
 add('pickles', 'Pickles', [
-    F(('rect', 13, 8.4, 22, 7.8, 2.6), 'lemon', 'm', det=['M16 10.4V14.2M19.4 10.4V14.2M22.8 10.4V14.2M26.2 10.4V14.2M29.6 10.4V14.2M32.4 10.4V14.2'], det_w=1.1),
+    F(('rect', 13, 8.4, 22, 7.8, 2.6), 'lemon', 'm', det=['M16 10.4V14.2M19.4 10.4V14.2M22.8 10.4V14.2M26.2 10.4V14.2M29.6 10.4V14.2M32.4 10.4V14.2'], det_w=1.2),
     F(('path', 'M15.6 15.6H32.4V18.4C36.4 19.4 38.6 22.2 38.6 26V38Q38.6 42 34.6 42H13.4Q9.4 42 9.4 38V26C9.4 22.2 11.6 19.4 15.6 18.4Z'), 'melon', 'lp', band=.16, band_t='p',
       det=['M15.8 16.8H32.2'], det_t='p', det_w=1.2),
     *[F(('ellipse', x, y, 3.8, 9, a), 'melon', 'm', ol=1.4, cut=False, band=.22, band_t='deep', tex=[_C3_PICKLE_DOTS(x, y)], tex_t='#D3F4C5', tex_w=1.6)
       for x, y, a in [(16.2, 30.4, -8), (24, 29.2, 3), (31.8, 30.6, 9)]],
     LINE('M20.2 23.6L19 21.4M19 21.4l-1.6 -.4M19 21.4l.2 -1.6M27.8 23.4L29 21.2M29 21.2l1.6 -.4M29 21.2l-.2 -1.6', 'melon', 1.2, t='tr', cut=False),
-    F(('path', 'M20.6 41C19 41 18.4 39.4 18.8 38C19.2 36.6 20.4 35.6 21.6 35.4C22.4 36.6 22.8 38 22.6 39.2C22.4 40.4 21.6 41 20.6 41Z'), 'lemon', 'w', ol=1.1, cut=False),
+    F(('path', 'M20.6 41C19 41 18.4 39.4 18.8 38C19.2 36.6 20.4 35.6 21.6 35.4C22.4 36.6 22.8 38 22.6 39.2C22.4 40.4 21.6 41 20.6 41Z'), 'lemon', 'w', ol=1.2, cut=False),
 ], qty='1 L jar', aisle='pantry')
 
 # olives: a little dish of green and black olives, the front green one stuffed with a red pimento
@@ -386,8 +386,8 @@ add('curry_sauce', 'Curry & simmer sauces', [
     F(('path', 'M17.4 20.4H37.4Q40.4 20.4 40.4 23.4V38Q40.4 42 36.4 42H18.4Q14.4 42 14.4 38V23.4Q14.4 20.4 17.4 20.4Z'), 'peach', 'm', band=.2),
     F(('rect', 18.4, 25.6, 18, 11.4, 3), 'peach', 'w', ol=1.5, cut=False),
     F(('path', 'M27.4 26.4C30.2 28.8 31.4 30.6 31.4 32.6C31.4 34.8 29.6 36.2 27.4 36.2C25.2 36.2 23.4 34.8 23.4 32.6C23.4 31.2 24.2 30 25.2 29.2C25.2 30.4 25.6 31.4 26.4 31.6C26 29.8 26.4 27.8 27.4 26.4Z'), 'peach', 'deep', ol=1.2, cut=False),
-    F(('path', _c3_drop(27.4, 33.4, .52)), 'lemon', 'm', ol=1, cut=False),
-    F(('rect', 12.8, 13.8, 29.2, 7.6, 2.6), 'lemon', 'm', det=['M16.6 15.8V19.6M20.6 15.8V19.6M24.6 15.8V19.6M28.6 15.8V19.6M32.6 15.8V19.6M36.6 15.8V19.6'], det_w=1.1),
+    F(('path', _c3_drop(27.4, 33.4, .52)), 'lemon', 'm', ol=1.2, cut=False),
+    F(('rect', 12.8, 13.8, 29.2, 7.6, 2.6), 'lemon', 'm', det=['M16.6 15.8V19.6M20.6 15.8V19.6M24.6 15.8V19.6M28.6 15.8V19.6M32.6 15.8V19.6M36.6 15.8V19.6'], det_w=1.2),
 ], qty='350 mL jar', aisle='pantry')
 
 # ================================================================ snacks and candy
@@ -440,12 +440,12 @@ def _c3_peanut(x0, y0, x1, y1, r0, r1):
 
 add('nuts', 'Nuts & trail mix', [
     F(('path', _c3_peanut(11.8, 22.6, 19.6, 17.4, 4.8, 4.4)), 'cocoa', 'p', band=.2, band_t='m',
-      tex=['M8 18L20 30M10 14L24 28M15 11L25 21M6 24L14 32', 'M8 26L18 14M10 30L22 16M14 32L25 20'], tex_t='#CB9C73', tex_w=1.1),
+      tex=['M8 18L20 30M10 14L24 28M15 11L25 21M6 24L14 32', 'M8 26L18 14M10 30L22 16M14 32L25 20'], tex_t='#CB9C73', tex_w=1.2),
     F(('path', _c3_bumpy(31, 21.4, 8.4, 7.2, 7, .07, 0)), 'cocoa', 'm', band=.24, band_t='deep',
       det=['M31 14.8V27.8', 'M27 17.6Q25 20.4 27.4 22.6Q25 24.6 27 26.6', 'M35 17.6Q37 20.4 34.6 22.6Q37 24.6 35 26.6'], det_t='deep', det_w=1.3),
-    F(('path', _C3_ALMOND), 'cocoa', 'm', band=.26, band_t='deep', tf='translate(13 34.6) rotate(-24)', det=['M-1.4 -3.4Q-2 0 -1.2 3.6', 'M1.6 -2.6Q2 .4 1.4 3.4'], det_t='deep', det_w=1.1),
+    F(('path', _C3_ALMOND), 'cocoa', 'm', band=.26, band_t='deep', tf='translate(13 34.6) rotate(-24)', det=['M-1.4 -3.4Q-2 0 -1.2 3.6', 'M1.6 -2.6Q2 .4 1.4 3.4'], det_t='deep', det_w=1.2),
     F(('path', _c3_arc(33.6, 33.6, 4.4, 160, 380, 5.6)), 'cocoa', 'lp', band=.26, band_t='p', det=[_c3_line(_c3_arc_pts(33.6, 33.6, 4.4, 200, 330, 8))], det_t='p', det_w=1.3),
-    F(('path', _C3_ALMOND), 'cocoa', 'm', band=.26, band_t='deep', tf='translate(23.4 35) rotate(14)', det=['M-1.4 -3.4Q-2 0 -1.2 3.6', 'M1.6 -2.6Q2 .4 1.4 3.4'], det_t='deep', det_w=1.1),
+    F(('path', _C3_ALMOND), 'cocoa', 'm', band=.26, band_t='deep', tf='translate(23.4 35) rotate(14)', det=['M-1.4 -3.4Q-2 0 -1.2 3.6', 'M1.6 -2.6Q2 .4 1.4 3.4'], det_t='deep', det_w=1.2),
 ], qty='500 g bag', aisle='snacks')
 
 # dried fruit: wrinkly purple raisins heaped behind two flat, wrinkled dried apricot halves (the big one carries the gloss)
@@ -480,12 +480,12 @@ _C3_BERRIES = [(15.4, 24.6, 'r'), (22.4, 27.8, 'b'), (29, 24.8, 'r'), (13.4, 31.
 add('frozen_berries', 'Frozen fruit', [
     F(('path', 'M11.6 12.6H36.4C39.8 18.6 41.2 27 40.4 34.6Q39.8 41.6 34.6 41.8H13.4Q8.2 41.6 7.6 34.6C6.8 27 8.2 18.6 11.6 12.6Z'), 'ramune', 'w', band=.14, band_t='p'),
     *[F(('circle', x, y, 3.4), 'strawberry', 'm', ol=1.3, cut=False, tex=[_c3_dots([(x - 1.2, y - 1), (x + 1.2, y - .8), (x, y + 1.2)])], tex_t='#FFC4D1', tex_w=1.2)
-      if c == 'r' else F(('circle', x, y, 3), 'ramune', 'm', ol=1.3, cut=False, det=[f'M{fmt(x - .8)} {fmt(y - 1.6)}l.8 .8l.8 -.8'], det_w=1)
+      if c == 'r' else F(('circle', x, y, 3), 'ramune', 'm', ol=1.3, cut=False, det=[f'M{fmt(x - .8)} {fmt(y - 1.6)}l.8 .8l.8 -.8'], det_w=1.2)
       for x, y, c in _C3_BERRIES],
     LINE(_c3_dots([(18.6, 23), (25.4, 31), (31.6, 28.2), (11.6, 35.6), (35.4, 35.6), (20.4, 41), (27.6, 41.2), (24.8, 22.4)]), 'ramune', 1.6, t='#FFFFFF', cut=False),
-    F(('path', _c3_snowflake(31.6, 19, 4.4, 1.8)), 'ramune', 'm', ol=1.1, cut=False),
+    F(('path', _c3_snowflake(31.6, 19, 4.4, 1.8)), 'ramune', 'm', ol=1.2, cut=False),
     F(('path', 'M10.8 9.2L12.4 8.2L14 9.2L15.6 8.2L17.2 9.2L18.8 8.2L20.4 9.2L22 8.2L23.6 9.2L25.2 8.2L26.8 9.2L28.4 8.2L30 9.2L31.6 8.2L33.2 9.2L34.8 8.2L36.4 9.2L37.6 8.6V13.4H10.4V8.6Z'), 'ramune', 'w',
-      det=['M12.6 10.4V12.2M15.6 10.4V12.2M18.6 10.4V12.2M21.6 10.4V12.2M24.6 10.4V12.2M27.6 10.4V12.2M30.6 10.4V12.2M33.6 10.4V12.2M36.2 10.4V12.2'], det_t='m', det_w=1.1),
+      det=['M12.6 10.4V12.2M15.6 10.4V12.2M18.6 10.4V12.2M21.6 10.4V12.2M24.6 10.4V12.2M27.6 10.4V12.2M30.6 10.4V12.2M33.6 10.4V12.2M36.2 10.4V12.2'], det_t='m', det_w=1.2),
 ], qty='600 g bag', aisle='frozen')
 
 # perogies: three plump half-moon perogies with crimped edges and pan-fried spots, sprinkled with green onion
@@ -516,7 +516,7 @@ add('perogies', 'Perogies & dumplings', [
       tex=_C3_BROWN([(12.6, 37.6), (17.6, 36.4)]), tex_t='#CB9C73', tex_w=3.4),
     F(('path', _c3_perogy(32.8, 42, 8.4, 9.4)), 'cocoa', 'p', band=.24, band_t='m', det=[_c3_crimp(32.8, 42, 8.4, 9.4)], det_t='m', det_w=1.3,
       tex=_C3_BROWN([(30.2, 36.4), (35.2, 37.8)]), tex_t='#CB9C73', tex_w=3.4),
-    *[F(('rect', x - 1.6, y - .9, 3.2, 1.8, .9, a), 'melon', 'm', ol=1, cut=False) for x, y, a in [(22.2, 26.4, -20), (27.6, 29.6, 15), (13.4, 35, 25), (18.2, 39, -10), (31.4, 39.2, 20), (35.6, 35.6, -25)]],
+    *[F(('rect', x - 1.6, y - .9, 3.2, 1.8, .9, a), 'melon', 'm', ol=1.2, cut=False) for x, y, a in [(22.2, 26.4, -20), (27.6, 29.6, 15), (13.4, 35, 25), (18.2, 39, -10), (31.4, 39.2, 20), (35.6, 35.6, -25)]],
 ], qty='907 g bag', aisle='frozen')
 
 # nuggets & fish sticks: three golden breaded nuggets beside a little white cup of ketchup

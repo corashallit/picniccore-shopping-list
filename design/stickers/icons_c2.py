@@ -116,7 +116,7 @@ def _c2_salad_leaves(sel):
         c, s = _c2m.cos(_c2m.radians(a)), _c2m.sin(_c2m.radians(a))
         out.append(F(('path', blob(x, y, rx, ry, 9, .12, n + 3, a)), fam, 'm', ol=1.3, cut=False,
                      det=[f'M{fmt(x - rx * .6 * c)} {fmt(y - rx * .6 * s)}L{fmt(x + rx * .6 * c)} {fmt(y + rx * .6 * s)}'],
-                     det_t='p', det_w=1.1))
+                     det_t='p', det_w=1.2))
     return out
 
 
@@ -176,7 +176,7 @@ def _c2_bean(L=30, hw=2.8, k=2.4):
 _C2_BT = 'translate(23.4 32.4)'
 add('green_beans', 'Green beans', [
     *[F(('path', _c2_bean(L, hw)), 'melon', 'm', band=.34, sband=False, tf=f'{_C2_BT} rotate({r})',
-        det=[f'M{fmt(-L / 2 + 5)} .4Q0 {fmt(-hw * .2)} {fmt(L / 2 - 5)} .4'], det_t='p', det_w=1.1)
+        det=[f'M{fmt(-L / 2 + 5)} .4Q0 {fmt(-hw * .2)} {fmt(L / 2 - 5)} .4'], det_t='p', det_w=1.2)
       for r, L, hw in [(-21, 33, 3), (19, 32, 3), (-8, 34, 3), (7, 33, 3.8)]],
     TUBE('M0 -7.4V7', 'cocoa', 3.4, 'p', cut=False, tf=_C2_BT),
     F(('ellipse', -4.6, -11, 4.4, 2.8, 30), 'cocoa', 'p', ol=1.6, tf=_C2_BT),
@@ -245,7 +245,7 @@ add('parsley', 'Parsley & cilantro', [
     *[TUBE(f'M24 40.6Q{fmt((24 + x) / 2)} {fmt((41 + y) / 2 + 4)} {fmt(x)} {fmt(y + R * .5)}', 'melon', 2.6, 'm') for x, y, R, s in _C2_PS],
     *[F(('path', _c2_frill(x, y, R, -90 + s * 7, s)), 'melon', 'm', band=.26,
         det=[f'M{fmt(x)} {fmt(y + R * .5)}L{fmt(x)} {fmt(y - R * .45)}', f'M{fmt(x)} {fmt(y + R * .1)}L{fmt(x - R * .45)} {fmt(y - R * .2)}',
-             f'M{fmt(x)} {fmt(y + R * .1)}L{fmt(x + R * .45)} {fmt(y - R * .2)}'], det_t='p', det_w=1.1) for x, y, R, s in _C2_PS],
+             f'M{fmt(x)} {fmt(y + R * .1)}L{fmt(x + R * .45)} {fmt(y - R * .2)}'], det_t='p', det_w=1.2) for x, y, R, s in _C2_PS],
 ], qty='1 bunch', aisle='produce')
 
 # 9 bagel: one golden sesame bagel in 3/4 view, the hole showing its inner wall
@@ -279,16 +279,16 @@ def _c2_bun(cx, bot, w, seeds=False):
 
 add('buns', 'Buns & rolls', [*_c2_bun(31.6, 37, 18.4), *_c2_bun(18.4, 42, 22.8, seeds=True)], qty='8 pack', aisle='bakery')
 
-# 11 pita & naan: a flatbread teardrop (the flatbread emoji's shape), pale, with soft toasted patches, dark char specks
-# and green herb flecks (the cookies' dark chips and the potatoes' eyes stay distinct)
-_C2_NAAN = 'M7.4 32.4C6.6 23.2 13.6 14.6 23.6 11.6C30.6 9.6 37.6 8.4 40.6 10C42.8 12 40.8 18 38.8 23.6C35.8 32.4 30 40.4 20.6 41.6C13.6 42.4 8 38.8 7.4 32.4Z'
+# 11 pita & naan: a round flatbread disc lying behind, a half pita standing in front of it with its cut edge on top and
+# the pocket open (the disc and the D read as bread at 22 dp; potatoes are lumpy ovals with eyes, cookies have chips)
+_C2_PITA_D = 'M20.4 28.4H39.6Q42 28.4 42 30.8C42 37.2 36.8 42 30 42C23.2 42 18 37.2 18 30.8Q18 28.4 20.4 28.4Z'
 add('pita', 'Pita & naan', [
-    F(('path', _C2_NAAN), 'cocoa', 'p', band=.22),
-    *[F(('path', _c2_bubble(x, y, r)), 'cocoa', 'm', ol=0, cut=False) for x, y, r in [(15.6, 28, 3.2), (25, 20.4, 2.8), (32.6, 15.4, 2.2), (28.6, 29, 2.8), (18.6, 36, 2.4), (37.2, 12.8, 1.5)]],
-    LINE(_c2_dots([(16.4, 27.6), (25.6, 20), (29.2, 28.4), (19.2, 35.4), (33, 15)]), 'cocoa', 1.8, t='tr', cut=False),
-    LINE(''.join(f'M{fmt(x)} {fmt(y)}l{fmt(dx)} {fmt(dy)}' for x, y, dx, dy in [(11.6, 33.2, 1.4, -.8), (21.4, 25.2, .4, 1.6), (23.4, 33.6, 1.6, .4),
-                                                                                  (31.4, 22.4, -.6, 1.4), (35.2, 19.2, 1.2, .8), (27.4, 14.6, 1.4, -.6), (14.6, 21.8, .8, 1.2)]),
-         'melon', 1.6, t='m', cut=False),
+    F(('ellipse', 21, 22.4, 15, 12), 'cocoa', 'p', band=.24),
+    *[F(('path', _c2_bubble(x, y, r)), 'cocoa', 'm', ol=0, cut=False) for x, y, r in [(26.6, 15.6, 2.4), (31, 21.4, 2.2), (21.8, 21, 2), (14.4, 27.8, 1.9)]],
+    F(('path', _C2_PITA_D), 'cocoa', 'p', band=.26),
+    F(('path', 'M20.6 30.6C24.6 34 35.4 34 39.4 30.6C35.4 31.6 24.6 31.6 20.6 30.6Z'), 'cocoa', 'm', ol=0, cut=False,
+      det=['M20.6 30.6C24.6 34 35.4 34 39.4 30.6'], det_t='tr', det_w=2),
+    *[F(('path', _c2_bubble(x, y, r)), 'cocoa', 'm', ol=0, cut=False) for x, y, r in [(25.4, 37.4, 1.8), (34.2, 37, 2)]],
 ], qty='4 pack', aisle='bakery')
 
 # 12 cake: a round white-frosted layer cake, pink glaze dripping over the top edge, one cherry
@@ -398,7 +398,7 @@ add('hummus', 'Hummus & dips', [
     F(('path', 'M9.4 26.4C9.4 21.4 15.6 18.4 24 18.4C32.4 18.4 38.6 21.4 38.6 26.4C34.6 29.6 13.4 29.6 9.4 26.4Z'), 'cocoa', 'p', ol=1.6, cut=False,
       det=['M25 21.6C30.6 21.2 33.4 23.4 31.2 25.8C28.2 28.6 18.6 28.2 16.8 25.4C15.2 22.6 19.4 20.4 26.2 20.6'], det_t='m', det_w=1.8),
     F(('ellipse', 24.4, 24.6, 4.6, 2), 'lemon', 'm', ol=1.2, cut=False),
-    *[F(('circle', x, y, 1.6), 'cocoa', 'p', ol=1.1, cut=False) for x, y in [(27.6, 24.2), (29.8, 25.8), (26.4, 26.6)]],
+    *[F(('circle', x, y, 1.6), 'cocoa', 'p', ol=1.2, cut=False) for x, y in [(27.6, 24.2), (29.8, 25.8), (26.4, 26.6)]],
     *[F(('circle', x, y, 1.05), 'strawberry', 'm', ol=0, cut=False) for x, y in [(13.4, 25.2), (34.6, 24.4), (18.6, 21.4), (21, 27.6), (17.4, 27.8), (35.4, 27.2), (30.4, 21)]],
 ], qty='227 g tub', aisle='deli')
 
@@ -425,21 +425,20 @@ add('hot_dogs', 'Hot dogs', [
     F(('path', 'M-16.6 -1.6C-16.6 3.8 -13 7.4 -8.4 7.4H8.4C13 7.4 16.6 3.8 16.6 -1.6C10.6 1 -10.6 1 -16.6 -1.6Z'), 'peach', 'p', band=.36, tf=_C2_HD),
 ], qty='12 franks', aisle='meat')
 
-# 21 whole turkey: a golden roast on a lemon platter, drumsticks at the lower sides pointing up and out, paper frills
-
-
+# 21 whole turkey: a wide golden roast on a lemon platter, a drumstick at each front shoulder leaning out, a white bone
+# running up and out of each to its paper frill, pale roast streaks on the breast
 def _c2_leg(x, y, a):
     tf = f'translate({fmt(x)} {fmt(y)}) rotate({a})'
-    return [TUBE('M0 -5.4V-10.4', 'cocoa', 3.6, 'w', tf=tf),
-            F(('path', 'M-3.4 -10H3.4L4 -13.4L2.6 -12.2L1.3 -14.2L0 -12.4L-1.3 -14.2L-2.6 -12.2L-4 -13.4Z'), 'cocoa', 'w', ol=1.4, tf=tf),
-            F(('ellipse', 0, 0, 5.4, 7.6), 'cocoa', 'm', band=.3, tf=tf)]
+    return [TUBE('M0 -3.6V-10.6', 'cocoa', 2.4 + 2, 'w', tf=tf),
+            F(('path', 'M-3 -10.2H3L3.6 -13.6L2.3 -12.4L1.2 -14.4L0 -12.6L-1.2 -14.4L-2.3 -12.4L-3.6 -13.6Z'), 'cocoa', 'w', ol=1.4, tf=tf),
+            F(('ellipse', 0, 0, 4.4, 6), 'cocoa', 'm', band=.3, tf=tf)]
 
 
 add('whole_turkey', 'Turkey', [
     F(('path', 'M5.6 36.4H42.4Q42.4 42 37 42H11Q5.6 42 5.6 36.4Z'), 'lemon', 'p', band=.4),
-    F(('path', 'M8.6 30.4C8.6 21.4 15.4 15.6 24 15.6C32.6 15.6 39.4 21.4 39.4 30.4C39.4 35 36 38.2 31 38.2H17C12 38.2 8.6 35 8.6 30.4Z'), 'cocoa', 'm', band=.22,
-      det=['M24 18.8Q22.6 24.6 24 30'], det_t='p', det_w=1.6),
-    *_c2_leg(16, 32.6, -30), *_c2_leg(32, 32.6, 30),
+    F(('ellipse', 24, 27.4, 16.4, 10.4), 'cocoa', 'm', band=.22,
+      det=['M21.4 22.4Q24 20.8 26.6 22.4', 'M19.4 27.6Q24 25.4 28.6 27.6', 'M21 32.6Q24 31.2 27 32.6'], det_t='p', det_w=1.6),
+    *_c2_leg(14.2, 31.4, -46), *_c2_leg(33.8, 31.4, 46),
 ], qty='6 kg', aisle='meat')
 
 # 22 white fish fillet: a long tapered pale fillet with flake lines, a lemon slice beside it
@@ -480,7 +479,7 @@ _C2_STF = f'translate({fmt(_C2_ST[0] + .4)} {fmt(_C2_ST[1] - .4)}) rotate(-34)'
 add('shrimp', 'Shrimp', [
     LINE(f'M{fmt(_C2_SHD[0] - 2)} {fmt(_C2_SHD[1] - 3)}C{fmt(_C2_SHD[0] + 1)} {fmt(_C2_SHD[1] - 7)} {fmt(_C2_SHD[0] + 3)} {fmt(_C2_SHD[1] - 8.4)} 41.4 6.8'
          f'M{fmt(_C2_SHD[0] - .4)} {fmt(_C2_SHD[1] - 1.6)}C{fmt(_C2_SHD[0] + 1.6)} {fmt(_C2_SHD[1] - 3.6)} 39 {fmt(_C2_SHD[1] - 3.6)} 41.6 {fmt(_C2_SHD[1] - 2)}', 'peach', 1.3),
-    F(('path', 'M-1 -2.4L8.4 -5.6Q11.2 0 8.4 5.6L-1 2.4Z'), 'peach', 'm', tf=_C2_STF, det=['M1 0H8.4', 'M1 -.6L7.6 -3.6', 'M1 .6L7.6 3.6'], det_t='p', det_w=1.1),
+    F(('path', 'M-1 -2.4L8.4 -5.6Q11.2 0 8.4 5.6L-1 2.4Z'), 'peach', 'm', tf=_C2_STF, det=['M1 0H8.4', 'M1 -.6L7.6 -3.6', 'M1 .6L7.6 3.6'], det_t='p', det_w=1.2),
     F(('path', _C2_SH), 'peach', 'm', band=.22, tex=_C2_SHS, tex_t='p', tex_w=2.2),
     F(('circle', _C2_SHD[0] - 4.6, _C2_SHD[1] + .6, 1.4), 'peach', 'tr', ol=0, cut=False),
 ], qty='340 g bag', aisle='seafood')
@@ -512,7 +511,7 @@ add('lobster', 'Lobster & crab', [
     TUBE('M28.4 18.8L33.6 21.6', 'strawberry', 4.4, 'm'),
     F(('path', _C2_CLAW), 'strawberry', 'm', band=.3, tf='translate(13 18.4) rotate(-16)'),
     F(('path', _C2_CLAW), 'strawberry', 'm', band=.3, tf='translate(35 18.4) rotate(16) scale(-1 1)'),
-    F(('path', 'M24 35.6L18.2 40.2Q17.2 42 19.4 42H28.6Q30.8 42 29.8 40.2Z'), 'strawberry', 'm', det=['M24 37V41.6', 'M21.4 38.4L20.6 41.6', 'M26.6 38.4L27.4 41.6'], det_t='p', det_w=1.1),
+    F(('path', 'M24 35.6L18.2 40.2Q17.2 42 19.4 42H28.6Q30.8 42 29.8 40.2Z'), 'strawberry', 'm', det=['M24 37V41.6', 'M21.4 38.4L20.6 41.6', 'M26.6 38.4L27.4 41.6'], det_t='p', det_w=1.2),
     *[F(('rect', 24 - w / 2, y, w, 4.6, 2.3), 'strawberry', 'm', band=.34) for y, w in [(32.4, 7.2), (29, 8.4), (25.6, 9.4)]],
     F(('ellipse', 24, 19.6, 6.4, 8), 'strawberry', 'm', band=.22, det=['M18.6 22.4Q24 25 29.4 22.4'], det_t='p', det_w=1.3),
     F(('circle', 21.6, 12.6, 1.5), 'strawberry', 'tr', ol=0), F(('circle', 26.4, 12.6, 1.5), 'strawberry', 'tr', ol=0),
@@ -540,11 +539,11 @@ add('cream_cheese', 'Cream cheese', [
 
 # 28 plant milk: a tall slim oat-beige carton, green screw cap, an oat stalk with a leaf on its blank front
 add('plant_milk', 'Plant milk', [
-    F(('rect', 25.6, 5.2, 7.6, 5.4, 2), 'melon', 'm', det=['M27.8 6.8V9M30.8 6.8V9'], det_w=1.1),
+    F(('rect', 25.6, 5.2, 7.6, 5.4, 2), 'melon', 'm', det=['M27.8 6.8V9M30.8 6.8V9'], det_w=1.2),
     F(('path', 'M16.6 9.6H31.4L34 12.6V38.8Q34 42 30.8 42H17.2Q14 42 14 38.8V12.6Z'), 'cocoa', 'p', band=.16, det=['M14.4 14.4H33.6']),
     F(('rect', 17.4, 18.8, 13.2, 19.2, 3), 'cocoa', 'w', ol=1.4, cut=False),
     LINE('M24 35.6V23.4', 'cocoa', 1.5, t='m', cut=False),
-    *[F(('ellipse', 24 + dx, y, 1.5, 2.5, a), 'cocoa', 'm', ol=1.1, cut=False) for dx, y, a in [(0, 22.4, 0), (-2.2, 25.6, -34), (2.2, 25.6, 34), (-2.2, 29.2, -34), (2.2, 29.2, 34)]],
+    *[F(('ellipse', 24 + dx, y, 1.5, 2.5, a), 'cocoa', 'm', ol=1.2, cut=False) for dx, y, a in [(0, 22.4, 0), (-2.2, 25.6, -34), (2.2, 25.6, 34), (-2.2, 29.2, -34), (2.2, 29.2, 34)]],
     F(('path', 'M24.2 35.4C26 32.2 28.2 31 30 31.6C29.6 34 27 35.6 24.2 35.4Z'), 'melon', 'm', ol=1.2, cut=False),
 ], qty='1.89 L carton', aisle='dairy')
 
