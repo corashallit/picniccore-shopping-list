@@ -127,6 +127,28 @@ object MotionFixture {
         return s
     }
 
+    /** A store with the default 14 aisles: Baking & spices nearly done, spaghetti in Pasta (stop 7, store aisle 3). */
+    fun pasta(): AppState {
+        var s = AppState(
+            lists = listOf(GroceryList(LIST_ID, "Saturday shop", WRITTEN)),
+            currentListId = LIST_ID,
+            store = StoreProfile(name = STORE, aislesText = Aisles.DEFAULT_TEXT),
+        )
+        val aisles = s.store.aisles()
+        val baking = aisles.first { it.name.contains("Baking") }.id
+        val pasta = aisles.first { it.name.contains("Pasta") }.id
+        val items = listOf(
+            item("flour").copy(aisleId = baking),
+            item("sugar").copy(aisleId = baking),
+            item("baking-powder").copy(aisleId = baking),
+            item("flour").copy(id = "spaghetti", name = "Spaghetti", quantity = "900 g box", aisleId = pasta, icon = "spaghetti"),
+        )
+        for (it in items) s = s.addItems(LIST_ID, listOf(it), WRITTEN).first
+        s = s.toggleChecked(LIST_ID, "flour", TRIP_START)
+        s = s.toggleChecked(LIST_ID, "sugar", TRIP_START + 60_000)
+        return s.setOpenAisle(LIST_ID, baking)
+    }
+
     val catalog: IconCatalog get() = IconCatalog.default
 }
 

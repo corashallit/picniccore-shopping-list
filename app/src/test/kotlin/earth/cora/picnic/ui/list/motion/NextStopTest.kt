@@ -136,7 +136,7 @@ class NextStopTest {
     @Test
     fun holdIsComputedPerCardLongName() {
         // 7 · Pasta, rice & international, store aisle 3: "NEXT 7 Pasta, rice & international A3" = 6 words → 3000 ms.
-        val rig = HarnessRig(compose, pastaState()).start()
+        val rig = HarnessRig(compose, MotionFixture.pasta()).start()
         val t0 = rig.tap("baking-powder")
         val L = t0 + 620
         rig.advanceTo(L + 1300 + 400)
@@ -269,28 +269,6 @@ class NextStopTest {
     }
 
     // ---- helpers ----
-
-    /** A store with the default 14 aisles: Baking & spices nearly done, spaghetti in Pasta (stop 7, store aisle 3). */
-    private fun pastaState(): AppState {
-        var s = AppState(
-            lists = listOf(GroceryList(MotionFixture.LIST_ID, "Saturday shop", MotionFixture.WRITTEN)),
-            currentListId = MotionFixture.LIST_ID,
-            store = StoreProfile(name = MotionFixture.STORE, aislesText = Aisles.DEFAULT_TEXT),
-        )
-        val aisles = s.store.aisles()
-        val baking = aisles.first { it.name.contains("Baking") }.id
-        val pasta = aisles.first { it.name.contains("Pasta") }.id
-        val items = listOf(
-            MotionFixture.item("flour").copy(aisleId = baking),
-            MotionFixture.item("sugar").copy(aisleId = baking),
-            MotionFixture.item("baking-powder").copy(aisleId = baking),
-            MotionFixture.item("flour").copy(id = "spaghetti", name = "Spaghetti", quantity = "900 g box", aisleId = pasta, icon = "spaghetti"),
-        )
-        for (it in items) s = s.addItems(MotionFixture.LIST_ID, listOf(it), MotionFixture.WRITTEN).first
-        s = s.toggleChecked(MotionFixture.LIST_ID, "flour", MotionFixture.TRIP_START)
-        s = s.toggleChecked(MotionFixture.LIST_ID, "sugar", MotionFixture.TRIP_START + 60_000)
-        return s.setOpenAisle(MotionFixture.LIST_ID, baking)
-    }
 
     /** The 14 default aisles' display names. */
     private fun defaultNames(): List<Pair<Int, String>> {

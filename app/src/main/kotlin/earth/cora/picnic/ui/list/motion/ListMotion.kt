@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -164,11 +165,14 @@ fun Modifier.rowHanko(checked: Boolean, phase: RowPhase?, rowStart: Long?, clock
 /**
  * The fold's focus hand-off (§8.5, item 193): when a section opens or folds ([open] changes; not on first composition),
  * focus moves once the 240 ms fold ([FoldMotion.DURATION], on the frame clock under the fixed motion scale) has run: to
- * the open tray's chevron ([chevron]) or to the folded strip ([strip]). WP5's list puts one in each section's item.
+ * the opened tray's chevron ([chevron]), or, when this section folded and no other opened ([anyOpen] false), to its
+ * strip ([strip]). A section that folds because another opened leaves the focus to that one. WP5's list puts one in
+ * each section's item.
  */
 @Composable
-fun FoldFocusEffect(open: Boolean, chevron: FocusRequester, strip: FocusRequester) {
+fun FoldFocusEffect(open: Boolean, anyOpen: Boolean, chevron: FocusRequester, strip: FocusRequester) {
     val first = remember { booleanArrayOf(true) }
+    val others by androidx.compose.runtime.rememberUpdatedState(anyOpen)
     LaunchedEffect(open) {
         if (first[0]) {
             first[0] = false
@@ -176,6 +180,11 @@ fun FoldFocusEffect(open: Boolean, chevron: FocusRequester, strip: FocusRequeste
         }
         withContext(FixedMotionScale) { holdOnFrameClock(FoldMotion.DURATION) }
         // The requester may not be attached (the item scrolled away): then focus stays where it is.
-        runCatching { if (open) chevron.requestFocus() else strip.requestFocus() }
+        runCatching {
+            when {
+                open -> chevron.requestFocus()
+                !others -> strip.requestFocus()
+            }
+        }
     }
 }

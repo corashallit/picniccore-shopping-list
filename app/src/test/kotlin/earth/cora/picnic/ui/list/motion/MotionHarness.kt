@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -277,7 +278,7 @@ fun HarnessList(model: HarnessModel, p: ListPresentation, state: LazyListState, 
             val chevron = remember { FocusRequester() }
             val strip = remember { FocusRequester() }
             val isOpen = s.id == open
-            FoldFocusEffect(isOpen, chevron, strip)
+            FoldFocusEffect(isOpen, anyOpen = !open.isNullOrEmpty(), chevron, strip)
             if (isOpen) HarnessTray(model, s, p, current = true, chevron = chevron) else HarnessStrip(model, s, p, strip)
         }
     }
@@ -300,6 +301,7 @@ private fun HarnessStrip(model: HarnessModel, s: AisleSection, p: ListPresentati
             .testTag(HarnessTags.strip(s.id))
             .unfoldMotion(ap?.foldT0, clock, reduced)
             .focusRequester(focus)
+            .focusProperties { canFocus = true }
             .clickable(role = Role.Button) { model.open(s.id) },
     ) {
         Box(
@@ -403,6 +405,7 @@ private fun HarnessTray(model: HarnessModel, s: AisleSection, p: ListPresentatio
                     .size(48.dp)
                     .testTag(HarnessTags.chevron(s.id))
                     .focusRequester(chevron)
+                    .focusProperties { canFocus = true }
                     .clickable(role = Role.Button, onClickLabel = "Fold") { model.open("") },
             )
             with(model.engine.anchors) {
