@@ -347,7 +347,7 @@ object AntMotion {
         val to = -size
         val x = lerp(from, to, (step + 1).toFloat() / STEPS)
         val lift = if (step % 2 == 1) 1.5f * density else 0f
-        return EggPose(Offset(x, edgeY - size * 0.42f - lift), if (step % 2 == 1) -4f else 2f)
+        return EggPose(Offset(x, edgeY - size * 0.5f - lift), if (step % 2 == 1) -4f else 2f)
     }
 }
 
@@ -597,18 +597,18 @@ object EggBeats {
     }
 
     /**
-     * The standing bee's loop over the current tray (§4.27): a figure of eight 26 × 10 dp flown once per 2.4 s in 12 fps
-     * poses, tilted toward where it flies. The offset is in dp from the top left of its 48 × 30 dp box.
+     * The standing bee's loop over the current tray (§4.27, the mockup's figure of eight): its centre flies a 48 × 18 dp
+     * figure of eight in a 64 × 30 dp box once per 3.2 s in 12 fps poses, tilted toward where it flies. Centre in dp.
      */
     fun beeLoop(elapsed: Long): EggPose {
         val t = stepped(elapsed % BEE_LAP_MS, POSE_MS).toFloat() / BEE_LAP_MS
         val a = (t * 2 * PI).toFloat()
-        val x = 13f + 13f * kotlin.math.sin(a)
-        val y = 4f + 4f * kotlin.math.sin(2 * a)
+        val x = 32f + 24f * kotlin.math.sin(a)
+        val y = 15f - 9f * kotlin.math.sin(2 * a)
         return EggPose(Offset(x, y), if (kotlin.math.cos(a) >= 0f) 8f else -8f)
     }
 
-    const val BEE_LAP_MS: Long = 2400
+    const val BEE_LAP_MS: Long = 3200
 
     /** The pet's bob (2 steps per second) and its 2-frame chomp (520 ms). */
     fun petBob(elapsed: Long): Boolean = (elapsed / 500) % 2 == 1L

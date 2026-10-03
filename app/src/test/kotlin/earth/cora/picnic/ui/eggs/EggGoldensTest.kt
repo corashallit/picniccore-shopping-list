@@ -10,8 +10,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
+import com.github.takahirom.roborazzi.captureRoboImage
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.ui.album.PerfectWeeksCard
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
@@ -55,12 +60,53 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         return r
     }
 
-    /** The practice list before any egg (the lab's starting point). */
+    /**
+     * `surprise_lab_practice_list` (Appendix C): the Surprise lab screen after a Try it, its practice list brought into
+     * view under the "Surprise lab · practice list" ribbon (here the LCD pet has just moved in).
+     */
     @Test
     fun practiceList() {
-        val r = rig()
-        r.advance(400)
-        r.capture("lab_practice_list_${r.v}")
+        val lab = SurpriseLabViewModel { SurpriseLabSandbox(feedback = earth.cora.picnic.platform.NoOpFeedback, timeouts = earth.cora.picnic.platform.FakeTimeouts()) }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(earth.cora.picnic.ui.theme.LocalTimeouts provides earth.cora.picnic.platform.FakeTimeouts()) {
+                earth.cora.picnic.ui.theme.PicnicTheme(variant = variant, reducedMotion = false) {
+                    earth.cora.picnic.ui.about.SurpriseLabScreen(onBack = {}, lab = lab)
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Try LCD pet").performScrollTo().performClick()
+        repeat(40) {
+            androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeByFrame()
+        }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("$EGG_SHOTS/surprise_lab_practice_list_${if (day) "day" else "glow"}.png")
+        lab.close()
+    }
+
+    /** The printed receipt at font scale 1.3 (Day; Appendix C `receipt_fs130`). */
+    @Test
+    fun receiptFontScale130() {
+        if (!day) return
+        receiptAt("receipt_fs130", 1.3f)
+    }
+
+    /** The printed receipt at font scale 2.0 (Day; Appendix C `receipt_fs200`): 278 dp wide, nothing clips. */
+    @Test
+    fun receiptFontScale200() {
+        if (!day) return
+        receiptAt("receipt_fs200", 2f)
+    }
+
+    private fun receiptAt(name: String, scale: Float) {
+        val r = EggRig(compose, variant = variant, fontScale = scale, fixture = completedFixture()).start()
+        r.holdLcd(r.timeouts.holdThresholdMs + 20)
+        r.advance(2_000)
+        assertNotNull(r.eggs.receipt)
+        r.capture(name)
     }
 
     /** Egg 1, Day → Dusk at the 7th tap + 1.4 s; `list_dusk_day` once settled (item 238). The Glow moon is static. */
@@ -143,12 +189,11 @@ class EggGoldensTest(private val variant: ThemeVariant) {
     @Test
     fun egg9() {
         val r = end(9, 2200 + 1000) { assertTrue(list.items.single { it.name == "Birthday cake" }.checked) }
-        if (day) {
-            val cake = r.list.items.single { it.name == "Birthday cake" }
-            val row = r.anchors.bounds(AnchorRegistry.rowKey(cake.id))!!
-            val check = r.anchors.bounds(AnchorRegistry.checkKey(cake.id))!!
-            r.capture("row_hanko_birthday", Rect(row.left - 12 * px, row.top - 10 * px, check.right + 10 * px, check.bottom + 10 * px))
-        }
+        // Appendix C: a name with no variant suffix is recorded in Day and Glow.
+        val cake = r.list.items.single { it.name == "Birthday cake" }
+        val row = r.anchors.bounds(AnchorRegistry.rowKey(cake.id))!!
+        val check = r.anchors.bounds(AnchorRegistry.checkKey(cake.id))!!
+        r.capture("row_hanko_birthday_${r.v}", Rect(row.left - 12 * px, row.top - 10 * px, check.right + 10 * px, check.bottom + 10 * px))
     }
 
     /** Egg 10: stage start + 0.5 s; `list_bonus_stage_<v>` (item 247). */
@@ -235,7 +280,8 @@ class EggGoldensTest(private val variant: ThemeVariant) {
     fun egg18() {
         val r = end(18, 2000) { assertNotNull(eggs.receipt) }
         val lcd = r.anchors.bounds(AnchorRegistry.LCD)!!
-        r.capture("receipt_printed_${r.v}", Rect(lcd.right - 230 * px, lcd.top - 10 * px, lcd.right + 14 * px, lcd.bottom + 250 * px))
+        val width = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
+        r.capture("receipt_printed_${r.v}", Rect(0f, (lcd.top - 10 * px).coerceAtLeast(0f), width, lcd.bottom + 250 * px))
     }
 
     companion object {

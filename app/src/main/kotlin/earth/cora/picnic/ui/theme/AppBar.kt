@@ -111,6 +111,9 @@ fun BinderTopBar(
     sunModifier: Modifier = Modifier,
     /** On the LCD chip (WP5's `lcd` anchor: egg 18's receipt prints out of its slot). */
     lcdModifier: Modifier = Modifier,
+    /** On the title's and the subtitle's words (WP9's `text:` keep-outs: egg bursts are never drawn over text). */
+    titleModifier: Modifier = Modifier,
+    subtitleModifier: Modifier = Modifier,
 ) {
     val reduced = LocalReducedMotion.current
     val collapsed = state.collapsed
@@ -137,7 +140,7 @@ fun BinderTopBar(
                     stroke = 6.dp,
                     minFontSize = 20.sp,
                     heading = true,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f, fill = false).then(titleModifier),
                     fillBrush = titleBrush,
                 )
                 SunSticker(sunModifier, onTap = onSunTap, goldenMinutesLeft = goldenMinutesLeft)
@@ -146,7 +149,7 @@ fun BinderTopBar(
                 PadPatch {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                         FlatStar(Modifier.size(13.dp), fill = Families.lemon.mid)
-                        Text(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft))
+                        Text(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft), modifier = subtitleModifier)
                     }
                 }
             }

@@ -203,14 +203,15 @@ fun BoxScope.EggOverlays(
         if (!listPlacesDecor) state.napSectionId?.let { NapCat(it, anchors, local, engine, chainsDone) }
         state.napLeaving?.let { NapLeaving(it, anchors, local, engine) }
         state.ladybug?.let { Ladybug(it, anchors, local, engine) }
-        // The bursts: clipped clear of every text box.
+        // The bursts, and the produce rolling across the page: clipped clear of every text box (they pass behind words).
         KeepOut(keepOut) {
+            state.duskFx?.let { DuskBurst(it, anchors.bounds(AnchorRegistry.SUN)?.let(local)) }
             state.petalsId?.let { Petals(it, anchors, local, engine) }
             state.antsId?.let { Ants(it, anchors, local, engine) }
             state.confettiId?.let { Confetti(it, anchors, local, engine) }
             state.shinyBursts.forEach { ShinyBurst(it, anchors, local, engine) }
+            state.rolling?.let { Rolling(it, anchors, local, engine, feedback) }
         }
-        state.rolling?.let { Rolling(it, anchors, local, engine, feedback) }
         state.jackpot?.let { Jackpot(it, anchors, local, engine, feedback) }
         state.receipt?.let { ReceiptPrint(it, anchors, local, engine, feedback) }
         state.receiptTuckId?.let { ReceiptPoof(it, engine) }
@@ -280,7 +281,7 @@ private fun EffectTimer(key: Long, ms: Long, onDone: () -> Unit) {
 
 /** Reports a piece's window bounds to the test probe. */
 @Composable
-private fun Probe(tag: String, time: Long, localBounds: Rect, rotation: Float, origin: Offset) {
+internal fun Probe(tag: String, time: Long, localBounds: Rect, rotation: Float, origin: Offset) {
     val probe = LocalEggProbe.current ?: return
     SideEffect { probe.record(tag, time, localBounds.translate(origin), rotation) }
 }
@@ -307,7 +308,7 @@ private fun PlacedSticker(name: String, pose: EggPose, size: Dp, modifier: Modif
 private fun Rect.sized(center: Offset, size: Float): Rect = Rect(center.x - size / 2, center.y - size / 2, center.x + size / 2, center.y + size / 2)
 
 @Composable
-private fun origin(): Offset = LocalOverlayOrigin.current
+internal fun origin(): Offset = LocalOverlayOrigin.current
 
 private val LocalOverlayOrigin = staticCompositionLocalOf { Offset.Zero }
 
@@ -363,19 +364,31 @@ private fun DuskSun(fx: DuskFx, sun: Rect?, engine: SurpriseEngine, feedback: Fe
             }
         }
     }
-    // The six-star sparkle burst round the moon once it has risen, outside its 48 dp box (never on the title: it bursts
-    // up and to the right, where the bar has nothing but binder).
-    if (fx.toDusk && !fx.reduced) {
-        DuskMotion.burst(t)?.let { (reach, scale) ->
-            val c = box.center
-            for (i in 0 until 6) {
-                val a = Math.toRadians((-150.0 + i * 30.0))
-                val r = 26f * d.density * reach
-                PlacedSticker("star4", EggPose(Offset(c.x + (cos(a) * r).toFloat(), c.y + (sin(a) * r).toFloat()), 0f, scale), 10.dp)
-            }
+    @Suppress("UNUSED_VARIABLE") val unused = sizeDp
+}
+
+/**
+ * Egg 1's six-star sparkle burst as the moon rises: a half ring on the moon's right, away from the title, reaching 26 dp
+ * from its centre. A burst, so it is drawn inside the text keep-outs (§4.1): a star that would cross the title or the
+ * subtitle is cut clear of the words.
+ */
+@Composable
+private fun DuskBurst(fx: DuskFx, sun: Rect?) {
+    if (!fx.toDusk || fx.reduced) return
+    val box = sun ?: return
+    // The same frame-clock time as [DuskSun] (both start on the frame the effect shows).
+    val t by rememberEffectTime(fx.id to "burst", DuskMotion.DURATION)
+    val d = LocalDensity.current.density
+    DuskMotion.burst(t)?.let { (reach, scale) ->
+        val c = box.center
+        for (i in 0 until 6) {
+            val a = Math.toRadians(-90.0 + i * 36.0)
+            val r = 26f * d * reach
+            val at = Offset(c.x + (cos(a) * r).toFloat(), c.y + (sin(a) * r).toFloat())
+            PlacedSticker("star4", EggPose(at, 0f, scale), 10.dp)
+            Probe("dusk$i", t, Rect(Offset.Zero, Size.Zero).sized(at, 10 * d * scale), 0f, origin())
         }
     }
-    @Suppress("UNUSED_VARIABLE") val unused = sizeDp
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -418,12 +431,25 @@ private fun Umbrella(addBar: Rect) {
     val reduced = LocalReducedMotion.current
     val t by rememberEffectTime("umbrella", if (reduced) 120 else 320)
     val d = LocalDensity.current.density
-    val size = 36.dp
-    val center = Offset(addBar.left + 30 * d, addBar.top)
-    val pose = if (reduced) EggPose(center, alpha = (t / 120f).coerceIn(0f, 1f)) else EggBeats.magicAppear(t).copy(center = center, rotation = -10f + EggBeats.magicAppear(t).rotation)
-    PlacedSticker("umbrella", pose, size, page = "umbrella", tag = EggTags.UMBRELLA)
-    Probe("umbrella", t, Rect(Offset.Zero, Size.Zero).sized(center, 36 * d), pose.rotation, origin())
+    val pose = umbrellaPose(addBar, t, reduced, d)
+    PlacedSticker("umbrella", pose, UMBRELLA_DP.dp, page = "umbrella", tag = EggTags.UMBRELLA)
+    Probe("umbrella", t, Rect(Offset.Zero, Size.Zero).sized(pose.center, UMBRELLA_DP * d * pose.scaleX), pose.rotation, origin())
 }
+
+/**
+ * The umbrella stands on the raindrop tape at the bar's left end, inside the bar: in the band over the field (the
+ * field's words start 20 dp down, the doodle 76 dp in), so neither the list scrolling under the bar's top edge nor the
+ * bar's own words are ever under it, even at the magic appear's 1.3× pose. Reduced motion: it fades in (120 ms).
+ */
+internal fun umbrellaPose(addBar: Rect, t: Long, reduced: Boolean, density: Float): EggPose {
+    val center = Offset(addBar.left + 30 * density, addBar.top + 10.1f * density)
+    if (reduced) return EggPose(center, -10f, alpha = (t / 120f).coerceIn(0f, 1f))
+    val beat = EggBeats.magicAppear(t)
+    return beat.copy(center = center, rotation = -10f + beat.rotation)
+}
+
+/** The umbrella's size at rest (dp): the bar's free band at its left end is 20 dp tall. */
+internal const val UMBRELLA_DP: Float = 15.5f
 
 /* ------------------------------------------------------------------------------------------------
  * Egg 8: the nap cat in the still-empty basket; a tap sends it off.
@@ -615,11 +641,12 @@ private fun ShinyBurst(fx: ShinyFx, anchors: AnchorRegistry, local: (Rect) -> Re
     val row = anchors.bounds(AnchorRegistry.rowKey(fx.itemId))?.let(local) ?: return
     val d = LocalDensity.current.density
     val particles = remember(fx.id) { HankoBurst.particles(fx.id.toInt()) }
-    for (p in particles) {
+    for ((i, p) in particles.withIndex()) {
         val pose = HankoBurst.at(p, t) ?: continue
         // Mirrored: the burst opens to the left of the sticker, into the gutter, never across the item's name.
         val c = row.center + Offset(-pose.dx * d, pose.dy * d)
         PlacedSticker(p.kind, EggPose(c, -pose.rotation, pose.scaleX, alpha = pose.alpha), p.sizeDp.dp)
+        Probe("shiny$i", t, Rect(Offset.Zero, Size.Zero).sized(c, p.sizeDp * d * pose.scaleX), -pose.rotation, origin())
     }
 }
 

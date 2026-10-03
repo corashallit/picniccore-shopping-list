@@ -160,7 +160,11 @@ class SurpriseLabSandbox(
             1 -> dusk()
             2 -> ladybug()
             3 -> rolling()
-            4 -> engine.onShake()
+            4 -> {
+                // The lab plays it as its practice list comes into view (a shake only counts on the list).
+                engine.onListShown(listId)
+                engine.onShake()
+            }
             5 -> moveClock(LocalTime.of(23, 30))
             6 -> shiny()
             7 -> engine.interceptText("kirakira")

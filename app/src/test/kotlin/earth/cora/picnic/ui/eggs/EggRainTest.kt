@@ -136,7 +136,8 @@ class EggRainTest {
         val umbrella = r.probe.frames.last { it.tag == "umbrella" }
         val bar = r.anchor(earth.cora.picnic.ui.list.motion.AnchorRegistry.ADD_BAR)
         assertTrue("at the add bar's left end", umbrella.center.x < bar.left + bar.width * 0.25f)
-        assertEquals(bar.top, umbrella.center.y, 6f)
+        // Inside the bar, in the band over the field: never over the list under the bar's edge.
+        assertTrue("inside the bar", umbrella.bounds.top >= bar.top && umbrella.bounds.bottom <= bar.top + 20 * 3f)
         assertEquals(WashiPattern.Raindrop, AddRules.addBarTape(r.eggs))
     }
 }

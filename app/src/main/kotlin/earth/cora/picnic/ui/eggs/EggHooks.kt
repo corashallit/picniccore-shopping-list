@@ -245,20 +245,20 @@ fun Modifier.pageSticker(name: String, tag: String? = null): Modifier = clearAnd
 }
 
 /**
- * The list's standing bee (§4.1, §4.27): a 22 dp bee flying a small loop over the current tray's header, one lap per
- * 2.4 s in 12 fps poses, tilted toward where it flies; still under reduced motion. A page sticker. WP5's tray places it
- * at the header's top right; the practice list does the same.
+ * The list's standing bee (§4.1, §4.27): a 22 dp bee flying a figure of eight over the current tray's basket, one lap
+ * per 3.2 s in 12 fps poses, tilted toward where it flies; still under reduced motion. A page sticker in a 64 × 30 dp
+ * box: WP5's tray places it over its basket, as the practice list does.
  */
 @Composable
 fun TrayBee(modifier: Modifier = Modifier) {
     val reduced = LocalReducedMotion.current
     val t by rememberLoopTime(enabled = !reduced)
     val pose = if (reduced) EggBeats.beeLoop(0) else EggBeats.beeLoop(t)
-    Box(modifier.size(48.dp, 30.dp)) {
+    Box(modifier.size(64.dp, 30.dp)) {
         DecorSticker(
             "bee",
             Modifier
-                .offset(pose.center.x.dp, pose.center.y.dp)
+                .offset((pose.center.x - 11f).dp, (pose.center.y - 11f).dp)
                 .graphicsLayer { rotationZ = pose.rotation }
                 .pageSticker("bee"),
             size = 22.dp,

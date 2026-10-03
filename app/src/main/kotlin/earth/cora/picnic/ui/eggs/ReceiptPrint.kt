@@ -108,6 +108,7 @@ internal fun ReceiptPrint(fx: ReceiptFx, anchors: AnchorRegistry, local: (Rect) 
         val x = left + with(d) { (sdx + jitter).dp.toPx() }
         val y = top + with(d) { sdy.dp.toPx() }
         if (paperW > 0) spot.rect = Rect(x, y, x + paperW, y + paperH)
+        if (paperW > 0) Probe("receipt", t, Rect(x, y, x + paperW, y + paperH * fed), rot, origin())
         if (!reduced && ReceiptMotion.slotVisible(t) && paperW > 0) {
             // The slot: a 4 dp ballpoint line the paper comes out of.
             Canvas(

@@ -227,7 +227,7 @@ fun PracticeList(
                     verticalArrangement = Arrangement.spacedBy(7.dp),
                 ) {
                     items(grouped.sections, key = { it.id }) { s ->
-                        if (s.id == open) PracticeTray(model, s, eggs, p) else PracticeStrip(model, s, eggs, p)
+                        if (s.id == open) PracticeTray(model, s, eggs, p, current = s.id == grouped.nowSectionId) else PracticeStrip(model, s, eggs, p)
                     }
                 }
             }
@@ -274,8 +274,11 @@ private fun PracticeTopBar(
                 .anchor(AnchorRegistry.SUN)
                 // Egg 1's transition draws the sun and the moon itself while it plays.
                 .graphicsLayer { alpha = if (eggs.duskFx != null) 0f else 1f },
-            lcdModifier = Modifier.anchor(AnchorRegistry.LCD),
-            modifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "topbar").padding(top = 4.dp),
+            // The LCD's digits are words too: bursts are cut clear of them.
+            lcdModifier = Modifier.anchor(AnchorRegistry.LCD).anchor(EggAnchors.TEXT_PREFIX + "lcd"),
+            titleModifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "title"),
+            subtitleModifier = Modifier.anchor(EggAnchors.TEXT_PREFIX + "subtitle"),
+            modifier = Modifier.padding(top = 4.dp),
         )
     }
 }
@@ -640,7 +643,7 @@ private fun Chevron(modifier: Modifier, up: Boolean) {
 }
 
 @Composable
-private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseState, p: ListPresentation) {
+private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseState, p: ListPresentation, current: Boolean) {
     val c = PicnicTheme.colors
     val look = lookOf(s, model.state)
     val clock = model.motion.clock
@@ -683,6 +686,8 @@ private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseSt
                 Box(Modifier.align(Alignment.CenterEnd).clickable(remember { MutableInteractionSource() }, indication = null) { model.open("") }) {
                     Chevron(Modifier, up = true)
                 }
+                // The standing bee flies its loop over the current aisle's basket (§4.27).
+                if (current) TrayBee(Modifier.align(Alignment.TopEnd).offset(x = (-58).dp, y = (-12).dp))
             }
             Column(
                 Modifier
@@ -696,7 +701,10 @@ private fun PracticeTray(model: PracticeModel, s: AisleSection, eggs: SurpriseSt
                     PracticeRow(model, item, s, eggs, p, i)
                 }
             }
-            Box(Modifier.fillMaxWidth().height(15.dp).patternFill(look, 0.55f))
+            Box(Modifier.fillMaxWidth().height(15.dp).patternFill(look, 0.55f)) {
+                // The standing ladybug on the end cap (it steps off while the nap cat and the umbrella both show).
+                EndCapLadybug(eggs, Modifier.align(Alignment.BottomStart).offset(x = 30.dp, y = (-1).dp))
+            }
         }
     }
 }
@@ -822,7 +830,8 @@ private fun PracticeAddBar(model: PracticeModel, eggs: SurpriseState, modifier: 
             onChoosePhoto = {},
             onSpeak = {},
             tape = AddRules.addBarTape(eggs),
-            modifier = modifier.anchor(AnchorRegistry.ADD_BAR).testTag(PracticeTags.ADD_BAR),
+            // The whole bar is a keep-out: its field, placeholder and doodle are words, and bursts fall behind it.
+            modifier = modifier.anchor(AnchorRegistry.ADD_BAR).anchor(EggAnchors.TEXT_PREFIX + "addbar").testTag(PracticeTags.ADD_BAR),
         )
     }
 }

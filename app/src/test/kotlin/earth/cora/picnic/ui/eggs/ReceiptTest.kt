@@ -55,7 +55,7 @@ import java.time.LocalDate
 /**
  * Items 266–272 (egg 18, §13.2): the receipt's 9 lines at 21 columns from the trip's real stats; line 2 fitted; its width
  * following the LCD pitch up to 1.6×; the print sequence (14 frames over 1.7 s with jitter, the tear at 1.7 s, settled
- * at 1.96 s, PRINT★ and its cues, no timeout) and its strip `receipt_print_strip`; the tap that tucks it into the book
+ * at 1.96 s, PRINT★ and its cues, no timeout) and its strip `receipt_print_strip_{day,glow}`; the tap that tucks it into the book
  * and the album; the auto-tuck; reduced motion; TalkBack.
  */
 @RunWith(AndroidJUnit4::class)
@@ -193,11 +193,27 @@ class ReceiptTest {
         assertEquals((t0 + ReceiptMotion.FEED_MS).toDouble(), tear.single().toDouble(), 20.0)
         r.advanceTo(t0 + ReceiptMotion.FEED_MS + 120)
         assertNull("the LCD back to the count", r.eggs.lcdWord)
-        stripOf(frames, cols = 4, scale = 0.5f).captureRoboImage("$EGG_SHOTS/receipt_print_strip.png")
+        stripOf(frames, cols = 4, scale = 0.5f).captureRoboImage("$EGG_SHOTS/receipt_print_strip_day.png")
         // It stays until tapped: no timeout.
         r.advance(12_000)
         assertNotNull(r.eggs.receipt)
         assertFalse(r.list.trip!!.receiptSaved)
+    }
+
+    /** The same strip in Glow (`receipt_print_strip_glow`): the LCD and the paper stay light on the night binder. */
+    @Test
+    fun printSequenceGlow() {
+        val r = EggRig(compose, variant = ThemeVariant.Glow, fixture = completedFixture()).start()
+        val lcd = r.anchor(AnchorRegistry.LCD)
+        val crop = Rect(lcd.right - 236 * px, lcd.top - 8 * px, lcd.right + 16 * px, lcd.bottom + 250 * px)
+        r.holdLcd(r.timeouts.holdThresholdMs + 20)
+        val t0 = r.now
+        assertNotNull(r.eggs.receipt)
+        val frames = listOf(0L, 240L, 600L, 1_000L, 1_400L, 1_700L, 1_830L, 1_960L).map { t ->
+            r.advanceTo(t0 + t)
+            t to r.grab(crop)
+        }
+        stripOf(frames, cols = 4, scale = 0.5f).captureRoboImage("$EGG_SHOTS/receipt_print_strip_glow.png")
     }
 
     // ---- 268: the tap ----
