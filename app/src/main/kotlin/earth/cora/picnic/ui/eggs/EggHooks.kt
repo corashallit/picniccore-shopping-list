@@ -40,6 +40,7 @@ import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.PetPose
+import earth.cora.picnic.ui.theme.binderGround
 import earth.cora.picnic.ui.theme.rememberLoopTime
 import kotlinx.coroutines.withContext
 
@@ -361,4 +362,49 @@ fun BoxScope.RowRoller(itemId: String) {
         )
         Probe("rollhome", t, androidx.compose.ui.geometry.Rect(pose.center.x - half, pose.center.y - half, pose.center.x + half, pose.center.y + half), pose.rotation, Offset.Zero)
     }
+}
+
+/**
+ * Egg 1: the Dusk palette washes in (§12.2: "the Dusk variant washes in (bands, gutter sparkles)"). The list places it
+ * first inside its PicnicBackground (beneath everything else): while the change plays, the ground it had (Day, or Golden
+ * at golden hour) lies over the Dusk ground and fades out in 12 fps steps over the moon's rise (600 ms after the sun has
+ * set), or over 120 ms under reduced motion (§12.3); the moon tapped, the Dusk ground lies over the Day ground and fades
+ * out the same way. Decorative.
+ */
+@Composable
+fun BoxScope.DuskWash(state: SurpriseState) {
+    val fx = state.duskFx?.takeIf { state.enabled } ?: return
+    val total = when {
+        fx.reduced -> DuskMotion.FADE_MS
+        fx.toDusk -> DuskMotion.DURATION
+        else -> DuskMotion.UNDO_MS
+    }
+    val t by rememberEffectTime("wash:${fx.id}", total)
+    val from = remember(fx.id) {
+        when {
+            !fx.toDusk -> earth.cora.picnic.ui.theme.ThemeVariant.Dusk
+            state.golden -> earth.cora.picnic.ui.theme.ThemeVariant.Golden
+            else -> earth.cora.picnic.ui.theme.ThemeVariant.Day
+        }
+    }
+    val a = duskWashAlpha(fx, t)
+    if (a <= 0f) return
+    Box(
+        Modifier
+            .matchParentSize()
+            .clearAndSetSemantics { this[Decorative] = Unit }
+            .graphicsLayer { alpha = a }
+            .binderGround(earth.cora.picnic.ui.theme.colorsFor(from)),
+    )
+}
+
+/**
+ * How much of the ground being left still shows over the new one at [elapsed] in [fx]: all of it until the sun has set
+ * (the palette is still the old one then), then 1 → 0 in 12 fps steps over the moon's rise; 1 → 0 over the whole undo;
+ * 1 → 0 over 120 ms under reduced motion.
+ */
+fun duskWashAlpha(fx: DuskFx, elapsed: Long): Float = when {
+    fx.reduced -> 1f - (elapsed.toFloat() / DuskMotion.FADE_MS).coerceIn(0f, 1f)
+    fx.toDusk -> if (elapsed < DuskMotion.SINK_MS) 1f else 1f - (stepped(elapsed - DuskMotion.SINK_MS, POSE_MS).toFloat() / DuskMotion.RISE_MS).coerceIn(0f, 1f)
+    else -> 1f - (stepped(elapsed, POSE_MS).toFloat() / DuskMotion.UNDO_MS).coerceIn(0f, 1f)
 }

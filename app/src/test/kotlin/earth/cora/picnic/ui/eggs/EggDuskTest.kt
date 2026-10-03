@@ -12,6 +12,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
+import kotlin.math.abs
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -47,12 +48,38 @@ class EggDuskTest {
         // The sun sets behind the title first (600 ms): still Day.
         r.advanceTo(t7 + 400)
         assertEquals(ThemeVariant.Day, r.resolved)
-        // Then the Dusk palette washes in, the moon rises; done by 1.2 s.
+        val probe = groundProbe(r)
+        val day = r.grab().getPixel(probe.first, probe.second)
+        // Then the Dusk palette washes in over the moon's rise, the moon rises; done by 1.2 s.
         r.advanceTo(t7 + EggRules.DUSK_SINK_MS + 50)
         assertEquals(ThemeVariant.Dusk, r.resolved)
+        r.advanceTo(t7 + EggRules.DUSK_SINK_MS + 300)
+        val mid = r.grab().getPixel(probe.first, probe.second)
         r.advanceTo(t7 + EggRules.DUSK_TRANSITION_MS + 100)
+        val dusk = r.grab().getPixel(probe.first, probe.second)
+        assertBetween("the ground mid-way through the wash", day, mid, dusk)
         assertNull("the transition has played out", r.eggs.duskFx)
         assertTrue(r.eggs.dusk)
+    }
+
+    /** A point of bare binder ground: in the gap under the Produce strip, halfway across. */
+    private fun groundProbe(r: EggRig): Pair<Int, Int> {
+        val strip = r.anchor(EggAnchors.strip("produce"))
+        return strip.center.x.toInt() to (strip.bottom + 4.5f * 3f).toInt()
+    }
+
+    /** [mid] lies between [from] and [to] in every channel and is neither of them (a wash, not a swap). */
+    private fun assertBetween(what: String, from: Int, mid: Int, to: Int) {
+        val shifts = (0..2).map { ch ->
+            val a = (from shr (8 * ch)) and 0xFF
+            val m = (mid shr (8 * ch)) and 0xFF
+            val b = (to shr (8 * ch)) and 0xFF
+            assertTrue("$what: channel $ch $m not between $a and $b", m in minOf(a, b) - 3..maxOf(a, b) + 3)
+            Triple(a, m, b)
+        }
+        val widest = shifts.maxBy { abs(it.first - it.third) }
+        assertTrue("$what: the colours differ (${Integer.toHexString(from)} → ${Integer.toHexString(to)})", abs(widest.first - widest.third) > 20)
+        assertTrue("$what is neither end: ${Integer.toHexString(mid)}", abs(widest.second - widest.first) > 6 && abs(widest.second - widest.third) > 6)
     }
 
     @Test
@@ -72,11 +99,17 @@ class EggDuskTest {
         r.advance(1500)
         assertEquals(ThemeVariant.Dusk, r.resolved)
         // The sticker by the title is the moon now: one tap undoes Dusk.
+        val probe = groundProbe(r)
+        val dusk = r.grab().getPixel(probe.first, probe.second)
         r.tapSun(1, 0)
         val fx = r.eggs.duskFx
         assertNotNull(fx)
         assertFalse(fx!!.toDusk)
+        // The Dusk ground fades back out over the undo.
+        r.advance(330)
+        val mid = r.grab().getPixel(probe.first, probe.second)
         r.advance(1500)
+        assertBetween("the ground mid-way back", dusk, mid, r.grab().getPixel(probe.first, probe.second))
         assertEquals(ThemeVariant.Day, r.resolved)
         assertFalse(r.duskSaved())
         assertFalse(r.eggs.dusk)
@@ -135,6 +168,10 @@ class EggDuskTest {
         assertTrue("a 120 ms fade, no sunset", fx!!.reduced)
         r.frame()
         assertEquals(ThemeVariant.Dusk, r.resolved)
+        // The Dusk palette fades in over 120 ms (§12.3).
+        assertEquals(1f, duskWashAlpha(fx, 0), 0f)
+        assertEquals(0.5f, duskWashAlpha(fx, 60), 0.01f)
+        assertEquals(0f, duskWashAlpha(fx, 120), 0f)
         r.advance(300)
         assertNull(r.eggs.duskFx)
         assertTrue(r.feedback.log.none { it.second == Cue.CELEBRATION })

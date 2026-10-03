@@ -276,6 +276,8 @@ fun PracticeList(
     androidx.compose.runtime.CompositionLocalProvider(LocalRollHome provides rollHome) {
     Box(modifier.fillMaxSize().testTag(PracticeTags.ROOT)) {
         PicnicBackground {
+            // Egg 1: the ground being left fades out over the new one.
+            DuskWash(eggs)
             Column(Modifier.fillMaxSize()) {
                 ribbon?.invoke()
                 PracticeTopBar(model, list.title, state.store.name, grouped.stops, list.items.count { it.checked }, list.items.size, eggs, p)
@@ -283,7 +285,8 @@ fun PracticeList(
                 LazyColumn(
                     Modifier.weight(1f).fillMaxWidth().testTag(PracticeTags.LIST),
                     state = listState,
-                    contentPadding = PaddingValues(top = LIST_TOP, bottom = 110.dp),
+                    // Egg 16: while the umbrella stands on the bar, the list ends clear of its canopy.
+                    contentPadding = PaddingValues(top = LIST_TOP, bottom = 110.dp + if (eggs.umbrella) UMBRELLA_LIST_ROOM else 0.dp),
                 ) {
                     entries.forEachIndexed { index, e ->
                         val s = e.section
@@ -933,6 +936,8 @@ private fun PracticeAddBar(model: PracticeModel, eggs: SurpriseState, modifier: 
             // The practice copy has no camera or microphone: Snap, Choose a photo and Speak are off here.
             captureEnabled = false,
             tape = AddRules.addBarTape(eggs),
+            // Egg 16: the umbrella stands at the bar's left end; the tape moves along.
+            tapeStart = if (eggs.umbrella) UMBRELLA_TAPE_START else 4.dp,
             // The whole bar is a keep-out: its field, placeholder and doodle are words, and bursts fall behind it.
             modifier = modifier.anchor(AnchorRegistry.ADD_BAR).anchor(EggAnchors.TEXT_PREFIX + "addbar").testTag(PracticeTags.ADD_BAR),
         )

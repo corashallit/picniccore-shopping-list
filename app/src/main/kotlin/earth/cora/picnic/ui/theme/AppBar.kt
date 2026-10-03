@@ -1,5 +1,11 @@
 package earth.cora.picnic.ui.theme
 
+import androidx.compose.runtime.rememberUpdatedState
+
+import androidx.compose.ui.input.pointer.pointerInput
+
+import androidx.compose.foundation.gestures.detectTapGestures
+
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.snap
@@ -187,15 +193,16 @@ fun SunSticker(modifier: Modifier = Modifier, onTap: (() -> Unit)? = null, golde
     Box(
         modifier
             .size(48.dp)
-            .semantics(mergeDescendants = true) {
-                contentDescription = label
-                if (onTap != null) role = Role.Button
-            }
+            // TalkBack reads "Sun sticker" and nothing more (§4.2: it is an egg, not a feature): no role, no action.
+            .clearAndSetSemantics { contentDescription = label }
             .then(
                 if (onTap != null) {
-                    Modifier.clickable(remember { MutableInteractionSource() }, indication = null) {
-                        taps++
-                        onTap()
+                    val tap by rememberUpdatedState(onTap)
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures {
+                            taps++
+                            tap()
+                        }
                     }
                 } else {
                     Modifier

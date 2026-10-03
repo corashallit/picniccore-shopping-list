@@ -165,6 +165,8 @@ fun AddBar(
     onFocusChange: (Boolean) -> Unit = {},
     /** Snap, Choose a photo and Speak can run (false: the Surprise lab's practice list, which has no camera or microphone). */
     captureEnabled: Boolean = true,
+    /** Where the washi sits along the top edge (egg 16's umbrella stands at the left end, so the tape moves along). */
+    tapeStart: androidx.compose.ui.unit.Dp = 4.dp,
 ) {
     val c = PicnicTheme.colors
     val choose = stringResource(R.string.add_bar_choose_photo)
@@ -252,7 +254,7 @@ fun AddBar(
             )
         }
         // The season's washi at the left end, over the perforation.
-        Box(Modifier.offset(x = 4.dp, y = (-5).dp).clearAndSetSemantics { this[Decorative] = Unit; testTag = ADD_BAR_WASHI_TAG }) {
+        Box(Modifier.offset(x = tapeStart, y = (-5).dp).clearAndSetSemantics { this[Decorative] = Unit; testTag = ADD_BAR_WASHI_TAG }) {
             WashiTape(tape, length = 56.dp, height = 18.dp, rotation = -4f, alpha = 0.9f, flutter = true)
         }
     }

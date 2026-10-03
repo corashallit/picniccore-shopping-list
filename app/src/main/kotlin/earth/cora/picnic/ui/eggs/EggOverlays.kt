@@ -441,19 +441,28 @@ private fun Umbrella(addBar: Rect) {
 }
 
 /**
- * The umbrella stands on the raindrop tape at the bar's left end, inside the bar: in the band over the field (the
- * field's words start 20 dp down, the doodle 76 dp in), so neither the list scrolling under the bar's top edge nor the
- * bar's own words are ever under it, even at the magic appear's 1.3× pose. Reduced motion: it fades in (120 ms).
+ * The 44 dp sakura umbrella stands on the bar's left shoulder (§12.2 egg 16, as the mockup's live phone has it: a big
+ * umbrella at the bar's top-left, tilted −12°), over the perforation and the gutter: its handle in the bar's top band
+ * (the tape moves along the bar while it shows, [UMBRELLA_TAPE_START]), its canopy above the bar, where the list keeps
+ * clear room while it rains ([UMBRELLA_LIST_ROOM]). Reduced motion: it fades in (120 ms).
  */
 internal fun umbrellaPose(addBar: Rect, t: Long, reduced: Boolean, density: Float): EggPose {
-    val center = Offset(addBar.left + 30 * density, addBar.top + 10.1f * density)
-    if (reduced) return EggPose(center, -10f, alpha = (t / 120f).coerceIn(0f, 1f))
+    val center = Offset(addBar.left + 27 * density, addBar.top - 13 * density)
+    if (reduced) return EggPose(center, UMBRELLA_TILT, alpha = (t / 120f).coerceIn(0f, 1f))
     val beat = EggBeats.magicAppear(t)
-    return beat.copy(center = center, rotation = -10f + beat.rotation)
+    return beat.copy(center = center, rotation = UMBRELLA_TILT + beat.rotation)
 }
 
-/** The umbrella's size at rest (dp): the bar's free band at its left end is 20 dp tall. */
-internal const val UMBRELLA_DP: Float = 15.5f
+/** The umbrella's size at rest (dp). */
+internal const val UMBRELLA_DP: Float = 44f
+
+private const val UMBRELLA_TILT: Float = -12f
+
+/** While the umbrella shows, the bar's washi sits this far in (dp), past the umbrella's handle. */
+val UMBRELLA_TAPE_START: androidx.compose.ui.unit.Dp = 196.dp
+
+/** While the umbrella shows, the list keeps this much more room at its end (dp), so no row ends under its canopy. */
+val UMBRELLA_LIST_ROOM: androidx.compose.ui.unit.Dp = 38.dp
 
 /* ------------------------------------------------------------------------------------------------
  * Egg 8: the nap cat in the still-empty basket; a tap sends it off.
@@ -569,9 +578,11 @@ private fun Ladybug(fx: LadybugFx, anchors: AnchorRegistry, local: (Rect) -> Rec
         }
     }
     val at = start.value ?: return
-    val (pose, flying) = LadybugMotion.at(at, t, d) ?: return
-    PlacedSticker(if (flying) "ladybugfly" else "ladybug", pose, LadybugMotion.SIZE_DP.dp)
-    Probe("ladybug", t, Rect(Offset.Zero, Size.Zero).sized(pose.center, LadybugMotion.SIZE_DP * d), pose.rotation, origin())
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val (pose, flying) = LadybugMotion.at(at, t, d, constraints.maxWidth.toFloat()) ?: return@BoxWithConstraints
+        PlacedSticker(if (flying) "ladybugfly" else "ladybug", pose, LadybugMotion.SIZE_DP.dp)
+        Probe("ladybug", t, Rect(Offset.Zero, Size.Zero).sized(pose.center, LadybugMotion.SIZE_DP * d), pose.rotation, origin())
+    }
 }
 
 /* ------------------------------------------------------------------------------------------------

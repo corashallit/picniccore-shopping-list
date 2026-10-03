@@ -250,7 +250,7 @@ object RollingMotion {
  * ------------------------------------------------------------------------------------------------ */
 
 object LadybugMotion {
-    /** 5 s on the strip, 10 % per hop (18 dp each), a pause at 40–60 %, then 600 ms flying off. */
+    /** 5 s on the strip, 10 % per hop (18 dp each), a pause at 40–60 %, then 600 ms flying off the nearer edge. */
     const val WALK_MS: Long = 5000
     const val FLY_MS: Long = 600
     const val DURATION: Long = WALK_MS + FLY_MS
@@ -269,11 +269,13 @@ object LadybugMotion {
     }
 
     /**
-     * The pose at [elapsed] for a walk starting at [start] (the bug's centre on the strip's bottom edge), heading right:
-     * stepped hops with a 2-frame waddle (±5° every 250 ms; still while paused), then the wings open and it flies up and
-     * off to the right, fading. Rotation 90° = facing right (the sticker's head points up). Null once gone.
+     * The pose at [elapsed] for a walk starting at [start] (the bug's centre on the strip's bottom edge), heading right,
+     * on a screen [width] px wide: stepped hops with a 2-frame waddle (±5° every 250 ms; still while paused), then the
+     * wings open and it flies off the nearer screen edge along the strip's bottom edge (in the gap under the strip, past
+     * no words) in 12 fps poses, fading only in the last one. Rotation 90° = facing right (the sticker's head points up),
+     * −90° = facing left. Null once gone.
      */
-    fun at(start: Offset, elapsed: Long, density: Float): Pair<EggPose, Boolean>? {
+    fun at(start: Offset, elapsed: Long, density: Float, width: Float): Pair<EggPose, Boolean>? {
         if (elapsed >= DURATION) return null
         if (elapsed < WALK_MS) {
             val x = start.x + hops(elapsed) * HOP_DP * density
@@ -282,10 +284,18 @@ object LadybugMotion {
             val waddle = if (paused) 0f else if ((elapsed / WADDLE_MS) % 2 == 0L) -5f else 5f
             return EggPose(Offset(x, start.y), 90f + waddle) to false
         }
-        val f = stepped(elapsed - WALK_MS, POSE_MS).toFloat() / FLY_MS
-        val x = start.x + 8 * HOP_DP * density + f * 60 * density
-        val y = start.y - f * 70 * density
-        return EggPose(Offset(x, y), 60f, alpha = 1f - clamp01((f - 0.5f) * 2)) to true
+        val endX = start.x + 8 * HOP_DP * density
+        val size = SIZE_DP * density
+        val leftward = endX < width - endX
+        val edgeX = if (leftward) -size else width + size
+        val flown = elapsed - WALK_MS
+        val step = stepped(flown, POSE_MS)
+        // The first pose has already lifted off; the last one is past the edge's line, half faded.
+        val f = clamp01((step + POSE_MS).toFloat() / FLY_MS)
+        val x = lerp(endX, edgeX, f)
+        val y = start.y + 2f * density * kotlin.math.sin((f * PI).toFloat())
+        val last = flown >= FLY_MS - POSE_MS
+        return EggPose(Offset(x, y), if (leftward) -80f else 80f, alpha = if (last) 0.45f else 1f) to true
     }
 }
 

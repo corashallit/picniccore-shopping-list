@@ -1,6 +1,7 @@
 package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.weather.WeatherToday
 import earth.cora.picnic.settings.AppSettings
@@ -162,8 +163,14 @@ class EggRainTest {
         val umbrella = r.probe.frames.last { it.tag == "umbrella" }
         val bar = r.anchor(earth.cora.picnic.ui.list.motion.AnchorRegistry.ADD_BAR)
         assertTrue("at the add bar's left end", umbrella.center.x < bar.left + bar.width * 0.25f)
-        // Inside the bar, in the band over the field: never over the list under the bar's edge.
-        assertTrue("inside the bar", umbrella.bounds.top >= bar.top && umbrella.bounds.bottom <= bar.top + 20 * 3f)
+        // A big umbrella (the mockup's), standing on the bar's left shoulder: its canopy over the bar's edge.
+        assertTrue("at least 40 dp (${umbrella.bounds.width / 3f} dp)", umbrella.bounds.width >= 40 * 3f)
+        assertTrue("it stands on the bar", umbrella.bounds.bottom in bar.top..bar.top + 16 * 3f && umbrella.bounds.top < bar.top)
+        // Clear of the tape, which has moved along the bar, and of every word.
+        val tape = compose.onNodeWithTag(earth.cora.picnic.ui.add.ADD_BAR_WASHI_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertFalse("clear of the tape", tape.overlaps(umbrella.bounds.deflate(2f)))
+        textBoxes(compose).forEach { (w, box) -> assertFalse("over \"$w\"", box.overlaps(umbrella.bounds.deflate(2f))) }
+        // The list keeps room at its end for the canopy.
         assertEquals(WashiPattern.Raindrop, AddRules.addBarTape(r.eggs))
     }
 }

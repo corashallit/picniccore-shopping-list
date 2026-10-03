@@ -48,6 +48,18 @@ class EggLadybugTest {
         // Along the strip's bottom edge (its centre 2 dp below it, its feet on the binder).
         val strip = r.anchor(EggAnchors.strip("produce"))
         steps.forEach { f -> assertEquals(strip.bottom + 2 * 3f, f.center.y, 3f) }
+        // Then it flies off the nearer screen edge (the left one here), low along the strip's edge, past no words.
+        r.probe.clear()
+        r.advanceTo(t0 + LadybugMotion.DURATION - 20)
+        val flight = r.probe.frames.filter { it.tag == "ladybug" }.distinctBy { it.time }.sortedBy { it.time }
+        assertTrue("it flew", flight.size >= 4)
+        flight.zipWithNext { a, b -> assertTrue("towards the left edge", b.center.x <= a.center.x) }
+        assertTrue("off the edge (${flight.last().center.x})", flight.last().center.x < 0f)
+        val words = textBoxes(compose)
+        flight.forEach { f ->
+            assertEquals("level with the strip's edge", strip.bottom + 2 * 3f, f.center.y, 3 * 3f)
+            words.forEach { (w, box) -> assertFalse("over \"$w\" at ${f.time} ms", box.overlaps(f.bounds.deflate(2f))) }
+        }
         r.advanceTo(t0 + LadybugMotion.DURATION + 100)
         assertNull(r.eggs.ladybug)
     }
