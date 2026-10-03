@@ -10,6 +10,7 @@ import earth.cora.picnic.core.model.GroceryList
 import earth.cora.picnic.core.model.GroupedList
 import earth.cora.picnic.core.model.SectionKind
 import earth.cora.picnic.core.store.Album
+import earth.cora.picnic.core.store.TripBook
 import earth.cora.picnic.core.store.unlockSheet
 import java.text.Normalizer
 import java.time.LocalDate
@@ -216,21 +217,53 @@ object EggRules {
      * The album after egg 14's rules: every fourth complete trip in a row (4, 8, …) makes every book's stamp page holo
      * for 7 days from that filing (`perfectUntil`) and unlocks the sakura sheet; ten finished trips open the back pocket
      * ("sticker sheet 2 of 2"). Idempotent: the week a filing granted is granted once.
+     *
+     * The rules follow the books as they are now, so a book taken back out (Undo of the automatic new book, §0.4 Q9,
+     * `Album.unfile`) takes back what its filing granted: the week, the sakura sheet if no other week was ever granted,
+     * and the back pocket (and sheet 2) when the finished trips fall back under ten. The weeks are recomputed from the
+     * books only while every finished trip is still in the album (none dropped by the album's cap); past that, a week
+     * once granted stays.
      */
     fun perfectWeek(album: Album): Album {
         var a = album
-        // Every finished filing moves the streak, so with a streak of 4, 8, … the newest finished book is the one that
-        // made it; a book with no sticker (not a finished trip) never grants or extends a week.
-        val newest = a.books.firstOrNull { it.stickers.isNotEmpty() }
-        if (newest != null && a.perfectStreak > 0 && a.perfectStreak % PERFECT_WEEK_TRIPS == 0) {
-            val until = newest.closedAt + PERFECT_WEEK_MS
-            if (a.perfectUntil != until) a = a.copy(perfectUntil = until).unlockSheet(SAKURA_SHEET)
+        val finishedBooks = a.books.count { it.stickers.isNotEmpty() }
+        // The books tell the whole story only while every finished trip is still filed (and the counters agree).
+        if (finishedBooks >= a.finishedTrips && a.finishedTrips >= a.perfectStreak) {
+            val grants = perfectWeekGrants(a.books)
+            val until = grants.maxOrNull()
+            if (a.perfectUntil != until) a = a.copy(perfectUntil = until)
+            a = if (grants.isEmpty()) a.lockSheet(SAKURA_SHEET) else a.unlockSheet(SAKURA_SHEET)
+        } else {
+            // Older books have left the album: the newest finished book is the one that moved the streak to 4, 8, ….
+            val newest = a.books.firstOrNull { it.stickers.isNotEmpty() }
+            if (newest != null && a.perfectStreak > 0 && a.perfectStreak % PERFECT_WEEK_TRIPS == 0) {
+                val until = newest.closedAt + PERFECT_WEEK_MS
+                if (a.perfectUntil == null || a.perfectUntil!! < until) a = a.copy(perfectUntil = until).unlockSheet(SAKURA_SHEET)
+            }
         }
-        if (a.finishedTrips >= BACK_POCKET_TRIPS && !a.backPocketOpen) {
-            a = a.copy(backPocketOpen = true).unlockSheet(SHEET_2)
-        }
+        val pocket = a.finishedTrips >= BACK_POCKET_TRIPS
+        if (a.backPocketOpen != pocket) a = a.copy(backPocketOpen = pocket)
+        a = if (pocket) a.unlockSheet(SHEET_2) else a.lockSheet(SHEET_2)
         return a
     }
+
+    /**
+     * The end of every perfect week [books] (newest first, as the album keeps them) granted: walking the finished books
+     * in filing order, a complete one adds one to the streak and an incomplete one resets it (a book with no sticker is
+     * not a finished trip and does neither, §7.8); each streak of 4, 8, … grants 7 days from that book's filing.
+     */
+    fun perfectWeekGrants(books: List<TripBook>): List<Long> {
+        var streak = 0
+        val grants = ArrayList<Long>()
+        for (book in books.asReversed()) {
+            if (book.stickers.isEmpty()) continue
+            streak = if (book.perfect) streak + 1 else 0
+            if (streak > 0 && streak % PERFECT_WEEK_TRIPS == 0) grants += book.closedAt + PERFECT_WEEK_MS
+        }
+        return grants
+    }
+
+    private fun Album.lockSheet(sheet: String): Album = if (sheet in sheets) copy(sheets = sheets - sheet) else this
 
     // ---- Egg 18 and 15 ----
 

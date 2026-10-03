@@ -18,6 +18,7 @@ import earth.cora.picnic.platform.InMemoryWeatherCache
 import earth.cora.picnic.platform.WeatherService
 import earth.cora.picnic.settings.AppSettings
 import earth.cora.picnic.settings.InMemorySettingsRepository
+import earth.cora.picnic.settings.SettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,12 +61,16 @@ class EngineRig(
     album: Album = Album(),
     val timeouts: FakeTimeouts = FakeTimeouts(),
     places: PlaceSource = PlaceSource.Toronto,
+    /** The settings as a repository of the test's own (a delayed first emission); default: [settings] in memory. */
+    repo: SettingsRepository? = null,
+    /** A toast host takes the eggs' toasts as they come (false: nobody is collecting yet, see [collectToasts]). */
+    collectToasts: Boolean = true,
 ) {
     val zone: ZoneId = ZoneId.of("America/Toronto")
     val catalog: IconCatalog = IconCatalog.default
     val store = PracticeStore(state)
     val albumStore = InMemoryAlbumStore(album)
-    val settings = InMemorySettingsRepository(settings)
+    val settings: SettingsRepository = repo ?: InMemorySettingsRepository(settings)
     val feedback = FakeFeedback()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     val weatherCache = InMemoryWeatherCache()
@@ -91,7 +96,17 @@ class EngineRig(
     val toasts: MutableList<EggToast> = Collections.synchronizedList(ArrayList())
 
     init {
-        scope.launch { engine.events.collect { toasts += it } }
+        if (collectToasts) collectToasts()
+    }
+
+    /** Starts taking the eggs' toasts, as the list's toast host does (each is reported shown). */
+    fun collectToasts() {
+        scope.launch {
+            engine.events.collect {
+                toasts += it
+                engine.onToastShown(it)
+            }
+        }
     }
 
     val eggs: SurpriseState get() = engine.state.value

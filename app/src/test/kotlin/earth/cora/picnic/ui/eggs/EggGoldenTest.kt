@@ -117,6 +117,56 @@ class EggGoldenTest {
         }
     }
 
+    /**
+     * Item 316 (WP9 half, §0.4 Q6): golden hour follows her place the moment it changes, not the next day: "Use my area"
+     * switched on (her area far west of Toronto: its sunset is an hour later), switched off again, and her stored area
+     * refreshed mid-day (the minute tick reads the place again). The variant source follows the same switch at once.
+     */
+    @Test
+    fun aPlaceChangeMidDayMovesGoldenHourAtOnce() {
+        val winnipeg = Place(lat = 49.9, lon = -97.1, cityCode = "s0000193")
+        val ottawa = Place(lat = 45.4, lon = -75.7, cityCode = "s0000430")
+        val far = SunClock.sunset(day, winnipeg, zone)
+        assertTrue("its sunset is long after Toronto's", far.isAfter(sunset.plusMinutes(40)))
+        var stored = winnipeg
+        val repo = earth.cora.picnic.settings.InMemorySettingsRepository(earth.cora.picnic.settings.AppSettings(eggs = true))
+        val area = PlaceSource { if (repo.current().useMyArea) stored else Place.TORONTO }
+        val e = EngineRig(places = area, repo = repo)
+        try {
+            e.at(day, sunset.minusMinutes(10))
+            assertEquals("Toronto's golden hour", 10, e.eggs.goldenMinutesLeft)
+            runBlocking { repo.setSurprise(earth.cora.picnic.settings.Surprise.UseMyArea, true) }
+            assertFalse("her area's sun is still high: no golden hour, at once", e.eggs.golden)
+            runBlocking { repo.setSurprise(earth.cora.picnic.settings.Surprise.UseMyArea, false) }
+            assertEquals("off again: Toronto's", 10, e.eggs.goldenMinutesLeft)
+            // On again, and her stored area refreshes to Ottawa (the 6 h refresh) mid-day: the next minute tick follows it.
+            runBlocking { repo.setSurprise(earth.cora.picnic.settings.Surprise.UseMyArea, true) }
+            assertFalse(e.eggs.golden)
+            stored = ottawa
+            val there = SunClock.sunset(day, ottawa, zone)
+            e.at(day, there.minusMinutes(12))
+            assertEquals("Ottawa's sunset now", 12, e.eggs.goldenMinutesLeft)
+        } finally {
+            e.close()
+        }
+        // The theme variant follows the switch the same way, with no tick.
+        stored = winnipeg
+        val off = earth.cora.picnic.settings.InMemorySettingsRepository(earth.cora.picnic.settings.AppSettings(eggs = true))
+        val clock = FakeClock(day.atTime(sunset.minusMinutes(10)).atZone(zone).toInstant().toEpochMilli())
+        val s = ThemeVariantSource(off, clock::now, SunClock, PlaceSource { if (off.current().useMyArea) stored else Place.TORONTO }, zone)
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Unconfined)
+        try {
+            s.start(scope, everyMinute = false)
+            assertEquals(ThemeVariant.Golden, s.variant.value)
+            runBlocking { off.setSurprise(earth.cora.picnic.settings.Surprise.UseMyArea, true) }
+            assertEquals(ThemeVariant.Day, s.variant.value)
+            runBlocking { off.setSurprise(earth.cora.picnic.settings.Surprise.UseMyArea, false) }
+            assertEquals(ThemeVariant.Golden, s.variant.value)
+        } finally {
+            scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        }
+    }
+
     @Test
     fun onTheListGoldenWithLongShadows() {
         var shadows: PicnicShadows? = null

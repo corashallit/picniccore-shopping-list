@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.emptyFlow
  * - [SurpriseEngine.onListShown] / [SurpriseEngine.onListHidden]: the list screen came up or went (SNACK? on entry,
  *   the weather check, the receipt's auto-tuck, the bonus stage ending, ants on open).
  * - [SurpriseEngine.onReceiptTap], [SurpriseEngine.onNapTap]: taps on the printed receipt and the nap cat (EggOverlays).
+ * - [SurpriseEngine.onToastShown]: the toast host took an egg toast (the rain toast is marked as today's then).
  * - [SurpriseEngine.onMotionEvent]: WP6's MotionEvents (the pet chomps at each landing); EggOverlays forwards them.
  * - [SurpriseEngine.onImeVisible]: the ants never march while the keyboard is open.
  * - [SurpriseEngine.onIconDrawing], [SurpriseEngine.onIconDrawFailed]: a live drawing started or failed (egg 13's
@@ -83,6 +84,9 @@ interface SurpriseEngine {
 
     /** Egg 18: a tap on the printed receipt tucks it into the book. */
     fun onReceiptTap() = Unit
+
+    /** The toast host has taken [toast] from [events] and shows it (egg 16's rain toast counts as today's then). */
+    fun onToastShown(toast: EggToast) = Unit
 
     /** Egg 8: a tap on the nap cat sends it off (it does not return this trip). */
     fun onNapTap() = Unit

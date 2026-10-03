@@ -37,11 +37,11 @@ import earth.cora.picnic.ui.theme.isGoldenHour
 import earth.cora.picnic.ui.theme.isMidnight
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -78,7 +78,10 @@ class AppSurpriseEngine(
     private val timeouts: Timeouts = DefaultTimeouts,
     private val weather: WeatherService? = null,
     private val places: PlaceSource = PlaceSource.Toronto,
+    /** The calendar's zone: the season windows and sheets (§12.2 egg 11: America/Toronto). */
     private val zone: ZoneId = ZoneId.of("America/Toronto"),
+    /** Her local time (eggs 5 and 12: midnight, golden hour, sunset); AppContainer passes the phone's zone. */
+    private val localZone: ZoneId = zone,
     /** The Surprise lab's sandbox: eggs on whatever the switch says (§6.9). */
     private val forceEggs: Boolean = false,
 ) : SurpriseEngine {
@@ -88,18 +91,25 @@ class AppSurpriseEngine(
     private val _state = MutableStateFlow(SurpriseState())
     override val state: StateFlow<SurpriseState> = _state.asStateFlow()
 
-    private val toasts = MutableSharedFlow<EggToast>(extraBufferCapacity = 8)
-    override val events: Flow<EggToast> = toasts.asSharedFlow()
+    /**
+     * The toasts wait in a buffer until the list's toast host takes them (a toast raised while she is on another screen,
+     * a forecast that arrives during a 10 s fetch, is shown when she is back, never dropped).
+     */
+    private val toasts = Channel<EggToast>(Channel.BUFFERED)
+    override val events: Flow<EggToast> = toasts.receiveAsFlow()
 
     // ---- Inputs (written by the collectors and the hooks; read when deriving). ----
     @Volatile private var appSettings: AppSettings? = null
     @Volatile private var appState: AppState? = null
     @Volatile private var albumNow: Album? = null
     @Volatile private var calendar: Calendar = Calendar()
-    @Volatile private var sunsetCache: Pair<String, LocalTime>? = null
+    /** Today's sunset, for the place it was computed for (a new day or a new place computes it again). */
+    @Volatile private var sunsetCache: Sunset? = null
     @Volatile private var weatherRain: Boolean = false
     @Volatile private var firstSnow: LocalDate? = null
     @Volatile private var duskPending: Boolean = false
+    /** The rainy-day toast handed to the toast host today (it is marked in DataStore once shown). */
+    @Volatile private var rainToastQueued: LocalDate? = null
 
     /** Reduced motion (§8.8), from the host. */
     @Volatile var reducedMotion: Boolean = false
@@ -127,7 +137,20 @@ class AppSurpriseEngine(
     @Volatile var forceJackpotNext: Boolean = false
 
     init {
-        scope.launch { settings.settings.collect { s -> appSettings = s; derive() } }
+        scope.launch {
+            settings.settings.collect { s ->
+                val before = appSettings
+                appSettings = s
+                derive()
+                when {
+                    // A cold start straight into the list: the list said it was showing before the switches had loaded,
+                    // when no egg could know it was on. Its checks run now (SNACK?, the forecast, the ants).
+                    before == null && listShown && eggsOn -> listShownChecks(snackDue = true)
+                    // "Use my area" on or off: golden hour follows the new place at once, not tomorrow.
+                    before != null && before.useMyArea != s.useMyArea -> refresh()
+                }
+            }
+        }
         scope.launch {
             store.states.collect { s ->
                 val before = appState
@@ -212,28 +235,31 @@ class AppSurpriseEngine(
 
     override fun refresh() {
         val now = clock()
-        val at = Instant.ofEpochMilli(now).atZone(zone)
+        val at = Instant.ofEpochMilli(now).atZone(localZone)
         val wasMidnight = calendar.midnight
-        val sunset = sunsetCache?.takeIf { it.first == at.toLocalDate().toString() }?.second
+        val sunset = sunsetCache?.takeIf { it.date == at.toLocalDate() }?.time
         calendar = Calendar(
-            date = at.toLocalDate(),
+            date = Instant.ofEpochMilli(now).atZone(zone).toLocalDate(),
             midnight = isMidnight(true, at.toLocalTime()),
             goldenMinutesLeft = sunset?.let { goldenMinutesLeft(at, it) },
         )
-        if (sunset == null) {
-            scope.launch {
-                val place = try {
-                    places.place()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    null
-                } ?: return@launch
-                val time = SunClock.sunset(at.toLocalDate(), place, zone)
-                sunsetCache = at.toLocalDate().toString() to time
-                calendar = calendar.copy(goldenMinutesLeft = goldenMinutesLeft(Instant.ofEpochMilli(clock()).atZone(zone), time))
-                derive()
-            }
+        // The place is read again on every refresh (the minute tick; AreaPlaceSource answers from its 6 h store), so a
+        // new area, or "Use my area" turned on or off, moves golden hour at once.
+        scope.launch {
+            val place = try {
+                places.place()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            } ?: return@launch
+            val date = at.toLocalDate()
+            val cached = sunsetCache
+            if (cached != null && cached.date == date && cached.lat == place.lat && cached.lon == place.lon) return@launch
+            val time = SunClock.sunset(date, place, localZone)
+            sunsetCache = Sunset(date, place.lat, place.lon, time)
+            calendar = calendar.copy(goldenMinutesLeft = goldenMinutesLeft(Instant.ofEpochMilli(clock()).atZone(localZone), time))
+            derive()
         }
         derive()
         unlockSeason()
@@ -241,10 +267,13 @@ class AppSurpriseEngine(
         if (listShown && eggsOn && calendar.midnight && !wasMidnight) snack()
     }
 
+    /** A day's sunset at a place (rounded point, §0.4 Q6), in local time. */
+    private data class Sunset(val date: LocalDate, val lat: Double, val lon: Double, val time: LocalTime)
+
     /** Minutes left before [sunset] (0–30) while golden hour holds at [at], else null. */
     private fun goldenMinutesLeft(at: ZonedDateTime, sunset: LocalTime): Int? {
         if (!isGoldenHour(at.toLocalTime(), sunset)) return null
-        val sunsetAt = at.toLocalDate().atTime(sunset).atZone(zone)
+        val sunsetAt = at.toLocalDate().atTime(sunset).atZone(localZone)
         return ChronoUnit.MINUTES.between(at, sunsetAt).toInt().coerceIn(0, 30)
     }
 
@@ -362,7 +391,7 @@ class AppSurpriseEngine(
         if (bonusStep == EggRules.BONUS_SEQUENCE.size) {
             bonusStep = 0
             _state.update { it.copy(bonusStage = true, lcdWord = LcdWord(nextId(), EggRules.BONUS, 0)) }
-            toasts.tryEmit(EggToast.BonusStage)
+            toasts.trySend(EggToast.BonusStage)
         }
     }
 
@@ -460,10 +489,22 @@ class AppSurpriseEngine(
         listShown = true
         shownListId = listId
         refresh()
+        // Before the switches have loaded nothing knows whether eggs are on: the settings collector runs these then.
         if (!eggsOn) return
-        if (!wasShown && calendar.midnight) snack()
+        listShownChecks(snackDue = !wasShown)
+    }
+
+    /** What coming to the list checks (§12.2): SNACK? at midnight, the forecast, the ants. */
+    private fun listShownChecks(snackDue: Boolean) {
+        if (snackDue && calendar.midnight) snack()
         checkWeather()
         checkAnts()
+    }
+
+    override fun onToastShown(toast: EggToast) {
+        if (toast != EggToast.RainToday) return
+        val service = weather ?: return
+        scope.launch { safely { service.markRainToast() } }
     }
 
     override fun onListHidden() {
@@ -476,7 +517,7 @@ class AppSurpriseEngine(
         val fx = _state.value.receipt ?: return
         scope.launch { safely { store.update { it.saveReceipt(fx.listId) } } }
         _state.update { it.copy(receipt = null, receiptTuckId = nextId()) }
-        toasts.tryEmit(EggToast.ReceiptSaved)
+        toasts.trySend(EggToast.ReceiptSaved)
     }
 
     override fun onNapTap() {
@@ -579,9 +620,12 @@ class AppSurpriseEngine(
             firstSnow = w.firstSnowDate
             derive()
             unlockSeason()
-            if (w.rainToastDue && eggsOn) {
-                service.markRainToast()
-                toasts.tryEmit(EggToast.RainToday)
+            // Once a day: it is marked in DataStore when the toast host shows it (onToastShown), so a toast that waited
+            // for her to come back to the list still counts, and one that never showed is not lost.
+            val today = Instant.ofEpochMilli(clock()).atZone(zone).toLocalDate()
+            if (w.rainToastDue && eggsOn && rainToastQueued != today) {
+                rainToastQueued = today
+                toasts.trySend(EggToast.RainToday)
             }
         }
     }
@@ -604,7 +648,7 @@ class AppSurpriseEngine(
         scope.launch {
             safely {
                 album.update { EggRules.perfectWeek(it) }
-                if (opened) toasts.tryEmit(EggToast.BackPocket)
+                if (opened) toasts.trySend(EggToast.BackPocket)
             }
         }
     }

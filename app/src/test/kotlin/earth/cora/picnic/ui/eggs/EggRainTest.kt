@@ -65,6 +65,32 @@ class EggRainTest {
         }
     }
 
+    /**
+     * The rain toast waits for the toast host (she left the list during a slow fetch): it is shown when the host takes it,
+     * and only then does today count as toasted, so it is never lost and never shown twice.
+     */
+    @Test
+    fun theRainToastWaitsForTheToastHost() {
+        val w = CountingWeather { WeatherToday(it, rain = true, snow = false) }
+        val e = EngineRig(settings = AppSettings(eggs = true, weather = true), weatherSource = w, collectToasts = false)
+        try {
+            e.at(today, LocalTime.of(9, 0))
+            e.engine.onListShown(e.listId)
+            e.engine.onListHidden()
+            e.engine.onListShown(e.listId)
+            assertTrue(e.eggs.umbrella)
+            assertEquals("not counted before it shows", null, kotlinx.coroutines.runBlocking { e.weatherCache.read() }.rainToastDay)
+            // The host comes back and takes what waited: one toast, now counted as today's.
+            e.collectToasts()
+            assertEquals(listOf(EggToast.RainToday), e.toasts)
+            assertEquals(today, kotlinx.coroutines.runBlocking { e.weatherCache.read() }.rainToastDay)
+            e.engine.onListShown(e.listId)
+            assertEquals(1, e.toasts.size)
+        } finally {
+            e.close()
+        }
+    }
+
     @Test
     fun noRainNoUmbrella() {
         val (e, _) = rig(answer = { WeatherToday(it, rain = false, snow = false) })

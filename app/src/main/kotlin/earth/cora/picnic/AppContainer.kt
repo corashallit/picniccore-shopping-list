@@ -67,6 +67,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.ZoneId
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -176,13 +177,15 @@ class AppContainer(private val app: Application) {
             timeouts = timeouts,
             weather = weather,
             places = places,
+            // Midnight and golden hour are her local time (§12.2 eggs 5 and 12); the season calendar stays Toronto's.
+            localZone = ZoneId.systemDefault(),
         )
     }
 
     /** Day / Glow / Dusk / Golden (§2.5); MainActivity feeds it the system dark mode (WP4). Ticks once a minute. */
     val themeVariants: ThemeVariantSource by lazy {
         ThemeVariantSource(
-            settings, clock, SunClock, places,
+            settings, clock, SunClock, places, ZoneId.systemDefault(),
             duskShown = surprises.state.map { it.dusk },
             onTick = { surprises.refresh() },
         ).also { it.start(appScope) }

@@ -15,6 +15,7 @@ import earth.cora.picnic.core.store.Album
 import earth.cora.picnic.core.store.BookSticker
 import earth.cora.picnic.core.store.TripBook
 import earth.cora.picnic.core.store.file
+import earth.cora.picnic.core.store.unfile
 import earth.cora.picnic.ui.album.PerfectWeeksCard
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -107,6 +108,56 @@ class PerfectWeekTest {
         val ten = nine.fileAll(book(10, "s", false))
         assertTrue(ten.backPocketOpen)
         assertTrue(EggRules.SHEET_2 in ten.sheets)
+    }
+
+    /**
+     * §0.4 Q9 × egg 14: the automatic new book's Undo takes the filed book back out (Album.unfile). What that filing
+     * granted goes with it: the perfect week and the sakura sheet (the streak is 3 again), and the back pocket and
+     * sheet 2 when it was the tenth finished trip.
+     */
+    @Test
+    fun undoingTheFilingTakesBackWhatItGranted() {
+        val three = Album().fileAll(book(1, "s", true), book(2, "s", true), book(3, "s", true))
+        val fourth = book(4, "s", true)
+        val four = three.fileAll(fourth)
+        assertTrue(EggRules.SAKURA_SHEET in four.sheets)
+        val undone = EggRules.perfectWeek(four.unfile(fourth, before = three))
+        assertEquals(3, undone.perfectStreak)
+        assertNull("the week goes with the book", undone.perfectUntil)
+        assertFalse(EggRules.SAKURA_SHEET in undone.sheets)
+        assertEquals(EggRules.perfectWeek(three), undone)
+
+        // An earlier week stays: eight in a row, the eighth taken back, the fourth's week remains.
+        val seven = four.fileAll(book(5, "s", true), book(6, "s", true), book(7, "s", true))
+        val eighth = book(8, "s", true)
+        val back = EggRules.perfectWeek(seven.fileAll(eighth).unfile(eighth, before = seven))
+        assertEquals(fourth.closedAt + EggRules.PERFECT_WEEK_MS, back.perfectUntil)
+        assertTrue(EggRules.SAKURA_SHEET in back.sheets)
+
+        // The tenth finished trip opened the back pocket; taking it back closes it.
+        val nine = (1..9).fold(Album()) { a, n -> a.fileAll(book(n, "p", false)) }
+        val tenth = book(10, "p", false)
+        val ten = nine.fileAll(tenth)
+        assertTrue(ten.backPocketOpen)
+        val shut = EggRules.perfectWeek(ten.unfile(tenth, before = nine))
+        assertFalse(shut.backPocketOpen)
+        assertFalse(EggRules.SHEET_2 in shut.sheets)
+    }
+
+    @Test
+    fun theEngineTakesBackTheWeekWhenTheBookIsTakenBack() {
+        val e = EngineRig()
+        try {
+            val books = (1..4).map { n -> book(n, "s", true, at = PracticeFixture.NOW - (5 - n) * day) }
+            val three = books.take(3).fold(Album()) { a, b -> a.file(b) }
+            runBlocking { e.albumStore.update { three.file(books[3]) } }
+            assertTrue(e.eggs.perfectWeek)
+            runBlocking { e.albumStore.update { it.unfile(books[3], before = three) } }
+            assertFalse("the stamp pages are not holo any more", e.eggs.perfectWeek)
+            assertFalse(EggRules.SAKURA_SHEET in runBlocking { e.albumStore.current() }.sheets)
+        } finally {
+            e.close()
+        }
     }
 
     @Test

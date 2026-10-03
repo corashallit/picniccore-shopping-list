@@ -11,6 +11,9 @@ import earth.cora.picnic.ui.theme.HankoText
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import earth.cora.picnic.ui.theme.WashiPattern
+import earth.cora.picnic.core.model.addItems
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -94,6 +97,47 @@ class SurpriseEngineTest {
             assertTrue(rig.eggs.pet)
             assertTrue(rig.eggs.perfectWeek)
             assertEquals(HankoText.HappyBday, rig.eggs.hankoFor(cake.copy(checked = true), rig.catalog))
+        } finally {
+            rig.close()
+        }
+    }
+
+    /**
+     * A cold start straight into the list (§12.2 eggs 5, 16, 17): the list says it is showing before the switches have
+     * loaded from DataStore. Once they load, SNACK? shows at midnight, the forecast is asked and the ants set off, as if
+     * she had come in with them known.
+     */
+    @Test
+    fun aColdStartStraightIntoTheListRunsItsChecksOnceTheSwitchesLoad() {
+        val loaded = kotlinx.coroutines.flow.MutableStateFlow(false)
+        val inner = earth.cora.picnic.settings.InMemorySettingsRepository(AppSettings(eggs = true, weather = true))
+        val slow = object : earth.cora.picnic.settings.SettingsRepository by inner {
+            @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+            override val settings = loaded.filter { it }.flatMapLatest { inner.settings }
+        }
+        // Midnight snack time, with three picnic things to get on the list.
+        val picnic = PracticeFixture.state().let { s ->
+            listOf("watermelon" to "Watermelon", "lemonade" to "Lemonade", "sliced_bread" to "Sandwich bread").foldIndexed(s) { i, acc, (key, name) ->
+                acc.addItems(s.currentListId, listOf(earth.cora.picnic.core.model.GroceryItem(id = "p$i", name = name, icon = key, addedAt = PracticeFixture.NOW)), PracticeFixture.NOW).first
+            }
+        }
+        val rig = EngineRig(
+            state = picnic,
+            repo = slow,
+            clock = FakeClock(java.time.LocalDate.of(2026, 10, 3).atTime(23, 30).atZone(java.time.ZoneId.of("America/Toronto")).toInstant().toEpochMilli()),
+            weatherSource = CountingWeather { day -> earth.cora.picnic.core.weather.WeatherToday(day, rain = true, snow = false) },
+        )
+        try {
+            rig.engine.onListShown(rig.listId)
+            assertNull("the switches are not loaded yet", rig.eggs.lcdWord)
+            assertEquals(0, rig.weatherSource!!.requests)
+            assertNull(rig.eggs.antsId)
+            loaded.value = true
+            assertEquals("SNACK? as she comes in", EggRules.SNACK, rig.eggs.lcdWord?.text)
+            assertEquals("the forecast is asked", 1, rig.weatherSource!!.requests)
+            assertTrue(rig.eggs.rain)
+            assertEquals(listOf(EggToast.RainToday), rig.toasts)
+            assertNotNull("the ants set off", rig.eggs.antsId)
         } finally {
             rig.close()
         }

@@ -26,7 +26,8 @@ import java.time.ZoneId
  * 2. system dark mode -> Glow;
  * 3. Easter eggs on and the Dusk binder saved (egg 1) -> Dusk;
  * 4. Easter eggs on and within 30 min before sunset at [places]' point (egg 12, §0.4 Q6: her approximate area with "Use
- *    my area" on, else Toronto) -> Golden;
+ *    my area" on, else Toronto) -> Golden; the place is read again on every minute tick and whenever "Use my area" is
+ *    switched, and the sunset is computed again for a new day or a new place;
  * 5. otherwise Day.
  * MainActivity feeds the system dark mode in ([onSystemDark]) and sets the bar styles from [variant] (WP4). [start]
  * collects the settings and ticks once a minute in a scope (AppContainer passes the app scope; tests a TestScope).
@@ -38,6 +39,7 @@ class ThemeVariantSource(
     private val clock: () -> Long,
     private val sunClock: SunClock = SunClock,
     private val places: PlaceSource = PlaceSource.Toronto,
+    /** Her local time (midnight, golden hour); AppContainer passes the phone's zone. */
     private val zone: ZoneId = ZoneId.of("America/Toronto"),
     private val duskShown: Flow<Boolean>? = null,
     /** Called on every minute tick (AppContainer: the SurpriseEngine re-reads the clock: midnight, golden hour, seasons). */
@@ -50,7 +52,10 @@ class ThemeVariantSource(
     @Volatile private var systemDark = false
     @Volatile private var current: AppSettings? = null
     @Volatile private var dusk: Boolean? = null
-    @Volatile private var sunset: Pair<LocalDate, LocalTime>? = null
+    /** Today's sunset for the place it was computed for. */
+    private data class Sunset(val date: LocalDate, val lat: Double, val lon: Double, val time: LocalTime)
+
+    @Volatile private var sunset: Sunset? = null
     private var job: Job? = null
 
     /** The system's dark mode (Configuration.uiMode), on start and on every change. */
@@ -66,7 +71,15 @@ class ThemeVariantSource(
     fun start(scope: CoroutineScope, everyMinute: Boolean = true) {
         if (job != null) return
         job = scope.launch {
-            launch { settings.settings.collect { current = it; resolve() } }
+            launch {
+                settings.settings.collect {
+                    val before = current
+                    current = it
+                    // "Use my area" switched: the sunset follows the new place now, not tomorrow.
+                    if (before != null && before.useMyArea != it.useMyArea) refreshSunset()
+                    resolve()
+                }
+            }
             duskShown?.let { flow -> launch { flow.collect { dusk = it; resolve() } } }
             refreshSunset()
             resolve()
@@ -94,7 +107,7 @@ class ThemeVariantSource(
         val s = current
         val eggs = s?.eggs ?: true
         val at = Instant.ofEpochMilli(clock()).atZone(zone)
-        val set = sunset?.takeIf { it.first == at.toLocalDate() }?.second
+        val set = sunset?.takeIf { it.date == at.toLocalDate() }?.time
         val duskSaved = dusk ?: (s?.duskBinder == true)
         return resolveThemeVariant(eggs = eggs, systemDark = systemDark, duskSaved = duskSaved, now = at.toLocalTime(), sunset = set)
     }
@@ -103,9 +116,9 @@ class ThemeVariantSource(
         resolved.value = resolveNow()
     }
 
+    /** Reads the place (AreaPlaceSource answers from its 6 h store) and computes the sunset for a new day or place. */
     private suspend fun refreshSunset() {
         val date = Instant.ofEpochMilli(clock()).atZone(zone).toLocalDate()
-        if (sunset?.first == date) return
         val place = try {
             places.place()
         } catch (e: CancellationException) {
@@ -113,7 +126,9 @@ class ThemeVariantSource(
         } catch (e: Exception) {
             return
         }
-        sunset = date to sunClock.sunset(date, place, zone)
+        val known = sunset
+        if (known != null && known.date == date && known.lat == place.lat && known.lon == place.lon) return
+        sunset = Sunset(date, place.lat, place.lon, sunClock.sunset(date, place, zone))
     }
 
     private companion object {

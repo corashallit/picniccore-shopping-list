@@ -161,6 +161,7 @@ fun BoxScope.EggOverlays(
                     )
                 },
             )
+            engine.onToastShown(toast)
         }
     }
     LaunchedEffect(engine, motion) { motion?.events?.collect { engine.onMotionEvent(it) } }
