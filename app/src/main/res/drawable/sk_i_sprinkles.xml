@@ -51,7 +51,7 @@
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M28.22 26.4L29.38 29.6"
-        android:strokeColor="#FFDA4A"
+        android:strokeColor="#E67BAA"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
@@ -61,7 +61,7 @@
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M15.95 35.07L17.65 32.13"
-        android:strokeColor="#FFDA4A"
+        android:strokeColor="#5EA9DB"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
@@ -91,7 +91,7 @@
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M23.02 39.4L24.18 36.2"
-        android:strokeColor="#FFDA4A"
+        android:strokeColor="#E67BAA"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
@@ -101,7 +101,7 @@
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M31.73 39.45L34.67 37.75"
-        android:strokeColor="#FFDA4A"
+        android:strokeColor="#5EA9DB"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
@@ -113,7 +113,7 @@
         android:strokeLineJoin="round"/>
     <path android:pathData="M17.4 18L17.4 20.8M20.6 18L20.6 20.8M23.8 18L23.8 20.8M27 18L27 20.8M30.2 18L30.2 20.8M33.4 18L33.4 20.8"
         android:strokeColor="#FF9FC8"
-        android:strokeWidth="1.1"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M44.42 40.01L44.59 39.71L44.69 39.39L44.69 39.05L44.61 38.72L44.44 38.42L44.21 38.18L43.91 38.01L43.59 37.91L43.25 37.91L42.92 37.99L42.62 38.16L42.38 38.39L39.38 42.19L39.21 42.49L39.11 42.81L39.11 43.15L39.19 43.48L39.36 43.78L39.59 44.02L39.89 44.19L40.21 44.29L40.55 44.29L40.88 44.21L41.18 44.04L41.42 43.81Z"
@@ -123,8 +123,8 @@
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M44.75 31.21L44.87 30.89L44.9 30.55L44.84 30.21L44.7 29.91L44.48 29.65L44.21 29.45L43.89 29.33L43.55 29.3L43.21 29.36L42.91 29.5L42.65 29.72L42.45 29.99L40.45 33.79L40.33 34.11L40.3 34.45L40.36 34.79L40.5 35.09L40.72 35.35L40.99 35.55L41.31 35.67L41.65 35.7L41.99 35.64L42.29 35.5L42.55 35.28L42.75 35.01Z"
-        android:fillColor="#FFDA4A"
-        android:strokeColor="#8A6800"
+        android:fillColor="#7CC6F5"
+        android:strokeColor="#1E6AA3"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>

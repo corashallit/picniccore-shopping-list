@@ -69,7 +69,7 @@
         android:strokeLineJoin="round"/>
     <path android:pathData="M20.6 16.6L20.6 20M23.8 16.6L23.8 20M27 16.6L27 20M30.2 16.6L30.2 20"
         android:strokeColor="#8A6800"
-        android:strokeWidth="1.1"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>

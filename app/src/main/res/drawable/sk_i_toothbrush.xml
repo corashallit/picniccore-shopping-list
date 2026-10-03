@@ -37,7 +37,7 @@
         android:strokeLineJoin="round"/>
     <path android:pathData="M17.57 33.81L19.3 36.01M18.99 32.7L20.72 34.91M20.41 31.59L22.13 33.8"
         android:strokeColor="#CCEBFF"
-        android:strokeWidth="1"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M28.11 14.16L34.1 9.48C34.4 9.24 34.76 9.09 35.14 9.03C35.53 8.98 35.92 9.03 36.28 9.17C36.63 9.31 36.95 9.55 37.18 9.86L39.52 12.85C39.76 13.15 39.92 13.52 39.97 13.9C40.02 14.28 39.97 14.67 39.83 15.03C39.69 15.39 39.45 15.7 39.14 15.94L33.16 20.62C32.93 20.8 32.67 20.93 32.39 21C32.11 21.08 31.82 21.1 31.53 21.07C31.25 21.03 30.97 20.94 30.72 20.8C30.47 20.66 30.25 20.47 30.07 20.24L27.73 17.24C27.55 17.02 27.42 16.76 27.34 16.48C27.26 16.2 27.24 15.91 27.28 15.62C27.31 15.33 27.41 15.06 27.55 14.81C27.69 14.55 27.88 14.33 28.11 14.16Z"
@@ -67,7 +67,7 @@
         android:strokeLineJoin="round"/>
     <path android:pathData="M29.15 18.42L38.14 11.4"
         android:strokeColor="#CCEBFF"
-        android:strokeWidth="1"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>

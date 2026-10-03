@@ -60,7 +60,7 @@
     <path android:pathData="M26 27.8Q27.08 30.32 29.6 31.4Q27.08 32.48 26 35Q24.92 32.48 22.4 31.4Q24.92 30.32 26 27.8Z"
         android:fillColor="#FFDA4A"
         android:strokeColor="#8A6800"
-        android:strokeWidth="1.1"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>

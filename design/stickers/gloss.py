@@ -237,7 +237,7 @@ def autogloss(icon, report=None):
     subs = 0
     need_colour = main is not None and main[0]['white']
     for d in cands:
-        if d['i'] in used or d['w'] < 10 or subs >= 2:
+        if d['i'] in used or d['w'] < 10 or subs >= getattr(icon, 'subs', 2):
             continue
         if d['white'] and not need_colour and subs >= 1:
             continue

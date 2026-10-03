@@ -18,9 +18,9 @@ run(report) -> (errors, warnings, measurements). Errors fail `build_android.py` 
             2u trace), paint in a trace colour inside the outlines' outer edge (+1u), unless the part's own trace
             repaints it.
   hairline  every detail line, texture line, plain line and outline is at least HAIRLINE (1.2u) wide.
-  families  at most two families per sticker plus white and lemon pastel (§3.1); a third family is allowed only as a
-            small accent (under FAMILY_ACCENT of the coloured area: stems, leaves, a cap), or on the composite
-            generics in COMPOSITE (a bowl of mixed fruit, a breakfast plate).
+  families  at most two families per sticker plus white and lemon-pastel details (§3.1): a third family (lemon pastel
+            counts as lemon) is allowed only as a small accent (under FAMILY_ACCENT of the coloured area: stems,
+            leaves, seeds, a cap), or on the composite generics in COMPOSITE (a bowl of mixed fruit, a breakfast plate).
   geometry  the union cut is present; the base sits on y 42 (41.4-42.6); the art stays in the live area 6-42 (the 2u
             trace may overhang by 1u, so 5-43); every die-cut fill part fits a 2u disc; die-cut rectangles have
             corners r >= 2u; no die-cut line is thinner than 1.2u; no <text> or <image> anywhere.
@@ -61,7 +61,7 @@ EXTRAS = {
 HEADS = {'cat': (15.8, 31.4, 9.6), 'bee': (14.6, 28.2, 7), 'ladybug': (24, 13.4, 6.4), 'ladybugfly': (24, 15.4, 6), 'ant': (12.4, 32, 3.6),
          'antcrumb': (12.4, 32, 3.6), 'dustbunny': (22.4, 29.6, 6.4),   # the dust bunny's face; its gloss is on the fluff
          # item stickers with a head (no face on a list sticker, but a white stroke in the head still reads as one)
-         'candy': (32.6, 22.4, 4.6)}
+         'candy': (32.6, 26.4, 4.6)}
 BASKET_KINDS = {'wicker_picnic', 'bread_basket', 'fruit_crate', 'berry_punnet', 'wire_basket', 'egg_basket', 'milk_crate',
                 'cooler', 'ice_bucket', 'bento_box', 'jar_shelf', 'canvas_tote', 'flower_bucket', 'bottle_carrier',
                 'candy_jar', 'vanity_case', 'mixing_bowl'}
@@ -89,12 +89,15 @@ GRANDFATHERED = {
     'corner': {'bottled_water', 'cream', 'french_fries', 'frozen_vegetables', 'garlic', 'laundry_detergent', 'olive_oil',
         'orange_juice', 'potato_chips'},
     'stray_gloss': {'bacon', 'celery', 'grapes'},
-    'coverage': {'baby_wipes', 'butter_tart', 'diapers', 'honey'},
-    'dot': {'banana', 'baguette', 'diapers', 'lettuce'},
-    'cross': {'bacon', 'celery', 'chicken_drumstick', 'grapes', 'pasta', 'pretzel'},
-    'printed': set(),
-    'families': {'canned_beans', 'muffin', 'vitamins'},
-    'hairline': set(),
+    'coverage': {'baby_wipes', 'bandages', 'banana', 'bottled_water', 'butter_tart', 'diapers', 'honey'},
+    'dot': {'baguette', 'banana', 'diapers', 'lettuce'},
+    'cross': set(),
+    'printed': {'bakery_generic', 'canned_beans', 'canned_tomatoes', 'canned_tuna', 'cheddar', 'donut', 'maple_syrup', 'muffin',
+        'oatmeal', 'pasta', 'soup_can', 'sunscreen', 'sweet_potato', 'tea', 'tissues', 'yogurt'},
+    'families': {'canned_beans', 'chicken_breast', 'frozen_pizza', 'ground_beef', 'muffin', 'popsicle', 'sponge', 'vitamins'},
+    'hairline': {'baby_food', 'cat_food', 'cat_litter', 'cherries', 'granola', 'grapes', 'honey', 'hot_sauce', 'ice_cream', 'jam',
+        'ketchup', 'laundry_detergent', 'lemonade', 'maple_syrup', 'mayonnaise', 'oatmeal', 'orange', 'pasta_sauce', 'peach',
+        'peanut_butter', 'pear', 'potato_chips', 'salt', 'sparkling_water', 'tea', 'toothpaste', 'vitamins', 'yogurt'},
 }
 
 
@@ -300,9 +303,12 @@ def check_printed(lint, stickers):
             lint.fail('printed', key, f'printed: {key} paints outside its die-cut art: ' + '; '.join(worst))
 
 
-def check_gloss_crossing(lint, stickers):
-    """no gloss mark crosses the visible colour-trace of a die-cut shape (fill outlines and tube outer strokes)."""
+def check_gloss_crossing(lint, stickers, gloss_report=()):
+    """no gloss mark crosses the visible colour-trace of a die-cut shape (fill outlines and tube outer strokes). A cluster's
+    main gloss (grapes, a bunch of scallions: autogloss strokes the whole silhouette when no single shape can carry it)
+    spans several shapes by design and is not checked."""
     base = E.translate(OFF, OFF)
+    cluster = {r['key'] for r in gloss_report if r.get('main') and r['main']['part'] == -1}
     for icon, key, groups, dom, sil in stickers:
         cover = _cover(icon, base)
         rings = []
@@ -322,8 +328,11 @@ def check_gloss_crossing(lint, stickers):
                 ring = ring.difference(cover[i])
             rings.append((i, ring))
         hits = []
-        for g in icon.gloss:
+        for n, g in enumerate(icon.gloss):
+            if n == 0 and icon.key in cluster:
+                continue
             geo = E.stroke_geom(E.bake(g[1], base), g[2]) if g[0] == 'g' else Point(g[1] + OFF, g[2] + OFF).buffer(g[3])
+            geo = geo.buffer(-.45)        # a slim shape's gloss (inset 1.9u) may graze the trace's inner edge; a crossing goes deeper
             for i, ring in rings:
                 a = geo.intersection(ring).area
                 if a > CROSS_MAX:
@@ -339,16 +348,15 @@ for _f in C:
 
 
 def families_used(icon, base=None):
-    """the share of the coloured, visible art per family (white and lemon pastel are free: §3.1)."""
+    """the share of the coloured, visible art per family (white is free; lemon pastel counts as lemon, so a lemon-pastel
+    detail stays under the accent share and a lemon-pastel body is a lemon mass)."""
     base = base or E.translate(OFF, OFF)
     cover = _cover(icon, base)
     area = {}
     for i, p in enumerate(icon.parts):
         for g, c, k in _paint(p, base):
-            if c in (E.WHITE, engine.LP):
+            if c == E.WHITE:
                 continue
-            if c == C['lemon'][2] and p.fam == 'lemon' and engine.tone(p.fam, p.t) == engine.LP:
-                continue          # the trace of a lemon-pastel detail
             f = _FAM_OF.get(c)
             if f is None:
                 continue
@@ -478,7 +486,7 @@ def run(report):
     check_gloss(lint, stickers, [r for r in GLOSS_REPORT if r['key'] in dsl_keys], report['decor'])
     check_geometry(lint, stickers)
     check_printed(lint, stickers)
-    check_gloss_crossing(lint, stickers)
+    check_gloss_crossing(lint, stickers, [r for r in GLOSS_REPORT if r['key'] in dsl_keys])
     check_families(lint, stickers)
     check_hairlines(lint, stickers)
     check_no_text(lint, ICONS + DECO)

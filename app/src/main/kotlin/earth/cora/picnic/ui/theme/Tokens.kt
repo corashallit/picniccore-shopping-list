@@ -94,6 +94,13 @@ enum class Pictogram(val key: String) {
 @Immutable
 data class AisleLook(val position: Int, val family: StickerFamily, val pattern: TabPattern, val pictogram: Pictogram) {
     val isEverythingElse: Boolean get() = position <= 0
+
+    /**
+     * The ink of this aisle's stamp pictogram (§4.13): the aisle trace on the Day, Dusk and Golden pages; the aisle
+     * mid on the Glow page (`#222861`), where the traces fall to 1.7–2.8 : 1 and the mids reach 5.1–10 : 1. Paths of
+     * `sk_p_*` named `ink` take this colour, `paper` paths stay white.
+     */
+    fun stampInk(variant: ThemeVariant): Color = if (variant == ThemeVariant.Glow) family.mid else family.trace
 }
 
 /** The aisle rotation (§2.3) and the editor's overrides (§4.26). Pure: AisleStyleTest. */

@@ -394,7 +394,7 @@ Stickers inside a tray row lie flat on the page except their own die-cut shadow 
 
 - **Box**: viewBox −2 −2 52 52; art grid 0–48, live area 6–42; base on y 42; centred. Front view, chibi (height:width ≈ 1:1.1), cylinders with a 1:3 top ellipse, boxes front face only with r 3–4u corners.
 - **Colour-trace outline**: every shape outlined in its own trace, 2u, round joins and caps. Interior detail 1.5u trace. Texture lines 2u mid on pastel. **No universal dark ink.**
-- **Two-tone fill**: dominant shape pastel + mid accents (or mid body for berries and tomatoes). At most two families per icon, plus white and lemon-pastel details. No gradients.
+- **Two-tone fill**: dominant shape pastel + mid accents (or mid body for berries and tomatoes). At most two families per icon, plus white and lemon-pastel details; a third family only as a small accent (a stem, a leaf, a cap: under 6 % of the coloured area). Exception: a composite generic that stands for a whole aisle of mixed things (`fruit_generic`, `vegetables_generic`, `breakfast_generic`, `deli_generic`, `household_generic`) may show three. No gradients.
 - **Volume**: no cel shadow. A flat puffy bottom band: the bottom 20–25 % of the dominant shape in its mid (deep on mid bodies), clipped to the silhouette.
 - **Bonbon gloss**: one 2.6u white curved stroke (round caps) along the upper-left inner contour, inset 3u, covering 25–35 % of the contour, plus a 1.6u white dot just past its end; sub-shapes ≥10u wide get a 2.2u gloss. 100 % white, never blurred. Generated from each outline and linted (no gloss in critter heads, no stray fragments).
 - **Die-cut**: the union silhouette stroked 8u white with round joins and filled white (border 4u outside the art); the hard shadow is drawn at render time (§3.3).
@@ -565,7 +565,7 @@ TalkBack: "Strawberries, 1 litre basket" + state ("not checked" / "got it"); cus
 ### 4.13 Stamp circles and pictograms
 
 - Circle: 24 dp (20 dp above 8 stops) with a 2 dp dashed ballpointSoft ring (`DashSpec` 3.4 / 2.6), the walking number in DynaPuff 12 sp (11 sp at 20 dp); "Everything else" has the first circle, with no numeral. The **current stop** (the "now" ring) is the open aisle if it has items left, otherwise the automatic current aisle (D2); its ring is strawberry trace and turns slowly (6 s per turn, off under reduced motion). In the fixture that is stop 4, Baking.
-- Stamped: the aisle's pictogram (24-grid monochrome vector, white details) at 0.75 of the circle, inked in the aisle trace, rotated −10°.
+- Stamped: the aisle's pictogram (24-grid monochrome vector, white details) at 0.75 of the circle, inked in the aisle trace, rotated −10°. On the Glow page (`#222861`) the traces fall to 1.7–2.8 : 1, so there the stamp is inked in the aisle **mid** (5.1–10 : 1; `AisleLook.stampInk`, golden `stamp_pictograms_glow`).
 - Pictograms: strawberry, bee, star, heart, cloud, flower, ladybug, teacup, sandwich, sun (+ capsule for "Everything else"; seasonal: maple leaf, pumpkin, ghost, snowflake, heart, envelope).
 
 ### 4.14 Washi tape and dividers
@@ -694,7 +694,7 @@ Decorated kinds carry their decoration in the **back layer**, so it is there emp
 |---|---|
 | **Nothing gotten yet** | the empty basket of its kind (decorated kinds with their decoration) with a dotted 7 dp-radius landing spot half-sunk in its mouth (1.8 dp dashed ring, 3.2 / 2.4); the badge shows the full count |
 | **Filling** | gotten minis (30 dp, full colour, shiny ones holo) in **check-off order**, newest on top: 1 upright; 2 tilted ±7°; 3 fanned −9° / 0 / +9° (outer two raised 1.5 dp); 4 = two front + two raised back row (−6 dp); 5 = three front + two back (−7 dp); more than 5 = the newest 5 + the "+n" tag. Earlier stickers keep their places; each new one lands on top. The badge counts what is left. |
-| **Aisle done** | the lid / cover shuts over everything gotten (2 frames, 160 ms), the 34 dp GOT IT hanko presses onto the **lid** at the hanko point (never onto the tab), the badge hides, the minis hide once the lid has landed (240 ms) |
+| **Aisle done** | the lid / cover shuts over everything gotten (2 frames, 160 ms), the 34 dp GOT IT hanko presses onto the **lid** at the hanko point (never onto the tab), the badge hides, the minis hide once the lid has landed (240 ms). The lid stamp is Day vermilion `#C8321F` in every variant (baskets keep their colours, §2.4; the Glow hanko `#FF8A7A` falls to 1.1–2.0 : 1 on the lids) on a 1.5u white backing ring (`drawBasketHanko`) |
 | **Peek** (press and hold a folded basket for the hold threshold, §4.3) | the lid opens in 2 frames, the minis rise 8 dp, the basket wobbles, the peek note appears; release closes it; the click is swallowed so the strip does not open |
 | **Un-check in a done aisle** | the lid re-opens (minis visible again), the hanko lifts, the badge returns, the stamp goes back to the number |
 | **Nap** (egg 8) | a ginger tabby curled up inside, breathing |

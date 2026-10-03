@@ -54,13 +54,13 @@
     <path android:pathData="M18.4 37.73C19.13 38.92 19.62 39.67 19.62 40.21C19.62 40.82 19.07 41.13 18.4 41.13C17.73 41.13 17.18 40.82 17.18 40.21C17.18 39.67 17.67 38.92 18.4 37.73Z"
         android:fillColor="#FFFFFF"
         android:strokeColor="#7A4A28"
-        android:strokeWidth="1"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M27.6 25.06C28.2 26.04 28.61 26.66 28.61 27.1C28.61 27.61 28.15 27.86 27.6 27.86C27.05 27.86 26.59 27.61 26.59 27.1C26.59 26.66 27 26.04 27.6 25.06Z"
         android:fillColor="#FFFFFF"
         android:strokeColor="#7A4A28"
-        android:strokeWidth="1"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path android:pathData="M30.6 26.6L42.4 26.6L41.4 41.4Q41.2 44 38.6 44L34.4 44Q31.8 44 31.6 41.4Z"

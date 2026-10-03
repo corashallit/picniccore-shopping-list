@@ -417,10 +417,11 @@ def gloss_svg(gl):
 
 
 class Icon:
-    def __init__(self, key, label, parts, gloss=(), cutx=(), qty='', aisle='', fam=None):
+    def __init__(self, key, label, parts, gloss=(), cutx=(), qty='', aisle='', fam=None, subs=2):
         self.key, self.label, self.parts, self.gloss, self.cutx = key, label, parts, list(gloss), list(cutx)
         self.qty, self.aisle = qty, aisle
         self.fam = fam
+        self.subs = subs          # the most sub-glosses autogloss may add (a bunch of leaves reads cleaner with one)
 
     def artobj(self, prefix='sticker'):
         return Art(self.key, self.parts, self.cutx, prefix)

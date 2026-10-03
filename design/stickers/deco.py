@@ -240,7 +240,9 @@ PICTO = {
     'pumpkin': '<path d="M12 7C6 7 3 10 3 14C3 18 6.5 21 12 21C17.5 21 21 18 21 14C21 10 18 7 12 7Z"/><path d="M12 7.6V20.6M7.6 8.6C6 12 6 16 7.6 20.2M16.4 8.6C18 12 18 16 16.4 20.2" stroke="#fff" stroke-width="1.4" fill="none"/><path d="M12 7.6C12 5 13 3.6 15 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
     'ghost': '<path d="M5 21V11C5 6.6 8 3.6 12 3.6S19 6.6 19 11V21L16.6 19.2L14.3 21L12 19.2L9.7 21L7.4 19.2Z"/><circle cx="9.4" cy="11" r="1.5" fill="#fff"/><circle cx="14.6" cy="11" r="1.5" fill="#fff"/>',
     'snowflake': '<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"><path d="M12 2.6V21.4M3.9 7.3L20.1 16.7M3.9 16.7L20.1 7.3"/><path d="M9.6 4.4L12 6.6L14.4 4.4M9.6 19.6L12 17.4L14.4 19.6"/></g>',
-    'envelope': '<rect x="5" y="3" width="14" height="18" rx="2.4"/><path d="M5 8.4Q12 12.6 19 8.4" stroke="#fff" stroke-width="1.6" fill="none"/><circle cx="12" cy="11" r="2.4" fill="#fff"/>',
+    'envelope': ('<rect x="2.4" y="5.4" width="19.2" height="13.6" rx="2.4"/>'
+                 '<path d="M4 7.2L12 13.2L20 7.2" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+                 f'<path d="{heart_path(12, 14.6, 2.4)}" fill="#fff"/>'),
     # r10 (WP2) · "Everything else": the gashapon capsule (top half inked, bottom half paper in an ink ring, a sparkle)
     'capsule': ('<path d="M3.2 11.6A8.8 8.8 0 0 1 20.8 11.6Z"/>'
                 '<path d="M4.1 13.2A7.9 7.9 0 0 0 19.9 13.2Z" fill="#fff"/>'

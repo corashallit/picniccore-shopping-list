@@ -405,7 +405,10 @@ data class BasketArt(
     val lidOpenStandsBehind: Boolean,
     /** The rim's top edge: minis sit at rimY - [BasketManifest.MINI_SIZE] x [BasketManifest.MINI_LIFT] + raise. */
     val rimY: Float,
-    /** Where the 34-unit GOT IT hanko lands on the closed lid (its centre), rotated [BasketManifest.HANKO_ROTATION]. */
+    /**
+     * Where the 34-unit GOT IT hanko lands on the closed lid (its centre), rotated [BasketManifest.HANKO_ROTATION]. It
+     * is drawn with `drawBasketHanko`: Day vermilion in every variant, on a white backing ring (§5.3).
+     */
     val hankoX: Float,
     val hankoY: Float,
 ) {{
@@ -472,8 +475,8 @@ object DecorManifest {{
     )
 
     /**
-     * Stamp pictograms (§4.13): `sk_p_<name>`, 24-unit monochrome. Paths named `ink` take the aisle trace
-     * (ballpoint by default); paths named `paper` are the white details.
+     * Stamp pictograms (§4.13): `sk_p_<name>`, 24-unit monochrome. Paths named `ink` take the aisle trace, or on the
+     * Glow page the aisle mid (`AisleLook.stampInk`; ballpoint by default); paths named `paper` are the white details.
      */
     val pictograms: Map<String, Int> = mapOf(
 {p}

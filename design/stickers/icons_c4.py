@@ -127,7 +127,7 @@ add('soda', 'Pop', [
     F(('circle', 40.2, 14.6, 1.6), 'strawberry', 'w', ol=1.4),
     F(('path', 'M14.4 14.6H33.6C34.8 15.8 35.6 17.4 35.6 19V38.4A11.6 3.6 0 0 1 12.4 38.4V19C12.4 17.4 13.2 15.8 14.4 14.6Z'),
       'strawberry', 'm', band=.18),
-    F(('rect', 12.4, 23.4, 23.2, 9.6), 'strawberry', 'w', ol=0, cut=False, det=['M12.6 23.4H35.4', 'M12.6 33H35.4'], det_w=1.4),
+    F(('rect', 13.4, 23.4, 21.2, 9.6), 'strawberry', 'w', ol=0, cut=False, det=['M13.6 23.4H34.4', 'M13.6 33H34.4'], det_w=1.4),
     *[F(('circle', x, y, r), 'strawberry', 'm', ol=1.2, cut=False) for x, y, r in [(18.6, 28.8, 2.6), (24.6, 27.2, 1.8), (29.8, 29.4, 2.2)]],
     F(('ellipse', 24, 14.6, 9.6, 3.2), 'strawberry', 'w'),
     F(('rect', 21.6, 12.6, 6.4, 3, 1.5), 'strawberry', 'p', ol=1.2, cut=False),
@@ -234,18 +234,17 @@ add('spray_cleaner', 'Cleaners & bleach', [
     F(('path', _c4_sparkle(28.7, 32.5, 3.6)), 'ramune', 'm', ol=1.2, cut=False),
 ], qty='950 mL', aisle='household')
 
-# foil & food wrap: a long pink box, a crinkled silver sheet pulled down from its serrated edge, catching the light in facets
-_C4_FOIL = ('M9.6 24.6H38.4L39.2 34.8C39.4 36.6 38.2 37.4 37 37L35.4 39.2L32.8 38L30.6 41.2L27.8 39.4L24.6 42L22 39.6L19 41.4L16.6 39'
-            'L13.6 40.6L11.6 37.8C9.8 38 8.6 36.8 8.8 35Z')
+# foil & food wrap: a long pink box on the base, a crinkled silver sheet pulled up out of its serrated front edge and
+# curling over toward the viewer at the top, catching the light in soft facets
 add('aluminum_foil', 'Foil & food wrap', [
-    F(('path', _C4_FOIL), 'periwinkle', 'm', band=.2, band_t='deep'),
-    *[F(('path', d), 'periwinkle', t, ol=0, cut=False) for d, t in [
-        ('M11.2 25.4H18.6L14.2 32.6Z', 'w'), ('M18.6 25.4H27.4L22.4 30.6Z', 'p'), ('M27.4 25.4H37L32.4 31.8Z', 'w'),
-        ('M14.2 32.6L22.4 30.6L19.6 37.4Z', 'p'), ('M22.4 30.6L32.4 31.8L27.6 37Z', 'w'), ('M32.4 31.8L38 28L37.6 34.4Z', 'p')]],
-    LINE('M14.2 32.6L22.4 30.6L32.4 31.8M18.6 25.4L14.2 32.6M27.4 25.4L22.4 30.6L27.6 37M32.4 31.8L37 25.4', 'periwinkle', 1.2, t='deep', cut=False),
-    F(('rect', 6.4, 12.4, 35.2, 11.6, 3.2), 'sakura', 'm', band=.3, band_t='deep', det=['M9.4 16.4H38.6'], det_t='p', det_w=1.4),
-    F(('rect', 6, 22.2, 36, 3.4, 1.7), 'sakura', 'deep', ol=1.6,
-      det=['M8.4 23.9' + ''.join(f'L{fmt(9.6 + 1.2 * i)} {"23.1" if i % 2 == 0 else "23.9"}' for i in range(27))], det_t='p', det_w=1.2),
+    F(('path', 'M10.4 32.6L11.4 13.8Q14.4 11 17.8 12.8Q21 10.6 24.4 12.4Q27.8 10.4 31.2 12.2Q34.6 10.8 36.4 13.4L37.6 32.6Z'), 'periwinkle', 'p'),
+    *[F(('path', d), 'periwinkle', 'm', ol=0, cut=False) for d in [
+        'M20.4 18.4L26.4 16.4L24.4 23.4Z', 'M14.4 24.6L20.4 22.4L17.6 29Z', 'M29.6 22.4L35 20.2L35.6 26.8Z', 'M23.6 27.4L29.6 26.2L26.6 31.6Z']],
+    LINE('M20.4 18.4L24.4 23.4L26.4 16.4M24.4 23.4L29.6 22.4M17.6 29L20.4 22.4L24.4 23.4M26.6 31.6L29.6 26.2', 'periwinkle', 1.5, t='m', cut=False),
+    F(('path', 'M31.2 12.2Q34.6 10.8 36.4 13.4L36.9 21.4Q32.4 19.8 31.2 12.2Z'), 'periwinkle', 'm', ol=1.6, det=['M32.6 14.6Q33.8 17.4 35.6 18.6'], det_t='p', det_w=1.4),
+    F(('rect', 6.4, 31.6, 35.2, 10.4, 3.2), 'sakura', 'm', band=.3, band_t='deep'),
+    F(('rect', 6, 29.8, 36, 3.8, 1.9), 'sakura', 'deep', ol=1.6,
+      det=['M8.6 32.1' + ''.join(f'L{fmt(9.8 + 1.2 * i)} {"31.3" if i % 2 == 0 else "32.1"}' for i in range(26))], det_t='p', det_w=1.2),
 ], qty='30 m roll', aisle='household')
 
 # sandwich & freezer bags: a clear, slightly puffed zip bag with a ramune zip track and slider, a slice of bread inside
@@ -256,10 +255,10 @@ _C4_CRUMB = ('M11.8 22C11.8 18.8 13.9 17.4 17.1 17.8C19.1 15.4 24.9 15.4 26.9 17
 add('zip_bags', 'Sandwich & freezer bags', [
     F(('path', 'M10.4 12.4H37.6Q39.6 12.4 39.8 14.4C40.8 22.4 40.8 31.4 40 38.6Q39.6 42 36.2 42H11.8Q8.4 42 8 38.6C7.2 31.4 7.2 22.4 8.2 14.4Q8.4 12.4 10.4 12.4Z'),
       'ramune', 'w', band=.18, band_t='p', det=['M12.2 23.4Q11.6 28.6 12.2 33.6'], det_t='p', det_w=2),
-    TUBE('M8.6 18.2H39.4', 'ramune', 3.4, 'm', cut=False),
+    TUBE('M10.6 18.2H37.4', 'ramune', 3.4, 'm', cut=False),
     F(('path', _c4_xf(_C4_SLICE, .6, 22, 27.6, 2, 3.4)), 'cocoa', 'm', ol=1.5, cut=False),
     F(('path', _c4_xf(_C4_CRUMB, .6, 22, 27.6, 2, 3.4)), 'cocoa', 'p', ol=0, cut=False),
-    F(('rect', 29.4, 9.4, 6.4, 11.6, 2.4), 'ramune', 'm', ol=1.7, det=['M31.6 12.6V17.8'], det_t='p', det_w=1.3),
+    F(('rect', 31.4, 9.4, 6.4, 11.6, 2.4), 'ramune', 'm', ol=1.7, det=['M33.6 12.6V17.8'], det_t='p', det_w=1.3),
 ], qty='50 bags', aisle='household')
 
 # shopping bag: a brown kraft-paper grocery bag standing open, the top folded down into a pinked cuff, side pleats
@@ -303,10 +302,12 @@ add('razor', 'Razors & shaving', [
       'periwinkle', 'w', ol=1.8, band=.3, band_t='p', det=[_c4_dots([(31.4, 34.4), (35.6, 36.4), (29.6, 37.6)])], det_t='p', det_w=1.8),
     F(('circle', 39.4, 29.4, 1.8), 'periwinkle', 'w', ol=1.4),
     F(('circle', 26.2, 31.4, 1.4), 'periwinkle', 'w', ol=1.3),
-    TUBE('M9.6 39.6C13.2 33.6 18.4 26 26.2 18.8', 'periwinkle', 5, 'm'),
+    F(('path', _c4_poly(__import__('shapely.geometry', fromlist=['LineString']).LineString(
+        [(9.6 + (26.2 - 9.6) * t + 4 * t * (1 - t) * -1.6, 39.6 + (18.8 - 39.6) * t + 4 * t * (1 - t) * -1.2) for t in [i / 16 for i in range(17)]]
+    ).buffer(2.6, quad_segs=8).simplify(.03))), 'periwinkle', 'm', band=.3, band_t='deep'),
     F(('rect', 23.4, 10.4, 16, 6.8, 2.6), 'periwinkle', 'p', tf=_C4_RZ, sband=False, band=.36, band_t='m',
       det=['M25.8 12.8H37', 'M25.8 14.6H37'], det_t='tr', det_w=1.2),
-    F(('rect', 24.4, 9.2, 14, 2.6, 1.3), 'lemon', 'lp', tf=_C4_RZ, ol=1.4, cut=False),
+    F(('rect', 24.4, 8.8, 14, 2.8, 1.4), 'lemon', 'lp', tf=_C4_RZ, ol=1.4),
 ], qty='4 pack', aisle='health')
 
 # lotion & lip balm: a squat peach pump bottle (the pump's spout turned to the left) and a swirled dollop of cream
@@ -391,8 +392,8 @@ add('bouquet', 'Flowers', [
     TUBE('M15.8 21V15.4', 'melon', 2.2, 'm'), TUBE('M32.2 21V15.4', 'melon', 2.2, 'm'),
     F(('path', _c4_tulip(15.8, 12.6)), 'sakura', 'm', ol=1.7, det=['M15.8 13.6V16.4'], det_t='deep', det_w=1.3),
     F(('path', _c4_tulip(32.2, 12.6)), 'sakura', 'm', ol=1.7, det=['M32.2 13.6V16.4'], det_t='deep', det_w=1.3),
-    F(('path', _c4_flower(24, 12.2, 6.6, a0=-90)), 'lemon', 'm', ol=1.7),
-    F(('circle', 24, 12.2, 2.4), 'lemon', 'deep', ol=1.3),
+    F(('path', _c4_flower(24, 12.2, 6.6, a0=-90)), 'sakura', 'w', ol=1.7),
+    F(('circle', 24, 12.2, 2.4), 'lemon', 'm', ol=1.4),
     F(('path', 'M8.6 17.6C13.4 20.4 34.6 20.4 39.4 17.6L28.4 33.6H19.6Z'), 'sakura', 'w', band=.34, band_t='p',
       det=['M15 21L21.4 31.4', 'M33 21L26.6 31.4'], det_t='p', det_w=1.5),
     F(('path', 'M20.2 32.6H27.8L29.6 37H18.4Z'), 'sakura', 'w', ol=1.7),
@@ -407,23 +408,23 @@ add('potted_plant', 'Potted plant', [
     TUBE('M24 25C24.4 20 25.8 16.4 28.6 13.4', 'melon', 2.2, 'm'),
     *[F(('path', _C4_LEAF), 'melon', 'm', tf=f'translate({x} {y}) rotate({a})', ol=1.7, det=['M0 -1.4V-9'], det_t='p', det_w=1.2)
       for x, y, a in [(21.6, 26.4, -58), (26.4, 26.4, 58), (22.4, 25.6, -24), (25.8, 25.6, 22)]],
-    F(('path', _c4_flower(29.4, 12.8, 7.2, a0=-60)), 'lemon', 'lp', ol=1.6),
-    F(('circle', 29.4, 12.8, 2.4), 'lemon', 'm', ol=1.3),
+    F(('path', _c4_flower(29.4, 12.8, 7.2, a0=-60)), 'peach', 'w', ol=1.6),
+    F(('circle', 29.4, 12.8, 2.4), 'lemon', 'm', ol=1.4),
     F(('path', 'M13.2 28.4H34.8L32.4 39.2Q31.8 42 29 42H19Q16.2 42 15.6 39.2Z'), 'peach', 'm', band=.26, band_t='deep'),
     F(('rect', 10.8, 24.4, 26.4, 6.2, 2.6), 'peach', 'm', det=['M13.8 27.5H20.6'], det_t='p', det_w=1.4),
 ], qty='12 cm pot', aisle='garden')
 
-# seeds: a lemon paper seed packet with a sunflower picture, its top torn open and seeds tumbling out
+# seeds: a yellow paper seed packet with a sunflower picture, its top torn open and seeds tumbling out
 add('seed_packet', 'Seeds', [
     *[F(('ellipse', x, y, 1.4, 2.2, a), 'cocoa', 'm', ol=1.3, det=[f'M{fmt(x)} {fmt(y - 1)}V{fmt(y + 1)}'], det_t='p', det_w=1.2)
       for x, y, a in [(34.6, 9.6, 30), (39.4, 13.6, -20), (36.4, 17.4, 60)]],
     F(('path', 'M11.4 15.6L14 13.4L16.4 15.2L18.8 13.2L21.2 15.2L23.6 13.4L26 15.4L28.4 13.4L30.8 15L33.2 13.2L36.6 15.4V38.6Q36.6 42 33.2 42H14.8Q11.4 42 11.4 38.6Z'),
-      'melon', 'p', band=.18),
-    F(('rect', 14.4, 18.6, 19.2, 16.4, 2.6), 'melon', 'w', ol=1.5, cut=False),
-    TUBE('M24 34.4V27.2', 'melon', 1.8, 'm', cut=False),
-    *[F(('ellipse', 24 + 4.4 * _c4m.cos(_c4m.radians(a)), 25.6 + 4.4 * _c4m.sin(_c4m.radians(a)), 2.4, 1.5, a), 'lemon', 'm', ol=1.2, cut=False) for a in range(0, 360, 40)],
-    F(('circle', 24, 25.6, 3), 'cocoa', 'm', ol=1.2, cut=False, det=[_c4_dots([(23, 24.8), (25, 24.8), (24, 26.6)])], det_t='p', det_w=1.2),
-    F(('path', 'M24 32.6C21.4 31.2 19.6 32 19.4 33.8C21.6 34.6 23 34.2 24 32.6Z'), 'melon', 'm', ol=1.2, cut=False),
+      'lemon', 'p', band=.18, band_t='m'),
+    F(('rect', 14.4, 18.6, 19.2, 16.4, 2.6), 'lemon', 'w', ol=1.5, cut=False),
+    TUBE('M24 34.4V29.4', 'melon', 2.4, 'm', cut=False),
+    F(('path', 'M24 32.8C21.4 31.4 19.6 32.2 19.4 34C21.6 34.8 23 34.4 24 32.8Z'), 'melon', 'm', ol=1.2, cut=False),
+    *[F(('ellipse', 24 + 4.4 * _c4m.cos(_c4m.radians(a)), 25.6 + 4.4 * _c4m.sin(_c4m.radians(a)), 2.5, 1.6, a), 'lemon', 'm', ol=1.5, cut=False) for a in range(0, 360, 45)],
+    F(('circle', 24, 25.6, 3), 'cocoa', 'm', ol=1.4, cut=False, det=[_c4_dots([(23, 24.8), (25, 24.8), (24, 26.6)])], det_t='p', det_w=1.4),
 ], qty='1 packet', aisle='garden')
 
 # charcoal: a pale periwinkle paper sack with a stitched top and a flame label, dark pillow briquettes heaped in front
@@ -478,19 +479,19 @@ add('candle', 'Candles', [
     F(('path', 'M9.6 36.4H38.4L36.8 40.2Q36 42 34 42H14Q12 42 11.2 40.2Z'), 'peach', 'm', band=.4, band_t='deep'),
 ], qty='2 pack', aisle='garden')
 
-# picnic blanket: a red-and-white gingham blanket rolled up, fringed at the end, buckled with a leather carry strap
-_C4_ROLL = 'M11.6 21.4H37.4Q40.6 21.4 40.6 24.6V38.4Q40.6 41.6 37.4 41.6H11.6Z'
+# picnic blanket: a red-and-white gingham blanket rolled into a long cylinder, its rolled end a spiral, fringe tassels
+# at the far end, buckled with a leather strap (no carry handle: with one it read as a handbag)
+_C4_ROLL = 'M12.4 25.6H38.6Q41.6 25.6 41.6 28.6V39Q41.6 42 38.6 42H12.4Z'
 add('picnic_blanket', 'Picnic blanket', [
-    TUBE('M16.2 22C16.2 12.2 30.2 12.2 30.2 22', 'cocoa', 3, 'm'),
-    *[TUBE(f'M40.4 {fmt(y)}H41.4', 'strawberry', 2.2, 'm') for y in (24.8, 29.2, 33.6, 38)],
-    F(('path', _C4_ROLL), 'strawberry', 'w', band=.22, band_t='p', tex=_c4_grid(11.6, 21.4, 40.6, 41.6, 5.6, 1.8), tex_t='p', tex_w=2.8),
-    *[F(('rect', x, y, 2.8, 2.8, .5), 'strawberry', 'm', ol=0, cut=False) for x, y in _c4_cross(11.6, 21.4, 40.6, 41.6, 5.6, 2.8, 1.8)
-      if 13.6 < x and x + 2.8 < 39.4 and 22.4 < y and y + 2.8 < 37.4],
-    F(('ellipse', 11.6, 31.5, 6, 10.1), 'strawberry', 'p', band=.22, band_t='m',
-      det=['M11.6 31.6C10.2 30.4 12 28.2 13.8 29.4C15.8 30.8 14.4 34.6 11.2 34.4C7.6 34.2 6.8 29.4 9.4 26.8'], det_t='m', det_w=1.5),
-    F(('rect', 24.8, 19.8, 6.4, 22.2, 2.4), 'cocoa', 'm', band=.2, det=['M26.4 23V39.4'], det_t='p', det_w=1.2),
-    F(('rect', 23.6, 28.2, 8.8, 6.6, 2), 'lemon', 'm', ol=1.5),
-    F(('rect', 25.8, 30.2, 4.4, 2.6, 1), 'cocoa', 'm', ol=1.2, cut=False),
+    F(('path', _C4_ROLL), 'strawberry', 'w', band=.22, band_t='p', tex=_c4_grid(12.4, 25.6, 41.6, 42, 5.6, 1.8), tex_t='p', tex_w=2.8,
+      det=['M39.2 28.4V30.6M39.2 32.6V34.8M39.2 36.8V39'], det_t='m', det_w=1.5),
+    *[F(('rect', x, y, 2.8, 2.8, .5), 'strawberry', 'm', ol=0, cut=False) for x, y in _c4_cross(12.4, 25.6, 41.6, 42, 5.6, 2.8, 1.8)
+      if 14.4 < x and x + 2.8 < 37.4 and 26.6 < y and y + 2.8 < 38.4],
+    F(('ellipse', 12.4, 33.8, 6, 8.2), 'strawberry', 'p', band=.22, band_t='m',
+      det=['M12.6 34C11.2 32.8 13 30.8 14.6 32C16.6 33.6 15.2 37.2 12 37C8.6 36.8 7.8 32.2 10 29.6C12.4 26.8 16.6 27.8 17.6 31.4'], det_t='m', det_w=1.5),
+    F(('rect', 31.4, 24, 5.6, 18, 2.4), 'cocoa', 'm', band=.2, det=['M33 27V39'], det_t='p', det_w=1.2),
+    F(('rect', 30.2, 30.2, 8, 6.2, 2), 'cocoa', 'p', ol=1.6),
+    F(('rect', 32.6, 32.2, 3.2, 2.2, 1.1), 'cocoa', 'm', ol=1.2, cut=False),
 ], qty='1 blanket', aisle='garden')
 
 # paper plates: a stack of three paper plates seen from a little above, the top one with a ribbed mint rim round a plain
@@ -510,8 +511,8 @@ add('paper_plates', 'Paper plates', [
     F(('ellipse', 24, _C4_PY + 6.8, 17.6, 8.8), 'mint', 'p', ol=1.8),
     F(('ellipse', 24, _C4_PY + 3.4, 17.6, 8.8), 'mint', 'w', ol=1.8),
     F(('ellipse', 24, _C4_PY, 17.6, 8.8), 'mint', 'p', band=.2, band_t='m',
-      det=[_c4_ribs(24, _C4_PY, 12.8, 6.4, 15.8, 7.8, 24)], det_t='m', det_w=1.2),
-    F(('ellipse', 24, _C4_PY - .5, 11.6, 5.6), 'mint', 'w', ol=1.5, cut=False),
+      det=[_c4_ribs(24, _C4_PY, 12.2, 5.6, 15.6, 7.6, 24)], det_t='m', det_w=1.2),
+    F(('ellipse', 24, _C4_PY - .3, 10.4, 4.2), 'mint', 'w', ol=1.5, cut=False),
 ], qty='50 plates', aisle='garden')
 
 

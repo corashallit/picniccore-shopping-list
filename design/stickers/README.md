@@ -91,10 +91,20 @@ Run on every build and in `--check`; errors fail the task.
 - **Palette**: every fill and stroke of `sk_i_` / `sk_f_` is one of the 40 family tokens or white. Decor, baskets,
   pictograms, glyphs, tiles and the launcher may also use the named extras in `validate.EXTRAS`.
 - **Gloss**: one main gloss ≥2.4u × ≥10u per sticker; it covers 25–35 % of its shape's contour (the angle it spans,
-  as `autogloss` draws it; a run cut short by a shape above it is a warning); sub-glosses ≥4u; every gloss mark on
-  the art; none in a critter's head.
+  as `autogloss` draws it; a run that fills the 90° window measures 24.1–24.9 % because the contour is sampled every
+  0.2u, so the floor is 24 % measured) and ends in its dot: a shorter run or a missing dot is an error; sub-glosses ≥4u
+  (`add(..., subs=n)` caps how many a sticker gets); every gloss mark on the art; none crossing the visible
+  colour-trace of a die-cut shape (a white notch in an outline; a cluster's whole-silhouette gloss is exempt); none in
+  a critter's head or an item's head (`validate.HEADS`: the gummy bear).
 - **Geometry**: the union cut is present; base on y 42 (41.4–42.6); art inside 5–43 (live area 6–42 plus the 1u
-  trace); every die-cut fill fits a 2u disc; die-cut rect corners r ≥2u; die-cut lines ≥1.2u; no text or images.
+  trace); every die-cut fill fits a 2u disc; die-cut rect corners r ≥2u; die-cut lines ≥1.2u; detail, texture and
+  plain lines and outlines ≥1.2u (`HAIRLINE`); no text or images.
+- **Printed parts**: every `cut=False` fill, line and tube (with its detail lines) stays inside the die-cut art: paint
+  in a non-trace colour inside the shapes' outlines (each shape less half its trace), paint in a trace colour no further
+  out than the outline's outer edge, unless the part's own trace repaints it. A band that must run edge to edge is a
+  `tex` stroke or a `band` path on its host (clipped), or `_c1_strip` / `_c3_strip` (the host's interior, inset 1u).
+- **Families**: at most two families plus white and lemon-pastel details (§3.1); a third family only as an accent
+  under 6 % of the coloured area, or on the composite generics in `validate.COMPOSITE`.
 - **Baskets**: all 17 kinds; back, front, open and closed lid; decoration slice on exactly the four decorated kinds;
   hanko point on the closed lid; rim inside the art; every layer's die-cut inside the 80 × 64 viewport (a VectorDrawable
   clips to it).

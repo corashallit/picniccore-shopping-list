@@ -34,7 +34,10 @@ data class BasketArt(
     val lidOpenStandsBehind: Boolean,
     /** The rim's top edge: minis sit at rimY - [BasketManifest.MINI_SIZE] x [BasketManifest.MINI_LIFT] + raise. */
     val rimY: Float,
-    /** Where the 34-unit GOT IT hanko lands on the closed lid (its centre), rotated [BasketManifest.HANKO_ROTATION]. */
+    /**
+     * Where the 34-unit GOT IT hanko lands on the closed lid (its centre), rotated [BasketManifest.HANKO_ROTATION]. It
+     * is drawn with `drawBasketHanko`: Day vermilion in every variant, on a white backing ring (§5.3).
+     */
     val hankoX: Float,
     val hankoY: Float,
 ) {
@@ -131,8 +134,8 @@ object BasketManifest {
             deco = null,
             lidOpenStandsBehind = false,
             rimY = 29.4f,
-            hankoX = 29f,
-            hankoY = 25f,
+            hankoX = 31f,
+            hankoY = 24f,
         ),
         BasketArt(
             kind = "fruit_crate",

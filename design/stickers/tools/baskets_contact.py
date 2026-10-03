@@ -36,8 +36,11 @@ GROUNDS = {
     'day': dict(binder='#E6F6EE', stripe='#CDEEDD', pad='#FFFFFF', ink='#25307C', shadow='#6E7BD0', spot_fill='#FFFFFF',
                 spot_line='#3E4BB0', hanko='#C8321F'),
     'glow': dict(binder='#161A3E', stripe='#1E2350', pad='#222861', ink='#FFFFFF', shadow='#0B0D24', spot_fill='none',
-                 spot_line='#C9CFF5', hanko='#FF8A7A'),
+                 spot_line='#C9CFF5', hanko='#C8321F'),
 }
+# The lid hanko is Day vermilion in every variant (§5.3): baskets keep their colours on every ground (§2.4), and the Glow
+# hanko #FF8A7A falls to 1.1-2.0 : 1 on the lids' pastels and mids. A white backing ring 1.5u wider than the stamp's
+# outer ring on each side, and a 1.5u white halo round the lettering, lift it off mid-coloured lids.
 MINIS = ['strawberry', 'milk_bag', 'apple', 'carrot', 'sliced_bread', 'eggs', 'maple_syrup']
 SIZES = [(80, 64), (64, 51), (120, 96)]
 STATES = ['empty', 'one', 'three', 'seven', 'done', 'peek', 'lid_open', 'deco']
@@ -62,6 +65,9 @@ def inner(svg):
 def hanko(cx, cy, colour, size=34, rot=-12):
     s = size / 40
     return (f'<g transform="translate({cx} {cy}) rotate({rot}) scale({s}) translate(-20 -20)" fill="{colour}" stroke="{colour}">'
+            '<circle cx="20" cy="20" r="16.4" fill="none" stroke="#FFFFFF" stroke-width="5"/>'
+            '<g stroke="#FFFFFF" stroke-width="3" stroke-linejoin="round" fill="#FFFFFF" style="font:900 10.4px sans-serif">'
+            '<text x="20" y="18.6" text-anchor="middle">GOT</text><text x="20" y="28.4" text-anchor="middle">IT!</text></g>'
             '<circle cx="20" cy="20" r="16.4" fill="none" stroke-width="2" stroke-dasharray="40 3.2 51.8 3.2"/>'
             '<circle cx="20" cy="20" r="13.6" fill="none" stroke-width=".8" stroke-dasharray="20 2 30 1.6 31.4"/>'
             '<text x="20" y="18.6" text-anchor="middle" stroke="none" style="font:900 10.4px sans-serif">GOT</text>'

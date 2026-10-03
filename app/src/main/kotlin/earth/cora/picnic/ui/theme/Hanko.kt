@@ -16,6 +16,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -96,10 +97,24 @@ fun HankoStamp(text: HankoText, modifier: Modifier = Modifier, size: Dp = 40.dp,
     Canvas(modifier.size(size).clearAndSetSemantics { }) { drawHanko(text, color, measurer, style) }
 }
 
-/** Draws the stamp into this draw area (square). */
-fun DrawScope.drawHanko(text: HankoText, color: Color, measurer: TextMeasurer, style: TextStyle) {
+/**
+ * Draws the stamp into this draw area (square). A [halo] colour first lays a backing ring under the outer ring
+ * ([BasketHanko.BACKING_W] wide) and a 1.5u halo round the lettering, so the stamp reads on a mid-coloured surface.
+ */
+fun DrawScope.drawHanko(text: HankoText, color: Color, measurer: TextMeasurer, style: TextStyle, halo: Color? = null) {
     val u = min(size.width, size.height) / HankoGeometry.UNITS
     val c = Offset(size.width / 2f, size.height / 2f)
+    if (halo != null) drawCircle(halo, HankoGeometry.RING_R * u, c, style = Stroke(BasketHanko.BACKING_W * u))
+    val px = HankoGeometry.textUnits(text) * u
+    val sp = (px / (density * fontScale)).sp
+    val textStyle = style.copy(color = color, fontSize = sp, lineHeight = sp * 0.98f, letterSpacing = 0.02.em, textAlign = TextAlign.Center)
+    val layout = measurer.measure("${text.top}\n${text.bottom}", textStyle)
+    val textAt = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f)
+    if (halo != null) {
+        val haloStyle = textStyle.copy(color = halo, drawStyle = Stroke(3f * u, join = StrokeJoin.Round))
+        // Its own layout (skipCache): a cached paragraph shared with the fill would keep the stroke paint.
+        drawText(measurer.measure("${text.top}\n${text.bottom}", haloStyle, skipCache = true), topLeft = textAt)
+    }
     drawBrokenRing(color, c, HankoGeometry.RING_R * u, HankoGeometry.RING_W * u, HankoGeometry.RING_GAP * u, HankoGeometry.ringGapsDeg)
     drawBrokenRing(color, c, HankoGeometry.INNER_R * u, HankoGeometry.INNER_W * u, HankoGeometry.INNER_GAP * u, HankoGeometry.innerGapsDeg)
     for ((deg, r, d) in HankoGeometry.speckles) {
@@ -107,12 +122,23 @@ fun DrawScope.drawHanko(text: HankoText, color: Color, measurer: TextMeasurer, s
         drawCircle(color, d.dp.toPx() * (u * HankoGeometry.UNITS / 40.dp.toPx()) / 2f, Offset(c.x + (r * u * cos(a)).toFloat(), c.y + (r * u * sin(a)).toFloat()))
     }
     // Text: units → px, then px → sp at this density with the font scale removed (the stamp never scales with text).
-    val px = HankoGeometry.textUnits(text) * u
-    val sp = (px / (density * fontScale)).sp
-    val textStyle = style.copy(color = color, fontSize = sp, lineHeight = sp * 0.98f, letterSpacing = 0.02.em, textAlign = TextAlign.Center)
-    val layout = measurer.measure("${text.top}\n${text.bottom}", textStyle)
-    drawText(layout, topLeft = Offset(c.x - layout.size.width / 2f, c.y - layout.size.height / 2f))
+    drawText(layout, topLeft = textAt)
 }
+
+/**
+ * The GOT IT stamp pressed onto a basket's closed lid (§5.3). Baskets keep their colours on every ground (§2.4), so the
+ * lid stamp keeps the Day vermilion in every variant: the Glow hanko (`#FF8A7A`) falls to 1.1–2.0 : 1 on the lids'
+ * pastels and mids. A white backing ring [BACKING_W] wide under the outer ring (1.5u each side of it) and a 1.5u white
+ * halo round the lettering lift it off a mid-coloured lid.
+ */
+object BasketHanko {
+    val ink: Color = Color(0xFFC8321F)
+    const val BACKING_W: Float = HankoGeometry.RING_W + 3f
+}
+
+/** Draws the basket-lid stamp (§5.3) into this draw area (square): white backing and halo, then the vermilion stamp. */
+fun DrawScope.drawBasketHanko(text: HankoText, measurer: TextMeasurer, style: TextStyle) =
+    drawHanko(text, BasketHanko.ink, measurer, style, halo = Color.White)
 
 private fun DrawScope.drawBrokenRing(color: Color, c: Offset, r: Float, w: Float, gap: Float, gapsDeg: List<Float>) {
     val gapDeg = (gap / r) * (180f / PI.toFloat())

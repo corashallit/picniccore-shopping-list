@@ -3,6 +3,7 @@ package earth.cora.picnic.ui.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -104,5 +105,22 @@ class TokensContrastTest {
         assertAtLeast("ballpoint/pressed band", DayColors.ballpoint, DayColors.pressedBand, 10.39)
         assertAtLeast("ink/glow pressed band", GlowColors.ink, GlowColors.pressedBand, 7.0)
         assertAtLeast("inkSoft/glow pressed band", GlowColors.inkSoft, GlowColors.pressedBand.compositeOver(GlowColors.pad), 4.5)
+    }
+
+    @Test
+    fun stampPictogramsReadOnEveryPage() {
+        // §4.13: a stamp is a graphic (3 : 1). On the Glow page (#222861) the traces fall to 1.7–2.8 : 1, so the
+        // pictograms ink in the aisle mid there.
+        val looks = (1..10).map { AisleLooks.of(it) } + AisleLooks.everythingElse
+        for (look in looks) {
+            assertAtLeast("stamp ${look.family.name} on the Day page", look.stampInk(ThemeVariant.Day), DayColors.book.page, 3.0)
+            assertAtLeast("stamp ${look.family.name} on the Glow page", look.stampInk(ThemeVariant.Glow), GlowColors.book.page, 3.0)
+        }
+    }
+
+    @Test
+    fun basketLidHankoKeepsTheDayVermilion() {
+        // §5.3: the lid stamp keeps its Day colour in every variant (baskets keep their colours, §2.4).
+        assertEquals(DayColors.hanko, BasketHanko.ink)
     }
 }

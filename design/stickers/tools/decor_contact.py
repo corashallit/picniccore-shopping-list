@@ -81,17 +81,21 @@ def build_sheet(variant, read, report, scale):
         small = unique_ids(svg).replace('<svg ', f'<svg style="width:{22 * scale}px;height:{22 * scale}px" ', 1)
         cells.append(cell(big + small, key))
     parts.append(section(f'decor stickers (sk_d_, 52 + 22 dp) · {variant}', ''.join(cells)))
-    # pictograms: in a dashed stamp circle, inked in each aisle trace
+    # pictograms: in a dashed stamp circle, inked in each aisle trace (Glow: the aisle mid; the traces fall to 1.7-2.8 : 1
+    # on the Glow page #222861, the mids reach 5.1-10 : 1, §4.13)
     cells = []
     from deco import PICTO
     for i, k in enumerate(PICTO):
         svg = vd2svg.convert(read('sk_p_' + k))
-        col = TRACES[i % 10] if k != 'capsule' else '#4F5BA6'
+        if variant == 'glow':
+            col = MIDS[i % 10] if k != 'capsule' else '#C9CFF5'
+        else:
+            col = TRACES[i % 10] if k != 'capsule' else '#4F5BA6'
         s = unique_ids(tinted(svg, col)).replace('<svg ', f'<svg style="width:{18 * scale}px;height:{18 * scale}px;transform:rotate(-10deg)" ', 1)
         stamp = (f'<span style="display:inline-grid;place-items:center;width:{24 * scale}px;height:{24 * scale}px;border-radius:50%;'
                  f'background:{g["pad"]};border:{2 * scale}px dashed #4F5BA6">{s}</span>')
         cells.append(cell(stamp, k))
-    parts.append(section('stamp pictograms (sk_p_, 24 dp stamps, aisle traces)', ''.join(cells)))
+    parts.append(section(f'stamp pictograms (sk_p_, 24 dp stamps, aisle {"mids" if variant == "glow" else "traces"})', ''.join(cells)))
     # glyphs
     cells = []
     for name in B.GLYPHS:

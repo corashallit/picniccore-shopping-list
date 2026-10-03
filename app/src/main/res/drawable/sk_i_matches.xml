@@ -137,7 +137,7 @@
     <path android:pathData="M20.4 39C18.6 39 17.8 37.6 18.2 36.2C18.6 35 19.6 34.6 19.8 33.2C21 34 21.4 35 21.2 35.8C21.8 35.4 22.2 34.8 22.2 34.2C23.4 35.4 23.8 36.8 23.2 37.8C22.8 38.6 21.8 39 20.4 39Z"
         android:fillColor="#FFA477"
         android:strokeColor="#AE4D1C"
-        android:strokeWidth="1.1"
+        android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>
