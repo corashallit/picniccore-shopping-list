@@ -50,9 +50,11 @@ import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -182,7 +184,8 @@ const val INLINE_GLYPHS: String = "♡☆★♪✦♥"
 
 /**
  * Text whose ♡ ☆ ★ ♪ ✦ are drawn as inline vector stickers (§2.7: hearts, stars and notes in copy are never glyphs).
- * TalkBack reads the words without them.
+ * TalkBack reads the words without them. [overflow] and [onTextLayout] as for Text (a [maxLines] text that may not
+ * fit passes TextOverflow.Ellipsis, never a silent clip).
  */
 @Composable
 fun PicnicText(
@@ -192,6 +195,8 @@ fun PicnicText(
     color: Color = style.color,
     textAlign: TextAlign? = null,
     maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
     val annotated = remember(text) {
         buildAnnotatedString {
@@ -214,6 +219,8 @@ fun PicnicText(
         color = color,
         textAlign = textAlign,
         maxLines = maxLines,
+        overflow = overflow,
+        onTextLayout = onTextLayout ?: {},
         inlineContent = inline,
         modifier = modifier.clearAndSetSemantics { this.text = AnnotatedString(spoken) },
     )

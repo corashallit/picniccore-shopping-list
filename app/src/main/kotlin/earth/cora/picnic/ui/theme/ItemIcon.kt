@@ -118,6 +118,8 @@ private val GoldHighlight = Color(0xFFFFF3A6)
  * - [ghost] = a checked row's peeled outline; [holo] = shiny / jackpot foil; [pixel] = the bonus-stage 16 px sprite
  *   (egg 10); [flags] = the corner flags; [drawing] = the busy sparkle while an icon is being decided or drawn.
  * - [contentDescription] null = decorative (rows already read the item name).
+ * - [glint] false keeps the static holo foil but never runs the shiny glint loop (500 ms every 4 s): for a holo sticker
+ *   on a text plate whose reading hold a glint must not cross (§9, the celebration's bonus card).
  * Sizes: 52 dp rows, 40 dp compact rows, 30 dp basket minis, 26 / 22 dp book, 56 dp album, 120 dp cards and the hero.
  */
 @Composable
@@ -141,6 +143,8 @@ fun ItemIcon(
     face: Boolean = false,
     /** Draw the hard shadow (off for stickers that sit inside something drawing its own). */
     shadow: Boolean = true,
+    /** Run the shiny glint loop on [holo] foil (false: the foil stays still). */
+    glint: Boolean = true,
 ) {
     @Suppress("UNUSED_VARIABLE") val unusedLifted = lifted
     val catalog = LocalIconCatalog.current
@@ -174,7 +178,7 @@ fun ItemIcon(
     val art = entry?.let { remember(it.drawable) { VectorArtCache.get(resources, it.drawable) } }
     val faceArt = if (face) entry?.face?.let { remember(it) { VectorArtCache.get(resources, it) } } else null
     val reduced = LocalReducedMotion.current
-    val glintTime by rememberLoopTime(enabled = holo && !reduced && !ghost)
+    val glintTime by rememberLoopTime(enabled = holo && glint && !reduced && !ghost)
     Box(modifier.then(semantics).size(size)) {
         Canvas(Modifier.size(size)) {
             val liveSticker = live
@@ -185,7 +189,7 @@ fun ItemIcon(
                 ghostDash = colors.ghostDash,
                 silhouette = if (colors.isDark) colors.inkSoft else colors.ballpoint,
                 recolor = if (StickerLibrary.isCapsule(entry)) capsuleRecolor(family) else null,
-                glint = if (holo) Holo.shinyGlint.progressAt(glintTime % PicnicMotion.shinyGlintPeriod) else 0f,
+                glint = if (holo && glint) Holo.shinyGlint.progressAt(glintTime % PicnicMotion.shinyGlintPeriod) else 0f,
             )
             when {
                 liveSticker != null -> drawLiveSticker(liveSticker, style)
