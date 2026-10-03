@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -239,6 +240,77 @@ class NoMaterialDefaultsTest {
         /** Material 3's default onSurface (what an unstyled Text would fall back to inside a MaterialTheme). */
         val MATERIAL_ON_SURFACE = Color(0xFF1D1B20)
     }
+}
+
+/**
+ * §15 Targets: every tap target WP8's screens show is at least 48 × 48 dp (the Done text button, the About version line,
+ * the drag handles, swatches, sticker cells, chips, tabs, pockets, rows), at font scale 1.0 and 2.0. Only targets fully on
+ * screen are measured (a target cut by the window edge is a scroll position, not a size).
+ */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = PHONE_360)
+class TapTargetsTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    private val screens: List<Pair<String, @Composable () -> Unit>> = wp8Screens + listOf(
+        "about_unlockable" to {
+            val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+            AboutScreen(AboutUiState("0.4.0", Licences.load(context), labVisible = false, canUnlock = true), AboutActions())
+        },
+        "pantry_empty" to { PantryScreen(PantrySamples.state(), PantryActions()) },
+    )
+
+    private fun check(scale: Float) {
+        var screen by mutableStateOf(screens.first())
+        compose.setContent {
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, scale),
+            ) {
+                PicnicTheme { Box(Modifier.fillMaxSize()) { screen.second() } }
+            }
+        }
+        val small = mutableListOf<String>()
+        var measured = 0
+        for (s in screens) {
+            screen = s
+            compose.waitForIdle()
+            val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+            val clickables = compose.onRoot().fetchSemanticsNode().allNodes().filter { it.config.getOrNull(SemanticsActions.OnClick) != null }
+            fun Rect.holds(o: Rect) = left <= o.left && top <= o.top && right >= o.right && bottom >= o.bottom
+            clickables.forEach { node ->
+                // Wholly on screen: not cut by the window or by a scrolling parent.
+                val b = node.boundsInRoot
+                val inWindow = b.width > 0f && b.left >= root.left && b.top >= root.top && b.right <= root.right && b.bottom <= root.bottom
+                val uncut = kotlin.math.abs(b.width - node.size.width) <= 1f && kotlin.math.abs(b.height - node.size.height) <= 1f
+                if (!inWindow || !uncut) return@forEach
+                measured++
+                val d = compose.density.density
+                if (b.width / d >= 47.5f && b.height / d >= 47.5f) return@forEach
+                // Smaller than 48 dp: Compose widens its touch area to 48 dp (a kit chip's 32 dp face, say), which only
+                // works where no neighbouring target sits inside that area (ten 29 dp swatches in a row can't all grow).
+                val touch = node.touchBoundsInRoot
+                val crowded = clickables.any { o ->
+                    o.id != node.id && !o.boundsInRoot.holds(b) && !b.holds(o.boundsInRoot) && o.boundsInRoot.overlaps(touch)
+                }
+                val tooSmall = touch.width / d < 47.5f || touch.height / d < 47.5f
+                if (crowded || tooSmall) {
+                    val name = node.config.getOrNull(SemanticsProperties.ContentDescription) ?: node.config.getOrNull(SemanticsProperties.Text)
+                    small += "${s.first}@$scale $name ${"%.0f".format(b.width / d)}x${"%.0f".format(b.height / d)}${if (crowded) " crowded" else ""}"
+                }
+            }
+        }
+        assertTrue("targets measured: $measured", measured > 50)
+        assertTrue("tap targets under 48 dp: $small", small.isEmpty())
+    }
+
+    @Test
+    fun atFontScale1() = check(1f)
+
+    @Test
+    fun atFontScale2() = check(2f)
 }
 
 /** The launcher label and the wordmark read the one app-name resource (checklist 236). */
