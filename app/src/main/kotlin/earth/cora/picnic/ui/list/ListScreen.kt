@@ -1,104 +1,166 @@
 package earth.cora.picnic.ui.list
 
+import android.content.res.Resources
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.calculateEndPadding
-import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxState
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.traversalIndex
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
-import earth.cora.picnic.ui.add.AddEvent
-import earth.cora.picnic.ui.add.AddMode
+import earth.cora.picnic.core.model.GroceryItem
+import earth.cora.picnic.core.model.NewTripMode
+import earth.cora.picnic.platform.Cue
+import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.add.AddBar
+import earth.cora.picnic.ui.add.AddBarCollapseState
+import earth.cora.picnic.ui.add.AddBarUi
+import earth.cora.picnic.ui.add.AddCommit
+import earth.cora.picnic.ui.add.AddDock
+import earth.cora.picnic.ui.add.AddEventsEffect
+import earth.cora.picnic.ui.add.AddRules
 import earth.cora.picnic.ui.add.AddSheetHost
 import earth.cora.picnic.ui.add.AddViewModel
 import earth.cora.picnic.ui.add.rememberAddFlows
-import earth.cora.picnic.ui.add.toastText
-import earth.cora.picnic.ui.common.HintText
-import earth.cora.picnic.ui.common.ScreenScaffold
 import earth.cora.picnic.ui.edit.EditItemSheet
+import earth.cora.picnic.ui.list.motion.AmbientBasket
+import earth.cora.picnic.ui.list.motion.CelebrationHost
+import earth.cora.picnic.ui.list.motion.FoldFocusEffect
+import earth.cora.picnic.ui.list.motion.FoldToggles
+import earth.cora.picnic.ui.list.motion.ListPresentation
+import earth.cora.picnic.ui.list.motion.MotionChoreographer
+import earth.cora.picnic.ui.list.motion.MotionEngineHost
+import earth.cora.picnic.ui.list.motion.MotionOverlay
+import earth.cora.picnic.ui.list.motion.ambientVisible
+import earth.cora.picnic.ui.list.motion.rememberAmbient
+import earth.cora.picnic.ui.list.motion.trayCurl
+import earth.cora.picnic.ui.list.motion.unfoldMotion
+import earth.cora.picnic.ui.list.motion.visibleFraction
 import earth.cora.picnic.ui.nav.LocalAppNav
-import earth.cora.picnic.ui.theme.AisleHeader
-import earth.cora.picnic.ui.theme.AisleSectionRow
+import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.EmptyState
-import earth.cora.picnic.ui.theme.Glyph
-import earth.cora.picnic.ui.theme.ItemRowCard
-import earth.cora.picnic.ui.theme.LoadingSparkle
+import earth.cora.picnic.ui.theme.FixedMotionScale
+import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.MenuItem
+import earth.cora.picnic.ui.theme.OverflowMenu
+import earth.cora.picnic.ui.theme.PicnicBackground
 import earth.cora.picnic.ui.theme.PicnicButton
-import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
-import earth.cora.picnic.ui.theme.PicnicIconButton
-import earth.cora.picnic.ui.theme.PicnicSurface
+import earth.cora.picnic.ui.theme.PicnicMotion
 import earth.cora.picnic.ui.theme.PicnicTheme
-import earth.cora.picnic.ui.theme.PicnicTopBar
-import earth.cora.picnic.ui.theme.TripProgress
-import kotlinx.coroutines.delay
+import earth.cora.picnic.ui.theme.ToastHostState
+import earth.cora.picnic.ui.theme.ToastMessage
+import earth.cora.picnic.ui.theme.WashiPattern
+import earth.cora.picnic.ui.theme.holdOnFrameClock
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
-/** Everything the List screen (and its Edit and list-switcher sheets) can ask for. Defaults do nothing. */
+/*
+ * The List screen (docs/DESIGN_STICKER.md §6.1). Top to bottom: the top stack (title, LCD, the trip's sticker book),
+ * the list viewport (one entry per stop in walking order, "Everything else" first: folded strips and the one open tray,
+ * its band pinned as the plate while its rows scroll), the docked add bar or the FAB, the overlay (hops, the Next card,
+ * toasts, peek notes, eggs), the sheets and the celebration. Z order: list < add bar < overlay < sheets < celebration.
+ * Owner: WP5.
+ */
+
+/** Everything the List screen (and its sheets) can ask for. Defaults do nothing. */
 @Stable
 class ListActions(
     val onToggle: (itemId: String) -> Unit = {},
     val onDelete: (itemId: String) -> Unit = {},
-    val onToggleSection: (sectionId: String) -> Unit = {},
-    val onClearChecked: () -> Unit = {},
+    val onOpenSection: (sectionId: String) -> Unit = {},
+    val onFoldAll: () -> Unit = {},
     val onOpenEdit: (itemId: String) -> Unit = {},
-    val onAdd: () -> Unit = {},
+    /** "Start my list" (§4.21): focuses the add field and opens the keyboard. */
+    val onStartList: () -> Unit = {},
+    val onNewTrip: (NewTripMode) -> Unit = {},
+    val onRefresh: () -> Unit = {},
     val onOpenAisles: () -> Unit = {},
+    val onOpenPantry: () -> Unit = {},
+    val onOpenAlbum: () -> Unit = {},
     val onOpenSettings: () -> Unit = {},
     val onOpenLists: () -> Unit = {},
     val onCloseEdit: () -> Unit = {},
@@ -111,13 +173,107 @@ class ListActions(
     val onNewList: (title: String) -> Unit = {},
     val onRenameList: (listId: String, title: String) -> Unit = { _, _ -> },
     val onDeleteList: (listId: String) -> Unit = {},
+    // Egg hooks (§19.2): WP9's SurpriseEngine.
+    val onSunTap: () -> Unit = {},
+    val onMoonTap: () -> Unit = {},
+    val onStampTap: (position: Int) -> Unit = {},
+    val onLcdHold: () -> Unit = {},
+    val onBasketHold: (sectionId: String, heldMs: Long) -> Unit = { _, _ -> },
+    /** A sound and haptic for the screen's own gestures (§14.3). */
+    val onCue: (Cue) -> Unit = {},
 )
 
+/** The screen's transient state: the menu, the sheets, a peek, the pull to refresh, the pops. */
+@Stable
+class ListScreenState(
+    menuOpen: Boolean = false,
+    newTripOpen: Boolean = false,
+    tripBookOpen: Boolean = false,
+    peek: String? = null,
+) {
+    var menuOpen by mutableStateOf(menuOpen)
+    var newTripOpen by mutableStateOf(newTripOpen)
+    var tripBookOpen by mutableStateOf(tripBookOpen)
+
+    /** The folded strip whose basket is held open (§5.3), or null. */
+    var peek by mutableStateOf(peek)
+
+    /** The LCD reads SYNC for 1500 ms after a refresh (§6.1). */
+    var syncing by mutableStateOf(false)
+
+    /** Bumped by each refresh: the sun spins once. */
+    var sunSpin by mutableIntStateOf(0)
+
+    /** Pull to refresh: how far the list follows the finger (px, at most 70 dp). */
+    var pull by mutableFloatStateOf(0f)
+
+    /** The scroll collapsed the app bar and the book. */
+    var scrolledDown by mutableStateOf(false)
+
+    /** Item id -> its pop (a new row or a duplicate, §6.2). */
+    val pops = mutableStateMapOf<String, PopRequest>()
+    private var popGen = 0
+
+    /** Her own fold and unfold taps (FoldFocusEffect). */
+    val toggles = FoldToggles()
+
+    /** Her last tap that opened a folded strip: its tray scrolls into view once it is laid out (§6.1). */
+    internal var openTap by mutableStateOf<OpenTap?>(null)
+    private var openTaps = 0
+
+    /** She opened [sectionId] herself (a tap on its strip, Enter, or TalkBack's "Expand"). */
+    internal fun openedByHer(sectionId: String) {
+        openTap = OpenTap(sectionId, ++openTaps)
+    }
+
+    internal data class OpenTap(val sectionId: String, val n: Int)
+
+    internal val stripBounds = mutableStateMapOf<String, Rect>()
+    internal var moreBounds by mutableStateOf<Rect?>(null)
+
+    /** The list viewport's window bounds (the peek note stays inside it). */
+    internal var listBounds by mutableStateOf<Rect?>(null)
+    internal val focus = HashMap<String, Pair<FocusRequester, FocusRequester>>()
+
+    /** Pops the stickers of a commit's rows, the new ones 80 ms apart (§6.2), the ones already there at once. */
+    fun pop(commit: AddCommit) {
+        popGen++
+        commit.added.forEachIndexed { i, item -> pops[item.id] = PopRequest(popGen, commit.popDelayMillis(i)) }
+        commit.alreadyThere.forEach { pops[it.id] = PopRequest(popGen, 0) }
+    }
+
+    internal fun focusOf(sectionId: String): Pair<FocusRequester, FocusRequester> = focus.getOrPut(sectionId) { FocusRequester() to FocusRequester() }
+
+    /**
+     * The re-sync (§6.1, item 119), however she asks for it (the pull, the overflow menu's Refresh, the list's custom
+     * action): the cue, the re-sync itself, the sun's one spin and "SYNC" on the LCD for 1500 ms.
+     */
+    fun refresh(actions: ListActions) {
+        actions.onCue(Cue.PULL_REFRESH)
+        actions.onRefresh()
+        sunSpin++
+        syncing = true
+    }
+
+    companion object {
+        /**
+         * What survives turning the phone or a dark-mode switch (§6.5, §6.6): the open menu and sheets, and whether the
+         * scroll had folded the bar and the book (the list keeps its own scroll).
+         */
+        val Saver: Saver<ListScreenState, Any> = listSaver(
+            save = { listOf(it.menuOpen, it.newTripOpen, it.tripBookOpen, it.scrolledDown) },
+            restore = { ListScreenState(menuOpen = it[0], newTripOpen = it[1], tripBookOpen = it[2]).apply { scrolledDown = it[3] } },
+        )
+    }
+}
+
+@Composable
+fun rememberListScreenState(): ListScreenState = rememberSaveable(saver = ListScreenState.Saver) { ListScreenState() }
+
 /**
- * Stateful List destination: wires [ListViewModel] and [AddViewModel], owns the Add sheet, the
- * list switcher and the snackbars (undo for deletes and "Clear checked", "Added N items").
+ * Stateful List destination: wires [ListViewModel] (its motion engine) and [AddViewModel] (the docked add bar, the FAB,
+ * the Add sheet), the sticky notes, the list switcher, the New trip and Trip book sheets.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListRoute(
     vm: ListViewModel,
@@ -126,74 +282,79 @@ fun ListRoute(
     onOpenSettings: () -> Unit,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
-    val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    val resources = LocalResources.current
-    var showLists by rememberSaveable { mutableStateOf(false) }
-    // WP7's add flows; WP5 docks the add bar and the FAB here (phase 1 keeps v1's Add button).
     val addState by addVm.state.collectAsStateWithLifecycle()
+    val surprises by vm.surprisesState.collectAsStateWithLifecycle()
+    val resources = LocalResources.current
+    val nav = LocalAppNav.current
+    val toasts = remember { ToastHostState() }
+    val screen = rememberListScreenState()
+    var showLists by rememberSaveable { mutableStateOf(false) }
     val addFlows = rememberAddFlows(addVm)
-
-    fun snack(message: String, action: String? = null, onAction: () -> Unit = {}) {
-        scope.launch {
-            // A new message replaces the current one instead of queueing behind it.
-            snackbar.currentSnackbarData?.dismiss()
-            val result = snackbar.showSnackbar(
-                message,
-                actionLabel = action,
-                duration = if (action != null) SnackbarDuration.Long else SnackbarDuration.Short,
-            )
-            if (result == SnackbarResult.ActionPerformed) onAction()
-        }
+    val tears = remember(resources) { TearToasts(resources, vm::undoDelete) }
+    SideEffect {
+        vm.strings = ListStrings(
+            addedToBook = { resources.getString(R.string.list_book_added_spoken, it) },
+            peeledFromBook = { resources.getString(R.string.list_book_peeled_spoken, it) },
+        )
     }
 
     LaunchedEffect(vm) {
         vm.events.collect { event ->
             when (event) {
-                is ListEvent.Deleted -> snack(
-                    resources.getString(R.string.list_removed, event.item.name),
-                    resources.getString(R.string.list_undo),
-                ) { vm.undoDelete(event.item, event.index, event.listId) }
-                is ListEvent.Cleared -> snack(
-                    resources.getQuantityString(R.plurals.list_cleared, event.removed.size, event.removed.size),
-                    resources.getString(R.string.list_undo),
-                ) { vm.undoClear(event.removed, event.listId) }
-                is ListEvent.Message -> snack(event.text)
-            }
-        }
-    }
-    LaunchedEffect(addVm) {
-        addVm.events.collect { event ->
-            when (event) {
-                is AddEvent.Committed -> {
-                    val commit = event.commit
-                    if (commit.canUndo) {
-                        snack(commit.toastText(resources), resources.getString(R.string.list_undo)) { addVm.undo(commit.id) }
-                    } else {
-                        snack(commit.toastText(resources))
-                    }
+                is ListEvent.Deleted -> toasts.show(tears.toast(event))
+                is ListEvent.NewBook -> {
+                    // The nudge asked for exactly this; once the fresh book has started it has nothing left to offer.
+                    toasts.current?.takeIf { it.kind == NUDGE_KIND }?.let { toasts.finished(it.id) }
+                    toasts.show(
+                        ToastMessage(
+                            resources.getString(R.string.list_toast_new_book),
+                            kind = "book",
+                            actionLabel = resources.getString(R.string.list_undo),
+                            onAction = event.undo,
+                        ),
+                    )
                 }
-                is AddEvent.SortFailed -> snack(
-                    resources.getQuantityString(R.plurals.list_sort_failed, event.leftUnsorted, event.friendlyMessage, event.leftUnsorted),
+                ListEvent.NewTrip -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_new_trip), kind = "trip"))
+                is ListEvent.Nudge -> toasts.show(
+                    ToastMessage(
+                        resources.getString(R.string.list_toast_nudge),
+                        kind = NUDGE_KIND,
+                        actionLabel = resources.getString(R.string.list_toast_nudge_action),
+                        onAction = { screen.newTripOpen = true },
+                        minHoldMs = NUDGE_FLOOR,
+                    ),
                 )
-                AddEvent.SaveFailed, is AddEvent.Undone, AddEvent.FocusField -> Unit
+                is ListEvent.Refreshed -> refreshedText(resources, event)?.let { toasts.show(ToastMessage(it, kind = "sync")) }
+                is ListEvent.Message -> toasts.show(ToastMessage(event.text, kind = "save"))
             }
         }
     }
+    AddEventsEffect(
+        addFlows,
+        toasts,
+        onCommitted = { commit ->
+            screen.pop(commit)
+            vm.onCommitted(commit.added)
+        },
+    )
     // The add flows send to the list on screen.
     LaunchedEffect(state.listId) {
         if (state.listId.isNotEmpty()) addVm.showList(state.listId)
     }
 
-    val actions = remember(vm, addVm) {
+    val actions = remember(vm, addFlows, nav) {
         ListActions(
             onToggle = vm::toggle,
             onDelete = vm::delete,
-            onToggleSection = vm::toggleSection,
-            onClearChecked = vm::clearChecked,
+            onOpenSection = vm::openSection,
+            onFoldAll = vm::foldAll,
             onOpenEdit = vm::openEdit,
-            onAdd = { addVm.openSheet(AddMode.WRITE, vm.state.value.listId) },
+            onStartList = addFlows::focusField,
+            onNewTrip = vm::newTrip,
+            onRefresh = vm::refresh,
             onOpenAisles = onOpenAisles,
+            onOpenPantry = nav.openPantry,
+            onOpenAlbum = nav.openAlbum,
             onOpenSettings = onOpenSettings,
             onOpenLists = { showLists = true },
             onCloseEdit = vm::closeEdit,
@@ -212,405 +373,739 @@ fun ListRoute(
             },
             onRenameList = vm::renameList,
             onDeleteList = vm::deleteList,
+            onSunTap = vm::onSunTap,
+            onMoonTap = vm::onMoonTap,
+            onStampTap = vm::onStampTap,
+            onLcdHold = vm::onLcdHold,
+            onBasketHold = vm::onBasketHold,
+            onCue = vm::cue,
         )
     }
-
-    ListScreen(state = state, actions = actions, snackbarHostState = snackbar, showLists = showLists)
-
-    // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet, and
-    // after a key error "Try again" picks up the photo or recording once the key is fixed (so no closeSheet() here).
-    AddSheetHost(
-        addFlows,
-        addState,
-        onOpenSettings = onOpenSettings,
-        onEditPantry = LocalAppNav.current.onEditPantry,
+    val tape = AddRules.addBarTape(surprises)
+    val sheetUp = state.editing != null || showLists || screen.newTripOpen || screen.tripBookOpen
+    ListScreen(
+        state = state,
+        actions = actions,
+        engine = vm.engine,
+        toasts = toasts,
+        showLists = showLists,
+        screen = screen,
+        dockHeight = addFlows.dockHeight,
+        collapse = addFlows.collapse,
+        dock = { AddDock(addFlows, addState, tape = tape, otherSheetOpen = sheetUp) },
     )
+    // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet.
+    AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry)
+}
+
+/** The nudge's toast kind. */
+private const val NUDGE_KIND: String = "nudge"
+
+/** The nudge's reading floor (§6.1, §9: it carries an action): 6 s. */
+private const val NUDGE_FLOOR: Long = 6000
+
+/** "Sorted 2 items · 1 new sticker drawn" (§6.1), or null when nothing changed. */
+internal fun refreshedText(resources: Resources, e: ListEvent.Refreshed): String? {
+    val parts = buildList {
+        if (e.sorted > 0) add(resources.getQuantityString(R.plurals.list_toast_sorted, e.sorted, e.sorted))
+        if (e.drawn > 0) add(resources.getQuantityString(R.plurals.list_toast_drawn, e.drawn, e.drawn))
+        if (e.sorted > 0 && e.left > 0) add(resources.getQuantityString(R.plurals.list_toast_left, e.left, e.left))
+    }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }
 
 /**
- * Stateless List screen: aisles in walking order, each one container (collapsible basket header band
- * owning its rows), check-off rows
- * (tap), edit (long-press or the accessibility action), swipe to delete, "Clear checked", and the
- * Edit / list-switcher sheets when [ListUiState.editing] / [showLists] say so.
+ * The tear-off's sticky notes (§8.6, §4.15): "Oat cereal torn out" with Undo; a second tear-off during its hold merges
+ * into "2 items torn out", whose Undo restores both.
+ */
+internal class TearToasts(private val resources: Resources, private val undo: (GroceryItem, Int, String?) -> Unit) {
+    private val torn = HashMap<Long, List<ListEvent.Deleted>>()
+
+    fun toast(e: ListEvent.Deleted): ToastMessage {
+        val note = note(listOf(e), null)
+        torn[note.id] = listOf(e)
+        return note
+    }
+
+    private fun note(all: List<ListEvent.Deleted>, id: Long?): ToastMessage {
+        val text = if (all.size == 1) {
+            resources.getString(R.string.list_toast_torn_one, all.single().item.name)
+        } else {
+            resources.getQuantityString(R.plurals.list_toast_torn_many, all.size, all.size)
+        }
+        val base = ToastMessage(
+            text = text,
+            kind = TEAR_KIND,
+            actionLabel = resources.getString(R.string.list_undo),
+            // Restore newest first, so each goes back at the index it had when it was torn out.
+            onAction = { all.asReversed().forEach { undo(it.item, it.index, it.listId) } },
+            merge = ::merge,
+        )
+        return if (id == null) base else base.copy(id = id)
+    }
+
+    private fun merge(current: ToastMessage, incoming: ToastMessage): ToastMessage {
+        val all = torn.remove(current.id).orEmpty() + torn.remove(incoming.id).orEmpty()
+        if (all.isEmpty()) return incoming.copy(id = current.id)
+        torn[current.id] = all
+        return note(all, current.id)
+    }
+
+    companion object {
+        const val TEAR_KIND: String = "tear"
+    }
+}
+
+/**
+ * The stateless List screen. [engine] plays the chains ([MotionEngineHost] runs it here); [dock] is the docked add bar
+ * (the app: WP7's AddDock; previews and goldens: the bar at rest, wearing the tape of the season the book shows),
+ * [dockHeight] its measured height (the toasts sit 20 dp above it, the list's bottom padding is it + 26 dp) and
+ * [collapse] its fold rules (programmatic scrolls are ignored). [eggs] is WP9's overlay slot.
  */
 @Composable
 fun ListScreen(
     state: ListUiState,
     actions: ListActions,
     modifier: Modifier = Modifier,
-    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    engine: MotionChoreographer = remember { MotionChoreographer() },
+    toasts: ToastHostState = remember { ToastHostState() },
     showLists: Boolean = false,
+    screen: ListScreenState = rememberListScreenState(),
+    listState: LazyListState? = null,
+    dockHeight: Dp = 84.dp,
+    collapse: AddBarCollapseState? = null,
+    dock: @Composable BoxScope.() -> Unit = { StaticDock(tape = AddRules.addBarTape(earth.cora.picnic.ui.eggs.SurpriseState(season = state.book?.season))) },
+    eggs: @Composable BoxScope.() -> Unit = {},
+    talkBackOverride: Boolean? = null,
 ) {
-    ScreenScaffold(
-        modifier = modifier,
-        topBar = { ListTopBar(state, actions) },
-        snackbarHostState = snackbarHostState,
-        floatingActionButton = {
-            if (!state.loading && state.total > 0) {
-                PicnicButton(stringResource(R.string.list_add), onClick = actions.onAdd, glyph = PicnicGlyph.Add)
-            }
-        },
-    ) { padding ->
-        when {
-            state.loading -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                LoadingSparkle()
-            }
-            state.total == 0 -> EmptyList(actions, Modifier.padding(padding))
-            else -> ListContent(state, actions, padding)
+    MotionEngineHost(engine, nextStopCard = state.nextStopCard, celebration = state.celebration, eggs = state.eggs, talkBackOverride = talkBackOverride)
+    val p = engine.current.value
+    // SYNC holds on the LCD for the LCD-word floor after each refresh, on the frame clock (§6.1, §9).
+    LaunchedEffect(screen.sunSpin) {
+        if (!screen.syncing) return@LaunchedEffect
+        withContext(FixedMotionScale) { holdOnFrameClock(PicnicMotion.floorLcdWord) }
+        screen.syncing = false
+    }
+    // Each list keeps its own scroll: another list opens at its top, never at the old one's place (§6.4, item 164).
+    val lazyState = listState ?: key(state.listId) { rememberLazyListState() }
+    // A different list, or this one emptied (the trip cleared, its last item torn out): the scroll that folded the app
+    // bar, the book and the add bar went with it, so they come back (§4.2, §4.21, §6.1; items 116, 164).
+    val emptied = state.total == 0 && !state.loading
+    val seen = remember { arrayOfNulls<Pair<String, Boolean>>(1) }
+    LaunchedEffect(state.listId, emptied) {
+        val before = seen[0]
+        seen[0] = state.listId to emptied
+        if (before != null && (before.first != state.listId || emptied)) {
+            screen.scrolledDown = false
+            collapse?.atTop(true)
         }
     }
-
-    state.editing?.let { editing ->
-        EditItemSheet(
-            state = editing,
-            onSave = actions.onSaveEdit,
-            onClose = actions.onCloseEdit,
-            onMoveToAisle = { aisleId -> actions.onMoveToAisle(editing.item.id, aisleId) },
-            onSetIcon = { key -> actions.onSetIcon(editing.item.id, key) },
-            onRedraw = { actions.onRedrawIcon(editing.item.id) },
-            onDelete = { actions.onDelete(editing.item.id) },
+    val density = LocalDensity.current
+    val ime = WindowInsets.ime.getBottom(density) > 0
+    val shortWindow = LocalConfiguration.current.screenHeightDp < SHORT_WINDOW_DP
+    Box(modifier.fillMaxSize()) {
+        PicnicBackground(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize()) {
+                TopStack(
+                    state = state,
+                    presentation = p,
+                    engine = engine,
+                    ui = TopStackUi(
+                        barCollapsed = screen.scrolledDown,
+                        bookCollapsed = screen.scrolledDown || ime || shortWindow,
+                        syncing = screen.syncing,
+                        sunSpin = screen.sunSpin,
+                    ),
+                    actions = actions,
+                    onMore = { screen.menuOpen = true },
+                    onMoreBounds = { screen.moreBounds = it },
+                    onOpenBook = { screen.tripBookOpen = true },
+                )
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    when {
+                        state.loading -> LoadingList()
+                        state.total == 0 -> EmptyList(state, actions, dockHeight)
+                        else -> AisleList(state, p, engine, actions, screen, lazyState, dockHeight, collapse)
+                    }
+                }
+            }
+        }
+        dock()
+        MotionOverlay(engine, p, toasts, bottomInset = dockHeight, eggs = eggs)
+        PeekLayer(state, screen, dockHeight)
+        if (screen.menuOpen) ListMenu(state, actions, screen)
+        state.editing?.let { editing ->
+            EditItemSheet(
+                state = editing,
+                onSave = actions.onSaveEdit,
+                onClose = actions.onCloseEdit,
+                onMoveToAisle = { aisleId -> actions.onMoveToAisle(editing.item.id, aisleId) },
+                onSetIcon = { key -> actions.onSetIcon(editing.item.id, key) },
+                onRedraw = { actions.onRedrawIcon(editing.item.id) },
+                onDelete = { actions.onDelete(editing.item.id) },
+            )
+        }
+        if (showLists) {
+            ListSwitcherSheet(
+                lists = state.lists,
+                onDismiss = actions.onCloseLists,
+                onSwitch = actions.onSwitchList,
+                onNew = actions.onNewList,
+                onRename = actions.onRenameList,
+                onDelete = actions.onDeleteList,
+            )
+        }
+        NewTripSheet(
+            visible = screen.newTripOpen && state.canStartNewTrip,
+            book = state.book,
+            onClear = {
+                screen.newTripOpen = false
+                actions.onNewTrip(NewTripMode.CLEAR_GOTTEN)
+            },
+            onKeep = {
+                screen.newTripOpen = false
+                actions.onNewTrip(NewTripMode.UNCHECK_ALL)
+            },
+            onDismiss = { screen.newTripOpen = false },
         )
-    }
-    if (showLists) {
-        ListSwitcherSheet(
-            lists = state.lists,
-            onDismiss = actions.onCloseLists,
-            onSwitch = actions.onSwitchList,
-            onNew = actions.onNewList,
-            onRename = actions.onRenameList,
-            onDelete = actions.onDeleteList,
+        TripBookSheet(
+            book = if (screen.tripBookOpen) state.tripBook else null,
+            dateLabel = state.book?.dateLabel.orEmpty(),
+            onClose = { screen.tripBookOpen = false },
         )
+        CelebrationHost(engine, p)
     }
 }
 
+/** Windows shorter than this keep the book collapsed (§7.4). */
+private const val SHORT_WINDOW_DP = 600
+
+/** The add bar at rest, docked at the bottom (previews and goldens; the app docks WP7's AddDock). */
 @Composable
-private fun ListTopBar(state: ListUiState, actions: ListActions) {
-    PicnicTopBar(
-        title = state.title.ifEmpty { stringResource(R.string.app_name) },
-        subtitle = when {
-            state.loading -> null
-            state.total > 0 -> stringResource(R.string.list_progress, state.checked, state.total)
-            else -> state.storeName
-        },
-        navigation = { PicnicIconButton(PicnicGlyph.Lists, stringResource(R.string.list_switch_lists), actions.onOpenLists) },
-        actions = {
-            PicnicIconButton(PicnicGlyph.Aisles, stringResource(R.string.list_open_aisles), actions.onOpenAisles)
-            PicnicIconButton(PicnicGlyph.Settings, stringResource(R.string.list_open_settings), actions.onOpenSettings)
-        },
-        bottom = if (state.total > 0) {
-            { TripProgress(state.checked, state.total) }
-        } else {
-            null
-        },
-    )
+fun BoxScope.StaticDock(tape: WashiPattern = WashiPattern.SakuraStripe) {
+    val c = PicnicTheme.colors
+    Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+        AddBar(AddBarUi(), onTextChange = {}, onSend = {}, onSnap = {}, onChoosePhoto = {}, onSpeak = {}, tape = tape)
+        Spacer(Modifier.fillMaxWidth().windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)).background(c.pad))
+    }
 }
 
+/** The loading state (§6.1): skeleton strips with spots. */
 @Composable
-private fun EmptyList(actions: ListActions, modifier: Modifier) {
+private fun LoadingList() {
+    Column(
+        Modifier.fillMaxSize().padding(start = 8.dp, end = 8.dp, top = 11.dp).testTag(ListTags.LOADING),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        repeat(5) { SkeletonStrip() }
+    }
+}
+
+/**
+ * The empty list (§4.21): the fresh sticker sheet, the copy, "Start my list"; no book. It scrolls to clear the docked
+ * add bar ([dockHeight], which grows with large text and the navigation bar), so the button is never left under it.
+ */
+@Composable
+private fun EmptyList(state: ListUiState, actions: ListActions, dockHeight: Dp) {
     Box(
-        modifier
+        Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        contentAlignment = Alignment.Center,
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(bottom = dockHeight)
+            .testTag(ListTags.EMPTY),
+        contentAlignment = Alignment.TopCenter,
     ) {
         EmptyState(
             title = stringResource(R.string.list_empty_title),
-            body = stringResource(R.string.list_empty_body),
-            action = { PicnicButton(stringResource(R.string.list_empty_action), onClick = actions.onAdd, glyph = PicnicGlyph.Add) },
+            body = stringResource(R.string.list_empty_body, state.title),
+            action = { PicnicButton(stringResource(R.string.list_empty_action), onClick = actions.onStartList, leadingStar = true) },
         )
     }
 }
 
-@Composable
-private fun ListContent(state: ListUiState, actions: ListActions, padding: PaddingValues) {
-    val d = PicnicTheme.dimens
-    val direction = LocalLayoutDirection.current
-    val sections = rememberTickDwell(state.sections)
-    val listState = rememberLazyListState()
-    val onePixel = with(LocalDensity.current) { 1.toDp() }
-    LazyColumn(
-        state = listState,
-        // The viewport starts under the top bar (not behind it, via content padding) so a pinned
-        // section band sits just below the bar. Scrolled rows vanish at the same line either way: the
-        // bar repaints the ground behind itself.
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = padding.calculateTopPadding()),
-        contentPadding = PaddingValues(
-            start = padding.calculateStartPadding(direction) + d.gutter,
-            end = padding.calculateEndPadding(direction) + d.gutter,
-            top = d.xs,
-            bottom = padding.calculateBottomPadding() + FAB_CLEARANCE,
-        ),
-    ) {
-        // Each section is ONE container drawn slice by slice (theme ListPieces.kt): the header is its
-        // top band, every row its own keyed item inside, the last row the cap. Slices must touch, so
-        // there is no list-wide spacing: a spacer item sits between sections instead.
-        // Section bands are sticky headers: once an open section's rows scroll under the top, its band
-        // stays pinned (drawn closed, a card over its own rows, backed by the ground from the viewport
-        // top across the full width), so a long aisle never becomes rows without a name and no row
-        // peeks out above or beside the pinned band. A one-pixel sticky marker closes every section and pushes its band off as
-        // the section ends (a collapsed band, followed by its marker straight away, just scrolls).
-        // Every header stays a sticky item, collapsed or not, so expanding or collapsing keeps the
-        // same composable and the band's closure animates.
-        var position = 0 // lazy-list index of the next item (the pinned check needs the header's)
-        sections.forEachIndexed { index, section ->
-            val open = !section.collapsed && section.items.isNotEmpty()
-            if (index > 0) {
-                item(key = "gap:${section.id}", contentType = "gap") {
-                    Spacer(Modifier.itemMotion(this).fillMaxWidth().height(d.sectionGap))
-                }
-                position++
-            }
-            val headerPosition = position
-            val header: @Composable LazyItemScope.(pinned: Boolean) -> Unit = { pinned ->
-                AisleHeader(
-                    title = sectionTitle(section),
-                    number = section.number,
-                    aisleIndex = section.aisleIndex,
-                    basket = section.basket,
-                    inBasket = section.inBasket,
-                    count = section.count,
-                    // The checked section lists the gotten items itself: it is announced as "<n> items".
-                    gotten = section.gotten.takeIf { section.kind != SectionUiKind.CHECKED },
-                    collapsed = section.collapsed,
-                    cleared = section.cleared,
-                    onToggle = { actions.onToggleSection(section.id) },
-                    rowsBelow = open && !pinned,
-                    // Pinned over its rows: backed by the ground up to the viewport top, so no row
-                    // shows above or beside the band (its rounded corners included).
-                    pinned = pinned,
-                    modifier = Modifier.itemMotion(this),
-                )
-            }
-            stickyHeader(key = "header:${section.id}", contentType = "header") {
-                val pinned by remember(listState, headerPosition) {
-                    derivedStateOf {
-                        listState.firstVisibleItemIndex > headerPosition ||
-                            (listState.firstVisibleItemIndex == headerPosition && listState.firstVisibleItemScrollOffset > 0)
-                    }
-                }
-                header(pinned)
-            }
-            position++
-            if (open) {
-                // Basket rows get their own keys: ticking or unticking fades a row out of one section and
-                // into the other (after the dwell) instead of sliding its slice across the sections between.
-                val keyOf: (ItemRowUi) -> String = if (section.kind == SectionUiKind.CHECKED) { row -> "basket:${row.id}" } else { row -> row.id }
-                itemsIndexed(section.items, key = { _, row -> keyOf(row) }, contentType = { _, _ -> "row" }) { i, row ->
-                    AisleSectionRow(
-                        aisleIndex = section.aisleIndex,
-                        first = i == 0,
-                        last = i == section.items.lastIndex,
-                        modifier = Modifier.itemMotion(this),
-                    ) {
-                        ItemRow(row, actions)
-                    }
-                }
-                position += section.items.size
-            }
-            // One pixel tall: the list ignores zero-size items when choosing which header to pin.
-            stickyHeader(key = "end:${section.id}", contentType = "end") { Spacer(Modifier.fillMaxWidth().height(onePixel)) }
-            position++
-            if (section.kind == SectionUiKind.CHECKED && section.count > 0) {
-                item(key = "clear-checked", contentType = "button") {
-                    Box(
-                        Modifier
-                            .itemMotion(this)
-                            .fillMaxWidth()
-                            .padding(top = d.m),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        PicnicButton(
-                            pluralStringResource(R.plurals.list_clear_checked, section.count, section.count),
-                            onClick = actions.onClearChecked,
-                            style = PicnicButtonStyle.Secondary,
-                            glyph = PicnicGlyph.Delete,
-                        )
-                    }
-                }
-                position++
-            }
-        }
-        item(key = "gesture-hint", contentType = "hint") {
-            HintText(
-                stringResource(R.string.list_gesture_hint),
-                Modifier
-                    .itemMotion(this)
-                    .fillMaxWidth()
-                    .padding(top = d.l),
-            )
-        }
+/** One lazy item of the list. */
+private sealed interface Entry {
+    val key: String
+    val sectionId: String?
+
+    data class Strip(val s: SectionUi) : Entry {
+        override val key get() = "strip:${s.id}"
+        override val sectionId get() = s.id
+    }
+
+    data class Header(val s: SectionUi) : Entry {
+        override val key get() = "header:${s.id}"
+        override val sectionId get() = s.id
+    }
+
+    data class RowItem(val s: SectionUi, val row: ItemRowUi, val first: Boolean, val last: Boolean) : Entry {
+        override val key get() = row.id
+        override val sectionId get() = s.id
+    }
+
+    data class Cap(val s: SectionUi) : Entry {
+        override val key get() = "cap:${s.id}"
+        override val sectionId get() = s.id
+    }
+
+    data class End(val s: SectionUi) : Entry {
+        override val key get() = "end:${s.id}"
+        override val sectionId get() = s.id
+    }
+
+    data class Gap(val s: SectionUi) : Entry {
+        override val key get() = "gap:${s.id}"
+        override val sectionId get() = s.id
+    }
+
+    data object Note : Entry {
+        override val key get() = "end-note"
+        override val sectionId get() = null
     }
 }
 
-/** Where a just-ticked row was shown: its aisle section and position there. */
-private class TickDwell(val sectionId: String, val index: Int)
-
-/**
- * [sections] as shown: a row just ticked in an aisle stays there, ticked, for [TICK_DWELL_MS] so its
- * check stamp plays in place (the state already lists it in the basket, which leaves it out
- * meanwhile). Then it fades out of the aisle and into the basket. Unticking it during the dwell,
- * removing it, or its section disappearing ends the dwell at once. Presentation only: the state and
- * its counts are untouched.
- */
-@Composable
-private fun rememberTickDwell(sections: List<SectionUi>): List<SectionUi> {
-    // Unchecked rows of open sections as last shown (plain map: written after composition).
-    val shown = remember { HashMap<String, TickDwell>() }
-    val dwelling = remember { mutableStateMapOf<String, TickDwell>() }
-    val basket = sections.firstOrNull { it.kind == SectionUiKind.CHECKED }?.items.orEmpty()
-    val fresh = basket.mapNotNull { row -> shown[row.id]?.takeIf { row.id !in dwelling }?.let { row.id to it } }.toMap()
-    // Only while the row is still in the basket and its aisle is still listed (an emptied section
-    // may vanish, Unsorted does): otherwise the row goes straight to where the state puts it.
-    val active = (dwelling + fresh).filter { (id, at) -> basket.any { it.id == id } && sections.any { it.id == at.sectionId } }
-    SideEffect {
-        dwelling.putAll(fresh)
-        dwelling.keys.filter { it !in active }.forEach { dwelling.remove(it) }
-        shown.clear()
-        sections.forEach { s ->
-            if (s.kind != SectionUiKind.CHECKED && !s.collapsed) s.items.forEachIndexed { i, row -> if (!row.checked) shown[row.id] = TickDwell(s.id, i) }
-        }
-    }
-    active.keys.forEach { id ->
-        key(id) {
-            LaunchedEffect(Unit) {
-                delay(TICK_DWELL_MS)
-                dwelling.remove(id)
-            }
-        }
-    }
-    if (active.isEmpty()) return sections
-    val rows = basket.associateBy { it.id }
-    return sections.map { s ->
-        if (s.kind == SectionUiKind.CHECKED) {
-            s.copy(items = s.items.filterNot { it.id in active })
+/** The lazy items for [sections] with [openId] open: strips, or the tray's band, rows, cap and end marker; gaps; the end note. */
+private fun planEntries(sections: List<SectionUi>, openId: String?): List<Entry> = buildList {
+    for (s in sections) {
+        if (s.id == openId && s.rows.isNotEmpty()) {
+            add(Entry.Header(s))
+            s.rows.forEachIndexed { i, r -> add(Entry.RowItem(s, r, i == 0, i == s.rows.lastIndex)) }
+            add(Entry.Cap(s))
+            add(Entry.End(s))
         } else {
-            val mine = active.entries.filter { it.value.sectionId == s.id }.sortedBy { it.value.index }
-            if (mine.isEmpty()) s else s.copy(items = s.items.toMutableList().apply { mine.forEach { (id, at) -> add(at.index.coerceAtMost(size), rows.getValue(id)) } })
+            add(Entry.Strip(s))
         }
+        add(Entry.Gap(s))
     }
+    add(Entry.Note)
 }
 
-/** Item placement/fade animations from [scope]; none with reduced motion. */
-@Composable
-private fun Modifier.itemMotion(scope: LazyItemScope): Modifier {
-    val motion = PicnicTheme.motion
-    return with(scope) {
-        if (motion.reduced) {
-            this@itemMotion.animateItem(fadeInSpec = null, placementSpec = null, fadeOutSpec = null)
-        } else {
-            this@itemMotion.animateItem(
-                fadeInSpec = tween(motion.shortMillis),
-                placementSpec = tween(motion.mediumMillis),
-                fadeOutSpec = tween(motion.shortMillis),
-            )
-        }
-    }
-}
-
-@Composable
-private fun sectionTitle(section: SectionUi): String = when (section.kind) {
-    SectionUiKind.UNSORTED -> stringResource(R.string.list_section_unsorted)
-    SectionUiKind.CHECKED -> stringResource(R.string.list_section_checked)
-    SectionUiKind.AISLE -> section.title
-}
-
-/**
- * One item: tap toggles, long-press opens the editor, swipe either way removes (Undo in the
- * snackbar). TalkBack gets the checked state and "Edit" / "Remove" actions (swipes aren't accessible).
- */
+/** The list viewport (§6.1 item 2): 11 dp top padding, 8 dp sides, the add bar + 26 dp at the bottom. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ItemRow(row: ItemRowUi, actions: ListActions, modifier: Modifier = Modifier) {
+private fun AisleList(
+    state: ListUiState,
+    p: ListPresentation,
+    engine: MotionChoreographer,
+    actions: ListActions,
+    screen: ListScreenState,
+    listState: LazyListState,
+    dockHeight: Dp,
+    collapse: AddBarCollapseState?,
+) {
+    val reduced = LocalReducedMotion.current
+    val density = LocalDensity.current
+    val clock = engine.clock
+    val anchors = engine.anchors
+    val openId = p.openSection(state.openSectionId)
+    val entries = remember(state.sections, openId) { planEntries(state.sections, openId) }
+    // The current aisle wears the lemon ring, the bee and the ladybug (§4.10, D2). While a chain holds a finished aisle
+    // open (the engine's override), it keeps them until it folds; a finished aisle she reopens herself is not current.
+    val currentId = if (openId != null && openId != state.openSectionId) openId else state.nowSectionId
     val scope = rememberCoroutineScope()
-    val dismissState = rememberSwipeToDismissBoxState()
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val editLabel = stringResource(R.string.list_row_edit)
-    val removeLabel = stringResource(R.string.list_row_remove)
-    val stateText = stringResource(if (row.checked) R.string.list_row_checked else R.string.list_row_unchecked)
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = { SwipeBackground(dismissState) },
-        modifier = modifier,
-        onDismiss = {
-            actions.onDelete(row.id)
-            // If the delete didn't happen (save failed), bring the card back instead of leaving a gap.
-            scope.launch {
-                delay(UNDISMISS_DELAY_MS)
-                dismissState.reset()
+    val act by rememberUpdatedState(actions)
+    val rowActions = remember(actions) {
+        RowActions(onToggle = actions.onToggle, onDelete = actions.onDelete, onEdit = actions.onOpenEdit, onTearCue = { actions.onCue(Cue.TEAR_OFF) })
+    }
+
+    // Focus after her own folds and unfolds (§15, item 193): the chevron when it opened, the strip when it folded.
+    for (s in state.sections) {
+        key(s.id) {
+            val (chevron, strip) = screen.focusOf(s.id)
+            FoldFocusEffect(open = s.id == openId, anyOpen = openId != null, userToggles = screen.toggles.of(s.id), chevron = chevron, strip = strip)
+        }
+    }
+
+    // The next stop opening behind the Next card scrolls into view (§10); the add bar ignores it (item 116).
+    LaunchedEffect(p.scroll?.t0) {
+        val req = p.scroll ?: return@LaunchedEffect
+        val index = entries.indexOfFirst { it.sectionId == req.sectionId && (it is Entry.Header || it is Entry.Strip) }
+        if (index < 0) return@LaunchedEffect
+        collapse?.ignoreProgrammaticScroll()
+        listState.animateScrollToItem(index)
+    }
+    // Her own open scrolls the tray into view (§6.1: smooth, programmatic; the add bar ignores it, item 116) unless its
+    // band and its first three rows already show above the add bar. It waits for the tray to be laid out: a bounded
+    // number of frames, as the engine may hold another aisle open a moment.
+    val latestEntries by rememberUpdatedState(entries)
+    val dockPx by rememberUpdatedState(with(density) { dockHeight.roundToPx() })
+    val snap by rememberUpdatedState(reduced)
+    LaunchedEffect(screen.openTap) {
+        val tap = screen.openTap ?: return@LaunchedEffect
+        fun headerIndex() = latestEntries.indexOfFirst { it is Entry.Header && it.sectionId == tap.sectionId }
+        var waited = 0
+        while (headerIndex() < 0 && waited++ < OPEN_WAIT_FRAMES) withFrameMillis { }
+        // One more frame: the layout with the tray in it has run.
+        withFrameMillis { }
+        val index = headerIndex()
+        if (index < 0) return@LaunchedEffect
+        val cap = latestEntries.indexOfFirst { it is Entry.Cap && it.sectionId == tap.sectionId }
+        val info = listState.layoutInfo
+        val header = info.visibleItemsInfo.firstOrNull { it.index == index }
+        val last = info.visibleItemsInfo.firstOrNull { it.index == minOf(index + OPEN_ROWS_IN_VIEW, cap - 1).coerceAtLeast(index) }
+        val inView = header != null && header.offset >= info.viewportStartOffset && last != null && last.offset + last.size <= info.viewportEndOffset - dockPx
+        if (inView) return@LaunchedEffect
+        collapse?.ignoreProgrammaticScroll()
+        if (snap) listState.scrollToItem(index) else listState.animateScrollToItem(index)
+    }
+    // At the top, the bar and the book come back (§4.2, §6.1).
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 }.collect { top ->
+            collapse?.atTop(top)
+            if (top) screen.scrolledDown = false
+        }
+    }
+
+    // Ambient loops (§8.5): a folded basket wobbles, a sticker gets a gloss sweep; only while on screen and resumed.
+    var fraction by remember { mutableFloatStateOf(1f) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val lifecycleState by lifecycle.currentStateFlow.collectAsStateWithLifecycle()
+    val sections by rememberUpdatedState(state.sections)
+    val open by rememberUpdatedState(openId)
+    val ambient = rememberAmbient(
+        visible = ambientVisible(lifecycleState.isAtLeast(Lifecycle.State.RESUMED), fraction),
+        reduced = reduced,
+        baskets = { sections.filter { it.id != open && !it.complete && it.gotten.isNotEmpty() }.map { AmbientBasket(it.id, it.gotten.map { m -> m.itemId }) } },
+        stickers = { sections.firstOrNull { it.id == open }?.rows?.filter { !it.checked }?.map { it.id }.orEmpty() },
+    )
+    val beat = ambient.state.value
+
+    val refreshLabel = stringResource(R.string.list_action_refresh)
+    val pullPx = with(density) { PULL_MAX.toPx() }
+    val triggerPx = with(density) { PULL_TRIGGER.toPx() }
+    val pullBack = remember { Animatable(0f) }
+    val refresh: () -> Unit = { screen.refresh(act) }
+    val connection = remember(screen, pullPx, triggerPx, reduced) {
+        object : NestedScrollConnection, PullGate {
+            private var raw = 0f
+
+            /** A finger is on the list: only her own drag pulls the bunting, never a programmatic scroll (a focus
+             * hand-off's bring-into-view, the next stop opening) that runs into the top. */
+            override var touching = false
+
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Pushing back up while pulled: the bunting rises first.
+                if (raw > 0f && available.y < 0f) {
+                    val used = maxOf(available.y, -raw)
+                    raw += used
+                    screen.pull = (raw * PULL_FOLLOW).coerceAtMost(pullPx)
+                    return Offset(0f, used)
+                }
+                return Offset.Zero
             }
-        },
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                // The scroll collapses the app bar and the book (and expands them on the way back).
+                if (consumed.y < -COLLAPSE_SLOP * density.density) screen.scrolledDown = true
+                if (consumed.y > COLLAPSE_SLOP * density.density) screen.scrolledDown = false
+                if (touching && source == NestedScrollSource.UserInput && available.y > 0f) {
+                    raw += available.y
+                    screen.pull = (raw * PULL_FOLLOW).coerceAtMost(pullPx)
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (raw <= 0f) return Velocity.Zero
+                val pulled = screen.pull
+                raw = 0f
+                if (pulled >= triggerPx) refresh()
+                if (reduced) {
+                    screen.pull = 0f
+                } else {
+                    pullBack.snapTo(pulled)
+                    withContext(FixedMotionScale) { pullBack.animateTo(0f, tween(220)) { screen.pull = value } }
+                }
+                return available
+            }
+        }
+    }
+
+    // Clipped to the viewport: the bunting starts above it (−34 dp) and comes out from under the top stack (R6).
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .onGloballyPositioned { screen.listBounds = it.boundsInWindow() }
+            .pointerInput(connection) {
+                // Watches (never consumes) whether a finger is down, for the pull to refresh.
+                awaitPointerEventScope {
+                    while (true) {
+                        val e = awaitPointerEvent(PointerEventPass.Initial)
+                        connection.touching = e.changes.any { it.pressed }
+                    }
+                }
+            },
     ) {
-        ItemRowCard(
-            name = row.name,
-            detail = row.detail,
-            icon = row.icon,
-            checked = row.checked,
-            drawing = row.drawing,
-            // Press feedback: the row takes its section's tint at once (it has no card edge to move).
-            pressed = pressed,
+        LazyColumn(
+            state = listState,
             modifier = Modifier
-                .combinedClickable(
-                    interactionSource = interaction,
-                    indication = null,
-                    role = Role.Checkbox,
-                    onLongClickLabel = editLabel,
-                    onLongClick = { actions.onOpenEdit(row.id) },
-                    onClick = { actions.onToggle(row.id) },
-                )
-                .semantics {
-                    stateDescription = stateText
-                    customActions = listOf(
-                        CustomAccessibilityAction(editLabel) {
-                            actions.onOpenEdit(row.id)
-                            true
-                        },
-                        CustomAccessibilityAction(removeLabel) {
-                            actions.onDelete(row.id)
-                            true
-                        },
-                    )
-                },
-        )
+                .fillMaxSize()
+                .testTag(ListTags.LIST)
+                .visibleFraction { fraction = it }
+                .then(if (collapse != null) Modifier.nestedScroll(collapse.nestedScrollConnection) else Modifier)
+                .nestedScroll(connection)
+                .semantics { customActions = listOf(CustomAccessibilityAction(refreshLabel) { refresh(); true }) }
+                .graphicsLayer { translationY = if (reduced) 0f else screen.pull },
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp, bottom = dockHeight + 26.dp),
+        ) {
+            entries.forEachIndexed { index, e ->
+                when (e) {
+                    is Entry.Strip -> item(key = e.key, contentType = "strip") {
+                        val s = e.s
+                        val (_, stripFocus) = screen.focusOf(s.id)
+                        FoldedStrip(
+                            section = s,
+                            basket = p.baskets[s.id],
+                            aisle = p.aisles[s.id],
+                            clock = clock,
+                            anchors = anchors,
+                            focus = stripFocus,
+                            onOpen = {
+                                screen.toggles.bump(s.id)
+                                screen.openedByHer(s.id)
+                                act.onOpenSection(s.id)
+                            },
+                            onPeek = { held, ms ->
+                                screen.peek = if (held) s.id else null
+                                if (!held) act.onBasketHold(s.id, ms)
+                            },
+                            peeked = screen.peek == s.id,
+                            ambient = beat,
+                            ambientClock = ambient.clock,
+                            modifier = Modifier
+                                .itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis)
+                                .zIndex(if (screen.peek == s.id) 1f else 0f)
+                                .onGloballyPositioned { screen.stripBounds[s.id] = it.boundsInWindow() }
+                                .unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
+                        )
+                    }
+                    is Entry.Header -> stickyHeader(key = e.key, contentType = "header") {
+                        val s = e.s
+                        val pinned by remember(listState, index) {
+                            derivedStateOf {
+                                listState.firstVisibleItemIndex > index ||
+                                    (listState.firstVisibleItemIndex == index && listState.firstVisibleItemScrollOffset > 0)
+                            }
+                        }
+                        val (chevron, _) = screen.focusOf(s.id)
+                        TrayHeader(
+                            section = s,
+                            basket = p.baskets[s.id],
+                            clock = clock,
+                            anchors = anchors,
+                            pinned = pinned,
+                            current = s.id == currentId,
+                            chevronFocus = chevron,
+                            onFold = {
+                                screen.toggles.bump(s.id)
+                                act.onFoldAll()
+                            },
+                            modifier = Modifier.unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
+                        )
+                    }
+                    is Entry.RowItem -> item(key = e.key, contentType = "row") {
+                        val curl = if (e.last) p.aisles[e.s.id]?.curlT0 else null
+                        TrayRow(
+                            row = e.row,
+                            section = e.s,
+                            first = e.first,
+                            last = e.last,
+                            presentation = p,
+                            clock = clock,
+                            anchors = anchors,
+                            actions = rowActions,
+                            pop = screen.pops[e.row.id],
+                            sweepT0 = beat?.sweepT0.takeIf { beat?.sweepItem == e.row.id },
+                            ambientClock = ambient.clock,
+                            current = e.s.id == currentId,
+                            modifier = Modifier
+                                .itemMotion(this, reduced, placementMs = SLOT_CLOSE_MS)
+                                .unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced)
+                                .trayCurl(curl, clock, flap = e.s.look.family.pastel, shadow = PicnicTheme.shadows.color, reduced = reduced),
+                        )
+                    }
+                    is Entry.Cap -> item(key = e.key, contentType = "cap") {
+                        TrayCap(e.s, current = e.s.id == currentId, modifier = Modifier.itemMotion(this, reduced, placementMs = SLOT_CLOSE_MS).unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced))
+                    }
+                    // One pixel tall: the list ignores zero-size items when it picks the header to pin; this pushes the
+                    // plate off as its tray ends.
+                    is Entry.End -> stickyHeader(key = e.key, contentType = "end") {
+                        Spacer(Modifier.fillMaxWidth().height(with(LocalDensity.current) { 1.toDp() }))
+                    }
+                    is Entry.Gap -> item(key = e.key, contentType = "gap") {
+                        Spacer(Modifier.itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis).fillMaxWidth().height(7.dp))
+                    }
+                    Entry.Note -> item(key = e.key, contentType = "note") {
+                        EndNote(state.total, Modifier.itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis))
+                    }
+                }
+            }
+        }
+        // Reduced motion: no sag, no bunting; "SYNC" on the LCD only (§8.5). The pull still counts towards the 40 dp.
+        if (screen.pull > 0f && !reduced) Bunting(screen.pull / pullPx, Modifier.align(Alignment.TopCenter))
+    }
+}
+
+/** Whether a finger is on the list (the pull to refresh follows only her own drags). */
+private interface PullGate {
+    var touching: Boolean
+}
+
+/** Pull to refresh (§6.1): the list follows at 0.6×, at most 70 dp; a release past 40 dp re-syncs. */
+private val PULL_MAX: Dp = 70.dp
+private val PULL_TRIGGER: Dp = 40.dp
+private const val PULL_FOLLOW: Float = 0.6f
+private const val COLLAPSE_SLOP: Float = 4f
+
+/** How long her open waits for its tray to be laid out (frames, about 1.5 s), and the rows it brings into view. */
+private const val OPEN_WAIT_FRAMES: Int = 90
+private const val OPEN_ROWS_IN_VIEW: Int = 3
+private const val SLOT_CLOSE_MS: Int = 380
+
+/** Placement only: rows and strips move smoothly when the layout changes; reduced motion swaps at once. */
+private fun Modifier.itemMotion(scope: LazyItemScope, reduced: Boolean, placementMs: Int): Modifier = with(scope) {
+    if (reduced) {
+        this@itemMotion.animateItem(fadeInSpec = null, placementSpec = null, fadeOutSpec = null)
+    } else {
+        this@itemMotion.animateItem(fadeInSpec = null, placementSpec = tween(placementMs, easing = PicnicMotion.layout.easing), fadeOutSpec = null)
     }
 }
 
 /**
- * Revealed under a swiped row: a "Remove" strip on the side the swipe started from. It fills the
- * row's slot inside the section (AisleSectionRow clips it to the inner surface).
+ * The sticker bunting (§6.1): hearts and stars on a dashed 1.6 dp cord that sags as she pulls (−34 → +10 dp).
+ * Decorative.
  */
 @Composable
-private fun RowScope.SwipeBackground(state: SwipeToDismissBoxState) {
-    val direction = state.dismissDirection
-    if (direction == SwipeToDismissBoxValue.Settled) return
+private fun Bunting(fraction: Float, modifier: Modifier) {
     val c = PicnicTheme.colors
-    val d = PicnicTheme.dimens
-    PicnicSurface(Modifier.fillMaxSize(), shape = RectangleShape, color = c.error, outlined = false, shadow = false) {
-        Row(
-            Modifier
-                .fillMaxSize()
-                .padding(horizontal = d.l),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (direction == SwipeToDismissBoxValue.StartToEnd) Arrangement.Start else Arrangement.End,
-        ) {
-            Glyph(PicnicGlyph.Delete, contentDescription = null, tint = c.onError)
-            Text(
-                stringResource(R.string.list_row_remove),
-                style = PicnicTheme.type.label,
-                color = c.onError,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(start = d.s),
-            )
+    val f = fraction.coerceIn(0f, 1f)
+    val sag = -34f + 44f * f
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier.fillMaxWidth().height(60.dp).testTag(ListTags.BUNTING).decorative()) {
+        val width = maxWidth
+        Canvas(Modifier.fillMaxWidth().height(60.dp)) {
+            val y0 = sag.dp.toPx() + 16.dp.toPx()
+            val dip = 14.dp.toPx() * f
+            val path = Path().apply {
+                moveTo(0f, y0 - dip)
+                quadraticTo(size.width / 2f, y0 + dip, size.width, y0 - dip)
+            }
+            drawPath(path, c.ballpointSoft, style = Stroke(1.6.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 3.dp.toPx()))))
+        }
+        val flags = listOf("heart", "star", "heart", "star4", "heart", "star")
+        flags.forEachIndexed { i, name ->
+            val x = (i + 0.5f) / flags.size
+            val t = (x - 0.5f) * 2f
+            val y = sag + 16f + 14f * f * (1f - t * t) - 4f - 14f * f
+            DecorSticker(name, size = 16.dp, modifier = Modifier.offset(width * x - 8.dp, y.dp))
         }
     }
 }
 
-/** Room under the last row so the floating Add button never hides it. */
-private val FAB_CLEARANCE = 96.dp
+/**
+ * The overlay's peek note (§4.23): 54 dp from the right, below the strip (above it in the lower 55 % of the list). It
+ * stays inside the list's viewport, clear of the add bar: it takes the side the rule picks unless that side is too
+ * cramped and the other one roomier, and a long aisle or large text caps its height to that side's room (the first
+ * lines, then "+n more").
+ */
+@Composable
+private fun PeekLayer(state: ListUiState, screen: ListScreenState, dockHeight: Dp) {
+    val id = screen.peek ?: return
+    val section = state.sections.firstOrNull { it.id == id } ?: return
+    val bounds = screen.stripBounds[id] ?: return
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    var noteHeight by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    Box(Modifier.fillMaxSize().onGloballyPositioned { origin = it.boundsInWindow().topLeft }) {
+        val list = screen.listBounds ?: return@Box
+        val gap = with(density) { 4.dp.toPx() }
+        // The room the note may use, in window px: the list's viewport above the add bar.
+        val top = list.top
+        val bottom = maxOf(top, list.bottom - with(density) { dockHeight.toPx() })
+        val above = bounds.top - gap - top
+        val below = bottom - (bounds.bottom + gap)
+        val ruleAbove = (bounds.center.y - list.top) > list.height * 0.45f
+        val wanted = noteHeight.toFloat()
+        val least = with(density) { PEEK_MIN_ROOM.toPx() }
+        val flip = if (ruleAbove) !(above < least && below > above) else below < least && above > below
+        val room = (if (flip) above else below).coerceAtLeast(least)
+        val yWindow = if (flip) bounds.top - gap - minOf(wanted, room) else bounds.bottom + gap
+        val y = yWindow.coerceIn(top, maxOf(top, bottom - minOf(wanted, room))) - origin.y
+        PeekNote(
+            section,
+            Modifier
+                .align(Alignment.TopEnd)
+                .offset { IntOffset(-54.dp.roundToPx(), y.roundToInt()) }
+                .onGloballyPositioned { noteHeight = it.size.height },
+            maxHeight = with(density) { room.toDp() },
+        )
+    }
+}
 
-private const val UNDISMISS_DELAY_MS = 700L
+/** The least room the peek note is given (its title and a line or two), even on a cramped screen. */
+private val PEEK_MIN_ROOM: Dp = 72.dp
 
-/** How long a just-ticked row stays in its aisle (the check stamp settles well within it). */
-private const val TICK_DWELL_MS = 600L
+/**
+ * The overflow menu (§4.24) dropping from the More button. A tap outside, Back or Escape closes it (§15); with TalkBack
+ * the area outside is a "Close menu" button read after the items, so she never has to pick one to leave.
+ */
+@Composable
+private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScreenState) {
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    val anchor = screen.moreBounds
+    val close = { screen.menuOpen = false }
+    val closeLabel = stringResource(R.string.list_menu_close)
+    // The menu is part of the List screen (the root destination): without this, Back would leave the app.
+    BackHandler(onBack = close)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { origin = it.boundsInWindow().topLeft }
+            .clickable(remember { MutableInteractionSource() }, indication = null, onClick = close)
+            .testTag(LIST_MENU_SCRIM_TAG)
+            .clearAndSetSemantics {
+                contentDescription = closeLabel
+                role = Role.Button
+                traversalIndex = 1f
+                onClick(label = closeLabel) {
+                    close()
+                    true
+                }
+            },
+    )
+    val items = listOf(
+        MenuItem(
+            stringResource(R.string.list_menu_new_trip), PicnicGlyph.Trip,
+            onClick = { screen.newTripOpen = true },
+            enabled = state.canStartNewTrip,
+            disabledState = stringResource(R.string.list_menu_no_trip),
+        ),
+        MenuItem(stringResource(R.string.list_menu_switch_list), PicnicGlyph.Lists, actions.onOpenLists),
+        MenuItem(stringResource(R.string.list_menu_refresh), PicnicGlyph.Refresh, onClick = { screen.refresh(actions) }),
+        MenuItem(stringResource(R.string.menu_my_store), PicnicGlyph.Aisles, actions.onOpenAisles),
+        MenuItem(stringResource(R.string.menu_my_pantry), PicnicGlyph.Jar, actions.onOpenPantry),
+        MenuItem(stringResource(R.string.menu_album), PicnicGlyph.Album, actions.onOpenAlbum),
+        MenuItem(stringResource(R.string.menu_settings), PicnicGlyph.Settings, actions.onOpenSettings),
+    )
+    Box(Modifier.fillMaxSize()) {
+        OverflowMenu(
+            items,
+            onDismissRequest = close,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset {
+                    val top = ((anchor?.bottom ?: 0f) - origin.y).roundToInt()
+                    IntOffset(-8.dp.roundToPx(), top)
+                }
+                .testTag(LIST_MENU_TAG),
+        )
+    }
+}
+
+/** The overflow menu's test tag. */
+const val LIST_MENU_TAG: String = "picnic_list_menu"
+
+/** The area outside the open overflow menu (a tap there, or its TalkBack button, closes the menu). */
+const val LIST_MENU_SCRIM_TAG: String = "picnic_list_menu_scrim"

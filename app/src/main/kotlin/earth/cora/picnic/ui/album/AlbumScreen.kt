@@ -188,7 +188,8 @@ fun AlbumScreen(
         subtitleTrailing = if (largeText && !state.loading) lcd else null,
         overlay = {
             val row = state.books.firstOrNull { it.id == openBook }
-            FiledBookSheet(book = row?.book, dateLabel = row?.dateLabel.orEmpty(), onClose = { openBook = null }, date = row?.date, initialFullReceipt = initialFullReceipt)
+            // WP5's Trip book sheet (§6.6, item 165): the filed book at 2×, read-only.
+            earth.cora.picnic.ui.list.TripBookSheet(book = row?.book, dateLabel = row?.dateLabel.orEmpty(), onClose = { openBook = null }, date = row?.date, initialFullReceipt = initialFullReceipt)
         },
     ) {
         LazyColumn(

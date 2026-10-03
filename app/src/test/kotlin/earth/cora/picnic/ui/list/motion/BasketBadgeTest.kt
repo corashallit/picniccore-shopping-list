@@ -33,10 +33,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The basket's to-get badge and "+n" tag at large font scales (docs/DESIGN_STICKER.md §4.12, §2.7, §15): the 13 sp
- * numeral scales with the font up to 200 %, and the badge grows from its 22 dp circle into a pill round it, so the
- * numeral never runs over the trace ring; its right edge and top stay on the flag slot. MotionBasket is the basket WP5
- * draws on strips and tray headers.
+ * The basket's to-get badge at large font scales (docs/DESIGN_STICKER.md §4.12, §2.7, §15; item 107): the 13 sp numeral
+ * follows the font up to BADGE_MAX_SCALE (the count is also in the strip's meta line, which grows all the way), and the
+ * badge grows from its 22 dp circle into a pill round it, so the numeral never runs over the trace ring. Its bottom-left
+ * corner stays on the flag slot's, so it grows up and to the right, never inward over the basket art. MotionBasket is
+ * the basket WP5 draws on strips and tray headers.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -55,7 +56,8 @@ class BasketBadgeTest {
                 PicnicTheme {
                     // The numeral as the badge sets it, measured on its own.
                     val measurer = rememberTextMeasurer()
-                    val style = PicnicTheme.type.badgeNumeral.copy(fontSize = 13.sp)
+                    val sp = 13f * minOf(fontScale, BADGE_MAX_SCALE) / fontScale
+                    val style = PicnicTheme.type.badgeNumeral.copy(fontSize = sp.sp, lineHeight = (sp * 1.15f).sp)
                     for (n in counts) numerals[n] = measurer.measure(if (n > 99) "99+" else n.toString(), style).size
                     Row(
                         Modifier.testTag("badges").background(PicnicTheme.colors.binder).padding(start = 10.dp, end = 30.dp, top = 6.dp, bottom = 10.dp),
@@ -96,9 +98,10 @@ class BasketBadgeTest {
             assertTrue("fs $fontScale, $n: numeral ${numeral.width} px wide in a ${face.width} px face", numeral.width <= face.width + 0.5f)
             assertTrue("fs $fontScale, $n: numeral ${numeral.height} px tall in a ${face.height} px face", numeral.height <= face.height + 0.5f)
             assertTrue("fs $fontScale, $n: at least the 22 dp circle", badge.height >= 22 * d - 0.5f && badge.width >= badge.height - 0.5f)
-            // On the flag slot: its right edge 12 dp outside the basket box, its top 8 dp down (a folded strip).
-            assertEquals("fs $fontScale, $n: right edge", basket.right + 12 * d, badge.right, 1f)
-            assertEquals("fs $fontScale, $n: top", basket.top + 8 * d, badge.top, 1f)
+            // On the flag slot: the 22 dp slot's left edge 10 dp inside the basket box's right edge (its right edge 12 dp
+            // outside), its bottom 30 dp down (8 dp + 22 dp, a folded strip); a bigger badge grows up and right from there.
+            assertEquals("fs $fontScale, $n: left edge (never further over the art)", basket.right - 10 * d, badge.left, 1f)
+            assertEquals("fs $fontScale, $n: bottom", basket.top + 30 * d, badge.bottom, 1f)
         }
     }
 

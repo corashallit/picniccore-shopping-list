@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -99,8 +100,9 @@ fun MotionBasket(
     val shut = p?.lidClosed ?: complete
     val minisHidden = p?.minisHidden ?: shut
     val visible = gotten.filter { p == null || it.itemId !in p.hiddenMinis }
-    val shown = if (minisHidden) emptyList() else visible.takeLast(BasketManifest.MAX_MINIS)
-    val extra = if (minisHidden) 0 else (visible.size - shown.size)
+    val fill = if (minisHidden) null else earth.cora.picnic.ui.theme.BasketLayout.fill(visible)
+    val shown = fill?.shown.orEmpty()
+    val extra = fill?.extra ?: 0
     val count = toGet + (p?.toGetLag ?: 0)
     val unit = size.width / BasketManifest.VIEWPORT_WIDTH
     val back = rememberVectorArt(art.back)
@@ -141,7 +143,7 @@ fun MotionBasket(
             drawBasketLayer(back, shadows.color, shadows.hs.x.toPx(), shadows.hs.y.toPx())
         }
         // The minis, in their fill-order slots; the newest on top.
-        val slots = BasketManifest.MINI_SLOTS[shown.size].orEmpty()
+        val slots = fill?.slots.orEmpty()
         val miniSize = size.width * (BasketManifest.MINI_SIZE / BasketManifest.VIEWPORT_WIDTH)
         shown.forEachIndexed { i, mini ->
             val slot = slots.getOrNull(i) ?: return@forEachIndexed
@@ -167,6 +169,8 @@ fun MotionBasket(
                             }
                         }
                         if (peeking) translationY = BasketMotion.ambientPeek(ambientClock!!.now - ambientT0!!) * density
+                        // A peek (§5.3, WP5): the lid opens and the minis rise 8 dp while she holds the basket.
+                        if (p?.peek == true && !reduced) translationY -= PEEK_RISE_DP * density
                     },
             )
         }
@@ -252,6 +256,9 @@ fun MotionBasket(
     }
 }
 
+/** How far the minis rise while a folded basket is peeked (§5.3). */
+private const val PEEK_RISE_DP: Float = 8f
+
 /** Draws a basket layer: its `cut` group tinted as the hard shadow, then the art. */
 internal fun DrawScope.drawBasketLayer(art: VectorArt, shadow: Color, dx: Float, dy: Float, alpha: Float = 1f) {
     translate(dx, dy) { drawArt(art, size = size, groups = setOf("cut"), paint = solid(shadow), alpha = alpha) }
@@ -313,23 +320,25 @@ private fun pillSize(textW: Int, textH: Int, minW: Dp, minH: Dp, padH: Dp): Pair
 
 /**
  * The 22 dp count sticker (§4.12): white, 2 dp aisle-trace border, DynaPuff 13 sp trace numeral, hs; never on the art.
- * It is sized from the measured numeral (§2.7: the 13 sp floor scales with the font, to 200 %, §15): a 22 dp circle
- * while the numeral fits, else a pill round it (height = numeral + 4 dp, width = numeral + 10 dp), its right edge and
- * top kept on the flag slot, so the numeral never runs over the ring. It pops about its centre. [still]: no pop
- * (reduced motion, or a change played in place).
+ * It is sized from the measured numeral: a 22 dp circle while the numeral fits, else a pill round it (height = numeral +
+ * 4 dp, width = numeral + 10 dp), so the numeral never runs over the ring. Its bottom-left corner stays on the flag
+ * slot's and it grows up and to the right, away from the basket, never inward over the art (item 107). The numeral
+ * follows the font scale up to [BADGE_MAX_SCALE]: the count it shows is also in the strip's meta line and its TalkBack
+ * label, which grow all the way (§15), and past that it would reach the chevron. It pops about its centre. [still]: no
+ * pop (reduced motion, or a change played in place).
  */
 @Composable
 private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, popT0: Long?, clock: MotionClock, still: Boolean) {
     val measurer = rememberTextMeasurer(cacheSize = 4)
-    val style = PicnicTheme.type.badgeNumeral.copy(color = look.family.trace, fontSize = 13.sp)
+    val style = badgeStyle(look.family.trace)
     val shadow = PicnicTheme.shadows
-    val label = if (count > 99) "99+" else count.toString()
-    val layout = measurer.measure(label, style)
+    val layout = measurer.measure(badgeLabel(count), style)
     val d = BasketManifest.BADGE_SIZE_DP.dp
     val (w, h) = pillSize(layout.size.width, layout.size.height, minW = d, minH = d, padH = 10.dp)
+    val slotTop = (if (tray) BasketManifest.BADGE_TOP_TRAY_DP else BasketManifest.BADGE_TOP_STRIP_DP).dp
     Canvas(
         Modifier
-            .offset(basket.width + BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp - w, (if (tray) BasketManifest.BADGE_TOP_TRAY_DP else BasketManifest.BADGE_TOP_STRIP_DP).dp)
+            .offset(basket.width + BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp - d, slotTop + d - h)
             .size(w, h)
             .testTag(BADGE_TAG)
             .graphicsLayer {
@@ -354,6 +363,40 @@ private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, po
         drawText(layout, topLeft = Offset((size.width - layout.size.width) / 2f, (size.height - layout.size.height) / 2f))
     }
 }
+
+/** The badge's numeral style: 13 sp, following the font scale up to [BADGE_MAX_SCALE]. */
+@Composable
+private fun badgeStyle(color: Color): androidx.compose.ui.text.TextStyle {
+    val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+    val sp = 13f * minOf(fontScale, BADGE_MAX_SCALE) / fontScale
+    return PicnicTheme.type.badgeNumeral.copy(color = color, fontSize = sp.sp, lineHeight = (sp * 1.15f).sp)
+}
+
+private fun badgeLabel(count: Int): String = if (count > 99) "99+" else count.toString()
+
+/**
+ * How far the badge reaches past the basket box's right edge for any count up to [maxCount] (the flag slot's 12 dp, more
+ * once it grows into a pill with large text or a long count): sized for the widest numeral with as many digits as
+ * [maxCount] ("10" is wider than "11"), so a strip or a tray band can keep it clear of the chevron beside the basket
+ * whatever it shows (item 107).
+ */
+@Composable
+internal fun badgeOverhang(maxCount: Int): Dp {
+    val measurer = rememberTextMeasurer(cacheSize = 2)
+    val style = badgeStyle(Color.Black)
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val label = badgeLabel(maxCount.coerceAtLeast(1))
+    val widest = remember(label.length, style, density) {
+        val labels = if (label.endsWith("+")) listOf(label) else ('0'..'9').map { it.toString().repeat(label.length) }
+        labels.map { measurer.measure(it, style).size }.maxBy { it.width }
+    }
+    val d = BasketManifest.BADGE_SIZE_DP.dp
+    val (w, _) = pillSize(widest.width, widest.height, minW = d, minH = d, padH = 10.dp)
+    return w - (d - BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp)
+}
+
+/** How far the badge's numeral follows the font scale (§4.12, item 107). */
+internal const val BADGE_MAX_SCALE: Float = 1.3f
 
 /** The badge's test tag (in the unmerged tree; the basket is decorative): its bounds are the pill's white face. */
 const val BADGE_TAG: String = "picnic_basket_badge"
@@ -400,12 +443,15 @@ fun StampCircle(
     val ink = SolidColor(look.stampInk(variant))
     val turn by rememberLoopTime(enabled = isNow && !reduced)
     val measurer = rememberTextMeasurer(cacheSize = 4)
-    val numeral = (if (size <= 20.dp) PicnicTheme.type.stampNumeral.copy(fontSize = 11.sp) else PicnicTheme.type.stampNumeral)
-        .copy(color = if (isNow) Families.strawberry.trace else c.ballpointSoft)
+    val base = if (size <= 20.dp) PicnicTheme.type.stampNumeral.copy(fontSize = 11.sp) else PicnicTheme.type.stampNumeral
+    // The numeral repeats the stop's number: it grows with the font only as far as its circle holds it (§4.13, R2).
+    val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+    val sp = minOf(base.fontSize.value * fontScale, size.value * 0.55f) / fontScale
+    val numeral = base.copy(fontSize = sp.sp, lineHeight = (sp * 1.15f).sp, color = if (isNow) Families.strawberry.trace else c.inkSoft)
     Box(modifier.size(size).decorative(), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {
             val r = this.size.minDimension / 2f - 1.dp.toPx()
-            val ringColor = if (isNow) Families.strawberry.trace else c.ballpointSoft
+            val ringColor = if (isNow) Families.strawberry.trace else c.inkSoft
             rotate(if (isNow) (turn % 6000L) * 360f / 6000f else 0f) {
                 drawDashedCircle(ringColor, center, r, 2.dp.toPx(), 3.4.dp.toPx(), 2.6.dp.toPx())
             }

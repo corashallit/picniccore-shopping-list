@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -114,6 +115,14 @@ class ShaderCacheTest {
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ReducedMotionTest {
+    /**
+     * The activity below is launched by the test itself; this rule gives its compositions the test recomposer. Without
+     * it, the list's ambient loops (sparkles, LCD blink, bee) run as ordinary frames and Robolectric's looper idle in
+     * moveToState never ends; with it they wait, as in every other Compose test.
+     */
+    @get:Rule
+    val compose = createEmptyComposeRule()
+
     private val resolver = ApplicationProvider.getApplicationContext<android.content.Context>().contentResolver
 
     private fun scales(animator: Float, transition: Float) {
