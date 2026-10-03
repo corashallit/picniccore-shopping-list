@@ -150,10 +150,15 @@ class ThemeGoldensTest(private val variant: ThemeVariant, private val v: String)
         Column(Modifier.width(332.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { CheckboxKit() }
     }
 
-    /** Item 337 at 1.3 and 2.0: the chips, pills, number circles and a ruled field grow with their labels, nothing cut. */
-    @Test fun kitLargeTextFs130() = compose.recordGolden("kit_large_text_fs130_$v", variant, fontScale = 1.3f) { LargeTextKit() }
+    /**
+     * Item 337 at 1.3 and 2.0: the chips, pills, number circles and a ruled field grow with their labels, nothing cut.
+     * A tall window, so the whole kit fits at 2.0.
+     */
+    @Test @Config(qualifiers = "w360dp-h1200dp-xxhdpi")
+    fun kitLargeTextFs130() = compose.recordGolden("kit_large_text_fs130_$v", variant, fontScale = 1.3f) { LargeTextKit() }
 
-    @Test fun kitLargeTextFs200() = compose.recordGolden("kit_large_text_fs200_$v", variant, fontScale = 2f) { LargeTextKit() }
+    @Test @Config(qualifiers = "w360dp-h1200dp-xxhdpi")
+    fun kitLargeTextFs200() = compose.recordGolden("kit_large_text_fs200_$v", variant, fontScale = 2f) { LargeTextKit() }
 
     @Test fun itemIcons() = compose.recordGolden("itemicon_kit_$v", variant) { ItemIconsKit() }
 

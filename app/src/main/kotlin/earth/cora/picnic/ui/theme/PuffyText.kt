@@ -74,8 +74,9 @@ import kotlin.math.min
  * reaches: a pinhole in the white, through which the hard shadow showed as a dark speck. The same happens in a counter
  * a little wider than the pen, and where two halos nearly meet they leave a hairline crack. A die-cut never leaves a
  * hole or a slit narrower than its blade, so after laying out, the stroke pass is rasterised once and every uncovered
- * region the open ground cannot reach through a neck of about 1 dp, no bigger than the pen ([PuffyPinholes]), is
- * filled in the stroke colour (and, offset, in the shadow colour). Larger counters and the gaps between words stay open.
+ * region the open ground cannot reach through a crack of about 1 dp ([PuffyPinholes]) is filled in the stroke colour
+ * (and, offset, in the shadow colour): inside a glyph's counter only when it is no bigger than the pen, between glyphs
+ * (a hole only their halos close) always. Larger counters and the gaps between words stay open.
  * The rule is in dp, so a title closes the same cracks on every phone. The patch is worked out once per title, size and
  * density in the process ([PuffyPatchCache]); in the app the pass over the pixels runs off the main thread
  * ([LocalPinholeWork]), so a title that appears mid-animation (NEXT, the celebration's) never costs a frame.
@@ -465,7 +466,7 @@ internal object PuffyPinholes {
     /**
      * The neck rule in px at [density]: the ground keeps this far from every covered pixel, so it never passes a crack
      * twice as wide. Half of [CRACK_DP], rounded up to whole px, so a 1 dp crack closes at every density (2 px each side
-     * from 2.5 to 4 px per dp: cracks up to 1 to 1.6 dp close; gaps between words, 1.7 dp and more, stay open).
+     * from 2.5 to 4 px per dp: what closes is 1 to 1.6 dp wide, never more).
      */
     fun neckPx(density: Float): Int = max(1, ceil(CRACK_DP * density / 2f - 0.001f).toInt())
 

@@ -570,7 +570,8 @@ private fun PillButton(
                     // The label's insets: past the dot when it wraps (its first line then reaches the gloss's height).
                     val endPx = labelEnd.roundToPx()
                     val basePx = labelStart.roundToPx()
-                    val room = constraints.maxWidth - basePx - endPx - if (leads) (18.dp + 6.dp).roundToPx() else 0
+                    // The leading star, spinner or glyph and the row's gap, rounded as the row places them.
+                    val room = constraints.maxWidth - basePx - endPx - if (leads) 18.dp.roundToPx() + 6.dp.roundToPx() else 0
                     val wraps = constraints.hasBoundedWidth && oneLine.width > room
                     val startPx = if (wraps) max(basePx, pastDot.roundToPx()) else basePx
                     val placeable = measurable.measure(constraints.offset(horizontal = -(startPx + endPx)))
@@ -611,17 +612,33 @@ private val FOCUS_GROW = 4.dp
 /**
  * A kit label that never loses words silently: it wraps onto [maxLines], then ends in "…" and reports
  * [earth.cora.picnic.ui.a11y.TextOverflowed] (the clipped-text checks see it; TalkBack still reads the whole text).
+ * A wrapped label is as wide as its longest line, so its chip or pill hugs it instead of running to the slot's edge.
  */
 @Composable
 internal fun WholeLabel(text: String, style: TextStyle, maxLines: Int, align: TextAlign = TextAlign.Start, modifier: Modifier = Modifier) {
     var lost by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val labelStyle = style.copy(textAlign = align)
+    val measurer = rememberTextMeasurer(cacheSize = 2)
     Text(
         text,
-        style = style.copy(textAlign = align),
+        style = labelStyle,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
         onTextLayout = { r -> lost = r.didOverflowHeight || r.multiParagraph.didExceedMaxLines || (0 until r.lineCount).any { r.isLineEllipsized(it) } },
-        modifier = modifier.semantics { if (lost) textOverflowed = true },
+        modifier = modifier
+            .layout { measurable, constraints ->
+                val width = if (!constraints.hasBoundedWidth) constraints.maxWidth else {
+                    val r = measurer.measure(text, labelStyle, TextOverflow.Ellipsis, maxLines = maxLines, constraints = Constraints(maxWidth = constraints.maxWidth))
+                    if (r.lineCount < 2) constraints.maxWidth else {
+                        // Its longest line, and a px of slack so re-laying it out at that width keeps every break.
+                        val longest = (0 until r.lineCount).maxOf { r.getLineRight(it) - r.getLineLeft(it) }
+                        (ceil(longest).toInt() + 1).coerceIn(constraints.minWidth, constraints.maxWidth)
+                    }
+                }
+                val placeable = measurable.measure(constraints.copy(maxWidth = width))
+                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            }
+            .semantics { if (lost) textOverflowed = true },
     )
 }
 

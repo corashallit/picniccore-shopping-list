@@ -19,6 +19,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -195,14 +196,18 @@ class AddLargeTextTest {
         compose.assertNoClippedText("tabs at 2.0", ADD_TABS_TAG)
     }
 
-    /** Item 215 at 2.0: "Add as plain lines" keeps every word it shows (the short form) and says the full one to TalkBack. */
+    /**
+     * Item 215 at 2.0 (and 337): every error pill shows its whole label, the same words as at 1.0: a long one wraps and
+     * its pill grows round it (no short form for large text), and nothing in the sheet is clipped.
+     */
     @Test
     fun errorAt200() {
         at(2f) { SheetStage { AddSheet(errorState(), AddActions()) } }
         compose.onNode(hasScrollAction()).performScrollToNode(hasTestTag(ADD_ERROR_TAG))
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("src/test/screenshots/add_error_fs200_day.png")
-        compose.onNode(hasContentDescription("Add as plain lines") and hasClickAction()).assertExists()
+        compose.onNode(hasText("Add as plain lines") and hasClickAction()).assertExists()
+        compose.onNode(hasText("Try again") and hasClickAction()).assertExists()
         compose.assertNoClippedText("error at 2.0", LETTERSET_TAG)
     }
 
