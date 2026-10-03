@@ -103,7 +103,8 @@ class LcdHoldTest {
 
     @Test
     fun receiptAfterTearOffCompletes() {
-        // One item left; she tears it off (swipe left): the trip is complete by the delete, and the hold prints.
+        // One item left; she tears it off (swipe left): the trip is complete by the delete, and the hold prints. The
+        // swipe is WP5's List screen's gesture, which the practice list does not have: the store change it makes stands in.
         val s = completedFixture().toggleChecked(listId, "toothpaste", PracticeFixture.NOW + 3_600_000)
         assertNull(s.list(listId)!!.trip!!.completedAt)
         val r = EggRig(compose, fixture = s).start()
