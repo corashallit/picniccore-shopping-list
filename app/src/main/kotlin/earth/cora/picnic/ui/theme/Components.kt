@@ -1266,9 +1266,14 @@ fun KeepSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: M
 /** The postage edge: 6 dp semicircle bites every 10 dp on all four sides. */
 val PostageShape: BittenEdgeShape = BittenEdgeShape(bite = 6.dp, every = 10.dp, allSides = true)
 
+/** The postage edge's rim: the perforation rims' 55 % periwinkle (§2.12). */
+internal val PostageRim: Color = Families.periwinkle.mid.copy(alpha = 0.55f)
+
 /**
  * A postage-edged card (the recipe card, §4.17): a white card with 6 dp bites every 10 dp on all four sides, a 2 dp dashed
- * `rule` frame inset 8 dp (exact dashes, DashSpec.forPath), and the hard shadow on the cut shape (hs2).
+ * `rule` frame inset 8 dp (exact dashes, DashSpec.forPath), the hard shadow on the cut shape (hs2), and a 1 dp periwinkle
+ * rim on the whole cut shape. The card sits on the white letter-set sheet, where the shadow only outlines the right and
+ * bottom bites; the rim makes the top and left bites read too.
  */
 @Composable
 fun PostageCard(modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
@@ -1282,6 +1287,11 @@ fun PostageCard(modifier: Modifier = Modifier, content: @Composable androidx.com
                 val inset = 8.dp.toPx()
                 val frame = Path().apply { addRect(Rect(inset, inset, size.width - inset, size.height - inset)) }
                 drawDashedPath(frame, c.rule, 2.dp.toPx(), 5.dp.toPx(), 3.dp.toPx(), join = StrokeJoin.Miter)
+            }
+            .drawWithContent {
+                drawContent()
+                // Drawn inside the clip, so half of the 2 dp stroke shows: a 1 dp rim along every bite.
+                drawOutline(PostageShape.createOutline(size, layoutDirection, this), PostageRim, style = Stroke(2.dp.toPx()))
             }
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
