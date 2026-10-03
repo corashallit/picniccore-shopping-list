@@ -319,23 +319,28 @@ private fun pillSize(textW: Int, textH: Int, minW: Dp, minH: Dp, padH: Dp): Pair
 
 /**
  * The 22 dp count sticker (§4.12): white, 2 dp aisle-trace border, DynaPuff 13 sp trace numeral, hs; never on the art.
- * It is sized from the measured numeral (§2.7: the 13 sp floor scales with the font, to 200 %, §15): a 22 dp circle
- * while the numeral fits, else a pill round it (height = numeral + 4 dp, width = numeral + 10 dp), its right edge and
- * top kept on the flag slot, so the numeral never runs over the ring. It pops about its centre. [still]: no pop
- * (reduced motion, or a change played in place).
+ * It is sized from the measured numeral: a 22 dp circle while the numeral fits, else a pill round it (height = numeral +
+ * 4 dp, width = numeral + 10 dp), so the numeral never runs over the ring. Its bottom-left corner stays on the flag
+ * slot's and it grows up and to the right, away from the basket, never inward over the art (item 107). The numeral
+ * follows the font scale up to [BADGE_MAX_SCALE]: the count it shows is also in the strip's meta line and its TalkBack
+ * label, which grow all the way (§15), and past that it would reach the chevron. It pops about its centre. [still]: no
+ * pop (reduced motion, or a change played in place).
  */
 @Composable
 private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, popT0: Long?, clock: MotionClock, still: Boolean) {
     val measurer = rememberTextMeasurer(cacheSize = 4)
-    val style = PicnicTheme.type.badgeNumeral.copy(color = look.family.trace, fontSize = 13.sp)
+    val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+    val sp = 13f * minOf(fontScale, BADGE_MAX_SCALE) / fontScale
+    val style = PicnicTheme.type.badgeNumeral.copy(color = look.family.trace, fontSize = sp.sp)
     val shadow = PicnicTheme.shadows
     val label = if (count > 99) "99+" else count.toString()
     val layout = measurer.measure(label, style)
     val d = BasketManifest.BADGE_SIZE_DP.dp
     val (w, h) = pillSize(layout.size.width, layout.size.height, minW = d, minH = d, padH = 10.dp)
+    val slotTop = (if (tray) BasketManifest.BADGE_TOP_TRAY_DP else BasketManifest.BADGE_TOP_STRIP_DP).dp
     Canvas(
         Modifier
-            .offset(basket.width + BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp - w, (if (tray) BasketManifest.BADGE_TOP_TRAY_DP else BasketManifest.BADGE_TOP_STRIP_DP).dp)
+            .offset(basket.width + BasketManifest.BADGE_RIGHT_OUTSIDE_DP.dp - d, slotTop + d - h)
             .size(w, h)
             .testTag(BADGE_TAG)
             .graphicsLayer {
@@ -360,6 +365,9 @@ private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, po
         drawText(layout, topLeft = Offset((size.width - layout.size.width) / 2f, (size.height - layout.size.height) / 2f))
     }
 }
+
+/** How far the badge's numeral follows the font scale (§4.12, item 107). */
+internal const val BADGE_MAX_SCALE: Float = 1.3f
 
 /** The badge's test tag (in the unmerged tree; the basket is decorative): its bounds are the pill's white face. */
 const val BADGE_TAG: String = "picnic_basket_badge"

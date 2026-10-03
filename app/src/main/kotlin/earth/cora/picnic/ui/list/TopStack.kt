@@ -18,11 +18,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -48,6 +51,7 @@ import earth.cora.picnic.ui.theme.FlatStar
 import earth.cora.picnic.ui.theme.LcdChip
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.NameTag
 import earth.cora.picnic.ui.theme.PadPatch
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicIconButton
@@ -100,22 +104,61 @@ internal fun TopStack(
                 val shown = layout.shownPage(book.takenSlots)
                 androidx.compose.runtime.SideEffect { engine.bookPaging = BookPaging(layout.perPage, shown) }
                 val dateOnPage = fontScale <= 1.3f
-                Column(horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (!dateOnPage) BookDateCaption(book.dateLabel)
-                    StickerBook(
-                        state = book,
-                        presentation = presentation.book,
-                        clock = engine.clock,
-                        width = width,
-                        collapsed = ui.bookCollapsed,
-                        anchors = engine.anchors,
-                        dateOnPage = dateOnPage,
-                        turnKey = state.bookTurn,
-                        onOpen = onOpenBook,
-                        onStampTap = actions.onStampTap,
-                    )
-                }
+                // Above font scale 1.3 the stamp name tag joins the date's caption row (§7.4, §7.7, item 157).
+                var captionTag by remember { mutableStateOf<String?>(null) }
+                BookWithCaption(
+                    caption = if (dateOnPage) null else { { BookDateCaption(book.dateLabel, season = book.season) } },
+                    tag = captionTag?.let { text -> @Composable { NameTag(text) } },
+                    book = {
+                        StickerBook(
+                            state = book,
+                            presentation = presentation.book,
+                            clock = engine.clock,
+                            width = width,
+                            collapsed = ui.bookCollapsed,
+                            anchors = engine.anchors,
+                            dateOnPage = dateOnPage,
+                            turnKey = state.bookTurn,
+                            onOpen = onOpenBook,
+                            onStampTap = actions.onStampTap,
+                            onNameTag = if (dateOnPage) null else { text -> captionTag = text },
+                        )
+                    },
+                )
             }
+        }
+    }
+}
+
+/**
+ * The book under its date caption (large text, §7.4), and the stamp name tag while it holds: in the caption row after
+ * the date, growing down over the book's right side as far as the book goes, never past it (so never over the list).
+ * The tag lies over the caption and the book; it moves nothing.
+ */
+@Composable
+private fun BookWithCaption(caption: (@Composable () -> Unit)?, tag: (@Composable () -> Unit)?, book: @Composable () -> Unit) {
+    Layout(
+        content = {
+            if (caption != null) Box(Modifier.layoutId("caption")) { caption() }
+            Box(Modifier.layoutId("book")) { book() }
+            if (tag != null) Box(Modifier.layoutId("tag")) { tag() }
+        },
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val gap = 6.dp.roundToPx()
+        val captionP = measurables.firstOrNull { it.layoutId == "caption" }?.measure(loose)
+        val bookP = measurables.first { it.layoutId == "book" }.measure(loose)
+        val bookY = captionP?.let { it.height + gap } ?: 0
+        val width = maxOf(bookP.width, captionP?.width ?: 0)
+        val height = bookY + bookP.height
+        val tagX = captionP?.let { it.width + 8.dp.roundToPx() } ?: 0
+        val tagP = measurables.firstOrNull { it.layoutId == "tag" }?.measure(
+            Constraints(maxWidth = (width - tagX).coerceAtLeast(0), maxHeight = height.coerceAtLeast(0)),
+        )
+        layout(width, height) {
+            captionP?.place(0, 0)
+            bookP.place(0, bookY)
+            tagP?.place(tagX, 0, zIndex = 1f)
         }
     }
 }
@@ -173,8 +216,9 @@ private fun AppBar(
                 fill = c.ink,
                 stroke = 6.dp,
                 minFontSize = 20.sp,
-                // Large text: the bar grows and the title may take a second line rather than lose its words (§4.2).
-                maxLines = if (large) 2 else 1,
+                // One line at every font scale (§4.2, item 24): it shrinks 24 → 20 sp, then ellipsizes with its stroke
+                // whole (item 334); at large text the bar grows to two rows, and TalkBack reads the whole title.
+                maxLines = 1,
                 heading = true,
                 modifier = Modifier.weight(1f, fill = false),
             )

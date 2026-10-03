@@ -181,11 +181,30 @@ class ListInteractionTest {
         compose.waitForIdle()
         assertEquals(listOf(ListTags.header("bakery")), headers())
         compose.onNodeWithTag(ListTags.strip("aisle-2-baking")).assertExists()
-        // The chevron folds it: nothing open until the automatic current aisle applies (Produce, the first with items left).
+        // The chevron folds it, and everything stays folded: no tray, and the list remembers "none open" ("").
         compose.onNodeWithTag(ListTags.chevron("bakery")).performClick()
         compose.waitForIdle()
-        assertTrue(headers().size <= 1)
+        assertEquals("every aisle folded", emptyList<String>(), headers())
+        assertEquals("", rig.app.list(ListFixture.LIST_ID)!!.openAisle)
         compose.onNodeWithTag(ListTags.strip("bakery")).assertExists()
+    }
+
+    /** Item 89 (D2): with no choice of hers, the open aisle is the automatic current one, the first stop with items left. */
+    @Test
+    fun automaticCurrentAisleIsFirstStopWithItemsLeft() {
+        val rig = ListRig(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, null))
+        compose.show(rig)
+        val sections = rig.vm.state.value.sections
+        val first = sections.first { it.toGet > 0 }
+        assertEquals("Produce, the first stop with something left", "produce", first.id)
+        assertEquals(first.id, rig.vm.state.value.openSectionId)
+        assertEquals(listOf(ListTags.header(first.id)), compose.onAllNodes(hasTagPrefix("picnic_tray_header_")).fetchSemanticsNodes().map { it.config[SemanticsProperties.TestTag] })
+        // Once Produce is done, the next stop in walking order with items left is the current one.
+        val produceDone = ListFixture.allBut(sections.flatMap { it.rows }.filter { !it.checked && it.sectionId != "produce" }.map { it.id })
+        val after = ListFixture.ui(produceDone)
+        val next = after.sections.first { it.toGet > 0 }
+        assertTrue("a later stop (${next.id})", after.sections.indexOf(next) > after.sections.indexOfFirst { it.id == "produce" })
+        assertEquals(next.id, after.openSectionId)
     }
 
     /** Item 91: reopening a finished aisle shows all its rows stamped. */

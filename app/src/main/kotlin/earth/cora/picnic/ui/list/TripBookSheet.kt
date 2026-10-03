@@ -36,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
@@ -46,9 +47,13 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -69,6 +74,7 @@ import earth.cora.picnic.ui.list.motion.MotionClock
 import earth.cora.picnic.ui.list.motion.StampCircle
 import earth.cora.picnic.ui.theme.AisleLook
 import earth.cora.picnic.ui.theme.AisleLooks
+import earth.cora.picnic.ui.theme.ChevronFace
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.HankoStamp
 import earth.cora.picnic.ui.theme.HankoText
@@ -96,6 +102,9 @@ import java.time.LocalDate
 object TripBookTags {
     const val SHEET: String = "picnic_trip_book_sheet"
     const val PAGES: String = "picnic_trip_book_pages"
+    const val PREVIOUS: String = "picnic_trip_book_previous"
+    const val NEXT: String = "picnic_trip_book_next"
+    const val PAGE_OF: String = "picnic_trip_book_page_of"
     fun sticker(slot: Int): String = "picnic_trip_book_sticker_$slot"
 }
 
@@ -149,13 +158,15 @@ fun TripBookSheet(
                         .padding(top = 14.dp)
                         .hardShadow(RoundedCornerShape(12.dp), PicnicTheme.shadows, large = true)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color.White)
+                        .background(c.stickerWhite)
                         .padding(3.dp)
                         .clip(RoundedCornerShape(9.dp))
                         .background(if (book.perfect) Color.Transparent else c.book.page)
                         .then(if (book.perfect) Modifier.background(holoBrush(Offset(400f, 200f))) else Modifier)
                         .padding(8.dp),
                 ) {
+                    // A PERFECT page is holo foil: its stamps keep their Day inks in every variant (§7.3, §5.3).
+                    earth.cora.picnic.ui.theme.HoloInks(book.perfect) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         book.stamps.forEach { s ->
                             val name = s.aisleName
@@ -170,7 +181,7 @@ fun TripBookSheet(
                                 }
                                 Text(
                                     name,
-                                    style = t.caption.copy(color = c.ink),
+                                    style = t.caption.copy(color = PicnicTheme.colors.ink),
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     textAlign = TextAlign.Center,
@@ -178,6 +189,7 @@ fun TripBookSheet(
                                 )
                             }
                         }
+                    }
                     }
                 }
             }
@@ -232,12 +244,18 @@ internal fun lookOf(s: BookStamp): AisleLook {
     )
 }
 
-/** The sticker pages at 2×: 40 dp stickers on release paper, a page at a time; swipe to turn, page dots and the LCD. */
+/**
+ * The sticker pages at 2×: 40 dp stickers on release paper, a page at a time. Turned by a swipe, by the round previous
+ * and next buttons beside the page dots and the LCD, or by the pages' TalkBack actions "Previous page" / "Next page"
+ * (nothing needs the gesture, §15); the dots and LCD say "Page 2 of 3", politely, when the page changes.
+ */
 @Composable
 private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.store.BookSticker>, full: Boolean) {
     val c = PicnicTheme.colors
     val book = c.book
     var page by remember { mutableIntStateOf(0) }
+    val nextLabel = stringResource(R.string.list_trip_book_next)
+    val previousLabel = stringResource(R.string.list_trip_book_previous)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val cell = 46.dp
         val cols = ((maxWidth - 24.dp) / cell).toInt().coerceAtLeast(4)
@@ -245,22 +263,32 @@ private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.sto
         val perPage = cols * rows
         val pages = ((total + perPage - 1) / perPage).coerceAtLeast(1)
         val shown = page.coerceIn(0, pages - 1)
+        val turn = { to: Int -> page = to.coerceIn(0, pages - 1) }
+        val pageLabel = stringResource(R.string.list_trip_book_page, shown + 1, pages)
         Column(Modifier.fillMaxWidth()) {
             Box(
                 Modifier
                     .fillMaxWidth()
                     .testTag(TripBookTags.PAGES)
+                    .semantics {
+                        if (pages > 1) {
+                            customActions = buildList {
+                                if (shown > 0) add(CustomAccessibilityAction(previousLabel) { turn(shown - 1); true })
+                                if (shown < pages - 1) add(CustomAccessibilityAction(nextLabel) { turn(shown + 1); true })
+                            }
+                        }
+                    }
                     .hardShadow(RoundedCornerShape(12.dp), PicnicTheme.shadows, large = true)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White)
+                    .background(c.stickerWhite)
                     .padding(3.dp)
                     .clip(RoundedCornerShape(9.dp))
                     .then(if (full) Modifier.background(holoBrush(Offset(300f, 200f))) else Modifier.background(book.releasePaper))
                     .pointerInput(pages) {
                         var dx = 0f
                         detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = {
-                            if (dx < -40 * density) page = (shown + 1).coerceAtMost(pages - 1)
-                            if (dx > 40 * density) page = (shown - 1).coerceAtLeast(0)
+                            if (dx < -40 * density) page = (page.coerceIn(0, pages - 1) + 1).coerceAtMost(pages - 1)
+                            if (dx > 40 * density) page = (page.coerceIn(0, pages - 1) - 1).coerceAtLeast(0)
                         }) { _, a -> dx += a }
                     }
                     .padding(horizontal = 9.dp, vertical = 8.dp),
@@ -294,32 +322,61 @@ private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.sto
             }
             if (pages > 1) {
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    Modifier.fillMaxWidth().padding(top = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    for (p in 0 until pages) {
+                    PageButton(next = false, enabled = shown > 0, label = previousLabel, tag = TripBookTags.PREVIOUS) { turn(shown - 1) }
+                    // The dots and the LCD read the page for TalkBack, and announce a turn (politely).
+                    Row(
+                        Modifier.semantics {
+                            contentDescription = pageLabel
+                            liveRegion = LiveRegionMode.Polite
+                        }.testTag(TripBookTags.PAGE_OF),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        for (p in 0 until pages) {
+                            Box(
+                                Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (p == shown) c.ink else c.inkSoft.copy(alpha = 0.4f))
+                                    .decorative(),
+                            )
+                        }
+                        Spacer(Modifier.width(2.dp))
                         Box(
                             Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (p == shown) c.ink else c.inkSoft.copy(alpha = 0.4f))
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(c.stickerWhite)
+                                .padding(2.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(c.lcd)
+                                .padding(horizontal = 4.dp, vertical = 3.dp)
                                 .decorative(),
-                        )
+                        ) { LcdText("${shown + 1}/$pages", 1.2.dp) }
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        Modifier
-                            .clip(RoundedCornerShape(5.dp))
-                            .background(Color.White)
-                            .padding(2.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(c.lcd)
-                            .padding(horizontal = 4.dp, vertical = 3.dp),
-                    ) { LcdText("${shown + 1}/$pages", 1.2.dp) }
+                    PageButton(next = true, enabled = shown < pages - 1, label = nextLabel, tag = TripBookTags.NEXT) { turn(shown + 1) }
                 }
             }
         }
+    }
+}
+
+/** A round 34 dp page button in a 48 dp target (the strips' chevron face, turned to point the way it turns). */
+@Composable
+private fun PageButton(next: Boolean, enabled: Boolean, label: String, tag: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(48.dp)
+            .testTag(tag)
+            .clickable(interactionSource = null, indication = null, enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label }
+            .alpha(if (enabled) 1f else 0.4f),
+        contentAlignment = Alignment.Center,
+    ) {
+        ChevronFace(up = false, rotation = if (next) -90f else 90f)
     }
 }
 

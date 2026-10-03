@@ -75,6 +75,23 @@ class TabLayoutTest {
             }
         }
         assertTrue("the long names shrink below 20 sp ($shrunk)", shrunk > 0)
+        // Every tray, not only the one open at load: open each aisle in turn and check its band (§4.10: the tab ends
+        // 8 dp before the store chip, or before the basket when there is no chip).
+        for (s in rig.vm.state.value.sections) {
+            compose.runOnIdle { rig.vm.openSection(s.id) }
+            compose.waitForIdle()
+            compose.onNodeWithTag(ListTags.LIST).performScrollToKey("header:${s.id}")
+            compose.waitForIdle()
+            val tab = probe["trayTab:${s.id}"]
+            val chip = probe.bounds["chip:${s.id}"]
+            val basket = probe["trayBasket:${s.id}"]
+            val limit = (chip ?: basket).left - 8 * dp
+            assertTrue("${s.displayName} (open): the tray tab ends 8 dp before the ${if (chip != null) "store chip" else "basket"} (${tab.right} ≤ $limit)", tab.right <= limit + 0.5f)
+            if (chip != null) assertEquals("${s.displayName}: the store chip sits 8 dp after the tab", 8f, (chip.left - tab.right) / dp, 0.6f)
+            assertTrue("${s.displayName} (open): the chip ends before the basket", (chip?.right ?: tab.right) <= basket.left + 0.5f)
+            val font = probe.fonts.getValue("trayTab:${s.id}")
+            assertTrue("${s.displayName} (open): 16–20 sp ($font)", font in 16f..20f)
+        }
     }
 
     private fun ribbons(state: earth.cora.picnic.core.model.AppState) {

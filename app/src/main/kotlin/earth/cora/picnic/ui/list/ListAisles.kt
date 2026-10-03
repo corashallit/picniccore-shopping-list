@@ -68,7 +68,6 @@ import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.StoreAisleChip
 import earth.cora.picnic.ui.theme.TabSize
-import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
 import earth.cora.picnic.ui.theme.drawDashedCircle
@@ -435,7 +434,7 @@ internal fun TrayHeader(
         val basketX = chevronX - px(4.dp) - basketM.width
         val start = px(TrayMetrics.border) + px(6.dp)
         val chip = measurables.firstOrNull { it.layoutId == "chip" }?.measure(Constraints())
-        val chipRoom = chip?.let { it.width + px(6.dp) } ?: 0
+        val chipRoom = chip?.let { it.width + px(CHIP_GAP) } ?: 0
         // The tab ends 8 dp before the store chip (or the basket, §4.10).
         val tabMax = (basketX - px(8.dp) - chipRoom - start).coerceAtLeast(px(60.dp))
         val tab = measurables.first { it.layoutId == "tab" }.measure(Constraints(maxWidth = tabMax))
@@ -444,7 +443,7 @@ internal fun TrayHeader(
         layout(w, h) {
             val tabY = bandTop + (bandH - tab.height) / 2
             tab.place(start, tabY)
-            var x = start + tab.width + px(6.dp)
+            var x = start + tab.width + px(CHIP_GAP)
             chip?.let {
                 it.place(x, bandTop + (bandH - it.height) / 2)
                 x += it.width + px(6.dp)
@@ -458,6 +457,9 @@ internal fun TrayHeader(
         }
     }
 }
+
+/** The room between the tray tab's end and the store chip (§4.10): 8 dp. */
+private val CHIP_GAP: Dp = 8.dp
 
 /** The bee flying a small figure 8 (3.2 s, 38 steps) over the current tray; still under reduced motion. Decorative. */
 @Composable
@@ -499,16 +501,12 @@ internal fun TrayCap(section: SectionUi, modifier: Modifier = Modifier, current:
     }
 }
 
-/** The current aisle's ring colour (§4.10: lemon mid; Glow's glow-star mint), or null for an open tray that is not current. */
+/**
+ * The current aisle's ring colour, or null for an open tray that is not current: lemon mid in every variant, Glow
+ * included (§4.10; §0.4 and item 313, which override §2.4's glow-star ring), unbroken from the pinned plate down the tray.
+ */
 @Composable
-internal fun currentRing(current: Boolean): androidx.compose.ui.graphics.Color? {
-    val c = PicnicTheme.colors
-    return when {
-        !current -> null
-        c.variant == ThemeVariant.Glow -> c.glowStar
-        else -> Families.lemon.mid
-    }
-}
+internal fun currentRing(current: Boolean): androidx.compose.ui.graphics.Color? = if (current) Families.lemon.mid else null
 
 /** The ladybug on the current end cap (§8.5): 22 dp hops to 130 dp, a pause, gone, again every 9 s; waddles ±5°. */
 @Composable

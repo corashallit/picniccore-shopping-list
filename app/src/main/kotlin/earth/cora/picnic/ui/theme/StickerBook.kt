@@ -1,11 +1,14 @@
 package earth.cora.picnic.ui.theme
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -36,8 +40,10 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -52,10 +58,14 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
+import earth.cora.picnic.core.calendar.Season
+import earth.cora.picnic.ui.theme.gen.DecorManifest
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.list.BookStickerUi
 import earth.cora.picnic.ui.list.BookUi
@@ -113,12 +123,15 @@ object BookRules {
 
 /**
  * The sticker book, [width] wide (the screen − 24 dp, at most 456 dp): expanded 76 dp (102 dp with three stamp rows), or
- * the 40 dp [collapsed] strip (IME open, a short window, scrolled down with the app bar, §7.4). [presentation] plays the
- * chains on [clock]; [anchors] records the spots and stamps. Tap the right page → [onOpen] (the Trip book sheet); swipe
- * it to turn pages (it returns to the shown page after 6 s idle); tap the left page → the nearest stamp boings, its
- * name tag is clipped onto the right page for its reading hold, and [onStampTap] feeds egg 10. TalkBack: one node with
- * the summary and the action "Open trip book"; the twins have no nodes. [dateOnPage] false: the date is a caption above
- * the book (font scale over 1.3). [turnKey] changes: the page turns to a fresh book (New trip).
+ * the 40 dp [collapsed] strip (IME open, a short window, scrolled down with the app bar, §7.4). Every height change
+ * animates (`standard`, 200 ms; at once under reduced motion) while the two faces cross-fade, so the list under it never
+ * jumps (§6.1, item 161). [presentation] plays the chains on [clock]; [anchors] records the spots and stamps. Tap the
+ * right page → [onOpen] (the Trip book sheet); swipe it to turn pages (it returns to the shown page after 6 s idle); tap
+ * the left page → the nearest stamp boings, its name tag is clipped onto the right page for its reading hold, and
+ * [onStampTap] feeds egg 10. TalkBack: one node with the summary and the action "Open trip book"; the twins have no
+ * nodes. [dateOnPage] false: the date is a caption above the book (font scale over 1.3), and the name tag goes there too
+ * through [onNameTag] (its text while it holds, then null), where it can grow with the text. [turnKey] changes: the page
+ * turns to a fresh book (New trip).
  */
 @Composable
 fun StickerBook(
@@ -133,9 +146,11 @@ fun StickerBook(
     turnKey: Int = 0,
     onOpen: () -> Unit = {},
     onStampTap: (position: Int) -> Unit = {},
+    onNameTag: ((String?) -> Unit)? = null,
 ) {
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
+    val reduced = LocalReducedMotion.current
     val layout = remember(width, state.stamps.size, state.total) { BookLayout.of(width.value, state.stamps.size, state.total) }
     val summary = bookSummary(state)
     val openLabel = stringResource(R.string.list_book_open)
@@ -155,12 +170,24 @@ fun StickerBook(
                 }
             },
     ) {
-        if (collapsed) {
-            CollapsedBook(state, presentation, clock, Modifier.testTag(BookTags.COLLAPSED), dateOnPage)
-            return@Box
+        // The book's height follows its state on the frame clock, never in one frame (§6.1, §7.4, item 161).
+        val target = if (collapsed) BookLayout.COLLAPSED else layout.height
+        val height = remember { Animatable(target) }
+        LaunchedEffect(target, reduced) {
+            if (reduced) {
+                height.snapTo(target)
+            } else {
+                withContext(FixedMotionScale) {
+                    height.animateTo(target, tween(PicnicMotion.standard.durationMillis, easing = PicnicMotion.standard.easing))
+                }
+            }
         }
+        val h = height.value
+        // 0 = the expanded pages, 1 = the collapsed strip; the two faces cross-fade while the height moves.
+        val folded = ((layout.height - h) / (layout.height - BookLayout.COLLAPSED)).coerceIn(0f, 1f)
+        val showPages = folded < 1f || !collapsed
         // The saved receipt pokes out of the fore-edge behind the page (§7.3, egg 18).
-        if (state.receiptSaved) ReceiptSlip(Modifier.align(Alignment.CenterEnd).offset(x = 9.dp, y = 6.dp))
+        if (state.receiptSaved && showPages) ReceiptSlip(Modifier.align(Alignment.CenterEnd).offset(x = 9.dp, y = 6.dp).graphicsLayer { alpha = 1f - folded })
         val shape = shapes.bookOuter
         // The page shown (§7.4): the engine's, else the one she swiped to (for 6 s), else the page of the next free spot.
         val paging = remember { PagingState() }
@@ -168,7 +195,7 @@ fun StickerBook(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(layout.height.dp)
+                .height(h.dp)
                 .hardShadow(shape, PicnicTheme.shadows, large = true)
                 .clip(shape)
                 .background(c.stickerWhite)
@@ -176,12 +203,32 @@ fun StickerBook(
                 .clip(shapes.bookPage)
                 .background(c.book.page),
         ) {
-            BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, onOpen, paging, page)
+            if (showPages) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .wrapContentHeight(Alignment.Top, unbounded = true)
+                        .height((layout.height - BookLayout.BORDERS).dp)
+                        .graphicsLayer { alpha = 1f - folded },
+                ) {
+                    BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, onOpen, paging, page, onNameTag)
+                }
+            }
+            if (folded > 0f) {
+                CollapsedPages(
+                    state, presentation, clock, dateOnPage,
+                    Modifier
+                        .testTag(BookTags.COLLAPSED)
+                        .fillMaxWidth()
+                        .height((BookLayout.COLLAPSED - BookLayout.BORDERS).dp)
+                        .graphicsLayer { alpha = folded },
+                )
+            }
         }
         // The page number (§7.3) clips onto the page's bottom edge at the right: inside the page it would sit on the
         // last spot of a full page. It hangs into the 8 dp under the book and ends where the list's viewport begins.
-        if (layout.pages > 1) {
-            PageLcd("${page + 1}/${layout.pages}", Modifier.align(Alignment.BottomEnd).offset(x = (-8).dp, y = PAGE_LCD_DROP))
+        if (layout.pages > 1 && showPages) {
+            PageLcd("${page + 1}/${layout.pages}", Modifier.align(Alignment.BottomEnd).offset(x = (-8).dp, y = PAGE_LCD_DROP).graphicsLayer { alpha = 1f - folded })
         }
     }
 }
@@ -234,16 +281,19 @@ private fun BookPages(
     onOpen: () -> Unit,
     paging: PagingState,
     page: Int,
+    onNameTag: ((String?) -> Unit)?,
 ) {
     val c = PicnicTheme.colors
     val fx = presentation.fx
-    val reduced = LocalReducedMotion.current
     val timeouts = LocalTimeouts.current
     val perfect = BookRules.perfect(state, fx)
     var tag by remember { mutableStateOf<StampTag?>(null) }
     var boing by remember { mutableStateOf<String?>(null) }
     val resources = LocalResources.current
-    val gridTop = stampTop(dateOnPage)
+    val gridTop = stampTop(dateOnPage, layout)
+    // Off the page (large text), the tag shows above the book: it hears the text while the tag holds, then null.
+    val offPage by rememberUpdatedState(onNameTag)
+    LaunchedEffect(tag) { offPage?.invoke(tag?.text) }
     Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
             // ---- The stamp page (left) ----
@@ -264,8 +314,10 @@ private fun BookPages(
                         }
                     },
             ) {
-                if (dateOnPage) DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = (-1).dp), onPage = true)
-                StampGrid(state.stamps, layout, presentation, clock, anchors, boing, top = gridTop)
+                if (dateOnPage) DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = DATE_TAG_Y.dp).probe(LocalPieceProbe.current, "dateTag"), onPage = true, season = state.season)
+                // On the holo stamp page (PERFECT) the stamps keep their Day inks in every variant: the Glow ones fade
+                // into the light foil (§2.4, §7.3; the lid stamps make the same choice, §5.3).
+                HoloInks(perfect) { StampGrid(state.stamps, layout, presentation, clock, anchors, boing, top = gridTop) }
             }
             // ---- The spine ----
             Spine(Modifier.width(BookLayout.SPINE.dp).fillMaxHeight())
@@ -330,7 +382,8 @@ private fun BookPages(
                 )
                 val t = tag
                 if (t != null) {
-                    NameTag(t.text, Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 6.dp))
+                    // At the page's art scale (it never leaves the book): up to three lines across the sticker page.
+                    if (onNameTag == null) NameTag(t.text, Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 6.dp, end = 9.dp), onPage = true)
                     LaunchedEffect(t) {
                         val hold = timeouts.recommended(readHold(words(t.text), PicnicMotion.floorCard), controls = false)
                         withContext(FixedMotionScale) {
@@ -345,7 +398,7 @@ private fun BookPages(
         }
         // PERFECT (§7.3): the 40 dp PER-FECT! hanko pressed across the spine, its right edge 24 dp past the stamp page's,
         // 6 dp from the top; drawn over the spine and the sticker page.
-        if (perfect) SpinePerfect(fx, clock, Modifier.offset(x = (layout.leftWidth + 24f - 40f).dp, y = 6.dp))
+        if (perfect) HoloInks(true) { SpinePerfect(fx, clock, Modifier.offset(x = (layout.leftWidth + 24f - 40f).dp, y = 6.dp)) }
     }
 }
 
@@ -387,12 +440,27 @@ internal fun stampCentre(i: Int, layout: BookLayout, top: Float): Pair<Float, Fl
     return x to y
 }
 
-/** Where the stamp grid starts (dp): under the date tag, or near the page top when the date is a caption (§7.4). */
-internal fun stampTop(dateOnPage: Boolean): Float = if (dateOnPage) DATE_ROOM else STAMP_TOP_NO_DATE
+/**
+ * Where the stamp grid starts (dp, in the left page of [layout]): below everything the date tag draws (its −2° turn and
+ * its hard shadow included, [DATE_TAG_REACH]), centred in the height left under it; centred in the whole page when the
+ * date is a caption above the book (font scale over 1.3, §7.4). Two rows of 24 dp stamps fill the room under the tag
+ * exactly.
+ */
+fun stampTop(dateOnPage: Boolean, layout: BookLayout): Float {
+    val page = layout.height - BookLayout.BORDERS
+    val grid = layout.stampRows * layout.stampSize + (layout.stampRows - 1) * BookLayout.STAMP_GAP
+    val above = if (dateOnPage) DATE_TAG_REACH else 0f
+    return above + ((page - above - grid) / 2f).coerceAtLeast(0f)
+}
 
-/** Where the stamp grid starts under the 18 dp date tag (dp): two rows of 24 dp stamps then end at the page bottom. */
-private const val DATE_ROOM: Float = 19f
-private const val STAMP_TOP_NO_DATE: Float = 8f
+/** The on-page date tag's top (dp): tucked 1 dp under the page's top edge. */
+private const val DATE_TAG_Y: Float = -1f
+
+/** The on-page date tag's height (dp; the mockup's tag, which leaves the stamps their room). */
+const val DATE_TAG_ON_PAGE: Float = 16f
+
+/** How far down the on-page date tag draws (dp): its top, its height, the −2° turn at its left end and its hs shadow. */
+const val DATE_TAG_REACH: Float = 19f
 private const val PAGE_IDLE_MS: Long = 6000
 private const val SWIPE_PX: Float = 40f
 private const val BOING_MS: Long = 166
@@ -452,25 +520,32 @@ private fun MoreCircle(n: Int, size: Dp, modifier: Modifier) {
 }
 
 /**
- * The date tag (§7.3): lemon pastel, 18 dp, radius 5 9 9 5, 2 dp white border, hs, −2°, a 12 dp sakura heart. [onPage]:
- * the tag is part of the page's art, which keeps its size (§7.4), so it stays 18 dp and clear of the stamp grid up to
- * font scale 1.3; above it the date leaves the page as a caption that grows with the text. The book's TalkBack line
- * carries the date either way (the tag itself is decorative).
+ * The date tag (§7.3): lemon pastel, radius 5 9 9 5, 2 dp white border, hs, −2°, a 12 dp sakura heart, the date and, when
+ * a seasonal sheet is active ([season], egg 11; only with the eggs on), its 12 dp pictogram. [onPage]: the tag is part
+ * of the page's art, which keeps its size (§7.4): 16 dp tall at every font scale up to 1.3, so it and its shadow stay
+ * clear of the first row of stamps ([DATE_TAG_REACH]); above 1.3 the date leaves the page as a caption that grows with
+ * the text. Elsewhere (the collapsed strip) it is at least 18 dp. The book's TalkBack line carries the date either way
+ * (the tag itself is decorative).
  */
 @Composable
-fun DateTag(label: String, modifier: Modifier = Modifier, onPage: Boolean = false) {
+fun DateTag(label: String, modifier: Modifier = Modifier, onPage: Boolean = false, season: Season? = null) {
     val c = PicnicTheme.colors
     val k = if (onPage) 1f / LocalDensity.current.fontScale.coerceAtLeast(1f) else 1f
-    val style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = (13f * k).sp, lineHeight = (14f * k).sp)
+    val style = PicnicTheme.type.label.copy(
+        color = c.ballpoint,
+        fontSize = (13f * k).sp,
+        lineHeight = ((if (onPage) 12f else 14f) * k).sp,
+        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
+    )
     val shape = RoundedCornerShape(topStart = 5.dp, bottomStart = 5.dp, topEnd = 9.dp, bottomEnd = 9.dp)
     Row(
         modifier
             .rotate(-2f)
             .decorative()
-            .heightIn(min = 18.dp)
+            .then(if (onPage) Modifier.height(DATE_TAG_ON_PAGE.dp) else Modifier.heightIn(min = 18.dp))
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
-            .background(Color.White)
+            .background(c.stickerWhite)
             .padding(2.dp)
             .clip(shape)
             .background(Families.lemon.pastel)
@@ -480,7 +555,47 @@ fun DateTag(label: String, modifier: Modifier = Modifier, onPage: Boolean = fals
     ) {
         DecorSticker("heart", size = 12.dp, shadow = false)
         Text(label, style = style, maxLines = 1)
+        if (season != null) SeasonMark(season, 12.dp)
     }
+}
+
+/** The pictogram of a seasonal sheet (egg 11), in its season's ink: maple, pumpkin, ghost, snowflake, heart, envelope. */
+@Composable
+fun SeasonMark(season: Season, size: Dp, modifier: Modifier = Modifier) {
+    val art = rememberVectorArt(DecorManifest.pictograms.getValue(seasonPictogram(season).key))
+    val ink = SolidColor(seasonInk(season))
+    Canvas(modifier.size(size).decorative().probe(LocalPieceProbe.current, "season:${season.name}")) {
+        drawArt(art, this.size, paint = { path, _ -> if (path.name == "ink") ink else null })
+    }
+}
+
+/** The pictogram a season's sheet wears (§4.13's seasonal set). */
+fun seasonPictogram(season: Season): Pictogram = when (season) {
+    Season.CANADA_DAY -> Pictogram.Maple
+    Season.THANKSGIVING -> Pictogram.Pumpkin
+    Season.HALLOWEEN -> Pictogram.Ghost
+    Season.FIRST_SNOW -> Pictogram.Snowflake
+    Season.VALENTINES -> Pictogram.Heart
+    Season.LUNAR_NEW_YEAR -> Pictogram.Envelope
+}
+
+/** Its ink: a trace that holds on the lemon tag and on the pad patch (≥3:1 for a graphic). */
+private fun seasonInk(season: Season): Color = when (season) {
+    Season.CANADA_DAY -> Families.strawberry.trace
+    Season.THANKSGIVING -> Families.peach.trace
+    Season.HALLOWEEN -> Families.grape.trace
+    Season.FIRST_SNOW -> Families.ramune.trace
+    Season.VALENTINES -> Families.sakura.trace
+    Season.LUNAR_NEW_YEAR -> Families.strawberry.trace
+}
+
+/**
+ * The holo stamp page's inks (PERFECT, §7.3): on the light foil the stamps, their rings and numerals and the PER-FECT!
+ * hanko keep their Day colours in every variant, as the lid stamps do (§5.3). [holo] false: the page's own theme.
+ */
+@Composable
+internal fun HoloInks(holo: Boolean, content: @Composable () -> Unit) {
+    if (holo && PicnicTheme.colors.isDark) PicnicTheme(variant = ThemeVariant.Day, content = content) else content()
 }
 
 /** The spine (§7.3): 12 dp of periwinkle cloth tape and three binder rings 22 × 8 dp at 9, 31 and 53 dp. */
@@ -602,7 +717,7 @@ private fun PageLcd(text: String, modifier: Modifier) {
             .decorative()
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
-            .background(Color.White)
+            .background(c.stickerWhite)
             .padding(2.dp)
             .clip(RoundedCornerShape(3.dp))
             .background(c.lcd)
@@ -612,25 +727,42 @@ private fun PageLcd(text: String, modifier: Modifier) {
     }
 }
 
-/** The stamp name tag (§7.7): a small lemon tag clipped onto the right page by the spine, over the release paper. */
+/**
+ * The stamp name tag (§7.7): a small lemon tag clipped onto the right page by the spine, over the release paper. [onPage]:
+ * at the page's art scale (like the date tag, it keeps its size up to font scale 1.3) and at most three lines; off the
+ * page (the caption row above the book at larger text) it grows with the text and takes as many lines as its room
+ * holds. It wraps rather than clips, and reports a lost word to the piece probe ("nameTagOverflow").
+ */
 @Composable
-private fun NameTag(text: String, modifier: Modifier) {
+fun NameTag(text: String, modifier: Modifier = Modifier, onPage: Boolean = false) {
     val c = PicnicTheme.colors
     val shape = RoundedCornerShape(4.dp)
-    Box(
+    val probe = LocalPieceProbe.current
+    val k = if (onPage) 1f / LocalDensity.current.fontScale.coerceAtLeast(1f) else 1f
+    val style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = (13f * k).sp, lineHeight = (15f * k).sp)
+    BoxWithConstraints(
         modifier
             .testTag(BookTags.NAME_TAG)
-            .probe(LocalPieceProbe.current, "nameTag:$text")
+            .probe(probe, "nameTag:$text")
             .rotate(-2f)
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
-            .background(Color.White)
+            .background(c.stickerWhite)
             .padding(2.dp)
             .clip(shape)
             .background(Families.lemon.pastel)
             .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
-        Text(text, style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 15.sp), maxLines = 2)
+        val lineHeight = with(LocalDensity.current) { style.lineHeight.toDp() }
+        val room = if (constraints.hasBoundedHeight) (maxHeight / lineHeight).toInt().coerceAtLeast(1) else Int.MAX_VALUE
+        val lines = if (onPage) minOf(3, room) else room
+        Text(
+            text,
+            style = style,
+            maxLines = lines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (it.hasVisualOverflow) probe?.report("nameTagOverflow:$text", Rect.Zero, null) },
+        )
     }
 }
 
@@ -653,33 +785,20 @@ private fun ReceiptSlip(modifier: Modifier) {
 }
 
 /**
- * The collapsed book (§7.4): one 40 dp strip with the date tag, the stamps as 12 dp dots (stamped dots filled in the
- * aisle trace), and the newest twins at 22 dp, right-aligned, with a "+n" pearl before them.
+ * The collapsed book's page (§7.4), inside the book's frame: one strip with the date tag, the stamps as 12 dp dots
+ * (stamped dots filled in the aisle trace), and the newest twins at 22 dp, right-aligned, with a "+n" pearl before them.
  */
 @Composable
-private fun CollapsedBook(state: BookUi, presentation: BookPresentation, clock: MotionClock, modifier: Modifier, dateOnPage: Boolean) {
+private fun CollapsedPages(state: BookUi, presentation: BookPresentation, clock: MotionClock, dateOnPage: Boolean, modifier: Modifier) {
     val c = PicnicTheme.colors
-    val shapes = PicnicTheme.shapes
-    val shape = shapes.bookOuter
     val variant = PicnicTheme.variant
     val newestFirst = remember(state.stickers) { state.stickers.sortedByDescending { it.slot } }
-    androidx.compose.ui.layout.SubcomposeLayout(
-        modifier
-            .fillMaxWidth()
-            .height(BookLayout.COLLAPSED.dp)
-            .hardShadow(shape, PicnicTheme.shadows, large = true)
-            .clip(shape)
-            .background(c.stickerWhite)
-            .padding(3.dp)
-            .clip(shapes.bookPage)
-            .background(c.book.page)
-            .padding(horizontal = 6.dp),
-    ) { constraints ->
+    androidx.compose.ui.layout.SubcomposeLayout(modifier.padding(horizontal = 6.dp)) { constraints ->
         val loose = constraints.copy(minWidth = 0, minHeight = 0)
         val h = constraints.maxHeight
         val w = constraints.maxWidth
         val gap = 6.dp.roundToPx()
-        val date = if (dateOnPage) subcompose("date") { DateTag(state.dateLabel) }.map { it.measure(loose) } else emptyList()
+        val date = if (dateOnPage) subcompose("date") { DateTag(state.dateLabel, season = state.season) }.map { it.measure(loose) } else emptyList()
         val dots = subcompose("dots") {
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 for (s in state.stamps.take(12)) {
@@ -735,7 +854,7 @@ private fun MorePearl(n: Int) {
             .height(20.dp)
             .widthIn(min = 30.dp)
             .clip(CircleShape)
-            .background(Color.White)
+            .background(PicnicTheme.colors.stickerWhite)
             .drawBehind {
                 val sw = 1.5.dp.toPx()
                 val inset = 1.5.dp.toPx() + sw / 2f
@@ -757,13 +876,17 @@ private fun MorePearl(n: Int) {
 
 private const val COLLAPSED_TWINS: Int = 6
 
-/** The date as a caption row above the book (font scale over 1.3, §7.4): Zen Maru 700 13 sp, scaled. */
+/**
+ * The date as a caption row above the book (font scale over 1.3, §7.4): Zen Maru 700 13 sp, scaled, with the heart and
+ * the season's pictogram (egg 11) when a seasonal sheet is active.
+ */
 @Composable
-fun BookDateCaption(label: String, modifier: Modifier = Modifier) {
+fun BookDateCaption(label: String, modifier: Modifier = Modifier, season: Season? = null) {
     PadPatch(modifier.decorative()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             DecorSticker("heart", size = 12.dp, shadow = false)
             Text(label, style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.onPad, fontSize = 13.sp))
+            if (season != null) SeasonMark(season, 12.dp)
         }
     }
 }

@@ -1,6 +1,7 @@
 package earth.cora.picnic.ui.list
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
@@ -100,6 +101,142 @@ class BookUiTest {
         compose.waitForIdle()
         val ime = compose.boundsOf(BookTags.BOOK).height / compose.density.density
         assertEquals("IME open: the 40 dp strip", 40f, ime, 1f)
+    }
+
+    /**
+     * Item 161: the height change animates (`standard`, 200 ms) so the list never jumps: sampled on the held clock, the
+     * book passes through heights between 76 and 40 dp on the way down and on the way back, and settles by about 200 ms.
+     */
+    @Test
+    fun collapseAnimatesItsHeight() {
+        val screen = ListScreenState()
+        compose.setContent { earth.cora.picnic.ui.theme.PicnicTheme { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) { ListScreen(ListFixture.ui(), ListActions(), screen = screen) } } }
+        compose.waitForIdle()
+        val dp = compose.density.density
+        fun height() = compose.boundsOf(BookTags.BOOK).height / dp
+        assertEquals(76f, height(), 1f)
+        compose.mainClock.autoAdvance = false
+        fun samples(): List<Float> = buildList { repeat(16) { compose.frames(1); add(height()) } }
+        screen.scrolledDown = true
+        val down = samples()
+        assertTrue("passes between 76 and 40 dp on the way down: $down", down.any { it in 45f..71f })
+        assertTrue("never jumps more than half the way in one frame: $down", down.zipWithNext().all { (a, b) -> kotlin.math.abs(a - b) < 18f })
+        assertEquals("settled on the strip by about 200 ms: $down", 40f, down.drop(14).last(), 1f)
+        screen.scrolledDown = false
+        val up = samples()
+        assertTrue("and on the way up: $up", up.any { it in 45f..71f })
+        assertEquals(76f, up.last(), 1f)
+        compose.mainClock.autoAdvance = true
+    }
+
+    /** Under reduced motion the book swaps at once (§8.8): no in-between heights. */
+    @Test
+    fun collapseSnapsUnderReducedMotion() {
+        val screen = ListScreenState()
+        compose.setContent { earth.cora.picnic.ui.theme.PicnicTheme(reducedMotion = true) { androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) { ListScreen(ListFixture.ui(), ListActions(), screen = screen) } } }
+        compose.waitForIdle()
+        val dp = compose.density.density
+        compose.mainClock.autoAdvance = false
+        screen.scrolledDown = true
+        compose.frames(2)
+        assertEquals(40f, compose.boundsOf(BookTags.BOOK).height / dp, 1f)
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * Items 146 and R2: the on-page date tag, its −2° turn and its hard shadow included, never touches a stamp circle,
+     * with 8 (24 dp stamps), 14 (20 dp) and 20 stops (three rows), at font scale 1.0 and 1.3; the grid stays inside the page.
+     */
+    @Test
+    fun dateTagClearsTheStamps() {
+        val cases = listOf(ListFixture.state() to 8, ListFixture.everyDefaultAisle() to 14, ListFixture.stops(20, 1, 3) to 20)
+        val probe = RecordingProbe()
+        // One composition (the rule takes one setContent): the case and the font scale change under it.
+        val current = androidx.compose.runtime.mutableStateOf(ListRig(cases.first().first) to 1f)
+        compose.setContent {
+            val (rig, fontScale) = current.value
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.key(rig, fontScale) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    earth.cora.picnic.ui.theme.LocalPieceProbe provides probe,
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, fontScale),
+                ) { rig.Themed() }
+            }
+        }
+        for (fontScale in listOf(1f, 1.3f)) {
+            for ((state, stops) in cases) {
+                val rig = ListRig(state)
+                compose.runOnIdle { current.value = rig to fontScale }
+                compose.waitForIdle()
+                val d = compose.density.density
+                val book = rig.vm.state.value.book!!
+                assertEquals(stops, book.stamps.size)
+                val left = probe["bookLeft"]
+                val tag = probe["dateTag"]
+                val layout = earth.cora.picnic.ui.theme.BookLayout.of(compose.boundsOf(BookTags.BOOK).width / d, stops, book.total)
+                val top = earth.cora.picnic.ui.theme.stampTop(true, layout)
+                for (i in 0 until minOf(stops, layout.circles)) {
+                    val (cx, cy) = earth.cora.picnic.ui.theme.stampCentre(i, layout, top)
+                    val centre = androidx.compose.ui.geometry.Offset(left.left + cx * d, left.top + cy * d)
+                    val gap = tagGap(tag, centre, layout.stampSize / 2f * d, d)
+                    assertTrue("fs $fontScale, $stops stops, stamp ${i + 1}: the tag or its shadow is ${-gap / d} dp into the circle", gap >= 0f)
+                    assertTrue("fs $fontScale, $stops stops, stamp ${i + 1}: inside the page", cy + layout.stampSize / 2f <= layout.height - 6f + 0.01f)
+                }
+            }
+        }
+    }
+
+    /**
+     * How far (px) the circle at [centre] with radius [r] is from the date tag laid out at [tag] (its box before the turn)
+     * once turned −2° about its centre, and from its hard shadow (the same box moved by hs, 1.6 × 2.2 dp, in the turned
+     * frame). Negative when they overlap.
+     */
+    private fun tagGap(tag: androidx.compose.ui.geometry.Rect, centre: androidx.compose.ui.geometry.Offset, r: Float, d: Float): Float {
+        val a = Math.toRadians(2.0)
+        val dx = centre.x - tag.center.x
+        val dy = centre.y - tag.center.y
+        // Into the tag's own frame: undo the −2° turn.
+        val lx = (dx * kotlin.math.cos(a) - dy * kotlin.math.sin(a)).toFloat() + tag.width / 2f
+        val ly = (dx * kotlin.math.sin(a) + dy * kotlin.math.cos(a)).toFloat() + tag.height / 2f
+        fun dist(l: Float, t: Float, rr: Float, b: Float): Float {
+            val ex = maxOf(l - lx, 0f, lx - rr)
+            val ey = maxOf(t - ly, 0f, ly - b)
+            return kotlin.math.hypot(ex, ey)
+        }
+        val body = dist(0f, 0f, tag.width, tag.height)
+        val shadow = dist(1.6f * d, 2.2f * d, tag.width + 1.6f * d, tag.height + 2.2f * d)
+        return minOf(body, shadow) - r
+    }
+
+    /**
+     * §7.3 and egg 11: with a seasonal sheet active the date tag carries its pictogram (the pumpkin in the Thanksgiving
+     * window, Appendix A's date); with the eggs off it does not; at font scale 2.0 the caption carries it.
+     */
+    @Test
+    fun seasonPictogramOnTheDate() {
+        val rig = ListRig()
+        val probe = RecordingProbe()
+        rig.surprises.states.value = earth.cora.picnic.ui.eggs.SurpriseState(season = earth.cora.picnic.core.calendar.Season.THANKSGIVING)
+        compose.show(rig, probe)
+        assertEquals(earth.cora.picnic.core.calendar.Season.THANKSGIVING, rig.vm.state.value.book!!.season)
+        val mark = probe["season:THANKSGIVING"]
+        val tag = probe["dateTag"]
+        assertTrue("the pumpkin rides on the date tag ($mark in $tag)", mark.left >= tag.left && mark.right <= tag.right + 0.5f && mark.top >= tag.top - 0.5f && mark.bottom <= tag.bottom + 0.5f)
+        // Eggs off: no pictogram.
+        rig.surprises.states.value = earth.cora.picnic.ui.eggs.SurpriseState(enabled = false, season = earth.cora.picnic.core.calendar.Season.THANKSGIVING)
+        compose.waitForIdle()
+        assertTrue(probe.keys("season:").isEmpty())
+    }
+
+    @Test
+    fun seasonPictogramInTheCaption() {
+        val rig = ListRig()
+        val probe = RecordingProbe()
+        rig.surprises.states.value = earth.cora.picnic.ui.eggs.SurpriseState(season = earth.cora.picnic.core.calendar.Season.THANKSGIVING)
+        compose.show(rig, probe, fontScale = 2f)
+        val book = compose.boundsOf(BookTags.BOOK)
+        val mark = probe["season:THANKSGIVING"]
+        assertTrue("in the caption row above the book ($mark, book $book)", mark.bottom <= book.top)
     }
 
     /** Item 161: a window under 600 dp keeps the book collapsed; the magic then lands in the newest position. */

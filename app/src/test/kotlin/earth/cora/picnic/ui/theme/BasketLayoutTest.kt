@@ -22,6 +22,23 @@ class BasketLayoutTest {
             assertEquals(0, f.extra)
             assertEquals("the $n-layout is the manifest's", BasketManifest.MINI_SLOTS.getValue(n), f.slots)
         }
+        // §5.3's own numbers, in fill order (tilt in degrees; raise in viewport units, negative = up).
+        fun tilts(n: Int) = BasketLayout.fill(minis(n)).slots.map { it.tilt }
+        fun raises(n: Int) = BasketLayout.fill(minis(n)).slots.map { it.raise }
+        assertEquals("1: upright", listOf(0f), tilts(1))
+        assertEquals("2: tilted ±7°", listOf(-7f, 7f), tilts(2))
+        assertEquals("2: level", listOf(0f, 0f), raises(2))
+        assertEquals("3: fanned −9° / 0 / +9°", listOf(-9f, 0f, 9f), tilts(3))
+        // The outer two sit 1.5 off the middle one's line. The spec says "raised"; WP2's art (and the frozen mockup)
+        // drops them 1.5 instead, a fan held in the hand. The magnitude is the spec's; the sign is WP2's (to the lead).
+        assertEquals("3: the outer two 1.5 off the middle", listOf(1.5f, 0f, 1.5f), raises(3).map { kotlin.math.abs(it) })
+        assertEquals("4: two front (−9° / +9°) and two raised back (−4° / +4°)", listOf(-9f, 9f, -4f, 4f), tilts(4))
+        assertEquals("4: the back row raised 6", listOf(-6f, -6f), raises(4).drop(2))
+        assertEquals("5: three front and two back", listOf(-9f, 0f, 9f, -4f, 4f), tilts(5))
+        assertEquals("5: the back row raised 7", listOf(-7f, -7f), raises(5).drop(3))
+        // The back row sits behind and between the front stickers.
+        val four = BasketLayout.fill(minis(4)).slots
+        assertTrue(four[0].centreX < four[2].centreX && four[3].centreX < four[1].centreX)
         // Slots spread left to right in a row, the raised back row (4 and 5) behind.
         val three = BasketLayout.fill(minis(3)).slots
         assertTrue(three[0].centreX < three[1].centreX && three[1].centreX < three[2].centreX)

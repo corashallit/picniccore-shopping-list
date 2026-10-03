@@ -123,10 +123,10 @@ private class ProbeNode(var probe: PieceProbe, var key: String, var fontSp: Floa
     override fun onDetach() = probe.gone(key)
 }
 
-/** The tab's height (§2.9): 38 dp in a tray header, 32 dp on a folded strip. */
+/** The tab's height (§2.9): 38 dp in a tray header, 32 dp on a folded strip; both with the 24 dp circle and 14 sp numeral (§4.10, item 75). */
 enum class TabSize(val height: Dp, val circle: Dp, val numeralSp: Float) {
     Tray(38.dp, 24.dp, 14f),
-    Strip(32.dp, 22.dp, 13f),
+    Strip(32.dp, 24.dp, 14f),
 }
 
 /**

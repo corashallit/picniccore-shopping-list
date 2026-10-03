@@ -65,6 +65,10 @@
 
     <!-- The peek note (§4.23) for TalkBack. -->
     <string name="list_peek_in_basket">%1$s, in the basket</string>
+    <!-- The Trip book sheet's sticker pages (§6.6, §15): the page buttons and actions, and what the dots and LCD say. -->
+    <string name="list_trip_book_next">Next page</string>
+    <string name="list_trip_book_previous">Previous page</string>
+    <string name="list_trip_book_page">Page %1$d of %2$d</string>
     <!-- The last line of a peek note too long for the room it has. -->
     <plurals name="list_peek_more">
         <item quantity="one">+%1$d more</item>

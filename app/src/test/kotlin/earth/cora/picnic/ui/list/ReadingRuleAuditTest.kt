@@ -28,8 +28,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The reading rule for the list's own text moments (docs/DESIGN_STICKER.md §9; the list's half of item 167): the stamp
- * name tag, the automatic new book's note, the New trip note and the tear-off note each hold still (constant bounds,
- * where they are really drawn) for at least readHold(their real words, their floor), on the frame clock.
+ * name tag, the automatic new book's note, the New trip note, the tear-off note and the nudge each hold still (constant
+ * bounds, where they are really drawn) for at least readHold(their real words, their floor), on the frame clock.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -117,6 +117,21 @@ class ReadingRuleAuditTest {
         val still = stillFor(rig, 5500, ::toastBounds)
         val rule = readHold(words("Toothpaste torn out Undo"), PicnicMotion.floorToast)
         assertTrue("the tear-off note held still $still ms, rule $rule ms", still >= rule)
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * The nudge, "New shop? Start a fresh sticker book" + New trip: it carries an action, so it holds at least
+     * max(6000 ms, readHold) (§6.1, §9), as it really draws, from the moment it shows.
+     */
+    @Test
+    fun nudgeNote() {
+        val rig = ListRig(now = ListFixture.NOW + 13 * ListFixture.HOUR)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { rig.Themed() }
+        val still = stillFor(rig, 7500, ::toastBounds)
+        val rule = maxOf(6000L, readHold(words("New shop? Start a fresh sticker book New trip"), PicnicMotion.floorToast))
+        assertTrue("the nudge held still $still ms, rule $rule ms", still >= rule)
         compose.mainClock.autoAdvance = true
     }
 }

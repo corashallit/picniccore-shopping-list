@@ -62,7 +62,9 @@ class ListSurprises : SurpriseEngine {
     var sunTaps = 0
     var moonTaps = 0
 
-    override val state: StateFlow<SurpriseState> = MutableStateFlow(SurpriseState())
+    /** What the eggs show; a test sets it (a seasonal sheet, eggs off). */
+    val states = MutableStateFlow(SurpriseState())
+    override val state: StateFlow<SurpriseState> = states
 
     override fun interceptText(text: String): Boolean = false
 

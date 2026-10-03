@@ -12,6 +12,7 @@ import earth.cora.picnic.ui.theme.BookTags
 import earth.cora.picnic.ui.theme.PicnicMotion
 import earth.cora.picnic.ui.theme.readHold
 import earth.cora.picnic.ui.theme.stampCentre
+import earth.cora.picnic.ui.theme.stampTop
 import earth.cora.picnic.ui.theme.words
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -97,6 +98,47 @@ class BookInteractionTest {
         compose.advanceMs(hold - 300)
         assertTrue("the tag holds at least ${hold} ms", key in probe.bounds)
         assertTrue("then it goes", compose.framesUntil(800) { key !in probe.bounds })
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * Item 157 at large text, with the longest default aisle name ("7 · Pasta, rice & international · 1 left", stamp 7 of
+     * the 14 default aisles): at 1.3 the tag stays on the right page at the page's art scale and wraps; at 2.0 it joins
+     * the date's caption row above the book and grows with the text. Never a lost word, never past the book's bottom
+     * (so never over the list).
+     */
+    @Test
+    fun stampTagAtLargeText130() = longTagFits(1.3f)
+
+    @Test
+    fun stampTagAtLargeText200() = longTagFits(2f)
+
+    private fun longTagFits(fontScale: Float) {
+        val rig = ListRig(ListFixture.everyDefaultAisle())
+        val probe = RecordingProbe()
+        compose.show(rig, probe, fontScale = fontScale)
+        val book = compose.boundsOf(BookTags.BOOK)
+        val leftPage = probe["bookLeft"]
+        val stops = rig.vm.state.value.book!!.stamps.size
+        val layout = BookLayout.of(book.width / dp, stops, rig.vm.state.value.total)
+        val stamp = rig.vm.state.value.book!!.stamps.indexOfFirst { it.displayName == "Pasta, rice & international" }
+        assertEquals("stamp 7", 6, stamp)
+        val (cx, cy) = stampCentre(stamp, layout, stampTop(fontScale <= 1.3f, layout))
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(BookTags.BOOK).performTouchInput { click(Offset(leftPage.left - book.left + cx * dp, leftPage.top - book.top + cy * dp)) }
+        compose.advanceMs(300)
+        val keys = probe.keys("nameTag:")
+        assertEquals("the tag for stamp 7 shows: $keys", listOf("nameTag:7 · Pasta, rice & international · 1 left"), keys)
+        assertTrue("no word lost (${probe.keys("nameTagOverflow")})", probe.keys("nameTagOverflow").isEmpty())
+        val tag = probe[keys.single()]
+        assertTrue("never below the book ($tag, book $book)", tag.bottom <= book.bottom + 0.5f)
+        if (fontScale <= 1.3f) {
+            val right = probe["bookRight"]
+            assertTrue("on the right page at 1.3 ($tag in $right)", tag.left >= right.left - 0.5f && tag.right <= right.right + 0.5f && tag.top >= book.top)
+        } else {
+            val top = compose.boundsOf(ListTags.TOP_STACK)
+            assertTrue("in the caption row and over the book at 2.0 ($tag, stack $top)", tag.top >= top.top && tag.right <= book.right + 0.5f)
+        }
         compose.mainClock.autoAdvance = true
     }
 }

@@ -12,7 +12,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -21,11 +25,13 @@ import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.list.motion.BookPresentation
 import earth.cora.picnic.ui.list.motion.MotionClock
+import earth.cora.picnic.ui.theme.BookLayout
 import earth.cora.picnic.ui.theme.LetterSetSheet
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.StickerBook
+import kotlin.math.roundToInt
 
 /*
  * The New trip sheet (docs/DESIGN_STICKER.md §6.5, §0.4 Q2): "Start a new trip?", the closing book drawn small (its
@@ -36,6 +42,21 @@ import earth.cora.picnic.ui.theme.StickerBook
 
 object NewTripTags {
     const val SHEET: String = "picnic_new_trip_sheet"
+    const val BOOK: String = "picnic_new_trip_book"
+}
+
+/** Lays the content out at its own size and draws it at [scale] from its top centre, taking only the scaled room. */
+private fun Modifier.drawnSmall(scale: Float): Modifier = layout { measurable, constraints ->
+    val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity, minHeight = 0))
+    val w = (p.width * scale).roundToInt()
+    val h = (p.height * scale).roundToInt()
+    layout(w, h) {
+        p.placeWithLayer((w - p.width) / 2, 0) {
+            scaleX = scale
+            scaleY = scale
+            transformOrigin = TransformOrigin(0.5f, 0f)
+        }
+    }
 }
 
 @Composable
@@ -58,10 +79,16 @@ fun NewTripSheet(
                     modifier = Modifier.fillMaxWidth().semantics { heading() },
                 )
                 if (book != null) {
-                    // The closing book, drawn small and still: read-only here.
+                    // The closing book drawn small (§6.5): the very book on the list (laid out at the list's width, with
+                    // its pages and its stickers where she saw them), scaled down to fit, still and read-only.
                     val clock = remember { MotionClock() }
-                    BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 4.dp).decorative(), contentAlignment = Alignment.Center) {
-                        StickerBook(book, BookPresentation.Identity, clock, width = maxWidth.coerceAtMost(320.dp))
+                    val listBook = BookLayout.widthFor(LocalConfiguration.current.screenWidthDp.toFloat()).dp
+                    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp).decorative(), contentAlignment = Alignment.Center) {
+                        val scale = (maxWidth / listBook).coerceAtMost(1f)
+                        StickerBook(
+                            book, BookPresentation.Identity, clock, width = listBook,
+                            modifier = Modifier.drawnSmall(scale).testTag(NewTripTags.BOOK),
+                        )
                     }
                 }
                 Text(stringResource(R.string.list_new_trip_body), style = t.body.copy(color = c.ink), modifier = Modifier.fillMaxWidth())
