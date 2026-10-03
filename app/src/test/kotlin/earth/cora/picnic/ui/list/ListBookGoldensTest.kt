@@ -33,7 +33,7 @@ class ListBookGoldensTest {
     val compose = createComposeRule()
 
     private fun book(name: String, ui: ListUiState, variant: ThemeVariant = ThemeVariant.Day, fontScale: Float? = null, collapsed: Boolean = false) =
-        compose.recordPiece(name, variant, fontScale = fontScale, pad = 20.dp) {
+        compose.recordPiece(name, variant, fontScale = fontScale, pad = 12.dp) {
             val b = ui.book!!
             val clock = remember { MotionClock() }
             val dateOnPage = LocalDensity.current.fontScale <= 1.3f

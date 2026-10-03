@@ -158,7 +158,7 @@ fun StickerBook(
             return@Box
         }
         // The saved receipt pokes out of the fore-edge behind the page (§7.3, egg 18).
-        if (state.receiptSaved) ReceiptSlip(Modifier.align(Alignment.CenterEnd).offset(x = 12.dp, y = 6.dp))
+        if (state.receiptSaved) ReceiptSlip(Modifier.align(Alignment.CenterEnd).offset(x = 9.dp, y = 6.dp))
         val shape = shapes.bookOuter
         Box(
             Modifier
