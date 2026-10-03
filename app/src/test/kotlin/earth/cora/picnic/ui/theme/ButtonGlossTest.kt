@@ -1,13 +1,21 @@
 package earth.cora.picnic.ui.theme
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -57,8 +65,16 @@ class ButtonGlossTest {
                     assertEquals("$kind crescents", 1, crescents.size)
                     assertEquals("$kind dots", 1, dots.size)
                 } else {
-                    // Disabled pills: no gloss at all (round buttons fade to 50 % with their gloss instead).
+                    // Disabled faces, pills and round buttons alike: no gloss at all (the disabled tokens, §4.6).
                     assertEquals(0, crescents.size + dots.size)
+                    // The FAB is never disabled (it opens the add bar); every other face takes the disabled face
+                    // (`backing` in Day, the rule navy in Glow) and its soft ink for the label or glyph.
+                    if (kind != ButtonKind.Fab) {
+                        assertEquals("$variant $kind disabled fill", c.disabledFace, ops.first().color)
+                        val ink = ops.single { it is FaceOp.Label || it is FaceOp.GlyphInk }
+                        assertEquals("$variant $kind disabled ink", c.onDisabledFace, ink.color)
+                        assertTrue("$variant $kind: no star or ring on a disabled face", ops.none { it is FaceOp.Star || it is FaceOp.Ring })
+                    }
                 }
                 // The only white ON a face: one crescent, one dot and the face's own label or glyph (the primary's white
                 // label, the FAB's white plus, a Glow round button's white glyph). The face's own fill may be white
@@ -181,6 +197,84 @@ class ButtonGlossTest {
             val fontPx = with(Density(3f, scale)) { (if (primary) 18 else 16).sp.toPx() }
             val g = assertPillGloss(face.size, labelInkBand(row, fontPx), "${if (primary) "primary" else "secondary"} '$text' at $scale")
             assertFalse("$text at $scale: the gloss stays in the left cap", g.mirrored)
+        }
+    }
+
+    /**
+     * §4.6, item 337: a disabled round sticker (More, Back, the add-bar buttons) is a flat disabled-face disc, its border
+     * too, with no hard shadow and no gloss, in Day and Glow. Read off the pixels on a plain green ground: nothing
+     * outside the disc but the ground (no shadow), the border ring all disabled face, no white anywhere (no gloss).
+     */
+    @Test
+    fun disabledRoundFacesAreFlatDiscs() {
+        val ground = Color(0xFF00FF00)
+        for (variant in listOf(ThemeVariant.Day, ThemeVariant.Glow)) for ((name, faceDp) in listOf("more" to 40f, "send" to 52f)) {
+            screen.show {
+                PicnicTheme(variant = variant) {
+                    androidx.compose.foundation.layout.Box(Modifier.background(ground).padding(12.dp).testTag("frame")) {
+                        if (name == "more") PicnicIconButton(PicnicGlyph.More, "More", {}, enabled = false)
+                        else AddBarButton(AddBarButtonKind.Send, "Send", {}, enabled = false)
+                    }
+                }
+            }
+            val colors = colorsFor(variant)
+            val img = compose.onNodeWithTag("frame").captureToImage().asAndroidBitmap()
+            val frame = compose.onNodeWithTag("frame").fetchSemanticsNode().boundsInRoot
+            val inner = faceRects().single()
+            val cx = inner.center.x - frame.left
+            val cy = inner.center.y - frame.top
+            val d = 3f
+            val outer = faceDp * d / 2f
+            val what = "$variant $name disabled"
+            var outside = 0
+            var ringOff = 0
+            var white = 0
+            for (y in 0 until img.height) for (x in 0 until img.width) {
+                val p = img.getPixel(x, y)
+                val r = hypot(x + 0.5f - cx, y + 0.5f - cy)
+                if (r > outer + 1.5f && !near(p, ground.toArgb(), 6)) outside++
+                if (r in (outer - 2.5f * d)..(outer - 0.5f * d) && !near(p, colors.disabledFace.toArgb(), 6)) ringOff++
+                if (r < outer - 1.5f && near(p, Color.White.toArgb(), 3) && colors.disabledFace != Color.White) white++
+            }
+            assertEquals("$what: $outside px of shadow (or anything) outside the disc", 0, outside)
+            assertEquals("$what: $ringOff px of the border ring not the disabled face", 0, ringOff)
+            assertEquals("$what: $white px of white on the face (a gloss)", 0, white)
+            assertTrue("$what: the glyph is drawn in the soft ink", (0 until img.height).any { y -> (0 until img.width).any { x -> near(img.getPixel(x, y), colors.onDisabledFace.toArgb(), 40) } })
+        }
+    }
+
+    /**
+     * R3 with a wrapped label (§4.6, item 337): at font scale 2.0 in a 328 dp column the long New trip label takes two
+     * lines; the face keeps its one-line caps, the label starts past the dot, and the gloss stays in the left cap, inside
+     * the face and ≥ 4 dp from the whole label block.
+     */
+    @Test
+    fun glossClearsAWrappedLabel() {
+        val d = 3f
+        for (primary in listOf(true, false)) {
+            fun faceFor(label: String): Pair<Rect, Rect> {
+                show {
+                    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides Density(d, 2f)) {
+                        androidx.compose.foundation.layout.Box(Modifier.width(328.dp)) {
+                            PicnicButton(label, {}, style = if (primary) PicnicButtonStyle.Primary else PicnicButtonStyle.Secondary)
+                        }
+                    }
+                }
+                val face = faceRects().single()
+                val text = compose.onNode(androidx.compose.ui.test.hasText(label), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                return face to text
+            }
+            val (oneLine, _) = faceFor("Go")
+            val label = "Keep everything, uncheck it all"
+            val (face, text) = faceFor(label)
+            val what = "${if (primary) "primary" else "secondary"} '$label' at 2.0"
+            assertTrue("$what wraps (face ${face.height / d} dp, one line ${oneLine.height / d} dp)", face.height > oneLine.height * 1.5f)
+            val capped = Size(face.width, oneLine.height)
+            val block = text.translate(-face.left, -face.top)
+            val g = ButtonGloss.of(FaceKind.Pill, capped, block, density)
+            assertFalse("$what: the gloss stays in the left cap", g.mirrored)
+            assertTrue("$what: gloss within 4 dp of the label (${g.distanceTo(block) / d} dp)", g.distanceTo(block) >= clearance)
+            for (p in g.outline) assertTrue("$what: crescent point $p outside the cap", insidePill(p, capped))
         }
     }
 

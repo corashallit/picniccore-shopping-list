@@ -40,12 +40,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import kotlin.math.abs
 
 /**
  * Timed component behaviour on the Compose test clock (checklist 24, 51, 60, 68, 69, 334): the toast's drop, hold and
  * queue; the letter-set sheet's entrance and handle slap; the primary pill dropping onto its shadow; the app bar's
- * collapse; puffy titles shrinking, ellipsizing and never clipping.
+ * collapse; puffy titles shrinking and ellipsizing (never clipping: PuffyTextBoundsTest).
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -321,53 +320,6 @@ class AppBarTest {
         assertEquals(true, node().config[TextOverflowed])
     }
 
-}
-
-/** Puffy titles never clip their stroke or shadow, fitting or ellipsized (checklist 334). */
-@RunWith(AndroidJUnit4::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w360dp-h760dp-xxhdpi")
-class PuffyTextBoundsTest {
-    @get:Rule
-    val compose = createComposeRule()
-
-    /** Applies pending state changes (with autoAdvance off, time alone does not), then advances the frame clock. */
-    private fun advance(ms: Long) {
-        compose.waitForIdle()
-        compose.mainClock.advanceTimeBy(ms)
-    }
-
-    @Test
-    fun puffyTextNeverClips() {
-        val titles = listOf("Saturday shop", "Kirakira Basket", "Everything else", "List complete!", "NEXT")
-        val screen = SwappableContent(compose)
-        for (variant in listOf(ThemeVariant.Day, ThemeVariant.Glow)) for (fontScale in listOf(1f, 2f)) for (narrow in listOf(false, true)) {
-            screen.show {
-                androidx.compose.runtime.CompositionLocalProvider(
-                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(3f, fontScale),
-                ) {
-                    PicnicTheme(variant) {
-                        Column {
-                            for (t in titles) {
-                                Box(Modifier.width(if (narrow) 120.dp else 360.dp)) {
-                                    PuffyText(t, PicnicTheme.type.screenTitle, PicnicTheme.colors.ink, 9.dp, minFontSize = 20.sp)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            compose.waitForIdle()
-            for (t in titles) {
-                val n = compose.onNodeWithText(t).fetchSemanticsNode()
-                val ink = n.config[PuffyInkBounds]
-                val box = n.boundsInRoot
-                assertTrue("$t ($variant, ×$fontScale, narrow=$narrow): ink $ink outside ${box.size}", ink.left >= 0f && ink.top >= 0f)
-                assertTrue("$t ($variant, ×$fontScale, narrow=$narrow): ink ${ink.right}×${ink.bottom} vs ${box.width}×${box.height}", ink.right <= box.width + 1f && ink.bottom <= box.height + 1f)
-                assertTrue(abs(ink.width - box.width) <= 1.5f || ink.width <= box.width)
-            }
-        }
-    }
 }
 
 private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountEqualsZero() {

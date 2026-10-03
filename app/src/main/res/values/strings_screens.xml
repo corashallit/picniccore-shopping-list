@@ -10,7 +10,6 @@
     <!-- Shared -->
     <string name="screens_back">Back</string>
     <string name="screens_cancel">Cancel</string>
-    <string name="screens_close">Close</string>
     <string name="screens_done">Done</string>
     <string name="screens_more_options">More options</string>
 
@@ -184,7 +183,6 @@
     <string name="settings_help_privacy">Text, photos, recordings and your pantry go to OpenAI when you ask the app to sort or read something. Item names also go there in the background, to sort them into aisles and to pick or draw their stickers (you can turn drawing off above).</string>
     <string name="settings_about_row">About &amp; licences</string>
     <string name="settings_about_row_hint">fonts, credits and the version</string>
-    <string name="settings_version">%1$s %2$s</string>
 
     <!-- The More menu of the Album and Settings screens (§4.24) -->
     <string name="menu_back_to_list">Back to %1$s</string>

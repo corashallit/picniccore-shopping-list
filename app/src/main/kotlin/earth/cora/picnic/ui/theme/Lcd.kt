@@ -32,7 +32,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
@@ -191,7 +190,9 @@ internal fun lcdColumns(cells: List<LcdCell>): Int = if (cells.isEmpty()) 0 else
  * A 5 × 7 dot-matrix line at [pitch] (app bar 1.9 dp, page number 1.2 dp, receipt 1.3 dp, settings 1.6 dp), scaled with
  * the font scale up to 1.6×. Each lit dot is 0.8 pitch; unlit dots show at 50 % [grid]. Lowercase prints as uppercase,
  * accents fold, anything else is a space. [moon] draws ★ as a full-moon disc (Dusk and Glow). [bold] doubles the dots
- * (the receipt's first and last lines). Sets the TextOverflowed semantics key when it does not fit its constraints.
+ * (the receipt's first and last lines). [starAlpha] dims only the ★ (or moon) cells' lit dots (the chip's blink): the
+ * line keeps one layout, so the blink never moves a dot. Sets the TextOverflowed semantics key when it does not fit its
+ * constraints.
  */
 @Composable
 fun LcdText(
@@ -202,6 +203,7 @@ fun LcdText(
     grid: Color? = PicnicTheme.colors.lcdGrid,
     moon: Boolean = false,
     bold: Boolean = false,
+    starAlpha: Float = 1f,
 ) {
     val density = LocalDensity.current
     val scale = min(density.fontScale, 1.6f).coerceAtLeast(1f)
@@ -215,7 +217,7 @@ fun LcdText(
                 this.text = AnnotatedString(text)
                 if (overflowed) textOverflowed = true
             }
-            .drawBehind { drawLcdCells(cells, p, color, grid, moon, bold) },
+            .drawBehind { drawLcdCells(cells, p, color, grid, moon, bold, starAlpha) },
         content = {},
     ) { _, constraints ->
         val w = ceil(columns * p).toInt()
@@ -226,7 +228,15 @@ fun LcdText(
 }
 
 /** Draws [cells] at pitch [p] (px) from the top-left. */
-internal fun DrawScope.drawLcdCells(cells: List<LcdCell>, p: Float, color: Color, grid: Color?, moon: Boolean, bold: Boolean) {
+internal fun DrawScope.drawLcdCells(
+    cells: List<LcdCell>,
+    p: Float,
+    color: Color,
+    grid: Color?,
+    moon: Boolean,
+    bold: Boolean,
+    starAlpha: Float = 1f,
+) {
     val dot = p * 0.8f
     val inset = (p - dot) / 2f
     val r = CornerRadius(dot * 0.18f)
@@ -242,7 +252,10 @@ internal fun DrawScope.drawLcdCells(cells: List<LcdCell>, p: Float, color: Color
         val left = x * p
         val g = cell.glyph
         when {
-            cell.extra != null -> drawExtra(cell.extra, left, p, color, moon)
+            cell.extra != null -> {
+                val blinks = cell.extra == LcdExtra.Star || cell.extra == LcdExtra.Moon
+                drawExtra(cell.extra, left, p, if (blinks && starAlpha < 1f) color.copy(alpha = color.alpha * starAlpha) else color, moon)
+            }
             g != null -> for (row in 0 until LcdGlyphs.ROWS) for (col in 0 until g.width) {
                 if (g.lit(col, row)) {
                     val w = if (bold) dot + p * 0.45f else dot
@@ -309,12 +322,22 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
             }
         }
     }
-    val blinkTime by rememberLoopTime(enabled = !reduced && state.mode == LcdMode.Count)
-    val starAlpha = if ((blinkTime % PicnicMotion.lcdBlinkPeriod) in (PicnicMotion.lcdBlinkPeriod - PicnicMotion.lcdBlinkOn) until PicnicMotion.lcdBlinkPeriod) {
-        PicnicMotion.lcdBlinkAlpha
-    } else {
-        1f
+    // The star's blink: dim for the last 120 ms of every 4 s. Timed by delays, not frames, so the chip recomposes twice
+    // per blink and the frame clock idles between them (the LCD sits on the List screen for a whole shop). The
+    // infinite-animation policy still decides whether it runs at all (tests: the lit star, unless the clock is held).
+    var dim by remember { mutableStateOf(false) }
+    LaunchedEffect(reduced, state.mode) {
+        dim = false
+        if (reduced || state.mode != LcdMode.Count) return@LaunchedEffect
+        while (true) {
+            withInfiniteAnimationFrameMillis { }
+            delay(PicnicMotion.lcdBlinkPeriod - PicnicMotion.lcdBlinkOn)
+            dim = true
+            delay(PicnicMotion.lcdBlinkOn)
+            dim = false
+        }
     }
+    val starAlpha = if (dim) PicnicMotion.lcdBlinkAlpha else 1f
 
     Box(
         modifier
@@ -355,23 +378,14 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
                 if (state.mode == LcdMode.Pet) {
                     LcdPetSprite(state.petPose, Modifier.padding(end = pitch * 1.5f), pitch = pitch)
                 }
-                val starIndex = shown.indexOf('★')
-                if (starIndex >= 0 && starAlpha < 1f) {
-                    LcdText(shown.substring(0, starIndex), pitch)
-                    Box(Modifier.padding(start = pitch)) {
-                        LcdText("★", pitch, Modifier.graphicsAlpha(starAlpha), moon = moon)
-                    }
-                } else {
-                    LcdText(shown, pitch, moon = moon)
-                }
+                // One line, one layout: the blink dims the star's dots in place and never re-lays the digits.
+                LcdText(shown, pitch, moon = moon, starAlpha = starAlpha)
             }
         }
     }
 }
 
 private val RoundedLcdInner = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
-
-private fun Modifier.graphicsAlpha(a: Float): Modifier = graphicsLayer { alpha = a }
 
 /** The LCD's faint 1 dp grid at 50 % (every 3 dp). */
 private fun DrawScope.drawLcdGrid(grid: Color) {

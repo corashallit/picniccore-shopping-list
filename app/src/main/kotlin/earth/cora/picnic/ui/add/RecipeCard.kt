@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -39,10 +38,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.max
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import earth.cora.picnic.R
@@ -214,7 +210,8 @@ internal fun AisleTray(rows: List<ReviewRow>, clock: RevealClock?, onToggleKeep:
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FixedSizeBadge { NumberCircle(if (first.aisleIndex < 0) null else first.aisleIndex + 1, look, modifier = Modifier.padding(top = 1.dp)) }
+            // The circle and the store chip grow with a large font (WP4), so the numerals never clip.
+            NumberCircle(if (first.aisleIndex < 0) null else first.aisleIndex + 1, look, modifier = Modifier.padding(top = 1.dp))
             FlowRow(
                 Modifier.weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -222,7 +219,7 @@ internal fun AisleTray(rows: List<ReviewRow>, clock: RevealClock?, onToggleKeep:
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(name, style = t.aisleTab.copy(color = look.family.trace))
-                first.storeAisle?.let { FixedSizeBadge { StoreAisleChip(it) } }
+                first.storeAisle?.let { StoreAisleChip(it) }
                 Text(kept, style = t.label.copy(color = c.ballpoint), modifier = Modifier.padding(top = 2.dp))
             }
         }
@@ -349,24 +346,6 @@ internal const val LARGE_TEXT: Float = 1.3f
 
 /** From this font scale the review rows stack their words under the sticker and the switch. */
 internal const val VERY_LARGE_TEXT: Float = 1.5f
-
-/**
- * The number circle and the store chip are fixed-size badges (24 dp, 22 dp) whose numerals would clip at large text;
- * they keep their drawn size (TalkBack still hears the aisle in the header's words).
- */
-@Composable
-internal fun FixedSizeBadge(content: @Composable () -> Unit) {
-    val d = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(d.density, minOf(d.fontScale, 1f)), content = content)
-}
-
-/** A chip's height that grows with the text (never below [min]): the label's line plus its padding. */
-@Composable
-internal fun chipHeight(min: Dp): Dp {
-    val lineHeight = PicnicTheme.type.label.lineHeight
-    val grown = with(LocalDensity.current) { lineHeight.toDp() } + 12.dp
-    return max(min, grown)
-}
 
 /** A row's detail line (§4.17): the reason for a skipped row, else the pack size · recipe amount · note. */
 @Composable

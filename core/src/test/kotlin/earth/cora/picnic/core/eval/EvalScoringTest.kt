@@ -5,6 +5,8 @@ import earth.cora.picnic.core.model.IconFit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EvalScoringTest {
@@ -89,6 +91,29 @@ class EvalScoringTest {
         val s = EvalScoring.scoreIngest(c, store, listOf(item("Salt"), item("Mixed spice")), "ok", 1)
         assertEquals(2, s.producedMatched)
         assertFalse(s.checks.first { it.what == "no web search" }.ok)
+    }
+
+    /**
+     * The message rule (§8 item 23): a correction she made mid-note (the cases tagged "self-correction") needs a message
+     * saying what was corrected, even when every row is one she named; a plain list she named needs none, so no check
+     * is added and an empty message passes.
+     */
+    @Test
+    fun selfCorrectionsMustExplainThemselves() {
+        val file = EvalFile.load()
+        val voice = file.cases.single { it.id == "voice-cat-food" }
+        assertTrue("self-correction" in voice.tags)
+        val named = listOf(item("Potatoes", qty = "1 kg"), item("Milk"))
+        fun messageCheck(case: EvalCase, message: String) =
+            EvalScoring.scoreIngest(case, file.store(case.store), named, message, 0).checks.firstOrNull { it.what == "message present (something to explain)" }
+        assertFalse(assertNotNull(messageCheck(voice, ""), "a correction needs its message checked").ok, "an empty message hides the correction")
+        assertTrue(assertNotNull(messageCheck(voice, "Updated the potatoes to 1 kg.")).ok)
+        // The same named rows on a plain list: nothing to explain, so no message check at all.
+        val plain = case(listOf(ItemExpect(match = listOf("potato")), ItemExpect(match = listOf("milk"))))
+        assertNull(messageCheck(plain, ""), "a plain named list adds no message check")
+        // A worked-out row (not named) needs its message again.
+        val worked = EvalScoring.scoreIngest(plain, store, listOf(item("Potatoes").copy(named = false)), "", 0)
+        assertFalse(worked.checks.first { it.what == "message present (something to explain)" }.ok)
     }
 
     @Test

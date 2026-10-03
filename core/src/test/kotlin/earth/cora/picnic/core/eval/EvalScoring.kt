@@ -215,8 +215,9 @@ object EvalScoring {
 
         checks += Check("message <= $MESSAGE_MAX_CHARS chars", message.length <= MESSAGE_MAX_CHARS, "${message.length} chars")
         // A plain list added exactly as she named it needs no message, so the app can add it at once (DESIGN_STICKER §6.2
-        // rule 4, quick add). Anything skipped or worked out from a dish, or an answer with nothing to buy, says why.
-        val explains = items.isEmpty() || items.any { it.skip != "none" || !it.named }
+        // rule 4, quick add). Anything skipped or worked out from a dish, a correction she made mid-note (a scratched
+        // item, a changed amount: the cases tagged "self-correction"), or an answer with nothing to buy, says why.
+        val explains = items.isEmpty() || items.any { it.skip != "none" || !it.named } || "self-correction" in case.tags
         if (explains) checks += Check("message present (something to explain)", message.isNotBlank(), "")
         case.message.mustNot.forEach { phrase ->
             val hit = if (phrase.startsWith("re:")) {

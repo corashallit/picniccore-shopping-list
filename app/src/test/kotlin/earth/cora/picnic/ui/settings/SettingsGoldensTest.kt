@@ -85,7 +85,7 @@ class SettingsGoldensTest(private val variant: ThemeVariant, @Suppress("unused")
 
 /** Hand-built Settings states for goldens and interaction tests. */
 object SettingsSamples {
-    private val base = SettingsUiState(loading = false, appVersion = "0.4.0", listTitle = "Saturday shop")
+    private val base = SettingsUiState(loading = false, listTitle = "Saturday shop")
 
     val noKey = base
 

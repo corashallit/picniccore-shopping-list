@@ -12,9 +12,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import earth.cora.picnic.ui.PicnicAppRoot
+import earth.cora.picnic.ui.theme.LocalPinholeWork
 import earth.cora.picnic.ui.theme.LocalStickerArt
 import earth.cora.picnic.ui.theme.LocalTimeouts
 import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.PinholeWork
 import earth.cora.picnic.ui.theme.SystemBarsHost
 import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.applySystemBars
@@ -64,6 +66,8 @@ class MainActivity : ComponentActivity() {
                         CompositionLocalProvider(
                             LocalStickerArt provides container.stickerArt,
                             LocalTimeouts provides container.timeouts,
+                            // Puffy titles scan for pinholes off the main thread in the app (§2.7, item 308).
+                            LocalPinholeWork provides PinholeWork.Background,
                         ) {
                             PicnicAppRoot(container)
                         }

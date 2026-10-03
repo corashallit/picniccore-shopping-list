@@ -2,6 +2,7 @@ package earth.cora.picnic.ui.theme
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -95,6 +96,8 @@ class ThemeGoldensTest(private val variant: ThemeVariant, private val v: String)
 
     @Test fun chipsAll() = compose.recordGolden("chips_all_$v", variant) { ChipsKit() }
 
+    @Test fun chipFocused() = compose.recordGolden("chip_focused_$v", variant) { ChipsFocusedState() }
+
     @Test fun switchStates() = compose.recordGolden("switch_states_$v", variant) { SwitchKit() }
 
     @Test fun fieldRest() = compose.recordGolden("field_rest_$v", variant) { FieldState("rest") }
@@ -144,9 +147,20 @@ class ThemeGoldensTest(private val variant: ThemeVariant, private val v: String)
 
     @Test fun rowStates() = compose.recordGolden("checkbox_states_$v", variant) { CheckboxKit() }
 
+    /** Item 57 at 2.0: the spot and hanko keep their size and the rows grow round them (the kit's pieces stacked, as at 1.0). */
     @Test fun rowStatesFs200() = compose.recordGolden("row_states_fs200_$v", variant, fontScale = 2f) {
-        Box(Modifier.width(332.dp)) { CheckboxKit() }
+        Column(Modifier.width(332.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) { CheckboxKit() }
     }
+
+    /**
+     * Item 337 at 1.3 and 2.0: the chips, pills, number circles and a ruled field grow with their labels, nothing cut.
+     * A tall window, so the whole kit fits at 2.0.
+     */
+    @Test @Config(qualifiers = "w360dp-h1200dp-xxhdpi")
+    fun kitLargeTextFs130() = compose.recordGolden("kit_large_text_fs130_$v", variant, fontScale = 1.3f) { LargeTextKit() }
+
+    @Test @Config(qualifiers = "w360dp-h1200dp-xxhdpi")
+    fun kitLargeTextFs200() = compose.recordGolden("kit_large_text_fs200_$v", variant, fontScale = 2f) { LargeTextKit() }
 
     @Test fun itemIcons() = compose.recordGolden("itemicon_kit_$v", variant) { ItemIconsKit() }
 

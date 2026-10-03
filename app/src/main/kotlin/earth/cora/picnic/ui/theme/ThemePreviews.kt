@@ -118,6 +118,16 @@ internal fun TextButtonState(state: String) {
     }
 }
 
+/** Chips with keyboard focus (§4.6 focus ring, §15): a label chip, a selected one and a source chip. */
+@Composable
+internal fun ChipsFocusedState() {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        PicnicChip("Favourites", selected = false, onClick = {}, interactionSource = rememberHeldInteraction(focused = true))
+        PicnicChip("Weekly shop", selected = true, onClick = {}, interactionSource = rememberHeldInteraction(focused = true))
+    }
+    SourceChip("pancake recipe", onClick = {}, interactionSource = rememberHeldInteraction(focused = true))
+}
+
 /** The round sticker buttons in one state. */
 @Composable
 internal fun RoundButtonsState(state: String) {
@@ -185,6 +195,39 @@ internal fun ChipsKit() {
     }
 }
 
+/**
+ * The kit under a large font (item 337, goldens kit_large_text_fs130 / fs200): the chips (a label, the longest default
+ * aisle, a source, store A12, shiny and jackpot, a rarity chip squeezed into 56 dp), the candy, secondary and disabled
+ * pills with the longest real labels, number circles of 24 and 20 dp, and a four-line ruled field, in a 332 dp column.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun LargeTextKit() {
+    Column(Modifier.width(332.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            PicnicChip("Favourites", selected = true, onClick = {}, family = Families.sakura)
+            AisleChip(3, "Pasta, rice & international", AisleLooks.of(3), selected = false, onClick = {})
+            SourceChip("pancake recipe", onClick = {})
+            Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { StoreAisleChip(12) }
+            Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { RarityChip(jackpot = false) }
+            Box(Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) { RarityChip(jackpot = true) }
+            Box(Modifier.heightIn(min = 48.dp).width(56.dp), contentAlignment = Alignment.Center) { RarityChip(jackpot = true) }
+        }
+        PicnicButton("Clear what I got", onClick = {})
+        PicnicButton("Keep everything, uncheck it all", onClick = {}, style = PicnicButtonStyle.Secondary)
+        PicnicButton("Stick all 12 on my list", onClick = {}, leadingStar = true)
+        PicnicButton("Reading… 6 of 9", onClick = {}, enabled = false, busy = true)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            NumberCircle(4, AisleLooks.of(4), size = 24.dp)
+            NumberCircle(12, AisleLooks.of(12), size = 24.dp)
+            NumberCircle(8, AisleLooks.of(8), size = 20.dp)
+            NumberCircle(24, AisleLooks.of(24), size = 20.dp)
+            NumberCircle(null, AisleLooks.everythingElse, size = 24.dp)
+        }
+        PicnicTextField("pancakes\nmaple syrup\nberries\nflour", {}, label = "Note", minLines = 4, modifier = Modifier.fillMaxWidth())
+    }
+}
+
 @Composable
 internal fun SwitchKit() {
     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -233,6 +276,7 @@ internal fun HankoVariantsKit() {
  * A row harness (the list's row is WP5's; this shows the theme pieces it is built from): sticker, name over detail, the
  * 48 dp checkbox target. States: unchecked with flags, pressed (the highlighter band behind the text), checked.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun RowHarness(
     name: String,
@@ -275,7 +319,12 @@ internal fun RowHarness(
                     }
                 },
             )
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // The chip wraps under the detail when a large font leaves it no room beside it.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(detail, style = t.itemDetail.copy(color = c.inkSoft))
                 if (holo) RarityChip(jackpot = false)
             }
@@ -539,11 +588,34 @@ internal fun PuffyKit(long: Boolean = false) {
         PuffyText("NEXT", t.nextLabel, fill = c.ballpoint, stroke = 6.dp, strokeColor = Color.White, shadow = PicnicTheme.shadows.hs)
         PuffyText("List complete!", t.celebrationTitle, fill = Families.strawberry.mid, stroke = 9.dp, strokeColor = Color.White, shadow = PicnicTheme.shadows.hs2)
     } else {
-        Box(Modifier.width(240.dp)) {
-            PuffyText("Saturday shop at Hillcrest", t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp)
-        }
-        Box(Modifier.width(200.dp)) {
-            PuffyText("Saturday shop at Hillcrest Market", t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp)
+        // Checklist 334: every stroked title at its longest real text, at font scale 1.0 and then 2.0, in the width its
+        // caller gives it: a long list name in the binder top (shrunk to 20 sp, then cut), the wordmark, a tab label,
+        // NEXT and the celebration title (two lines). Every stroke and shadow whole, every "…" after a whole word part.
+        val base = androidx.compose.ui.platform.LocalDensity.current
+        for (scale in listOf(1f, 2f)) {
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, scale),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.width(290.dp)) {
+                        PuffyText("Thanksgiving dinner at the cottage", t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp)
+                    }
+                    Box(Modifier.width(290.dp)) { Wordmark("Kirakira Basket") }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Box(Modifier.width(150.dp)) {
+                            PuffyText("Everything else", t.aisleTab.copy(color = c.ink), fill = c.ink, stroke = 6.dp)
+                        }
+                        PuffyText("NEXT", t.nextLabel, fill = c.ballpoint, stroke = 6.dp, strokeColor = Color.White, shadow = PicnicTheme.shadows.hs)
+                    }
+                    Box(Modifier.width(290.dp)) {
+                        PuffyText(
+                            "List complete!", t.celebrationTitle, fill = Families.strawberry.mid, stroke = 9.dp, strokeColor = Color.White,
+                            shadow = PicnicTheme.shadows.hs2, minFontSize = 26.sp, maxLines = 2,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
+                }
+            }
         }
     }
 }

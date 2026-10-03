@@ -40,7 +40,7 @@ class SettingsViewModelTest {
         assistant: FakeAssistant = FakeAssistant(),
     ): Fixture {
         val settings = InMemorySettingsRepository(initial, token)
-        val vm = SettingsViewModel(settings, assistant, "0.1.0-test")
+        val vm = SettingsViewModel(settings, assistant)
         advanceUntilIdle()
         return Fixture(vm, settings, assistant)
     }
@@ -62,7 +62,7 @@ class SettingsViewModelTest {
             cache = InMemoryPlaceCache(),
             clock = { 0L },
         )
-        val vm = SettingsViewModel(settings, FakeAssistant(), "0.1.0-test", places = source)
+        val vm = SettingsViewModel(settings, FakeAssistant(), places = source)
         runCurrent()
         assertEquals(AreaLookup.Finding, vm.state.value.area)
         answer.complete(null)
@@ -75,7 +75,7 @@ class SettingsViewModelTest {
             override fun hasPermission() = true
             override suspend fun locate(): LatLon? = LatLon(45.42, -75.69)
         }, InMemoryPlaceCache(), { 0L })
-        val vm2 = SettingsViewModel(settings, FakeAssistant(), "0.1.0-test", places = located)
+        val vm2 = SettingsViewModel(settings, FakeAssistant(), places = located)
         advanceUntilIdle()
         val found = vm2.state.value.area as AreaLookup.Found
         assertEquals(EcSites.nearest(LatLon(45.4, -75.7)).name, found.city)
@@ -92,7 +92,6 @@ class SettingsViewModelTest {
         assertEquals("", s.tokenInput)
         assertFalse(s.canSave)
         assertNull(s.notice)
-        assertEquals("0.1.0-test", s.appVersion)
     }
 
     @Test
@@ -192,7 +191,7 @@ class SettingsViewModelTest {
             override suspend fun setToken(token: String?) = Unit
         }
         val assistant = FakeAssistant()
-        val vm = SettingsViewModel(refusing, assistant, "0.1.0-test")
+        val vm = SettingsViewModel(refusing, assistant)
         advanceUntilIdle()
         vm.setTokenInput("sk-proj-abcdefghijklmnop1234")
         vm.saveConnection()
@@ -212,7 +211,7 @@ class SettingsViewModelTest {
             override suspend fun setDrawIcons(enabled: Boolean) = throw IOException("disk full")
             override suspend fun setToken(token: String?) = throw IOException("disk full")
         }
-        val vm = SettingsViewModel(failing, FakeAssistant(), "0.1.0-test")
+        val vm = SettingsViewModel(failing, FakeAssistant())
         advanceUntilIdle()
         vm.setDrawIcons(false)
         advanceUntilIdle()

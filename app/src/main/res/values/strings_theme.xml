@@ -12,7 +12,6 @@
     <string name="theme_state_expanded">expanded</string>
     <string name="theme_aisle_cleared">All picked up!</string>
     <string name="theme_aisle_cleared_stamp">CLEAR!</string>
-    <string name="theme_trip_progress">%1$d of %2$d in the basket</string>
     <string name="theme_switch_on">On</string>
     <string name="theme_switch_off">Off</string>
 
@@ -38,8 +37,6 @@
     <string name="theme_key_show">Show key</string>
     <string name="theme_key_hide">Hide key</string>
     <string name="theme_key_paste">Paste key</string>
-
-    <!-- Toast action (§4.15). -->
 
     <!-- Empty state art (§4.21): the doodle (hearts are drawn, not typed) and the sheet's printed caption. -->
     <string name="theme_empty_doodle">let\'s go shopping</string>

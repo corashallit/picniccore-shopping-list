@@ -1,13 +1,20 @@
 package earth.cora.picnic.ui.theme
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -16,12 +23,17 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
@@ -55,6 +67,59 @@ class ChipTest {
         compose.setContent { PicnicTheme(ThemeVariant.Day) { PicnicChip("Favourites", selected = true, onClick = {}) } }
         compose.onNodeWithText("Favourites").assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Checkbox))
         compose.onNodeWithText("Favourites").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "On"))
+    }
+
+    /**
+     * §15 keyboard and switch access, §4.6: a chip with focus shows it. In keyboard mode, focusing a label chip or a
+     * source chip draws the 2 dp ring 3 dp outside its face in the page's ink (ballpoint in Day, white in Glow, where
+     * ballpoint would vanish on the navy page): pixels of that colour appear round it, on the page it sits on. Moving
+     * focus away takes the ring off again.
+     */
+    @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+    @Test
+    fun focusedChipShowsItsRing() {
+        val requesters = List(3) { androidx.compose.ui.focus.FocusRequester() }
+        var input: androidx.compose.ui.input.InputModeManager? = null
+        var variant by mutableStateOf(ThemeVariant.Day)
+        compose.setContent {
+            input = androidx.compose.ui.platform.LocalInputModeManager.current
+            PicnicTheme(variant) {
+                Column(Modifier.background(PicnicTheme.colors.pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Box(Modifier.testTag("chip").padding(8.dp)) { PicnicChip("Favourites", selected = false, onClick = {}, modifier = Modifier.focusRequester(requesters[0])) }
+                    Box(Modifier.testTag("source").padding(8.dp)) { SourceChip("pancake recipe", onClick = {}, modifier = Modifier.focusRequester(requesters[1])) }
+                    Box(Modifier.testTag("away").padding(8.dp)) { PicnicButton("Try again", {}, style = PicnicButtonStyle.Secondary, modifier = Modifier.focusRequester(requesters[2])) }
+                }
+            }
+        }
+        fun shot(tag: String) = compose.onNodeWithTag(tag).captureToImage().asAndroidBitmap()
+        fun hasFocus(tag: String) = compose.onNode(hasClickAction() and hasAnyAncestor(hasTestTag(tag))).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused)
+        for ((v, colors) in listOf(ThemeVariant.Day to DayColors, ThemeVariant.Glow to GlowColors)) {
+            variant = v
+            compose.runOnIdle { requesters[2].requestFocus() }
+            compose.waitForIdle()
+            val ink = colors.ink.toArgb()
+            for ((i, tag) in listOf("chip", "source").withIndex()) {
+                val rest = shot(tag)
+                compose.runOnIdle {
+                    input!!.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard)
+                    requesters[i].requestFocus()
+                }
+                compose.waitForIdle()
+                assertEquals("$tag has focus in $v", true, hasFocus(tag))
+                val focused = shot(tag)
+                assertTrue("$tag: focus drew nothing in $v", !rest.sameAs(focused))
+                // The ring: ink-coloured pixels that appear where the resting chip had none (outside its face).
+                var ring = 0
+                for (y in 0 until rest.height) for (x in 0 until rest.width) {
+                    if (near(focused.getPixel(x, y), ink, 40) && !near(rest.getPixel(x, y), ink, 40)) ring++
+                }
+                assertTrue("$tag: no ring in the page's ink in $v ($ring px)", ring > 200)
+                compose.runOnIdle { requesters[2].requestFocus() }
+                compose.waitForIdle()
+                assertEquals("$tag lost focus in $v", false, hasFocus(tag))
+                assertTrue("$tag: the ring stays after focus moved away in $v", rest.sameAs(shot(tag)))
+            }
+        }
     }
 
 }

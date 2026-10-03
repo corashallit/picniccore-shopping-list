@@ -35,7 +35,7 @@ class LcdGlyphsTest {
         // Any store name, folded: accents, ligatures, punctuation.
         for (store in listOf(
             "Épicerie Dépanneur St-Hubert", "Œufs & Cie", "L'Ami's #1 Market (east)", "Marché Jean-Talon",
-            "Loblaws, Inc.", "Façade 100% bio", "Ünïcode Straße", "café “déjà vu” — 24h",
+            "Hillcrest Market, Inc.", "Façade 100% bio", "Ünïcode Straße", "café “déjà vu” — 24h",
         )) assertPrints(store)
     }
 

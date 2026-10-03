@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -231,7 +230,7 @@ private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: A
     if (chipBelow && storeAisle != null) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             NextTab(number, displayName, null, look, nameStyle, measurer, chipBelow = false, circle = circle)
-            NextStoreChip(storeAisle)
+            StoreAisleChip(storeAisle)
         }
         return
     }
@@ -273,28 +272,8 @@ private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: A
                 )
             }
         }
-        if (storeAisle != null) NextStoreChip(storeAisle)
-    }
-}
-
-/**
- * The store-aisle chip on the card (§4.10's "A3": lemon pastel, basket glyph, label 13 sp ballpoint): 22 dp tall, and
- * taller when the font scale grows its text, so the label never clips. TalkBack: "store aisle 3".
- */
-@Composable
-private fun NextStoreChip(number: Int) {
-    val label = androidx.compose.ui.res.stringResource(earth.cora.picnic.R.string.theme_store_aisle, number)
-    val style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp)
-    val textHeight = with(LocalDensity.current) { style.lineHeight.toDp() }
-    ChipFace(
-        fill = Families.lemon.pastel,
-        modifier = Modifier.clearAndSetSemantics { contentDescription = label },
-        height = maxOf(22.dp, textHeight + 2.dp * 2 + 4.dp),
-        border = 2.dp,
-        horizontal = 7.dp,
-    ) {
-        Glyph(PicnicGlyph.Basket, null, tint = PicnicTheme.colors.ballpoint, size = 13.dp)
-        Text("A$number", style = style, maxLines = 1)
+        // The store's own "A3" chip (§4.10): the theme's chip, which grows with a large font instead of clipping.
+        if (storeAisle != null) StoreAisleChip(storeAisle)
     }
 }
 

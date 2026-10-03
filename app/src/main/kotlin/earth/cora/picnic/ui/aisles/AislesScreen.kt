@@ -85,7 +85,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -649,9 +648,9 @@ private fun AisleLabel(
                     DragDots(look.family.trace)
                 }
             }
-            // The numeral repeats the label's number (TalkBack reads it from the label), one of the two §2.7 exemptions
-            // from the 13 sp floor: it keeps its 1.0 size, so it never overruns the circle's ring at large font scales.
-            val number: @Composable () -> Unit = { FixedFontScale { NumberCircle(position, look, size = 26.dp) } }
+            // The numeral repeats the label's number (TalkBack reads it from the label). It scales with the font like
+            // every numeral, and the circle grows round it (§2.7, §15: the kit's NumberCircle never cuts its numeral).
+            val number: @Composable () -> Unit = { NumberCircle(position, look, size = 26.dp) }
             val tools: @Composable () -> Unit = {
                 Swatch(look, Modifier.size(26.dp))
                 // The round button keeps the page's own colours (its face is the pad: white in Day, navy in Glow).
@@ -724,13 +723,6 @@ private fun LabelName(name: String, storeAisle: Int?, modifier: Modifier) {
             )
         }
     }
-}
-
-/** Runs [content] at font scale 1 (for a numeral that repeats a label and must stay inside its circle). */
-@Composable
-private fun FixedFontScale(content: @Composable () -> Unit) {
-    val d = LocalDensity.current
-    CompositionLocalProvider(LocalDensity provides Density(d.density, 1f), content = content)
 }
 
 /** The handle's 2 × 3 grid of 3 dp dots. */

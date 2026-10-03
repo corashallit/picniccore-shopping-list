@@ -272,6 +272,13 @@ data class PicnicColors(
     val receiptPaper: Color = Color(0xFFFFF9E8),
     /** Sticky-note toast paper (§2.6). */
     val toastNote: Color = Families.lemon.pastel,
+    /**
+     * A disabled button's face, its border too (§4.6): `backing` in Day, the rule navy in Glow, so a disabled control
+     * recedes on the navy page instead of standing out as a bright disc.
+     */
+    val disabledFace: Color = backing,
+    /** A disabled button's label and glyph on [disabledFace] (ballpointSoft; Glow inkSoft). */
+    val onDisabledFace: Color = ballpointSoft,
 ) {
     /** Colours for an aisle by 0-based index (position − 1); negative = "Everything else" (v1 shape). */
     fun aisle(index: Int): AisleColors =
@@ -451,6 +458,8 @@ val GlowColors = PicnicColors(
     onPad = Color(0xFFFFFFFF),
     onPadSoft = Color(0xFFC9CFF5),
     book = GlowBook,
+    disabledFace = Color(0xFF3A438A),
+    onDisabledFace = Color(0xFFC9CFF5),
 )
 
 /** Dusk (egg 1, §2.5): Day with a lilac binder, white 40 % pinstripes and three posterised bands at the top. */
