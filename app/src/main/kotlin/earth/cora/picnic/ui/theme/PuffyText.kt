@@ -93,10 +93,10 @@ internal var SemanticsPropertyReceiver.puffyInkBounds: Rect by PuffyInkBounds
 /**
  * Where a PuffyText works out its pinhole patch (§2.7, item 338). [Inline]: in composition, so the first frame already
  * carries it (previews and tests, where a golden must not depend on a worker's timing). [Background] (the app's root
- * provides it, MainActivity): the silhouette is rasterised on the main thread (two text draws into a mask; the layouts'
- * paints are never shared with another thread) and the pass over its pixels runs on a worker; the title draws without
- * the patch for the frame or two that takes (it only closes specks). Either way a patch is worked out once per title,
- * size and density in the process ([PuffyPatchCache]).
+ * provides it, MainActivity): the whole pass, the mask's rasterising and the scan of its pixels, runs on a worker, from
+ * a layout of its own that the screen never draws (so no paint is shared between threads); the title draws without the
+ * patch for the frame or two that takes (it only closes specks). Either way a patch is worked out once per title, size
+ * and density in the process ([PuffyPatchCache]).
  */
 @Immutable
 class PinholeWork private constructor(internal val context: CoroutineContext?) {
@@ -210,8 +210,8 @@ fun PuffyText(
 
 /**
  * The pinhole patch for [fit]: from [PuffyPatchCache] when this title was seen before; else worked out in composition
- * ([PinholeWork.Inline]) or, with [PinholeWork.Background], rasterised here on the main thread and scanned on a worker
- * (null until it is ready, so the title draws without it for a frame or two).
+ * ([PinholeWork.Inline]) or, with [PinholeWork.Background], on a worker (null until it is ready, so the title draws
+ * without it for a frame or two).
  */
 @Composable
 private fun rememberPinholes(fit: PuffyFit, key: PuffyPatchKey, density: Density, work: PinholeWork): PinholePatch? {
@@ -221,9 +221,8 @@ private fun rememberPinholes(fit: PuffyFit, key: PuffyPatchKey, density: Density
     }
     if (state.value == null && context != null) {
         LaunchedEffect(fit, key) {
-            // On the main thread (this effect's dispatcher): the draw into the mask uses the layouts' own paints.
-            val silhouette = PuffyPinholes.silhouette(fit, density)
-            val patch = if (silhouette == null) PinholePatch.None else withContext(context) { PuffyPinholes.patch(silhouette) }
+            // The mask is drawn from fit.mask, a layout only this pass uses, so it is safe off the main thread.
+            val patch = withContext(context) { PuffyPinholes.find(fit, density) }
             state.value = PuffyPatchCache.put(key, patch)
         }
     }
@@ -288,6 +287,8 @@ internal class PuffyFit(
     val outline: TextLayoutResult,
     /** The shadow pass, in the shadow colour. */
     val shadow: TextLayoutResult,
+    /** The same lines for the pinhole mask alone ([PuffyPinholes]): never drawn on screen, so a worker may draw it. */
+    val mask: TextLayoutResult,
     val half: Float,
     val sx: Float,
     val sy: Float,
@@ -326,7 +327,8 @@ internal fun fitPuffy(
     val maxText = if (maxWidth == Constraints.Infinity) Constraints.Infinity else max(0, (maxWidth - room).toInt())
     val from = style.fontSize.value
     val to = if (minFontSize.isSpecified) minFontSize.value.coerceAtMost(from) else from
-    fun fits(l: TextLayoutResult) = !l.hasVisualOverflow && inkRight(l) <= maxText + 0.5f
+    fun fitsIn(l: TextLayoutResult, max: Int) = !l.hasVisualOverflow && inkRight(l) <= max + 0.5f
+    fun fits(l: TextLayoutResult) = fitsIn(l, maxText)
     fun measure(t: AnnotatedString, size: Float, lines: Int) = measurePuffy(measurer, t, style, size, maxText, lines, TextOverflow.Clip, textAlign)
     // The largest size from [start] down to [to] (1 sp steps, then [to] itself) at which [lines] lines hold the text.
     fun shrink(start: Float, lines: Int): Triple<Float, TextLayoutResult, Int>? {
@@ -340,16 +342,27 @@ internal fun fitPuffy(
     }
     val found = if (wrapLast && maxLines > 1) shrink(from, 1) ?: shrink(to, maxLines) else shrink(from, maxLines)
     val size: Float
-    val layout: TextLayoutResult
+    var layout: TextLayoutResult
     val overflowed: Boolean
     // The passes are laid out exactly as the fill was (one line unwrapped, or wrapped in the box), so they align.
     val lines: Int
+    var width = maxText
     var shown = text
     if (found != null) {
         size = found.first
         layout = found.second
         lines = found.third
         overflowed = false
+        // A label that wrapped as a last resort (the candy pill) is as wide as its longest line, so its face hugs it.
+        if (wrapLast && lines > 1 && layout.lineCount > 1) {
+            val longest = (0 until layout.lineCount).maxOf { layout.getLineRight(it) - layout.getLineLeft(it) }
+            val tight = (ceil(longest).toInt() + 1).coerceAtMost(maxText)
+            val hugged = measurePuffy(measurer, text, style, size, tight, lines, TextOverflow.Clip, textAlign)
+            if (fitsIn(hugged, tight) && hugged.lineCount == layout.lineCount) {
+                layout = hugged
+                width = tight
+            }
+        }
     } else {
         size = to
         // The longest start that fits with its "…" (binary search: a longer start never fits where a shorter fails).
@@ -365,12 +378,13 @@ internal fun fitPuffy(
         overflowed = true
     }
     val plain = AnnotatedString(shown.text)
-    val outline = measurePuffy(measurer, plain, style.copy(color = strokeColor), size, maxText, lines, TextOverflow.Clip, textAlign)
-    val shadowLayout = measurePuffy(measurer, plain, style.copy(color = shadowColor), size, maxText, lines, TextOverflow.Clip, textAlign)
+    val outline = measurePuffy(measurer, plain, style.copy(color = strokeColor), size, width, lines, TextOverflow.Clip, textAlign)
+    val shadowLayout = measurePuffy(measurer, plain, style.copy(color = shadowColor), size, width, lines, TextOverflow.Clip, textAlign)
+    val mask = measurePuffy(measurer, plain, style.copy(color = Color.Black), size, width, lines, TextOverflow.Clip, textAlign)
     val inkW = max(inkRight(layout), layout.size.width.toFloat())
     val w = ceil(inkW + room).toInt()
     val h = ceil(layout.size.height + half * 2 + sy).toInt()
-    return PuffyFit(layout, outline, shadowLayout, half, sx, sy, size, overflowed, w, h, Rect(0f, 0f, inkW + room, layout.size.height + half * 2 + sy))
+    return PuffyFit(layout, outline, shadowLayout, mask, half, sx, sy, size, overflowed, w, h, Rect(0f, 0f, inkW + room, layout.size.height + half * 2 + sy))
 }
 
 /**
@@ -443,8 +457,8 @@ internal class Silhouette(val alpha: IntArray, val w: Int, val h: Int, val pen: 
 
 /**
  * The stroke pass's pinholes and cracks (see the file header). [silhouette] rasterises the silhouette (stroke and fill)
- * once, on the thread that draws the title (it uses the layouts' paints); [patch] is the pure pass over its pixels,
- * safe on any thread, and returns what to fill as an opaque mask cropped to it ([PinholePatch.None] when there is
+ * once, from the fit's own mask layout; [patch] is the pure pass over its pixels; both are safe off the main thread.
+ * [patch] returns what to fill as an opaque mask cropped to it ([PinholePatch.None] when there is
  * nothing, the usual case), drawn tinted in the stroke colour between the stroke and fill passes. The rule's sizes
  * are in dp (§2.7): the ground never passes a crack [CRACK_DP] wide or narrower, at any density, and reaches one
  * antialiased pixel past its clearance into what it borders, so a notch between two halos ends rounded, at the blade's
@@ -466,7 +480,7 @@ internal object PuffyPinholes {
     /**
      * The neck rule in px at [density]: the ground keeps this far from every covered pixel, so it never passes a crack
      * twice as wide. Half of [CRACK_DP], rounded up to whole px, so a 1 dp crack closes at every density (2 px each side
-     * from 2.5 to 4 px per dp: what closes is 1 to 1.6 dp wide, never more).
+     * from 2.5 to 4 px per dp, where what closes is 1 to 1.6 dp wide).
      */
     fun neckPx(density: Float): Int = max(1, ceil(CRACK_DP * density / 2f - 0.001f).toInt())
 
@@ -480,10 +494,10 @@ internal object PuffyPinholes {
 
     @Volatile internal var lastScanFilled = 0
 
-    /** Rasterises and scans in one go ([PinholeWork.Inline]). */
+    /** Rasterises and scans in one go. */
     fun find(fit: PuffyFit, density: Density): PinholePatch = silhouette(fit, density)?.let(::patch) ?: PinholePatch.None
 
-    /** The silhouette of [fit] (null when it has no stroke): drawn on the calling thread, which must be the one that draws [fit]. */
+    /** The silhouette of [fit] (null when it has no stroke), drawn from [PuffyFit.mask]: safe on any one thread at a time. */
     fun silhouette(fit: PuffyFit, density: Density): Silhouette? {
         val w = fit.width
         val h = fit.height
@@ -491,8 +505,8 @@ internal object PuffyPinholes {
         val mask = ImageBitmap(w, h, ImageBitmapConfig.Argb8888)
         CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(mask), Size(w.toFloat(), h.toFloat())) {
             translate(fit.half, fit.half) {
-                drawText(fit.outline, Color.Black, drawStyle = Stroke(width = fit.half * 2, join = StrokeJoin.Round))
-                drawText(fit.fill, Color.Black, drawStyle = Fill)
+                drawText(fit.mask, Color.Black, drawStyle = Stroke(width = fit.half * 2, join = StrokeJoin.Round))
+                drawText(fit.mask, Color.Black, drawStyle = Fill)
             }
         }
         val alpha = IntArray(w * h)
@@ -501,7 +515,7 @@ internal object PuffyPinholes {
         // The fill alone: what it encloses by itself is a glyph's counter.
         val fillMask = ImageBitmap(w, h, ImageBitmapConfig.Argb8888)
         CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(fillMask), Size(w.toFloat(), h.toFloat())) {
-            translate(fit.half, fit.half) { drawText(fit.fill, Color.Black, drawStyle = Fill) }
+            translate(fit.half, fit.half) { drawText(fit.mask, Color.Black, drawStyle = Fill) }
         }
         val fill = IntArray(w * h)
         fillMask.readPixels(fill)
