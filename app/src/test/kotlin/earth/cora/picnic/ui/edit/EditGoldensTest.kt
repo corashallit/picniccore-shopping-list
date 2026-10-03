@@ -28,7 +28,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Edit sheet goldens (checklist 217, 329, Appendix C), from the Appendix A fixture (Milk, 2 % in 6 · Dairy & eggs at
- * Hillcrest Market): `edit_{default,renamed,drawing,nokey}_{day,glow}`; Day only: `edit_sheet_pantry_on`, `edit_fs130`,
+ * Hillcrest Market): `edit_{default,renamed,drawing,nokey,sheet_pantry_on}_{day,glow}`; Day only: `edit_fs130`,
  * `edit_fs200`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -79,10 +79,9 @@ class EditGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pri
     @Test
     fun noKey() = record(goldenName("edit_nokey", variant), EditSamples.milk(canDraw = false), before = { toTheEnd() })
 
+    /** Item 329: the heart and the jar both on (Appendix C's rule: a name with no variant suffix is Day and Glow). */
     @Test
-    fun pantryOn() {
-        if (day) record("edit_sheet_pantry_on", EditSamples.milk(), favourite = true, inPantry = true)
-    }
+    fun pantryOn() = record(goldenName("edit_sheet_pantry_on", variant), EditSamples.milk(), favourite = true, inPantry = true)
 
     @Test
     fun fontScale130() {

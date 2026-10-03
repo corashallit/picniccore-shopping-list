@@ -23,9 +23,12 @@ class PrivacyDocTest {
         assertTrue("names the host", "weather.gc.ca" in plain)
         assertTrue("says it is off by default", "Weather surprises (Settings → Surprises, off by default)" in plain)
         assertTrue("says how often", "at most every 3 hours" in plain)
-        assertTrue("says what the request carries", "The request names only that city" in plain)
+        // The feed is requested for the city's own coordinates (Place.forecastFeedUrl), so the doc says so, truly.
+        assertTrue("says what the request carries", "names that city by its published coordinates (the same for everyone near it), never your own location" in plain)
+        assertFalse("not a city code: the request carries coordinates", "only the code of the nearest forecast city leaves the phone" in plain)
         val safety = plain.substringAfter("Data safety notes")
         assertTrue("the Data safety notes cover it", "Environment Canada" in safety && "Weather surprises" in safety)
+        assertTrue("and what the request carries", "by that city's published coordinates" in safety)
     }
 
     @Test
