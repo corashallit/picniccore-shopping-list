@@ -2,10 +2,13 @@ package earth.cora.picnic.ui.pantry
 
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.performClick
+import earth.cora.picnic.ui.common.focusWithoutTouch
 import earth.cora.picnic.ui.theme.ToastHostState
 import earth.cora.picnic.ui.theme.ToastMessage
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -68,7 +71,10 @@ class PantryGoldensTest(private val variant: ThemeVariant, @Suppress("unused") p
     fun full() {
         if (day) {
             record("pantry_full", PantrySamples.full, before = {
+                // The last sticker into view, then 140 dp more: its shelf and the names under it, the text field below.
                 onNodeWithContentDescription("Gochujang, in your pantry").performScrollTo()
+                val more = with(density) { 140.dp.toPx() }
+                onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, more) }
             })
         }
     }
@@ -83,9 +89,7 @@ class PantryGoldensTest(private val variant: ThemeVariant, @Suppress("unused") p
     fun textFocused() {
         if (day) {
             record("pantry_text_focused", PantrySamples.few, before = {
-                onNodeWithContentDescription("Pantry as text:").performScrollTo().performClick()
-                waitForIdle()
-                onNodeWithContentDescription("Pantry as text:").assertIsFocused()
+                focusWithoutTouch(onNodeWithContentDescription("Pantry as text:").performScrollTo())
             })
         }
     }

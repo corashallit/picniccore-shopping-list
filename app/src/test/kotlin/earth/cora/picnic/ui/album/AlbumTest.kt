@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import earth.cora.picnic.settings.InMemorySettingsRepository
+import earth.cora.picnic.ui.common.isCut
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -231,7 +232,7 @@ class AlbumTest {
                 val node = compose.onNodeWithText(label, useUnmergedTree = true).fetchSemanticsNode()
                 val results = mutableListOf<TextLayoutResult>()
                 node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
-                assertTrue("$label is cut at $s", results.none { r -> r.hasVisualOverflow || (0 until r.lineCount).any { r.isLineEllipsized(it) } })
+                assertTrue("$label is cut at $s", results.none { it.isCut() })
             }
         }
     }

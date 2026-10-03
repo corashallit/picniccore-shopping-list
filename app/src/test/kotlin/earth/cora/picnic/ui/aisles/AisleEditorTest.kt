@@ -35,10 +35,13 @@ import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.aisles
+import earth.cora.picnic.core.model.displayName
+import androidx.compose.ui.test.getBoundsInRoot
 import earth.cora.picnic.core.model.findItem
 import earth.cora.picnic.core.store.InMemoryStateStore
 import earth.cora.picnic.ui.common.FakeAssistant
 import earth.cora.picnic.ui.common.PHONE_360
+import earth.cora.picnic.ui.common.isCut
 import earth.cora.picnic.ui.common.Samples
 import earth.cora.picnic.ui.theme.AisleLooks
 import earth.cora.picnic.ui.theme.Families
@@ -119,6 +122,27 @@ class AisleEditorTest {
         // Produce's items followed it.
         assertEquals("produce", store.now().findItem("i-lemons")?.aisleId)
         assertEquals("Produce", store.now().store.aisles().first { it.id == "produce" }.name)
+    }
+
+    /**
+     * Labels grow with their names, so the drag measures them: "Aisle 1 - Breakfast, coffee & tea" (two lines and its
+     * store number) dragged until its centre is just past the next label's centre drops after it, and only one place on.
+     */
+    @Test
+    fun dragOverLabelsOfDifferentHeights() {
+        val store = launch()
+        val five = compose.onNodeWithTag(AislesTags.label(5)).getBoundsInRoot()
+        val six = compose.onNodeWithTag(AislesTags.label(6)).getBoundsInRoot()
+        assertTrue("the label grew with its name", five.bottom - five.top > 48.dp)
+        val distance = with(compose.density) { ((six.top + six.bottom) / 2 - (five.top + five.bottom) / 2 + 16.dp).toPx() }
+        compose.onNodeWithTag(AislesTags.handle(5), useUnmergedTree = true).performScrollTo().performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 12f))
+            repeat(20) { moveBy(Offset(0f, (distance - 12f) / 20f)) }
+            up()
+        }
+        waitFor(store) { s -> s.store.aisles().map { it.displayName() }.subList(4, 7) == listOf("Baking & spices", "Breakfast, coffee & tea", "Pasta, rice & international") }
+        assertEquals("aisle-1-breakfast-coffee-tea", store.now().findItem("i-coffee")?.aisleId)
     }
 
     @Test
@@ -248,7 +272,7 @@ class AisleEditorTest {
                     results.forEach { r ->
                         val text = r.layoutInput.text.text
                         if (text.startsWith("store aisle ")) storeLines++
-                        if (r.hasVisualOverflow || (0 until r.lineCount).any { r.isLineEllipsized(it) }) cut += "$s: '$text'"
+                        if (r.isCut()) cut += "$s: '$text'"
                     }
                 }
             }

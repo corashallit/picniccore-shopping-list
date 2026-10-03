@@ -221,7 +221,8 @@ internal fun EditDetails(
             singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Amount and Note side by side; with large text one under the other, so the hints stay whole.
+        val amount: @Composable (Modifier) -> Unit = { m ->
             PicnicTextField(
                 value = quantity,
                 onValueChange = onQuantityChange,
@@ -229,8 +230,10 @@ internal fun EditDetails(
                 placeholder = stringResource(R.string.edit_quantity_placeholder),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                modifier = Modifier.weight(0.42f),
+                modifier = m,
             )
+        }
+        val noteField: @Composable (Modifier) -> Unit = { m ->
             PicnicTextField(
                 value = note,
                 onValueChange = onNoteChange,
@@ -238,8 +241,17 @@ internal fun EditDetails(
                 placeholder = stringResource(R.string.edit_note_placeholder),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
-                modifier = Modifier.weight(0.58f),
+                modifier = m,
             )
+        }
+        if (LocalDensity.current.fontScale >= FIELDS_STACK) {
+            amount(Modifier.fillMaxWidth())
+            noteField(Modifier.fillMaxWidth())
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                amount(Modifier.weight(0.42f))
+                noteField(Modifier.weight(0.58f))
+            }
         }
 
         SectionDivider()
@@ -368,6 +380,9 @@ internal const val PANTRY_JAR: String = "spice_jar"
 
 /** From this font scale the toggles stand under the hero, so their labels keep whole words. */
 private const val LARGE_TEXT = 1.5f
+
+/** From this font scale Amount and Note stand one under the other (side by side, Note's hint would be cut at 1.3). */
+private const val FIELDS_STACK = 1.15f
 
 /** Stickers shown for an item with no category (the paper bag): the first ones of the catalog. */
 internal const val MIN_GRID = 15

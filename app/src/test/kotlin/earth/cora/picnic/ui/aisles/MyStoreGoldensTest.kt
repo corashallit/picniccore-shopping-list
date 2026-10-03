@@ -2,12 +2,15 @@ package earth.cora.picnic.ui.aisles
 
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
+import earth.cora.picnic.ui.common.focusWithoutTouch
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import earth.cora.picnic.core.catalog.IconCatalog
@@ -49,13 +52,12 @@ class MyStoreGoldensTest(private val variant: ThemeVariant, @Suppress("unused") 
         fontScale: Float? = null,
         frozen: Boolean = false,
         drag: DragPreview? = null,
-        focusText: Boolean = false,
         toast: String? = null,
         before: ComposeContentTestRule.() -> Unit = {},
     ) = compose.recordScreen(if (exact) name else goldenName(name, variant), variant, fontScale = fontScale, frozen = frozen, before = before) {
         val toasts = remember { ToastHostState() }
         if (toast != null) LaunchedEffect(Unit) { toasts.show(ToastMessage(toast, kind = "notice")) }
-        AislesScreen(state, AislesActions(), toasts = toasts, initialDrag = drag, focusText = focusText)
+        AislesScreen(state, AislesActions(), toasts = toasts, initialDrag = drag)
     }
 
     @Test
@@ -63,22 +65,26 @@ class MyStoreGoldensTest(private val variant: ThemeVariant, @Suppress("unused") 
 
     /** The mockup's open label: 5 · Breakfast, its name field in focus, the swatches and baskets under it. */
     @Test
-    fun editing() = record("mystore_editing", MyStoreSamples.default.copy(editing = "breakfast"))
+    fun editing() = record("mystore_editing", MyStoreSamples.default.copy(editing = "breakfast"), before = {
+        focusWithoutTouch(onNodeWithContentDescription("Aisle name"))
+    })
 
-    /** 7 · Frozen lifted (tilted, hsLift) a third of a slot down: only its shadow meets Household's border. */
+    /** 7 · Frozen lifted (tilted, hsLift) a little way down, as in the mockup: only its shadow meets Household's border. */
     @Test
-    fun dragging() = record("mystore_dragging", MyStoreSamples.default, drag = DragPreview(index = 6, offsetSlots = 0.3f))
+    fun dragging() = record("mystore_dragging", MyStoreSamples.default, drag = DragPreview(index = 6, offsetSlots = 0.12f))
 
     @Test
     fun resorting() = record("mystore_resorting", MyStoreSamples.default.copy(syncing = true), before = {
-        onNodeWithText("Re-sort my list").performScrollTo()
+        // The button and the line under it ("Sorting your list into the aisles…") in view.
+        onNodeWithText("Sorting your list into the aisles…").performScrollTo()
+        val more = with(density) { 96.dp.toPx() }
+        onNode(hasScrollAction()).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, more) }
     })
 
     @Test
     fun textFocused() = record("mystore_text_focused", MyStoreSamples.default, before = {
-        onNodeWithTag(AislesTags.TEXT).performScrollTo().performClick()
-        waitForIdle()
-        onNodeWithContentDescription("Aisles as text:").assertIsFocused()
+        onNodeWithTag(AislesTags.TEXT).performScrollTo()
+        focusWithoutTouch(onNodeWithContentDescription("Aisles as text:"))
     })
 
     @Test

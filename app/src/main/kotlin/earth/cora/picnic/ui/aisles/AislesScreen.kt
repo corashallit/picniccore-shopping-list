@@ -43,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -235,12 +236,9 @@ fun AislesScreen(
     toasts: ToastHostState = remember { ToastHostState() },
     scroll: ScrollState = rememberScrollState(),
     initialDrag: DragPreview? = null,
-    focusText: Boolean = false,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
-    val textFocus = remember { FocusRequester() }
-    LaunchedEffect(focusText) { if (focusText) textFocus.requestFocus() }
 
     SecondaryScreen(
         title = stringResource(R.string.aisles_title),
@@ -285,7 +283,6 @@ fun AislesScreen(
                     supportingText = stringResource(R.string.aisles_text_hint),
                     modifier = Modifier
                         .testTag(AislesTags.TEXT)
-                        .focusRequester(textFocus)
                         .onFocusChanged {
                             if (focused && !it.isFocused) commit()
                             focused = it.isFocused
@@ -314,21 +311,22 @@ private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDr
     // A golden's held drag ([DragPreview]) is given in slots of the label it moves over; it becomes px once measured.
     var previewSlots by remember { mutableStateOf(initialDrag?.offsetSlots) }
     fun slot(i: Int): Float = (heights[i] ?: 0) + gap
-    fun centre(i: Int): Float = (0 until i).fold(0f) { y, j -> y + slot(j) } + (heights[i] ?: 0) / 2f
+    fun top(i: Int): Float = (0 until i).fold(0f) { y, j -> y + slot(j) }
     fun offsetNow(): Float = previewSlots?.let { s ->
         val over = if (s >= 0f) (dragging + 1).coerceAtMost(count - 1) else (dragging - 1).coerceAtLeast(0)
         s * slot(over)
     } ?: dragOffset
-    // Read at call time (the drop can come before any recomposition of the drag).
+    // Where the lifted label would drop, read at call time (the drop can come before any recomposition of the drag): it
+    // passes a label once its centre crosses the middle of the gap before that label (for equal labels: half a slot).
     fun targetNow(): Int {
         if (dragging !in 0 until count) return -1
         val offset = offsetNow()
-        val y = centre(dragging) + offset
+        val y = top(dragging) + (heights[dragging] ?: 0) / 2f + offset
         var t = dragging
         if (offset > 0f) {
-            for (k in dragging + 1 until count) if (centre(k) < y) t = k
+            for (k in dragging + 1 until count) if (y > top(k) - gap / 2f) t = k
         } else {
-            for (k in dragging - 1 downTo 0) if (centre(k) > y) t = k
+            for (k in dragging - 1 downTo 0) if (y < top(k) + (heights[k] ?: 0) + gap / 2f) t = k
         }
         return t
     }
@@ -702,7 +700,12 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
     var name by remember(id) { mutableStateOf(label.aisle.name) }
     var number by remember(id) { mutableStateOf(label.storeAisle?.toString().orEmpty()) }
     val nameFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { nameFocus.requestFocus() }
+    // The name field takes focus once it is on screen: a frame later, so its focus underline (a strawberry line and the
+    // heart, §4.8) is already listening for the focus it is given.
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        nameFocus.requestFocus()
+    }
     val commitName = { if (name.isNotBlank() && name.trim() != label.aisle.name) actions.onRename(id, name) }
     val commitNumber = {
         val n = number.trim().toIntOrNull()?.takeIf { it > 0 }

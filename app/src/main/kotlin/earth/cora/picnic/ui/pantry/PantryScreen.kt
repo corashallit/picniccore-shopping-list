@@ -40,8 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -181,14 +179,11 @@ fun PantryScreen(
     toasts: ToastHostState = remember { ToastHostState() },
     scroll: ScrollState = rememberScrollState(),
     initialPopCard: String? = null,
-    focusText: Boolean = false,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     var popCard by rememberSaveable { mutableStateOf(initialPopCard) }
     var changing by rememberSaveable { mutableStateOf<String?>(null) }
-    val textFocus = remember { FocusRequester() }
-    LaunchedEffect(focusText) { if (focusText) textFocus.requestFocus() }
 
     SecondaryScreen(
         title = stringResource(R.string.pantry_title),
@@ -249,7 +244,6 @@ fun PantryScreen(
                     textStyle = t.aislesText,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     modifier = Modifier
-                        .focusRequester(textFocus)
                         .onFocusChanged {
                             if (focused && !it.isFocused) commit()
                             focused = it.isFocused

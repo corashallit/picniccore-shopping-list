@@ -6,7 +6,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Density
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
@@ -71,4 +75,22 @@ fun ComposeContentTestRule.recordScreen(
     waitForIdle()
     val path = "src/test/screenshots/$name.png"
     if (wholeScreen) captureScreenRoboImage(path) else onRoot().captureRoboImage(path)
+}
+
+/**
+ * A text the reader can't see whole: a line ends in an ellipsis, a line's ink runs past the box the text was given, or
+ * the lines are taller than it. (Not `hasVisualOverflow`: the layout a Text hands to GetTextLayoutResult is laid out at
+ * the full available width, so a short single-line text reads as "overflowing" the narrower box it really sits in.)
+ */
+fun androidx.compose.ui.text.TextLayoutResult.isCut(): Boolean =
+    didOverflowHeight || (0 until lineCount).any { isLineEllipsized(it) || getLineRight(it) - getLineLeft(it) > size.width + 0.5f }
+
+/**
+ * Focuses the text field [node] the way the keyboard or TalkBack would (no touch, so no text-selection handle lands on
+ * the golden), waits for the focus to settle and checks it took.
+ */
+fun ComposeContentTestRule.focusWithoutTouch(node: androidx.compose.ui.test.SemanticsNodeInteraction) {
+    node.performSemanticsAction(SemanticsActions.RequestFocus)
+    waitForIdle()
+    node.assert(isFocused())
 }

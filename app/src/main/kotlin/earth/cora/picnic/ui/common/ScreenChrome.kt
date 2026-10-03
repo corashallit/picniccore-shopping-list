@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
@@ -89,6 +91,7 @@ fun SecondaryScreen(
     actions: @Composable RowScope.() -> Unit = {},
     toasts: ToastHostState? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
+    subtitleTrailing: (@Composable () -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -96,7 +99,7 @@ fun SecondaryScreen(
         Column(Modifier.fillMaxSize()) {
             val barInsets = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
             if (subtitle != null && subtitle.any { it in INLINE_GLYPHS }) {
-                GlyphSubtitleTopBar(title, subtitle, onBack, barInsets, actions)
+                GlyphSubtitleTopBar(title, subtitle, onBack, barInsets, actions, subtitleTrailing)
             } else {
                 PicnicTopBar(
                     title = title,
@@ -124,10 +127,19 @@ fun SecondaryScreen(
  * [PicnicTopBar]'s pieces for a subtitle that carries inline glyphs ("★ 64 of 216 collected · 3 holo"): the same Back
  * button and puffy title (one line, 24 → 20 sp, then an ellipsis, §4.2), then the subtitle on its pad patch in a
  * row of its own under the title, so it never shares its width with the actions (the album's LCD and More) and is never
- * cut. [PicnicText] draws its star as an inline vector (§2.7).
+ * cut; [trailing] (the album's LCD, with large text) follows it there, or wraps under it. [PicnicText] draws its star as
+ * an inline vector (§2.7).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun GlyphSubtitleTopBar(title: String, subtitle: String, onBack: () -> Unit, modifier: Modifier, actions: @Composable RowScope.() -> Unit) {
+private fun GlyphSubtitleTopBar(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+    modifier: Modifier,
+    actions: @Composable RowScope.() -> Unit,
+    trailing: (@Composable () -> Unit)?,
+) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     Column(
@@ -145,8 +157,14 @@ private fun GlyphSubtitleTopBar(title: String, subtitle: String, onBack: () -> U
             }
             actions()
         }
-        Box(Modifier.padding(start = 52.dp, end = 8.dp, top = 2.dp)) {
+        FlowRow(
+            Modifier.padding(start = 52.dp, end = 8.dp, top = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
             PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
+            trailing?.invoke()
         }
     }
 }

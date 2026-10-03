@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -145,6 +146,14 @@ fun AlbumScreen(
     val empties = remember(slices) { slices.filterIsInstance<PageSlice.Pockets>().flatMap { it.pockets }.filterNot { it.collected }.map { it.key } }
     val wobbleKey = if (cycle > 0 && empties.isNotEmpty()) empties[Math.floorMod(cycle * 7919L, empties.size.toLong()).toInt()] else null
 
+    val largeText = LocalDensity.current.fontScale > LARGE_TEXT
+    val lcd: @Composable () -> Unit = {
+        Box(Modifier.clearAndSetSemantics { contentDescription = lcdLabel }) {
+            // "64/216" (§6.10): the count without the trip LCD's star.
+            LcdChip(LcdState(mode = LcdMode.Text, text = "${state.collected}/${state.collectible}"), pitch = 1.6.dp)
+        }
+    }
+
     SecondaryScreen(
         title = stringResource(R.string.album_title),
         subtitle = if (state.loading) null else subtitle,
@@ -152,12 +161,7 @@ fun AlbumScreen(
         modifier = modifier,
         actions = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (!state.loading) {
-                    Box(Modifier.clearAndSetSemantics { contentDescription = lcdLabel }) {
-                        // "64/216" (§6.10): the count without the trip LCD's star.
-                        LcdChip(LcdState(mode = LcdMode.Text, text = "${state.collected}/${state.collectible}"), pitch = 1.6.dp)
-                    }
-                }
+                if (!state.loading && !largeText) lcd()
                 MoreMenuButton(
                     items = listOf(
                         MenuItem(backToListLabel(state.listTitle), PicnicGlyph.Back, actions.onBackToList),
@@ -169,6 +173,8 @@ fun AlbumScreen(
                 )
             }
         },
+        // With large text the LCD steps down beside the subtitle, so the title keeps the width (§4.2).
+        subtitleTrailing = if (largeText && !state.loading) lcd else null,
         overlay = {
             val row = state.books.firstOrNull { it.id == openBook }
             FiledBookSheet(book = row?.book, dateLabel = row?.dateLabel.orEmpty(), onClose = { openBook = null })
@@ -260,6 +266,9 @@ fun AlbumScreen(
 
 /** Pockets per row of the vinyl page (§4.25). */
 const val POCKETS_PER_ROW: Int = 4
+
+/** From this font scale the LCD leaves the binder top's right side for the subtitle's row. */
+private const val LARGE_TEXT = 1.15f
 
 /** A random "?" wobbles every 6 s (§4.25). */
 private const val WOBBLE_MILLIS: Long = 6000
