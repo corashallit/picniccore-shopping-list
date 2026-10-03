@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -73,7 +75,10 @@ interface SurpriseLab {
     @Composable
     fun Practice(modifier: Modifier) = Unit
 
-    /** She left the lab: the sandbox is discarded. */
+    /**
+     * She left the lab: the sandbox is discarded. Called once when the lab screen leaves for good (any Back or pop), not
+     * on a rotation.
+     */
     fun close() = Unit
 }
 
@@ -116,13 +121,16 @@ fun SurpriseLabScreen(
     scroll: ScrollState = rememberScrollState(),
 ) {
     val reduced = LocalReducedMotion.current
+    // She left the lab, however she left (the Back button, system or predictive back, "Back to <list>", any pop): the
+    // sandbox goes with the screen. A rotation recreates the screen without her leaving, so the sandbox stays then.
+    val activity = LocalActivity.current
+    DisposableEffect(lab) {
+        onDispose { if (activity?.isChangingConfigurations != true) lab.close() }
+    }
     SecondaryScreen(
         title = stringResource(R.string.lab_title),
         subtitle = stringResource(R.string.lab_subtitle),
-        onBack = {
-            lab.close()
-            onBack()
-        },
+        onBack = onBack,
         modifier = modifier,
     ) {
         ScreenColumn(state = scroll, spacing = 12.dp) {

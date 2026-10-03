@@ -11,6 +11,8 @@ import earth.cora.picnic.core.calendar.Place
 import earth.cora.picnic.core.calendar.PlaceSource
 import earth.cora.picnic.core.llm.LlmError
 import earth.cora.picnic.core.model.currentList
+import earth.cora.picnic.platform.AreaLookup
+import earth.cora.picnic.platform.AreaPlaceSource
 import earth.cora.picnic.platform.EcSites
 import earth.cora.picnic.platform.PicnicLog
 import earth.cora.picnic.settings.AppSettings
@@ -56,11 +58,14 @@ data class SettingsUiState(
     val notice: String? = null,
     /** Every Surprises switch (and the rest of the persisted settings). */
     val settings: AppSettings = AppSettings(),
-    /** "Use my area" on: the forecast city it found (null while it looks, or when off). */
-    val areaCity: String? = null,
+    /** "Use my area": off, looking, found (its forecast city), or no fix yet (Toronto meanwhile). */
+    val area: AreaLookup = AreaLookup.Off,
     /** The current list's title, for the menu's "Back to <list>". */
     val listTitle: String = "",
-)
+) {
+    /** "Use my area" on: the forecast city it found (null while it looks, without a fix, or when off). */
+    val areaCity: String? get() = (area as? AreaLookup.Found)?.city
+}
 
 sealed interface ConnectionTestUi {
     data object Idle : ConnectionTestUi
@@ -81,7 +86,7 @@ class SettingsViewModel(
         val tokenVisible: Boolean = false,
         val test: ConnectionTestUi = ConnectionTestUi.Idle,
         val notice: String? = null,
-        val areaCity: String? = null,
+        val area: AreaLookup = AreaLookup.Off,
     )
 
     private val inputs = MutableStateFlow(Inputs())
@@ -92,9 +97,18 @@ class SettingsViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsUiState(appVersion = appVersion))
 
     init {
-        // "Use my area": the nearest forecast city, whenever the switch is (or turns) on.
+        // "Use my area": the nearest forecast city whenever the switch is (or turns) on; off, the stored area is deleted
+        // at once (PRIVACY.md), not at the next sunset or forecast check.
         viewModelScope.launch {
-            settings.settings.map { it.useMyArea }.distinctUntilChanged().collect { on -> if (on) refreshArea() else inputs.update { it.copy(areaCity = null) } }
+            settings.settings.map { it.useMyArea }.distinctUntilChanged().collect { on ->
+                if (on) {
+                    refreshArea()
+                } else {
+                    areaJob?.cancel()
+                    inputs.update { it.copy(area = AreaLookup.Off) }
+                    forgetArea()
+                }
+            }
         }
     }
 
@@ -131,17 +145,27 @@ class SettingsViewModel(
 
     /** "Use my area" was asked for, and coarse location was not allowed: it stays off, the surprises use Toronto. */
     fun onAreaDenied() {
-        launchWrite { settings.setSurprise(Surprise.UseMyArea, false) }
+        launchWrite {
+            settings.setSurprise(Surprise.UseMyArea, false)
+            forgetArea()
+        }
     }
 
-    /** Looks up the place again (the switch turned on, or the permission came back). */
+    /** Looks up the place again (the switch turned on, the permission came back, or Settings resumed without a fix). */
     fun refreshArea() {
         areaJob?.cancel()
         areaJob = viewModelScope.launch {
-            val place = places.place()
-            val city = if (place == Place.TORONTO) null else EcSites.byCode(place.cityCode)?.name
-            inputs.update { it.copy(areaCity = city) }
+            inputs.update { it.copy(area = AreaLookup.Finding) }
+            val area = (places as? AreaPlaceSource)?.lookup() ?: places.place().let { place ->
+                if (place == Place.TORONTO) AreaLookup.NoFix else AreaLookup.Found(place, EcSites.byCode(place.cityCode)?.name ?: place.cityCode)
+            }
+            inputs.update { it.copy(area = area) }
         }
+    }
+
+    /** Deletes the stored rounded point and city (the switch went off, or location was refused). */
+    private suspend fun forgetArea() {
+        (places as? AreaPlaceSource)?.forget()
     }
 
     /** The toast for [SettingsUiState.notice] was shown. */
@@ -212,7 +236,7 @@ class SettingsViewModel(
         loading = false,
         notice = i.notice,
         settings = s,
-        areaCity = if (s.useMyArea) i.areaCity else null,
+        area = if (s.useMyArea) i.area else AreaLookup.Off,
         listTitle = title,
     )
 

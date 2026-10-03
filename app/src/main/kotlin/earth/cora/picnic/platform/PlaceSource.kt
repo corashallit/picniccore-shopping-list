@@ -104,6 +104,21 @@ object EcSites {
     }
 }
 
+/** What a "Use my area" lookup found (Settings' hint, §0.4: say plain true things). */
+sealed interface AreaLookup {
+    /** The switch is off, or approximate location isn't allowed: Toronto. */
+    data object Off : AreaLookup
+
+    /** A lookup is running. */
+    data object Finding : AreaLookup
+
+    /** Her area: [place] (rounded) and its forecast [city]'s name. */
+    data class Found(val place: Place, val city: String) : AreaLookup
+
+    /** On and allowed, but the phone had no fix (and none is stored): Toronto for now. */
+    data object NoFix : AreaLookup
+}
+
 /** The phone's coarse location, as far as "Use my area" needs it. */
 interface CoarseLocator {
     /** ACCESS_COARSE_LOCATION is granted. */
@@ -154,6 +169,41 @@ class AreaPlaceSource(
         } catch (e: Exception) {
             PicnicLog.w("place unavailable; using Toronto", e)
             Place.TORONTO
+        }
+    }
+
+    /**
+     * Deletes the stored point and city at once: "Use my area" went off, or location was refused (§0.4, PRIVACY.md: turning
+     * it off deletes the stored area). Waits for a lookup in progress, so that lookup can't store it again. Never throws.
+     */
+    suspend fun forget() = mutex.withLock {
+        try {
+            if (cache.read() != null) cache.write(null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            PicnicLog.w("couldn't delete the stored area", e)
+        }
+    }
+
+    /**
+     * The place, and whether it is really her area: [AreaLookup.Found] with its forecast city, [AreaLookup.NoFix] when the
+     * switch and the permission are on but the phone has no fix yet (location services off, airplane mode: Toronto
+     * meanwhile), [AreaLookup.Off] when it is off or not allowed.
+     */
+    suspend fun lookup(): AreaLookup {
+        val place = place()
+        val on = try {
+            useMyArea() && locator.hasPermission()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+        return when {
+            !on -> AreaLookup.Off
+            place == Place.TORONTO -> AreaLookup.NoFix
+            else -> AreaLookup.Found(place, EcSites.byCode(place.cityCode)?.name ?: EcSites.nearest(LatLon(place.lat, place.lon)).name)
         }
     }
 

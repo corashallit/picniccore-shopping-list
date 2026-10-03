@@ -17,11 +17,17 @@ fun AppState.pantryEntryFor(itemName: String): PantryEntry? = pantry.firstOrNull
 
 /**
  * Puts [itemName] on the shelf as ONE entry (the Edit sheet's "In my pantry", §6.3): cleaned like a pantry entry
- * (bullets and quantities dropped, capitalised) but never split on commas or "and". Already covered -> this.
+ * (bullets and quantities dropped, capitalised) but never split on commas or "and". When cleaning takes away part of
+ * the name ("3 bean salad" -> "Bean salad", "1 L oat milk" -> "Oat milk"), the cleaned entry would no longer cover the
+ * item and the switch could never turn on: the item's own name goes on the shelf instead, trimmed and capitalised.
+ * Already covered -> this.
  */
 fun AppState.putOnShelf(itemName: String, now: Long): AppState {
     if (pantryEntryFor(itemName) != null) return this
-    val name = PantryNames.clean(itemName.replace(Regex("[\\r\\n]+"), " ")) ?: return this
+    val oneLine = itemName.replace(Regex("\\s+"), " ").trim()
+    if (oneLine.isEmpty()) return this
+    val cleaned = PantryNames.clean(oneLine)
+    val name = cleaned?.takeIf { PantryMatch.covers(it, itemName) } ?: oneLine.replaceFirstChar { it.uppercaseChar() }
     if (pantry.any { normalizeName(it.name) == normalizeName(name) }) return this
     return copy(pantry = pantry + PantryEntry(name = name, icon = null, addedAt = now))
 }

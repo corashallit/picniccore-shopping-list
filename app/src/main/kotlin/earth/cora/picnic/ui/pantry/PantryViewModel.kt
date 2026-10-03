@@ -161,12 +161,16 @@ class PantryViewModel(
         draft.value = text
     }
 
-    /** Done, or the text field lost focus: the text becomes the shelves (setPantryText: split, cleaned, de-duplicated). */
+    /**
+     * Done, or the text field lost focus: the text becomes the shelves (setPantryText: split, cleaned, de-duplicated).
+     * The draft stays until the write has landed (the store fsyncs before it emits), so the field and the shelves never
+     * fall back to the old pantry meanwhile; it is cleared only if she has not typed on since. A failed write keeps it:
+     * her text stays in the field, still unsaved, and the toast says "Couldn't save. Try again."
+     */
     fun commitText() {
         val text = draft.value ?: return
-        draft.value = null
         val now = clock()
-        commit({ it.setPantryText(text, now) })
+        commit({ it.setPantryText(text, now) }) { _, _ -> draft.compareAndSet(text, null) }
     }
 
     /** "Take off the shelf": removes it; the toast offers Undo ([undoTakeOff]). */

@@ -169,6 +169,7 @@
     <string name="settings_area_hint_on">sunset and forecast near %1$s; approximate area only</string>
     <string name="settings_area_hint_finding">sunset and forecast near you; approximate area only</string>
     <string name="settings_area_hint_denied">location isn’t allowed, so Toronto for now</string>
+    <string name="settings_area_hint_no_fix">couldn’t find your area yet, so Toronto for now</string>
     <string name="settings_surprises_footer">Reduced motion follows your phone’s setting.</string>
     <string name="settings_area_rationale_title">Use my area?</string>
     <!-- §0.4 Q6, verbatim; PRIVACY.md says the same (PrivacyDocTest). -->

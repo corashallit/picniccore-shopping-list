@@ -24,6 +24,10 @@ import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.PantryEntry
 import earth.cora.picnic.core.store.InMemoryStateStore
+import earth.cora.picnic.core.store.StateStore
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.Flow
+import java.io.IOException
 import earth.cora.picnic.settings.InMemorySettingsRepository
 import earth.cora.picnic.ui.common.AppearScale
 import earth.cora.picnic.ui.common.PHONE_360
@@ -58,6 +62,11 @@ class PantryScreenTest {
 
     private fun launch(state: AppState = Samples.emptyState): InMemoryStateStore {
         val store = InMemoryStateStore(state)
+        launchWith(store)
+        return store
+    }
+
+    private fun launchWith(store: StateStore) {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         val decider = object : IconDecider {
             override suspend fun decide(items: List<NamedItem>): Map<String, IconDecision> = emptyMap()
@@ -65,8 +74,27 @@ class PantryScreenTest {
         vm = PantryViewModel(store, InMemorySettingsRepository(), decider, IconCatalog.default, { Samples.NOW }, scope)
         compose.setContent { PicnicTheme { PantryRoute(vm, onBack = {}) } }
         compose.waitForIdle()
-        return store
     }
+
+    /** A store whose writes wait on [gate] (as the real one waits on its fsync before it emits), or fail with [fail]. */
+    private class GatedStore(initial: AppState) : StateStore {
+        val inner = InMemoryStateStore(initial)
+        val gate = CompletableDeferred<Unit>()
+        var fail = false
+        override val states: Flow<AppState> = inner.states
+        override suspend fun current(): AppState = inner.current()
+        override suspend fun update(transform: (AppState) -> AppState): AppState {
+            gate.await()
+            if (fail) throw IOException("disk full")
+            return inner.update(transform)
+        }
+    }
+
+    private fun idle(millis: Long = 0) {
+        if (millis > 0) shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(millis)) else shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    private fun shelves(): List<String> = vm.state.value.stickers.map { it.name }
 
     private fun InMemoryStateStore.names(): List<String> = runBlocking { current().pantry.map { it.name } }
 
@@ -144,6 +172,54 @@ class PantryScreenTest {
         assertEquals("nothing stored before Done", listOf("Salt", "Pepper"), store.names())
         compose.onNodeWithText("Done").performClick()
         waitForNames(store, listOf("Salt", "Rice", "Pepper"))
+    }
+
+    /**
+     * The draft stays until the write lands: while the store is still writing (its fsync), the field and the shelves keep
+     * what she wrote; nothing falls back to the old pantry and nothing plays its magic appear twice.
+     */
+    @Test
+    fun commitKeepsTextUntilSaved() {
+        val store = GatedStore(state("Salt"))
+        launchWith(store)
+        vm.setText("Salt\nPepper")
+        idle(450)
+        assertEquals("Salt\nPepper", vm.state.value.text)
+        assertEquals(listOf("Salt", "Pepper"), shelves())
+        vm.commitText()
+        idle()
+        // During the write.
+        assertEquals("Salt\nPepper", vm.state.value.text)
+        assertEquals(listOf("Salt", "Pepper"), shelves())
+        assertEquals(listOf("Salt"), runBlocking { store.current() }.pantry.map { it.name })
+        store.gate.complete(Unit)
+        idle()
+        compose.waitUntil(5_000) { runBlocking { store.current() }.pantry.map { it.name } == listOf("Salt", "Pepper") }
+        idle()
+        assertEquals(listOf("Salt", "Pepper"), shelves())
+        assertEquals("Salt\nPepper", vm.state.value.text)
+        assertTrue("saved: no longer dirty", !vm.state.value.textDirty)
+    }
+
+    /** A failed write keeps everything she typed in the field, still unsaved, and says so. */
+    @Test
+    fun failedCommitKeepsDraft() {
+        val store = GatedStore(state("Salt")).apply {
+            fail = true
+            gate.complete(Unit)
+        }
+        launchWith(store)
+        compose.mainClock.autoAdvance = false
+        vm.setText("Salt\nPepper\nOats")
+        vm.commitText()
+        settleFrozen()
+        assertEquals(listOf("Salt"), runBlocking { store.current() }.pantry.map { it.name })
+        assertEquals("Salt\nPepper\nOats", vm.state.value.text)
+        assertTrue("still unsaved", vm.state.value.textDirty)
+        // The shelves keep previewing her text.
+        idle(450)
+        assertEquals(listOf("Salt", "Pepper", "Oats"), shelves())
+        compose.onNodeWithText("Couldn't save", substring = true).assertExists()
     }
 
     /** "Pantry as text" also commits when the field loses focus (§6.13), not only on Done. */

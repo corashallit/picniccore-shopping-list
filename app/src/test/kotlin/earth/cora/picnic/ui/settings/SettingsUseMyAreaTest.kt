@@ -7,7 +7,13 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.calendar.Place
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import earth.cora.picnic.platform.AreaLookup
 import earth.cora.picnic.platform.AreaPlaceSource
+import earth.cora.picnic.platform.EcSites
+import earth.cora.picnic.ui.common.FakeAssistant
 import earth.cora.picnic.platform.CoarseLocator
 import earth.cora.picnic.platform.InMemoryPlaceCache
 import earth.cora.picnic.platform.LatLon
@@ -19,6 +25,7 @@ import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.theme.PicnicTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -128,6 +135,62 @@ class SettingsUseMyAreaTest {
         assertEquals(Place.TORONTO, source.place())
         assertTrue("no fix asked for", located.isEmpty())
         assertNull("the stored area is gone", cache.stored)
+    }
+
+    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+
+    private fun locator(granted: Boolean, fix: LatLon?) = object : CoarseLocator {
+        override fun hasPermission() = granted
+        override suspend fun locate(): LatLon? = fix
+    }
+
+    /**
+     * Turning "Use my area" off deletes the stored rounded point and city at once (PRIVACY.md), not at the next sunset or
+     * forecast check: with Easter eggs and Weather off nothing else would ever ask.
+     */
+    @Test
+    fun switchOffDeletesStoredArea() {
+        val settings = InMemorySettingsRepository(AppSettings(useMyArea = true))
+        val ottawa = StoredPlace(45.4, -75.7, "s0000430", at = 1_000L)
+        val cache = InMemoryPlaceCache(ottawa)
+        val source = AreaPlaceSource({ settings.current().useMyArea }, locator(granted = true, fix = LatLon(45.42, -75.69)), cache, clock = { 2_000L })
+        val vm = SettingsViewModel(settings, FakeAssistant(), "0.4.0", places = source)
+        idle()
+        assertEquals(EcSites.byCode("s0000430")!!.name, vm.state.value.areaCity)
+        assertEquals(ottawa, cache.stored)
+
+        vm.setSurprise(Surprise.UseMyArea, false)
+        idle()
+        assertFalse(vm.state.value.settings.useMyArea)
+        assertNull("the stored area is gone at once", cache.stored)
+        assertEquals(AreaLookup.Off, vm.state.value.area)
+    }
+
+    /** Location refused after the rationale: the switch stays off and nothing about the area stays on the phone. */
+    @Test
+    fun refusedLocationDeletesStoredArea() {
+        val settings = InMemorySettingsRepository(AppSettings(useMyArea = false))
+        val cache = InMemoryPlaceCache(StoredPlace(45.4, -75.7, "s0000430", at = 1_000L))
+        val source = AreaPlaceSource({ settings.current().useMyArea }, locator(granted = false, fix = null), cache, clock = { 2_000L })
+        val vm = SettingsViewModel(settings, FakeAssistant(), "0.4.0", places = source)
+        idle()
+        cache.stored = StoredPlace(45.4, -75.7, "s0000430", at = 1_000L)
+        vm.onAreaDenied()
+        idle()
+        assertNull(cache.stored)
+    }
+
+    /** On and allowed but the phone has no fix: the hint says Toronto for now, not "near you" (§0.4: plain true things). */
+    @Test
+    fun noFixHintSaysTorontoForNow() {
+        val on = SettingsSamples.ok.copy(settings = SettingsSamples.ok.settings.copy(useMyArea = true))
+        var state by mutableStateOf(on.copy(area = AreaLookup.Finding))
+        compose.setContent { PicnicTheme { SettingsScreen(state, SettingsActions(), location = FakePermission(isGranted = true)) } }
+        compose.onNodeWithText("sunset and forecast near you; approximate area only").performScrollTo().assertExists()
+        state = on.copy(area = AreaLookup.NoFix)
+        compose.onNodeWithText("couldn’t find your area yet, so Toronto for now").performScrollTo().assertExists()
+        compose.onNodeWithText("sunset and forecast near you", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("asks Environment Canada for Toronto’s forecast", substring = true).assertExists()
     }
 
     @Test

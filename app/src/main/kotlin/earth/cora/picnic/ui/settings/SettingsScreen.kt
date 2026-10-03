@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import earth.cora.picnic.R
+import earth.cora.picnic.platform.AreaLookup
 import earth.cora.picnic.settings.Surprise
 import earth.cora.picnic.ui.common.DoneButton
 import earth.cora.picnic.ui.common.accentInk
@@ -198,10 +199,12 @@ fun SettingsScreen(
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     var granted by remember { mutableStateOf(location.granted()) }
     val onAreaRefresh by rememberUpdatedState(actions.onAreaRefresh)
+    val noFix by rememberUpdatedState(state.settings.useMyArea && state.area == AreaLookup.NoFix)
     LaunchedEffect(lifecycle) {
         if (lifecycle == Lifecycle.State.RESUMED) {
             val now = location.granted()
-            if (now != granted) {
+            // The permission changed, or the last look found no fix (location services may be back on): look again.
+            if (now != granted || (now && noFix)) {
                 granted = now
                 onAreaRefresh()
             }
@@ -410,6 +413,8 @@ private fun SurprisesCard(state: SettingsUiState, actions: SettingsActions, gran
                     !s.useMyArea -> stringResource(R.string.settings_area_hint)
                     !granted -> stringResource(R.string.settings_area_hint_denied)
                     city != null -> stringResource(R.string.settings_area_hint_on, city)
+                    // Plain true things (§0.4): "near you" only while it is looking; no fix, Toronto says so.
+                    state.area == AreaLookup.NoFix -> stringResource(R.string.settings_area_hint_no_fix)
                     else -> stringResource(R.string.settings_area_hint_finding)
                 }
                 ),

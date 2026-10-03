@@ -3,6 +3,10 @@ package earth.cora.picnic.ui.about
 import android.os.Looper
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -122,6 +126,41 @@ class AboutScreenTest {
         repeat(6) { assertFalse(taps.tap()); now += 100 }
         now += TAP_GAP_MILLIS + 1
         assertFalse("a pause restarted the count", taps.tap())
+    }
+
+    /**
+     * The sandbox goes when she leaves the lab, however she leaves: here the screen simply leaves the composition (as a
+     * pop from "Back to <list>" or the system back does), and close() runs exactly once. The Back button only navigates.
+     */
+    @Test
+    fun leavingTheLabClosesTheSandboxOnce() {
+        var closes = 0
+        var backs = 0
+        val lab = object : SurpriseLab by ShellSurpriseLab {
+            override fun close() {
+                closes++
+            }
+        }
+        var shown by mutableStateOf(true)
+        compose.setContent {
+            PicnicTheme {
+                if (shown) SurpriseLabScreen(onBack = { backs++; shown = false }, lab = lab)
+            }
+        }
+        compose.onNodeWithText("Surprise lab").assertExists()
+        assertEquals(0, closes)
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.waitForIdle()
+        assertEquals(1, backs)
+        assertEquals("closed once, by leaving", 1, closes)
+
+        // And with no Back tap at all: a pop from elsewhere.
+        closes = 0
+        shown = true
+        compose.waitForIdle()
+        shown = false
+        compose.waitForIdle()
+        assertEquals(1, closes)
     }
 
     @Test
