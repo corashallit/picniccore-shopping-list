@@ -50,7 +50,7 @@ class EditGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pri
     ) = compose.recordScreen(name, variant, fontScale = fontScale, before = before) {
         Box(Modifier.fillMaxSize()) {
             PicnicBackground(Modifier.fillMaxSize()) {}
-            EditItemSheet(
+            EditItemSheetContent(
                 state, { _, _, _ -> }, {}, {}, {}, {}, {},
                 favourite = favourite, inPantry = inPantry, aisleStyles = EditSamples.app.store.aisleStyles,
             )

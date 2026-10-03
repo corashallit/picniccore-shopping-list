@@ -65,6 +65,7 @@ class AlbumActions(
     val onBookAppeared: (bookId: String) -> Unit = {},
     val onBackToList: () -> Unit = {},
     val onOpenMyStore: () -> Unit = {},
+    val onOpenPantry: () -> Unit = {},
     val onOpenSettings: () -> Unit = {},
 )
 
@@ -75,6 +76,7 @@ fun AlbumRoute(
     onBackToList: () -> Unit,
     onOpenMyStore: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenPantry: () -> Unit = {},
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val actions = remember(vm) {
@@ -85,6 +87,7 @@ fun AlbumRoute(
             onBookAppeared = vm::bookAppeared,
             onBackToList = onBackToList,
             onOpenMyStore = onOpenMyStore,
+            onOpenPantry = onOpenPantry,
             onOpenSettings = onOpenSettings,
         )
     }
@@ -166,6 +169,8 @@ fun AlbumScreen(
                     items = listOf(
                         MenuItem(backToListLabel(state.listTitle), PicnicGlyph.Back, actions.onBackToList),
                         MenuItem(stringResource(R.string.menu_my_store), PicnicGlyph.Aisles, actions.onOpenMyStore),
+                        // §6.13: My pantry sits between My store & aisles and the last item.
+                        MenuItem(stringResource(R.string.menu_my_pantry), PicnicGlyph.Jar, actions.onOpenPantry),
                         MenuItem(stringResource(R.string.menu_settings), PicnicGlyph.Settings, actions.onOpenSettings),
                     ),
                     expanded = menu,

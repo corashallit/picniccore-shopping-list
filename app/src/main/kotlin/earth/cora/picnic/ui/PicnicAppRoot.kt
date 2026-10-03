@@ -37,6 +37,7 @@ import earth.cora.picnic.ui.nav.PantryRoute
 import earth.cora.picnic.ui.nav.SettingsRoute
 import earth.cora.picnic.ui.nav.SurpriseLabRoute
 import earth.cora.picnic.ui.nav.backToList
+import earth.cora.picnic.ui.nav.navigateFromMenu
 import earth.cora.picnic.ui.nav.navigateOnce
 import earth.cora.picnic.ui.nav.popOnce
 import earth.cora.picnic.ui.pantry.PantryViewModel
@@ -51,7 +52,8 @@ import earth.cora.picnic.ui.settings.SettingsRoute as SettingsDestination
 
 /**
  * Entry point of the UI (app-screens), called by MainActivity inside PicnicTheme with LocalStickerArt provided. A
- * type-safe NavHost: List (start) → My store, My pantry, Sticker album, Settings → About & licences → Surprise lab. The
+ * type-safe NavHost: List (start) → My store, My pantry, Sticker album, Settings (siblings: the Settings and Album menus
+ * swap one for another, so Back from any of them is the list) → About & licences → Surprise lab. The
  * Add, Edit, list-switcher, New trip and Trip book sheets belong to the List destination. Back is navigation's own
  * (predictive back included). [LocalAppNav] carries the routes to every screen, sheet and menu (the list's overflow menu,
  * the recipe card's "Edit my pantry", the Album and Settings menus). Owner: WP8 (NavTest).
@@ -82,10 +84,11 @@ fun PicnicAppRoot(
 
     val appNav = remember(nav) {
         AppNav(
-            openMyStore = { nav.navigateOnce(AislesRoute) },
-            openPantry = { nav.navigateOnce(PantryRoute) },
-            openAlbum = { nav.navigateOnce(AlbumRoute) },
-            openSettings = { nav.navigateOnce(SettingsRoute) },
+            // The overflow menu's four screens are siblings: Back from any of them is the list.
+            openMyStore = { nav.navigateFromMenu(AislesRoute) },
+            openPantry = { nav.navigateFromMenu(PantryRoute) },
+            openAlbum = { nav.navigateFromMenu(AlbumRoute) },
+            openSettings = { nav.navigateFromMenu(SettingsRoute) },
             openAbout = { nav.navigateOnce(AboutRoute) },
             openSurpriseLab = { nav.navigateOnce(SurpriseLabRoute) },
             back = { nav.popOnce() },
@@ -130,6 +133,7 @@ fun PicnicAppRoot(
                     onBack = appNav.back,
                     onBackToList = appNav.backToList,
                     onOpenMyStore = appNav.openMyStore,
+                    onOpenPantry = appNav.openPantry,
                     onOpenSettings = appNav.openSettings,
                 )
             }
@@ -140,6 +144,7 @@ fun PicnicAppRoot(
                     onOpenAbout = appNav.openAbout,
                     onBackToList = appNav.backToList,
                     onOpenMyStore = appNav.openMyStore,
+                    onOpenPantry = appNav.openPantry,
                     onOpenAlbum = appNav.openAlbum,
                 )
             }

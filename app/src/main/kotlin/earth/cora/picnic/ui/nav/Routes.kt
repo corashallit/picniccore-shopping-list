@@ -47,6 +47,20 @@ fun NavController.navigateOnce(route: Any) {
 }
 
 /**
+ * Opens one of the overflow menu's screens (My store, My pantry, Sticker album, Settings: §4.24) as a sibling of the
+ * others: whatever menu screen is showing is replaced, so Back always returns to the list (Settings → More → Sticker
+ * album → Back is the list, not Settings). From the list itself this is a plain push. Like [navigateOnce], only from a
+ * settled destination.
+ */
+fun NavController.navigateFromMenu(route: Any) {
+    if (currentBackStackEntry?.lifecycle?.currentState != Lifecycle.State.RESUMED) return
+    navigate(route) {
+        popUpTo<ListRoute> { inclusive = false }
+        launchSingleTop = true
+    }
+}
+
+/**
  * Pops back from a settled destination; never pops the start destination (which would leave a
  * blank screen) when a Back tap races the system back gesture.
  */

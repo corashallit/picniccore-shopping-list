@@ -9,7 +9,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
  * - the list's overflow menu (WP5): [openMyStore], [openPantry], [openAlbum], [openSettings];
  * - the recipe card's "Edit my pantry" (WP7): [openPantry] (Back returns to the same card, keep switches as she left them:
  *   the Add sheet's state lives in the List destination, which stays on the back stack);
- * - the Album and Settings menus: [backToList] ("Back to <list>"), [openMyStore], [openSettings] / [openAlbum];
+ * - the Album and Settings menus: [backToList] ("Back to <list>"), [openMyStore], [openPantry], [openSettings] /
+ *   [openAlbum]. The four menu screens are siblings: opening one from another replaces it, so Back is the list;
  * - Settings: [openAbout]; About: [openSurpriseLab].
  * Defaults do nothing (previews, screenshot tests). Owner: WP8 (NavTest).
  */

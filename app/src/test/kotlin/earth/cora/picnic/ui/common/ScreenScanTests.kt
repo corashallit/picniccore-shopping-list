@@ -32,7 +32,7 @@ import earth.cora.picnic.ui.aisles.MyStoreSamples
 import earth.cora.picnic.ui.album.AlbumActions
 import earth.cora.picnic.ui.album.AlbumSamples
 import earth.cora.picnic.ui.album.AlbumScreen
-import earth.cora.picnic.ui.edit.EditItemSheet
+import earth.cora.picnic.ui.edit.EditItemSheetContent
 import earth.cora.picnic.ui.edit.EditSamples
 import earth.cora.picnic.ui.list.ListSwitcherSheet
 import earth.cora.picnic.ui.list.SwitcherSamples
@@ -67,7 +67,7 @@ private val wp8Screens: List<Pair<String, @Composable () -> Unit>> = listOf(
     "mystore_editing" to { AislesScreen(MyStoreSamples.default.copy(editing = "bakery"), AislesActions()) },
     "pantry" to { PantryScreen(PantrySamples.few, PantryActions()) },
     "album" to { AlbumScreen(AlbumSamples.state(AlbumSamples.mockup), AlbumActions()) },
-    "edit" to { EditItemSheet(EditSamples.milk(), { _, _, _ -> }, {}, {}, {}, {}, {}) },
+    "edit" to { EditItemSheetContent(EditSamples.milk(), { _, _, _ -> }, {}, {}, {}, {}, {}) },
     "switcher" to { ListSwitcherSheet(SwitcherSamples.lists, {}, {}, {}, { _, _ -> }, {}) },
 )
 

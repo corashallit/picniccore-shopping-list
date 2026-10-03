@@ -83,11 +83,12 @@ enum class EditPage { Details, Icons }
  * (40 dp stickers in kiss-cut cells, the item's category first, the chosen one ringed in lemon; applies at once and is
  * learned), "Draw a new sticker" (with a key; the ladybug ring while it draws), Save and Delete (hanko).
  *
- * The host places it in a full-size box (it is an overlay with its own scrim, §4.16). [favourite], [inPantry] and
- * [aisleStyles] come from the store; [EditItemRoute] reads them and handles the toggles for a host.
+ * Stateless: [favourite], [inPantry] and [aisleStyles] come from the store. The host places it in a full-size box (it is
+ * an overlay with its own scrim, §4.16). [EditItemSheet] (what the List screen mounts) and [EditItemRoute] read them
+ * from the store and handle the toggles; tests and goldens draw this one.
  */
 @Composable
-fun EditItemSheet(
+fun EditItemSheetContent(
     state: EditItemUi,
     onSave: (name: String, quantity: String?, note: String?) -> Unit,
     onClose: () -> Unit,

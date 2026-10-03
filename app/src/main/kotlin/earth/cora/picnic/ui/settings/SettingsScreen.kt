@@ -95,6 +95,7 @@ class SettingsActions(
     val onOpenAbout: () -> Unit = {},
     val onBackToList: () -> Unit = {},
     val onOpenMyStore: () -> Unit = {},
+    val onOpenPantry: () -> Unit = {},
     val onOpenAlbum: () -> Unit = {},
 )
 
@@ -143,6 +144,7 @@ fun SettingsRoute(
     onOpenAbout: () -> Unit = {},
     onBackToList: () -> Unit = onBack,
     onOpenMyStore: () -> Unit = {},
+    onOpenPantry: () -> Unit = {},
     onOpenAlbum: () -> Unit = {},
 ) {
     // Main.immediate: text-field edits round-trip through the VM within the same frame.
@@ -166,6 +168,7 @@ fun SettingsRoute(
             onOpenAbout = onOpenAbout,
             onBackToList = onBackToList,
             onOpenMyStore = onOpenMyStore,
+            onOpenPantry = onOpenPantry,
             onOpenAlbum = onOpenAlbum,
         )
     }
@@ -232,6 +235,8 @@ fun SettingsScreen(
                 items = listOf(
                     MenuItem(backToListLabel(state.listTitle), PicnicGlyph.Back, actions.onBackToList),
                     MenuItem(stringResource(R.string.menu_my_store), PicnicGlyph.Aisles, actions.onOpenMyStore),
+                    // §6.13: My pantry sits between My store & aisles and the Sticker album.
+                    MenuItem(stringResource(R.string.menu_my_pantry), PicnicGlyph.Jar, actions.onOpenPantry),
                     MenuItem(stringResource(R.string.menu_album), PicnicGlyph.Album, actions.onOpenAlbum),
                 ),
                 expanded = menu,

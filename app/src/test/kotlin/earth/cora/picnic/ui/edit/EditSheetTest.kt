@@ -3,6 +3,20 @@ package earth.cora.picnic.ui.edit
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import earth.cora.picnic.ui.list.ListActions
+import earth.cora.picnic.ui.list.ListScreen
+import earth.cora.picnic.ui.list.buildListUiState
+import earth.cora.picnic.ui.theme.TOAST_TAG
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -63,7 +77,7 @@ class EditSheetTest {
         compose.setContent {
             PicnicTheme {
                 Box(Modifier.fillMaxSize()) {
-                    EditItemSheet(
+                    EditItemSheetContent(
                         state = EditSamples.milk(),
                         onSave = { n, q, note -> saved = Triple(n, q, note) },
                         onClose = {},
@@ -101,7 +115,7 @@ class EditSheetTest {
         compose.setContent {
             PicnicTheme {
                 Box(Modifier.fillMaxSize()) {
-                    EditItemSheet(
+                    EditItemSheetContent(
                         EditSamples.milk(item = item), { _, _, _ -> }, {}, {},
                         onSetIcon = { key ->
                             picked += key
@@ -137,7 +151,7 @@ class EditSheetTest {
         compose.setContent {
             PicnicTheme {
                 Box(Modifier.fillMaxSize()) {
-                    EditItemSheet(EditSamples.milk(drawing = drawing), { _, _, _ -> }, {}, {}, {}, onRedraw = { redraws++; drawing = true }, onDelete = {})
+                    EditItemSheetContent(EditSamples.milk(drawing = drawing), { _, _, _ -> }, {}, {}, {}, onRedraw = { redraws++; drawing = true }, onDelete = {})
                 }
             }
         }
@@ -154,7 +168,7 @@ class EditSheetTest {
         compose.setContent {
             PicnicTheme {
                 Box(Modifier.fillMaxSize()) {
-                    EditItemSheet(EditSamples.milk(canDraw = false), { _, _, _ -> }, {}, {}, {}, {}, {})
+                    EditItemSheetContent(EditSamples.milk(canDraw = false), { _, _, _ -> }, {}, {}, {}, {}, {})
                 }
             }
         }
@@ -200,6 +214,72 @@ class EditSheetTest {
         compose.waitUntil(5_000) { pantry(store).isEmpty() }
         compose.waitUntil(5_000) { toasts.size == 2 }
         assertEquals("$entry is off your pantry shelf", toasts.last().text)
+    }
+
+    /**
+     * The sheet exactly as the List screen mounts it (ListScreen calls [EditItemSheet] with the list's own actions only):
+     * the heart and the jar write to the store and the jar's toast shows on the sheet's own sticky-note host.
+     */
+    @Test
+    fun listMountedSheetTogglesWorkAndToast() {
+        val store = InMemoryStateStore(EditSamples.app)
+        val vm = EditExtrasViewModel(store, { SaturdayShop.NOW }, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate))
+        val owner = ownerWith(vm)
+        val ui = buildListUiState(EditSamples.app, emptySet(), hasToken = true, editingId = "milk", catalog = IconCatalog.default)
+        assertTrue(ui.editing != null)
+        compose.setContent {
+            PicnicTheme {
+                CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+                    ListScreen(state = ui, actions = ListActions())
+                }
+            }
+        }
+        compose.onNodeWithText("Favourite").assertIsOff().performClick()
+        compose.waitUntil(5_000) { runBlocking { store.current() }.favourites.contains(normalizeName("Milk, 2 %")) }
+        compose.onNodeWithText("Favourite").assertIsOn()
+
+        // The toast holds on the frame clock: step it by hand so the note is still up when we look.
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("In my pantry").assertIsOff().performClick()
+        compose.waitUntil(5_000) { pantry(store).size == 1 }
+        assertEquals("Milk, 2 %", pantry(store).single())
+        compose.mainClock.advanceTimeBy(600)
+        compose.onNodeWithText("In my pantry").assertIsOn()
+        // The note is spoken as words ("2 percent", no "·"): match the words around the name.
+        compose.onNodeWithText("is in your pantry", substring = true).assertExists()
+        compose.onNodeWithText("recipes will leave it out", substring = true).assertExists()
+        // The note sits clear of the footer: Save and Delete stay tappable under it.
+        val note = compose.onNodeWithTag(TOAST_TAG).getBoundsInRoot()
+        val delete = compose.onNodeWithText("Delete").getBoundsInRoot()
+        assertTrue("toast $note overlaps Delete $delete", note.bottom <= delete.top)
+    }
+
+    /** A toast that lands after the sheet has closed is dropped: the next sheet never opens with a stale one. */
+    @Test
+    fun noStaleToastAfterClose() {
+        val store = InMemoryStateStore(EditSamples.app)
+        val vm = EditExtrasViewModel(store, { SaturdayShop.NOW }, CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate))
+        // Nobody is showing a sheet: the toggle still writes, its toast goes nowhere.
+        vm.setInPantry("Milk, 2 %", true, { "$it on" }, { "$it off" })
+        compose.waitUntil(5_000) { pantry(store).size == 1 }
+        compose.setContent {
+            PicnicTheme {
+                EditItemSheet(EditSamples.milk(), { _, _, _ -> }, {}, {}, {}, {}, {}, vm = vm)
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.onNodeWithTag(TOAST_TAG).assertDoesNotExist()
+        compose.onNodeWithText("In my pantry").assertIsOn()
+    }
+
+    private fun ownerWith(vm: EditExtrasViewModel): ViewModelStoreOwner {
+        val owner = object : ViewModelStoreOwner {
+            override val viewModelStore = ViewModelStore()
+        }
+        // The sheet asks for the default-keyed EditExtrasViewModel: this one is already there.
+        ViewModelProvider.create(owner, viewModelFactory { initializer { vm } })[EditExtrasViewModel::class]
+        return owner
     }
 
     private fun pantry(store: InMemoryStateStore): List<String> = runBlocking { store.current().pantry.map { it.name } }
