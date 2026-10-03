@@ -7,6 +7,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import earth.cora.picnic.settings.InMemorySettingsRepository
@@ -255,5 +261,60 @@ class AlbumTest {
         compose.onAllNodesWithText("Hillcrest Market", substring = true).fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }
         // Read-only: nothing in the book can be edited.
         compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+    }
+
+    /**
+     * §13.2 / §6.6: the filed book shows the receipt itself (LCD dots on thermal paper), a button TalkBack reads as one
+     * sentence; a tap shows it full size, and a tap or Back puts it away.
+     */
+    @Test
+    fun filedReceiptIsTheReceipt() {
+        compose.setContent {
+            PicnicTheme { AlbumScreen(AlbumSamples.state(AlbumSamples.mockup), AlbumActions(), initialBook = AlbumSamples.perfectBook.id) }
+        }
+        val slip = compose.onNodeWithTag(FiledBookTags.RECEIPT)
+        slip.performScrollTo()
+        slip.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        slip.assertContentDescriptionEquals("Trip receipt: Saturday 26 September, Hillcrest, 19 stickers, 8 baskets, 41 minutes, 1 shiny")
+        val small = slip.getBoundsInRoot()
+        slip.performClick()
+        val full = compose.onNodeWithTag(FiledBookTags.RECEIPT_FULL)
+        full.assertExists()
+        val paper = compose.onNode(hasContentDescription("Trip receipt:", substring = true) and hasAnyAncestor(hasTestTag(FiledBookTags.RECEIPT_FULL)), useUnmergedTree = true)
+        val big = paper.getBoundsInRoot()
+        assertTrue("full size is bigger: $big vs $small", big.right - big.left > small.right - small.left)
+        full.performClick()
+        compose.onNodeWithTag(FiledBookTags.RECEIPT_FULL).assertDoesNotExist()
+        compose.onNodeWithTag(FiledBookTags.RECEIPT).assertExists()
+    }
+
+    /** One sticker, one basket: the words agree with the numbers. */
+    @Test
+    fun receiptCountsArePlural() {
+        val one = AlbumSamples.perfectBook.copy(
+            id = "trip-one",
+            total = 1,
+            minutes = 1,
+            stickers = AlbumSamples.perfectBook.stickers.take(1),
+            stamps = AlbumSamples.perfectBook.stamps.take(1),
+            receipt = AlbumSamples.perfectBook.receipt!!.copy(stickers = 1, baskets = 1, minutes = 1, shiny = 0),
+        )
+        compose.setContent {
+            PicnicTheme { AlbumScreen(AlbumSamples.state(AlbumSamples.mockup.copy(books = listOf(one))), AlbumActions(), initialBook = one.id) }
+        }
+        compose.onNodeWithTag(FiledBookTags.RECEIPT).performScrollTo()
+            .assertContentDescriptionEquals("Trip receipt: Saturday 26 September, Hillcrest, 1 sticker, 1 basket, 1 minute, 0 shiny")
+        compose.onNodeWithText("1 of 1 sticker · 1 of 1 aisle stamped · 1 min").assertExists()
+    }
+
+    /** §6.10: the books follow a long pocket page; the link above the tabs takes her straight to them. */
+    @Test
+    fun tripBooksAreOneTapAway() {
+        compose.setContent { PicnicTheme { AlbumScreen(AlbumSamples.state(AlbumSamples.mockup), AlbumActions()) } }
+        compose.onNodeWithText("Trip sticker books").assertDoesNotExist()
+        compose.onNodeWithText("2 trip sticker books").assertIsDisplayed().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Trip sticker books").assertIsDisplayed()
+        compose.onNodeWithText("Sat 26 Sep", substring = true).assertIsDisplayed()
     }
 }

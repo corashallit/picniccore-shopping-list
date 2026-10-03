@@ -92,6 +92,8 @@ data class BookRowUi(
     val receipt: Boolean,
     val book: TripBook,
     val fresh: Boolean = false,
+    /** The trip's date (§7.1: the first check-off of its last session), as [dateLabel] shows it; printed on the receipt. */
+    val date: LocalDate? = null,
 )
 
 /** A seasonal card (§4.25): unlocked or not (55 % until then), flagged "next!" with its date. */
@@ -317,6 +319,7 @@ class AlbumStateBuilder(
         return BookRowUi(
             id = b.id,
             dateLabel = AlbumViewModel.DATE.format(Instant.ofEpochMilli(start).atZone(zone)),
+            date = Instant.ofEpochMilli(start).atZone(zone).toLocalDate(),
             minis = b.stickers.sortedBy { it.slot }.take(6).map { it.icon },
             stickers = b.stickers.size,
             total = b.total,

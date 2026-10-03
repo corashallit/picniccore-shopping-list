@@ -295,6 +295,10 @@
     <string name="album_pocket_holo">%1$s, collected, holo, rarity %2$d of 3</string>
     <string name="album_pocket_lift">Lift the sticker</string>
     <string name="album_books_title">Trip sticker books</string>
+    <plurals name="album_books_jump">
+        <item quantity="one">%1$d trip sticker book</item>
+        <item quantity="other">%1$d trip sticker books</item>
+    </plurals>
     <plurals name="album_book_count">
         <item quantity="one">%1$d of %2$d sticker</item>
         <item quantity="other">%1$d of %2$d stickers</item>
@@ -313,12 +317,29 @@
     <string name="album_back_pocket_sheet">sticker sheet 2 of 2</string>
     <string name="album_empty_title">Nothing collected yet</string>
     <string name="album_empty_body">Check something off to collect your first sticker.</string>
-    <string name="book_sheet_stats">%1$d of %2$d stickers · %3$d of %4$d aisles stamped</string>
+    <plurals name="book_sheet_stickers_of">
+        <item quantity="one">%1$d of %2$d sticker</item>
+        <item quantity="other">%1$d of %2$d stickers</item>
+    </plurals>
+    <plurals name="book_sheet_aisles_of">
+        <item quantity="one">%1$d of %2$d aisle stamped</item>
+        <item quantity="other">%1$d of %2$d aisles stamped</item>
+    </plurals>
     <string name="book_sheet_stamped">%1$s: stamped</string>
     <string name="book_sheet_not_yet">%1$s: not yet</string>
     <string name="book_sheet_stickers">Stickers</string>
     <string name="book_sheet_receipt">Receipt</string>
-    <string name="book_receipt_stickers">%1$d stickers</string>
-    <string name="book_receipt_baskets">%1$d baskets</string>
+    <!-- The receipt slip (§13.2): TalkBack reads it as one sentence; a tap shows it full size. -->
+    <string name="book_receipt_spoken">Trip receipt: %1$s</string>
+    <plurals name="book_receipt_stickers">
+        <item quantity="one">%1$d sticker</item>
+        <item quantity="other">%1$d stickers</item>
+    </plurals>
+    <plurals name="book_receipt_baskets">
+        <item quantity="one">%1$d basket</item>
+        <item quantity="other">%1$d baskets</item>
+    </plurals>
     <string name="book_receipt_shiny">%1$d shiny</string>
+    <string name="book_receipt_show">show it full size</string>
+    <string name="book_receipt_close">Close the receipt</string>
 </resources>

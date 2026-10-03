@@ -28,6 +28,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,6 +55,7 @@ import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.MenuItem
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.rememberLoopTime
+import kotlinx.coroutines.launch
 
 /** Everything the album can ask for. Defaults do nothing. */
 @Stable
@@ -107,6 +109,7 @@ private sealed interface PageSlice {
 /** Test tags. */
 object AlbumTags {
     const val LIST: String = "album_list"
+    const val JUMP: String = "album_books_jump"
     fun pocket(key: String): String = "album_pocket_$key"
 }
 
@@ -114,6 +117,7 @@ object AlbumTags {
  * The sticker album (§6.10): Back, "Sticker album", "★ 64 of 216 collected · 3 holo" on a pad patch, the LCD "64/216"
  * and More; the Groceries · Picnic · Seasonal tabs over the pink pinstripe vinyl page of pockets (4 across); then the
  * trip sticker books (newest first; a tap opens one read-only), the perfect-weeks card and, once open, the back pocket.
+ * A "2 trip sticker books" link above the tabs jumps down to the books past a long pocket page.
  * Tap a pocket to lift its sticker (tap again or elsewhere to drop it); long-press a face pocket and it blinks.
  */
 @Composable
@@ -125,12 +129,14 @@ fun AlbumScreen(
     initialLifted: String? = null,
     initialBook: String? = null,
     initialBlink: String? = null,
+    initialFullReceipt: Boolean = false,
 ) {
     var lifted by rememberSaveable { mutableStateOf(initialLifted) }
     var openBook by rememberSaveable { mutableStateOf(initialBook) }
     var menu by remember { mutableStateOf(false) }
     var blinks by remember { mutableStateOf(initialBlink?.let { mapOf(it to 1) } ?: emptyMap()) }
     val reduced = LocalReducedMotion.current
+    val scope = rememberCoroutineScope()
     val loop by rememberLoopTime(enabled = !reduced)
     val cycle by remember { derivedStateOf { loop / WOBBLE_MILLIS } }
 
@@ -182,7 +188,7 @@ fun AlbumScreen(
         subtitleTrailing = if (largeText && !state.loading) lcd else null,
         overlay = {
             val row = state.books.firstOrNull { it.id == openBook }
-            FiledBookSheet(book = row?.book, dateLabel = row?.dateLabel.orEmpty(), onClose = { openBook = null })
+            FiledBookSheet(book = row?.book, dateLabel = row?.dateLabel.orEmpty(), onClose = { openBook = null }, date = row?.date, initialFullReceipt = initialFullReceipt)
         },
     ) {
         LazyColumn(
@@ -206,6 +212,16 @@ fun AlbumScreen(
                 }
                 item("bottom") { Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))) }
                 return@LazyColumn
+            }
+            // The trip books follow the whole vinyl page (§6.10: below the tabs), which on Groceries is some 50 rows of
+            // pockets: this link above the tabs takes her straight to them.
+            if (state.books.isNotEmpty()) {
+                item("jump") {
+                    BooksJump(state.books.size, onClick = {
+                        val books = 2 + slices.size
+                        scope.launch { if (reduced) listState.scrollToItem(books) else listState.animateScrollToItem(books) }
+                    })
+                }
             }
             item("tabs") {
                 AlbumTabs(state.tab, onSelect = {

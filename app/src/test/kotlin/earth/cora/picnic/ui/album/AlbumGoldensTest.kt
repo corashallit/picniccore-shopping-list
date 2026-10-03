@@ -3,6 +3,7 @@ package earth.cora.picnic.ui.album
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToKey
 import earth.cora.picnic.core.store.Album
@@ -21,8 +22,9 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Sticker album goldens (checklist 165, 230, Appendix C), Day and Glow: `album_{groceries,picnic,seasonal}`,
  * `album_tripbooks`, `album_early`, `album_full`, `album_holo_glint`, `album_face_blink`, `album_back_pocket`,
- * `album_empty`, and two states Appendix C does not name yet, `album_tripbook_open` (a filed book opened read-only, §6.6)
- * and `album_pocket_lift` (§4.25); Day only: `album_fs130`, `album_fs200`.
+ * `album_empty`, and three states Appendix C does not name yet, `album_tripbook_open` (a filed book opened read-only at
+ * its receipt, §6.6), `album_receipt_full` (that receipt full size, §13.2) and `album_pocket_lift` (§4.25); Day only:
+ * `album_fs130`, `album_fs200`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -44,6 +46,7 @@ class AlbumGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pr
         lifted: String? = null,
         book: String? = null,
         blink: String? = null,
+        fullReceipt: Boolean = false,
         before: ComposeContentTestRule.() -> Unit = {},
     ) = compose.recordScreen(
         if (exact) name else goldenName(name, variant),
@@ -53,7 +56,7 @@ class AlbumGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pr
         frozen = frozen,
         before = before,
     ) {
-        AlbumScreen(AlbumSamples.state(album, tab), AlbumActions(), initialLifted = lifted, initialBook = book, initialBlink = blink)
+        AlbumScreen(AlbumSamples.state(album, tab), AlbumActions(), initialLifted = lifted, initialBook = book, initialBlink = blink, initialFullReceipt = fullReceipt)
     }
 
     @Test
@@ -68,9 +71,18 @@ class AlbumGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pr
     @Test
     fun tripBooks() = record("album_tripbooks", AlbumSamples.mockup, before = { onNodeWithTag(AlbumTags.LIST).performScrollToKey("books") })
 
+    /** The filed book opened read-only, scrolled to its receipt (§6.6, §13.2: LCD dots on thermal paper). */
     @Test
     fun tripBookOpen() {
-        record("album_tripbook_open", AlbumSamples.mockup, book = AlbumSamples.perfectBook.id)
+        record("album_tripbook_open", AlbumSamples.mockup, book = AlbumSamples.perfectBook.id, before = {
+            onNodeWithTag(FiledBookTags.END).performScrollTo()
+        })
+    }
+
+    /** The receipt full size (§13.2: "tapping the slip in the Trip book sheet shows it full size"). */
+    @Test
+    fun receiptFull() {
+        record("album_receipt_full", AlbumSamples.mockup, book = AlbumSamples.perfectBook.id, fullReceipt = true)
     }
 
     @Test

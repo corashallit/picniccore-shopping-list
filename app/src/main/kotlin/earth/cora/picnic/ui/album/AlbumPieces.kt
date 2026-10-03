@@ -56,6 +56,10 @@ import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.testTag
+import earth.cora.picnic.ui.theme.PicnicButton
+import earth.cora.picnic.ui.theme.PicnicButtonStyle
+import earth.cora.picnic.ui.theme.PicnicGlyph
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyKey
@@ -611,6 +615,22 @@ internal fun TripBooksCard(rows: List<BookRowUi>, onOpen: (BookRowUi) -> Unit, m
             )
             rows.forEach { row -> BookRow(row, onOpen = { onOpen(row) }, onAppeared = { onAppeared(row.id) }) }
         }
+    }
+}
+
+/**
+ * "2 trip sticker books ▾" (§6.10): a text button above the tabs that scrolls down to the Trip sticker books card, so
+ * her books are one tap away however long the pocket page above them is.
+ */
+@Composable
+internal fun BooksJump(count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().testTag(AlbumTags.JUMP), horizontalArrangement = Arrangement.End) {
+        PicnicButton(
+            pluralStringResource(R.plurals.album_books_jump, count, count),
+            onClick = onClick,
+            style = PicnicButtonStyle.Text,
+            glyph = PicnicGlyph.Expand,
+        )
     }
 }
 
