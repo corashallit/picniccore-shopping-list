@@ -57,8 +57,10 @@ class ButtonGlossTest {
                     assertEquals("$kind crescents", 1, crescents.size)
                     assertEquals("$kind dots", 1, dots.size)
                 } else {
-                    // Disabled pills: no gloss at all (round buttons fade to 50 % with their gloss instead).
+                    // Disabled faces, pills and round buttons alike: no gloss at all (the disabled tokens, §4.6).
                     assertEquals(0, crescents.size + dots.size)
+                    // The FAB is never disabled (it opens the add bar); every other face takes the backing fill.
+                    if (kind != ButtonKind.Fab) assertEquals("$kind disabled fill", c.backing, ops.first().color)
                 }
                 // The only white ON a face: one crescent, one dot and the face's own label or glyph (the primary's white
                 // label, the FAB's white plus, a Glow round button's white glyph). The face's own fill may be white

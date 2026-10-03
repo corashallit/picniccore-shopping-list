@@ -12,7 +12,6 @@
     <string name="theme_state_expanded">expanded</string>
     <string name="theme_aisle_cleared">All picked up!</string>
     <string name="theme_aisle_cleared_stamp">CLEAR!</string>
-    <string name="theme_trip_progress">%1$d of %2$d in the basket</string>
     <string name="theme_switch_on">On</string>
     <string name="theme_switch_off">Off</string>
 

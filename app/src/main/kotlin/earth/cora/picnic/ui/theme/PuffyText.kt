@@ -13,6 +13,15 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageBitmapConfig
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -49,6 +58,14 @@ import kotlin.math.max
  * PUFFY TEXT NEVER CLIPS. The box is laid out from the STROKE pass, not the fill: half the stroke on every side plus
  * the shadow offset on the right and bottom, and the last glyph's overhang (from the layout's bounding boxes, not the
  * advance width). Nothing here clips; an ellipsized title is ellipsized inside that padded box.
+ *
+ * NO PINHOLES. Each glyph's stroke is its own halo, half the pen wide. Where two glyphs sit closer than a pen width
+ * without touching (DynaPuff kerns "XT" in NEXT that tight), their halos meet everywhere around a point that neither
+ * reaches: a pinhole in the white, through which the hard shadow showed as a dark speck. The same happens in a counter
+ * a little wider than the pen, and where two halos nearly meet they leave a hairline crack. A die-cut never leaves a
+ * hole or a slit narrower than its blade, so after laying out, the stroke pass is rasterised once and every uncovered
+ * region the open ground cannot reach through a neck wider than 2 px, no bigger than the pen ([PuffyPinholes]), is
+ * filled in the stroke colour (and, offset, in the shadow colour). Larger counters and the gaps between words stay open.
  */
 
 /** The fitted font size (sp) a PuffyText chose (tests: AppBarTest, PuffyTextBoundsTest). */
@@ -116,6 +133,7 @@ fun PuffyText(
         }
         val widthDp = with(density) { fit.width.toDp() }
         val heightDp = with(density) { fit.height.toDp() }
+        val pinholes = remember(fit, density) { PuffyPinholes.find(fit, density) }
         Box(
             Modifier
                 .size(widthDp, heightDp)
@@ -128,16 +146,18 @@ fun PuffyText(
                 }
                 .drawBehind {
                     val strokeStyle = Stroke(width = fit.half * 2, join = StrokeJoin.Round)
-                    translate(fit.half, fit.half) {
-                        if (fit.sx > 0f || fit.sy > 0f) {
-                            translate(fit.sx, fit.sy) {
-                                drawText(fit.shadow, shadowColor, drawStyle = strokeStyle)
-                                drawText(fit.shadow, shadowColor, drawStyle = Fill)
-                            }
+                    if (fit.sx > 0f || fit.sy > 0f) {
+                        translate(fit.half + fit.sx, fit.half + fit.sy) {
+                            drawText(fit.shadow, shadowColor, drawStyle = strokeStyle)
+                            drawText(fit.shadow, shadowColor, drawStyle = Fill)
                         }
-                        drawText(fit.outline, strokeColor, drawStyle = strokeStyle)
-                        drawText(fit.fill, drawStyle = Fill)
+                        if (pinholes != null) {
+                            drawImage(pinholes, Offset(fit.sx, fit.sy), colorFilter = ColorFilter.tint(shadowColor, BlendMode.SrcIn))
+                        }
                     }
+                    translate(fit.half, fit.half) { drawText(fit.outline, strokeColor, drawStyle = strokeStyle) }
+                    if (pinholes != null) drawImage(pinholes, colorFilter = ColorFilter.tint(strokeColor, BlendMode.SrcIn))
+                    translate(fit.half, fit.half) { drawText(fit.fill, drawStyle = Fill) }
                 },
         )
     }
@@ -163,7 +183,9 @@ internal class PuffyFit(
 
 /**
  * Fits [text]: the style's size if it fits in [maxWidth] minus the stroke and shadow room, else 1 sp smaller each step
- * down to [minFontSize], else ellipsized at [minFontSize].
+ * down to [minFontSize], else ellipsized at [minFontSize]: the longest start of the text that fits with "…" after it,
+ * spaces before the "…" dropped ("Everything…", never "Everything …"), and the box as wide as what is drawn, so an
+ * ellipsized title never trails a gap before what follows it (the sun sticker).
  */
 internal fun fitPuffy(
     measurer: TextMeasurer,
@@ -187,28 +209,54 @@ internal fun fitPuffy(
     var size = from
     var layout: TextLayoutResult
     var overflowed: Boolean
+    var shown = text
+    fun fits(l: TextLayoutResult) = !l.hasVisualOverflow && inkRight(l) <= maxText + 0.5f
     while (true) {
         layout = measurePuffy(measurer, text, style, size, maxText, maxLines, TextOverflow.Clip, textAlign)
-        if (!layout.hasVisualOverflow && inkRight(layout) <= maxText + 0.5f) {
+        if (fits(layout)) {
             overflowed = false
             break
         }
         if (size - 1f < to - 0.001f) {
-            layout = measurePuffy(measurer, text, style, to, maxText, maxLines, TextOverflow.Ellipsis, textAlign)
             size = to
+            // The longest start that fits with its "…" (binary search: a longer start never fits where a shorter fails).
+            var lo = 0
+            var hi = text.length
+            while (lo < hi) {
+                val mid = (lo + hi + 1) / 2
+                if (fits(measurePuffy(measurer, ellipsized(text, mid), style, size, maxText, maxLines, TextOverflow.Clip, textAlign))) lo = mid else hi = mid - 1
+            }
+            shown = ellipsized(text, lo)
+            layout = measurePuffy(measurer, shown, style, size, maxText, maxLines, TextOverflow.Clip, textAlign)
             overflowed = true
             break
         }
         size -= 1f
     }
-    val plain = AnnotatedString(text.text)
-    val over = if (overflowed) TextOverflow.Ellipsis else TextOverflow.Clip
-    val outline = measurePuffy(measurer, plain, style.copy(color = strokeColor), size, maxText, maxLines, over, textAlign)
-    val shadowLayout = measurePuffy(measurer, plain, style.copy(color = shadowColor), size, maxText, maxLines, over, textAlign)
+    val plain = AnnotatedString(shown.text)
+    val outline = measurePuffy(measurer, plain, style.copy(color = strokeColor), size, maxText, maxLines, TextOverflow.Clip, textAlign)
+    val shadowLayout = measurePuffy(measurer, plain, style.copy(color = shadowColor), size, maxText, maxLines, TextOverflow.Clip, textAlign)
     val inkW = max(inkRight(layout), layout.size.width.toFloat())
     val w = ceil(inkW + room).toInt()
     val h = ceil(layout.size.height + half * 2 + sy).toInt()
     return PuffyFit(layout, outline, shadowLayout, half, sx, sy, size, overflowed, w, h, Rect(0f, 0f, inkW + room, layout.size.height + half * 2 + sy))
+}
+
+/**
+ * The first [n] characters of [text] (whole characters, trailing spaces dropped) and "…", spans kept; the "…" wears the
+ * span of the character before it (the wordmark's "Basket" ramune).
+ */
+internal fun ellipsized(text: AnnotatedString, n: Int): AnnotatedString {
+    var end = n.coerceIn(0, text.length)
+    if (end in 1 until text.length && text[end - 1].isHighSurrogate()) end--
+    while (end > 0 && text[end - 1].isWhitespace()) end--
+    val last = text.spanStyles.lastOrNull { end > 0 && it.start <= end - 1 && end - 1 < it.end }?.item
+    return androidx.compose.ui.text.buildAnnotatedString {
+        append(text.subSequence(0, end))
+        if (last != null) pushStyle(last)
+        append("\u2026")
+        if (last != null) pop()
+    }
 }
 
 private fun measurePuffy(
@@ -241,6 +289,150 @@ private fun inkRight(layout: TextLayoutResult): Float {
         if (end >= 0 && end < layout.layoutInput.text.length) right = max(right, layout.getBoundingBox(end).right)
     }
     return right
+}
+
+/**
+ * The stroke pass's pinholes and cracks (see the file header). [find] rasterises the silhouette (stroke and fill) once
+ * and returns what to fill as an opaque mask the size of the box (null when there is nothing, the usual case), drawn
+ * tinted in the stroke colour between the stroke and fill passes.
+ */
+internal object PuffyPinholes {
+    /** A pixel counts as covered from this alpha up (the stroke's antialiased rim is half covered). */
+    private const val COVERED = 128
+
+    /** The open ground reaches this far (px) into the gaps it borders: shallow dips between halos stay as drawn. */
+    const val SHORE = 3
+
+    fun find(fit: PuffyFit, density: androidx.compose.ui.unit.Density): ImageBitmap? {
+        val w = fit.width
+        val h = fit.height
+        if (w <= 2 || h <= 2 || fit.half <= 0f) return null
+        val mask = ImageBitmap(w, h, ImageBitmapConfig.Argb8888)
+        CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(mask), Size(w.toFloat(), h.toFloat())) {
+            translate(fit.half, fit.half) {
+                drawText(fit.outline, Color.Black, drawStyle = Stroke(width = fit.half * 2, join = StrokeJoin.Round))
+                drawText(fit.fill, Color.Black, drawStyle = Fill)
+            }
+        }
+        val argb = IntArray(w * h)
+        mask.readPixels(argb)
+        val alpha = IntArray(w * h) { (argb[it] ushr 24) and 0xFF }
+        val fill = holes(alpha, w, h, pen = ceil(fit.half * 2).toInt()) ?: return null
+        val out = IntArray(w * h)
+        for (i in fill.indices) if (fill[i]) out[i] = 0xFF000000.toInt()
+        val patch = ImageBitmap(w, h, ImageBitmapConfig.Argb8888)
+        patch.asAndroidBitmap().setPixels(out, 0, w, 0, 0, w, h)
+        return patch
+    }
+
+    /**
+     * Which pixels of a [w] × [h] coverage [alpha] map to fill, or null when none: the uncovered pixels (alpha below
+     * [COVERED]) the open ground cannot reach, in regions no bigger than the pen ([pen] × [pen] in area, 2 pens across),
+     * each with its partly covered rim. The ground floods in from the edges of the box but never through a neck 2 px wide
+     * or less (it keeps 1 px clear of every covered pixel), then reaches [shore] px further into what it borders. So an
+     * enclosed pinhole and the far end of a hairline crack between two halos are filled; open ground, the gaps between
+     * words, shallow dips along the outline and counters bigger than the pen are not. Pure (unit-tested).
+     */
+    fun holes(alpha: IntArray, w: Int, h: Int, pen: Int, shore: Int = SHORE): BooleanArray? {
+        val n = w * h
+        val covered = BooleanArray(n) { alpha[it] >= COVERED }
+        // A pixel the ground cannot pass: covered, or next to a covered pixel (8 neighbours).
+        val blocked = BooleanArray(n)
+        for (y in 0 until h) for (x in 0 until w) {
+            if (!covered[y * w + x]) continue
+            for (dy in -1..1) for (dx in -1..1) {
+                val nx = x + dx
+                val ny = y + dy
+                if (nx in 0 until w && ny in 0 until h) blocked[ny * w + nx] = true
+            }
+        }
+        // The ground: flooded (4 neighbours) from every unblocked pixel on the box's edge.
+        val ground = BooleanArray(n)
+        val queue = IntArray(n)
+        var head = 0
+        var tail = 0
+        fun seed(i: Int) {
+            if (!blocked[i] && !ground[i]) {
+                ground[i] = true
+                queue[tail++] = i
+            }
+        }
+        for (x in 0 until w) { seed(x); seed((h - 1) * w + x) }
+        for (y in 0 until h) { seed(y * w); seed(y * w + w - 1) }
+        while (head < tail) {
+            val i = queue[head++]
+            val x = i % w
+            val y = i / w
+            if (x > 0) seed(i - 1)
+            if (x < w - 1) seed(i + 1)
+            if (y > 0) seed(i - w)
+            if (y < h - 1) seed(i + w)
+        }
+        // Its shore: every pixel not fully covered within [shore] px (8 neighbours) of it (the outline's antialiased rim
+        // included), and the not fully covered edge of the box.
+        val partial = BooleanArray(n) { alpha[it] < 255 }
+        val open = ground.copyOf()
+        for (step in 0 until shore) {
+            val grown = open.copyOf()
+            for (y in 0 until h) for (x in 0 until w) {
+                if (!open[y * w + x]) continue
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = x + dx
+                    val ny = y + dy
+                    if (nx in 0 until w && ny in 0 until h && partial[ny * w + nx]) grown[ny * w + nx] = true
+                }
+            }
+            grown.copyInto(open)
+        }
+        for (x in 0 until w) for (y in intArrayOf(0, h - 1)) if (partial[y * w + x]) open[y * w + x] = true
+        for (y in 0 until h) for (x in intArrayOf(0, w - 1)) if (partial[y * w + x]) open[y * w + x] = true
+        // What is left not fully covered and unreached, region by region (4 neighbours). Its partly covered pixels go
+        // too: another renderer may cover them a little less (the stroke's own threshold is half).
+        val seen = BooleanArray(n)
+        val result = BooleanArray(n)
+        var any = false
+        for (start in 0 until n) {
+            if (seen[start] || !partial[start] || open[start]) continue
+            head = 0
+            tail = 0
+            queue[tail++] = start
+            seen[start] = true
+            var minX = w
+            var maxX = -1
+            var minY = h
+            var maxY = -1
+            while (head < tail) {
+                val i = queue[head++]
+                val x = i % w
+                val y = i / w
+                minX = minOf(minX, x); maxX = maxOf(maxX, x); minY = minOf(minY, y); maxY = maxOf(maxY, y)
+                fun visit(j: Int) {
+                    if (!seen[j] && partial[j] && !open[j]) {
+                        seen[j] = true
+                        queue[tail++] = j
+                    }
+                }
+                if (x > 0) visit(i - 1)
+                if (x < w - 1) visit(i + 1)
+                if (y > 0) visit(i - w)
+                if (y < h - 1) visit(i + w)
+            }
+            if (tail > pen * pen || maxX - minX + 1 > pen * 2 || maxY - minY + 1 > pen * 2) continue
+            any = true
+            for (k in 0 until tail) {
+                val i = queue[k]
+                result[i] = true
+                val x = i % w
+                val y = i / w
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = x + dx
+                    val ny = y + dy
+                    if (nx in 0 until w && ny in 0 until h && alpha[ny * w + nx] < 255 && !open[ny * w + nx]) result[ny * w + nx] = true
+                }
+            }
+        }
+        return if (any) result else null
+    }
 }
 
 /** Where a drawn puffy text's ink starts inside its box (the stroke's half-width). */
