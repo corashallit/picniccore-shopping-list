@@ -204,6 +204,12 @@ object HankoBurst {
         }
     }
 
+    /** Eight particles all round a centre (the PER-FECT! slams, where no text sits beside it), 26–40 dp out. */
+    fun ring(seed: Int): List<Particle> {
+        val base = particles(seed)
+        return base.mapIndexed { i, p -> p.copy(angleDeg = -90f + 45f * i + (p.angleDeg % 7f), distanceDp = p.distanceDp * 0.8f) }
+    }
+
     /** A particle's pose at [elapsed]: its offset from the centre (dp), scale and alpha; null once gone. */
     fun at(p: Particle, elapsed: Long): MotionPose? {
         val i = heldStep(elapsed, DURATION / 5, 5)
