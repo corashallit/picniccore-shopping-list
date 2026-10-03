@@ -60,6 +60,8 @@ class AlbumActions(
     val onBack: () -> Unit = {},
     val onSelectTab: (AlbumTab) -> Unit = {},
     val onAppeared: (key: String) -> Unit = {},
+    /** A newly filed trip book's row played its magic appear (§7.8). */
+    val onBookAppeared: (bookId: String) -> Unit = {},
     val onBackToList: () -> Unit = {},
     val onOpenMyStore: () -> Unit = {},
     val onOpenSettings: () -> Unit = {},
@@ -79,6 +81,7 @@ fun AlbumRoute(
             onBack = onBack,
             onSelectTab = vm::selectTab,
             onAppeared = vm::appeared,
+            onBookAppeared = vm::bookAppeared,
             onBackToList = onBackToList,
             onOpenMyStore = onOpenMyStore,
             onOpenSettings = onOpenSettings,
@@ -239,7 +242,7 @@ fun AlbumScreen(
             }
             if (state.books.isNotEmpty()) {
                 item("books") {
-                    TripBooksCard(state.books, onOpen = { openBook = it.id }, modifier = Modifier.padding(top = 18.dp))
+                    TripBooksCard(state.books, onOpen = { openBook = it.id }, modifier = Modifier.padding(top = 18.dp), onAppeared = actions.onBookAppeared)
                 }
             }
             item("perfect") {

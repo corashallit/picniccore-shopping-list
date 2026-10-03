@@ -31,7 +31,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.util.Locale
 import java.util.concurrent.Executor
 import kotlin.math.asin
 import kotlin.math.cos
@@ -58,23 +57,24 @@ data class LatLon(val lat: Double, val lon: Double)
 /** One Environment Canada city forecast site ([EC_SITES]). [code] is EC's site code ("s0000458" = Toronto). */
 data class EcSite(val code: String, val name: String, val province: String, val lat: Double, val lon: Double) {
     /**
-     * The city's forecast feed. The forecast is requested for the CITY's own coordinates (the same for everyone near
-     * it), never for the phone's point. (The older `rss/city/<code>_e.xml` feeds answer 404 since EC moved to
-     * coordinate feeds.)
+     * The city's forecast feed ([Place.forecastFeedUrl]): requested for the CITY's own coordinates (the same for everyone
+     * near it), never for the phone's point.
      */
-    val feedUrl: String
-        get() = "https://weather.gc.ca/rss/weather/${String.format(Locale.ROOT, "%.2f", lat)}_${String.format(Locale.ROOT, "%.2f", lon)}_e.xml"
+    val feedUrl: String get() = Place.forecastFeedUrl(lat, lon)
 }
 
 /** The bundled forecast cities and the pure parts of "Use my area" (PlaceSourceTest). */
 object EcSites {
-    /** Toronto's site; [Place.TORONTO]'s older city code "on-143" names it too. */
-    val TORONTO: EcSite = EC_SITES.first { it.code == "s0000458" }
+    /** Toronto's site, [Place.TORONTO]'s city. */
+    val TORONTO: EcSite = EC_SITES.first { it.code == Place.TORONTO.cityCode }
 
     val all: List<EcSite> get() = EC_SITES
 
-    /** The site for a [Place.cityCode]: an EC site code, or the older "on-143" (Toronto). Null when unknown. */
-    fun byCode(code: String): EcSite? = if (code == Place.TORONTO.cityCode) TORONTO else EC_SITES.firstOrNull { it.code == code }
+    /** The site for a [Place.cityCode] (an EC site code). Null when unknown. */
+    fun byCode(code: String): EcSite? = EC_SITES.firstOrNull { it.code == code }
+
+    /** The [Place] for a rounded [point] and its forecast [site]: the site's code and its own coordinates. */
+    fun place(point: LatLon, site: EcSite): Place = Place(lat = point.lat, lon = point.lon, cityCode = site.code, siteLat = site.lat, siteLon = site.lon)
 
     /** The nearest bundled forecast city to [point] (great-circle distance). */
     fun nearest(point: LatLon): EcSite = EC_SITES.minBy { distanceKm(point, LatLon(it.lat, it.lon)) }
@@ -91,7 +91,7 @@ object EcSites {
     /** The place for a raw coarse fix: rounded first, then its nearest city. */
     fun placeFor(fix: LatLon): Place {
         val rounded = round(fix)
-        return Place(lat = rounded.lat, lon = rounded.lon, cityCode = nearest(rounded).code)
+        return place(rounded, nearest(rounded))
     }
 
     /** The great-circle distance in km. */
@@ -115,7 +115,8 @@ interface CoarseLocator {
 
 /** The one stored place: the rounded point, its city and when it was found. */
 data class StoredPlace(val lat: Double, val lon: Double, val cityCode: String, val at: Long) {
-    val place: Place get() = Place(lat = lat, lon = lon, cityCode = cityCode)
+    /** The place, with its city's own coordinates from the bundled list (an unknown code: the nearest city's). */
+    val place: Place get() = LatLon(lat, lon).let { p -> EcSites.place(p, EcSites.byCode(cityCode) ?: EcSites.nearest(p)) }
 }
 
 /** Where the rounded place lives between runs. [write] null deletes it. */

@@ -38,6 +38,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.common.DashedAddSpot
+import earth.cora.picnic.ui.common.NoMaterialPress
+import earth.cora.picnic.ui.common.highlighterPress
 import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.LcdChip
@@ -60,8 +62,8 @@ import earth.cora.picnic.ui.theme.hardShadow
 /**
  * "Your lists" (§6.4): one kiss-cut label per list with an LCD chip of what is left, the current list selected (lemon,
  * with a star); tap a label to switch; the pencil renames in place; the bin asks first on a small confirm sheet, which
- * adds "Its sticker book goes into your album." when that list has stickers in its book ([stickers]: list id -> stickers
- * in its open trip's book) — the book is then filed before the list goes (the host's deleteList, TripFiling). The dashed
+ * adds "Its sticker book goes into your album." when that list has stickers in its book ([ListSummary.bookStickers]) — the
+ * book is then filed before the list goes (the host's deleteList, TripFiling). The dashed
  * "New list" spot starts a new list. The last list can't be deleted.
  */
 @Composable
@@ -72,7 +74,6 @@ fun ListSwitcherSheet(
     onNew: (title: String) -> Unit,
     onRename: (listId: String, title: String) -> Unit,
     onDelete: (listId: String) -> Unit,
-    stickers: Map<String, Int> = emptyMap(),
     visible: Boolean = true,
     modifier: Modifier = Modifier,
     initialConfirmDelete: String? = null,
@@ -83,92 +84,95 @@ fun ListSwitcherSheet(
     var adding by rememberSaveable { mutableStateOf(false) }
     var newTitle by rememberSaveable { mutableStateOf("") }
 
-    LetterSetSheet(visible = visible, onDismissRequest = onDismiss, modifier = modifier.imePadding()) {
-        Text(
-            stringResource(R.string.lists_title),
-            style = PicnicTheme.type.cardTitle.copy(color = PicnicTheme.colors.ink),
-            modifier = Modifier.semantics { heading() },
-        )
-        Spacer(Modifier.height(14.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)) {
-            lists.forEach { summary ->
-                if (summary.id == renamingId) {
-                    RenameRow(
-                        text = renameText,
-                        onTextChange = { renameText = it },
-                        onDone = {
-                            onRename(summary.id, renameText)
-                            renamingId = null
-                        },
-                        onCancel = { renamingId = null },
-                    )
-                } else {
-                    ListLabel(
-                        summary = summary,
-                        canDelete = lists.size > 1,
-                        onClick = { onSwitch(summary.id) },
-                        onRename = {
-                            renameText = summary.title
-                            renamingId = summary.id
-                        },
-                        onDelete = {
-                            renamingId = null
-                            confirmDeleteId = summary.id
-                        },
-                    )
-                }
-            }
-            if (adding) {
-                NewListRow(
-                    text = newTitle,
-                    onTextChange = { newTitle = it },
-                    onDone = {
-                        if (newTitle.isNotBlank()) onNew(newTitle.trim())
-                        newTitle = ""
-                        adding = false
-                    },
-                    onCancel = { adding = false },
-                )
-            } else {
-                DashedAddSpot(stringResource(R.string.lists_new_label), onClick = { adding = true }, modifier = Modifier.fillMaxWidth())
-            }
-        }
-    }
-
-    val confirming = lists.firstOrNull { it.id == confirmDeleteId }
-    LetterSetSheet(
-        visible = confirming != null,
-        onDismissRequest = { confirmDeleteId = null },
-        footer = {
-            Row(
-                Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PicnicButton(stringResource(R.string.lists_delete_no), onClick = { confirmDeleteId = null }, style = PicnicButtonStyle.Text)
-                PicnicButton(
-                    stringResource(R.string.lists_delete_yes),
-                    onClick = {
-                        confirmDeleteId?.let(onDelete)
-                        confirmDeleteId = null
-                    },
-                    glyph = PicnicGlyph.Delete,
-                )
-            }
-        },
-    ) {
-        if (confirming != null) {
+    // No Material ripple anywhere in the two sheets (§0.2).
+    NoMaterialPress {
+        LetterSetSheet(visible = visible, onDismissRequest = onDismiss, modifier = modifier.imePadding()) {
             Text(
-                stringResource(R.string.lists_delete_title, confirming.title),
+                stringResource(R.string.lists_title),
                 style = PicnicTheme.type.cardTitle.copy(color = PicnicTheme.colors.ink),
                 modifier = Modifier.semantics { heading() },
             )
-            Spacer(Modifier.height(10.dp))
-            if ((stickers[confirming.id] ?: 0) > 0) {
-                Text(stringResource(R.string.lists_delete_book), style = PicnicTheme.type.body.copy(color = PicnicTheme.colors.ink))
+            Spacer(Modifier.height(14.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)) {
+                lists.forEach { summary ->
+                    if (summary.id == renamingId) {
+                        RenameRow(
+                            text = renameText,
+                            onTextChange = { renameText = it },
+                            onDone = {
+                                onRename(summary.id, renameText)
+                                renamingId = null
+                            },
+                            onCancel = { renamingId = null },
+                        )
+                    } else {
+                        ListLabel(
+                            summary = summary,
+                            canDelete = lists.size > 1,
+                            onClick = { onSwitch(summary.id) },
+                            onRename = {
+                                renameText = summary.title
+                                renamingId = summary.id
+                            },
+                            onDelete = {
+                                renamingId = null
+                                confirmDeleteId = summary.id
+                            },
+                        )
+                    }
+                }
+                if (adding) {
+                    NewListRow(
+                        text = newTitle,
+                        onTextChange = { newTitle = it },
+                        onDone = {
+                            if (newTitle.isNotBlank()) onNew(newTitle.trim())
+                            newTitle = ""
+                            adding = false
+                        },
+                        onCancel = { adding = false },
+                    )
+                } else {
+                    DashedAddSpot(stringResource(R.string.lists_new_label), onClick = { adding = true }, modifier = Modifier.fillMaxWidth())
+                }
             }
-            // Room above the sticky footer's fade, so the last line is never washed out.
-            Spacer(Modifier.height(28.dp))
+        }
+
+        val confirming = lists.firstOrNull { it.id == confirmDeleteId }
+        LetterSetSheet(
+            visible = confirming != null,
+            onDismissRequest = { confirmDeleteId = null },
+            footer = {
+                Row(
+                    Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PicnicButton(stringResource(R.string.lists_delete_no), onClick = { confirmDeleteId = null }, style = PicnicButtonStyle.Text)
+                    PicnicButton(
+                        stringResource(R.string.lists_delete_yes),
+                        onClick = {
+                            confirmDeleteId?.let(onDelete)
+                            confirmDeleteId = null
+                        },
+                        glyph = PicnicGlyph.Delete,
+                    )
+                }
+            },
+        ) {
+            if (confirming != null) {
+                Text(
+                    stringResource(R.string.lists_delete_title, confirming.title),
+                    style = PicnicTheme.type.cardTitle.copy(color = PicnicTheme.colors.ink),
+                    modifier = Modifier.semantics { heading() },
+                )
+                Spacer(Modifier.height(10.dp))
+                if (confirming.bookStickers > 0) {
+                    Text(stringResource(R.string.lists_delete_book), style = PicnicTheme.type.body.copy(color = PicnicTheme.colors.ink))
+                }
+                // Room above the sticky footer's fade, so the last line is never washed out.
+                Spacer(Modifier.height(28.dp))
+            }
         }
     }
 }
@@ -200,7 +204,7 @@ private fun ListLabel(summary: ListSummary, canDelete: Boolean, onClick: () -> U
             Modifier
                 .weight(1f)
                 .heightIn(min = 56.dp)
-                .clickable(role = Role.Button, onClick = onClick)
+                .clickable(interactionSource = null, indication = highlighterPress(), role = Role.Button, onClick = onClick)
                 .semantics(mergeDescendants = true) { selected = summary.current },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),

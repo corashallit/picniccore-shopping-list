@@ -60,7 +60,8 @@ private fun StickerCell(key: String, label: String, selected: Boolean, onClick: 
     Box(
         Modifier
             .size(52.dp)
-            .clickable(role = Role.RadioButton, onClick = onClick)
+            // No ripple: the chosen cell answers with its lemon ring.
+            .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 this.selected = selected
                 contentDescription = label

@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -137,13 +136,12 @@ fun FiledBookSheet(book: TripBook?, dateLabel: String, onClose: () -> Unit, modi
     }
 }
 
-/** Thermal-receipt paper: a warm off-white, so the slip reads as paper on the white pad. */
-private val ReceiptPaper = Color(0xFFFFFBEF)
-
 /** The receipt slip (§13.1 egg 12's print, saved into the book): paper with a torn zigzag foot, ballpoint lines. */
 @Composable
 private fun ReceiptSlip(lines: List<String>) {
     val c = PicnicTheme.colors
+    // Thermal-receipt paper (§2.6 receiptPaper, #FFF9E8 in every variant): it reads as paper on the pad.
+    val paper = c.receiptPaper
     val shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
     Column(
         Modifier
@@ -151,7 +149,7 @@ private fun ReceiptSlip(lines: List<String>) {
             .offset(x = 4.dp)
             .rotate(-1.5f)
             .hardShadow(shape, PicnicTheme.shadows)
-            .background(ReceiptPaper, shape)
+            .background(paper, shape)
             .border(1.dp, Families.periwinkle.pastel, shape)
             .drawBehind {
                 val tooth = 6.dp.toPx()
@@ -168,7 +166,7 @@ private fun ReceiptSlip(lines: List<String>) {
                     lineTo(size.width, y)
                     close()
                 }
-                drawPath(path, ReceiptPaper)
+                drawPath(path, paper)
                 drawLine(Families.periwinkle.pastel, Offset(12.dp.toPx(), 30.dp.toPx()), Offset(size.width - 12.dp.toPx(), 30.dp.toPx()), 1.dp.toPx())
             }
             .padding(horizontal = 14.dp, vertical = 10.dp),

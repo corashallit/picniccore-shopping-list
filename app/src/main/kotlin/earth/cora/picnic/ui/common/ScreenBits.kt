@@ -69,7 +69,7 @@ fun LinkRow(title: String, onClick: () -> Unit, modifier: Modifier = Modifier, h
         modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clickable(role = Role.Button, onClick = onClick),
+            .clickable(interactionSource = null, indication = highlighterPress(), role = Role.Button, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -99,17 +99,19 @@ fun DashedAddSpot(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
     val dark = c.isDark && !onBacking
     val dash = if (dark) Families.periwinkle.mid else Families.periwinkle.trace
     val ink = if (onBacking) c.ballpoint else c.ink
+    val white = c.stickerWhite
     Row(
         modifier
             .heightIn(min = 48.dp)
-            .clickable(role = Role.Button, onClick = onClick)
             .drawBehind {
                 val inset = 1.dp.toPx()
                 val r = 10.dp.toPx()
                 val rect = RoundRect(inset, inset, size.width - inset, size.height - inset, CornerRadius(r))
-                drawRoundRect(Color.White.copy(alpha = if (dark) 0.08f else 0.5f), Offset(inset, inset), Size(size.width - 2 * inset, size.height - 2 * inset), CornerRadius(r))
+                drawRoundRect(white.copy(alpha = if (dark) 0.08f else 0.5f), Offset(inset, inset), Size(size.width - 2 * inset, size.height - 2 * inset), CornerRadius(r))
                 drawDashedPath(Path().apply { addRoundRect(rect) }, dash, 2.dp.toPx(), 5.dp.toPx(), 3.5.dp.toPx())
             }
+            // After the spot's paper, so the pressed highlighter lies on it, under the plus and the words.
+            .clickable(interactionSource = null, indication = highlighterPress(), role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),

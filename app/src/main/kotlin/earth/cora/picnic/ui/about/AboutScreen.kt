@@ -2,20 +2,19 @@ package earth.cora.picnic.ui.about
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.common.LinkRow
 import earth.cora.picnic.ui.common.accentInk
+import earth.cora.picnic.ui.common.highlighterPress
 import earth.cora.picnic.ui.common.PadCard
 import earth.cora.picnic.ui.common.RowRule
 import earth.cora.picnic.ui.common.ScreenColumn
@@ -60,7 +60,26 @@ class AboutActions(
 fun AboutRoute(vm: AboutViewModel, onBack: () -> Unit, onOpenLab: () -> Unit) {
     val state by vm.state.collectAsStateWithLifecycle()
     val actions = remember(vm) { AboutActions(onBack = onBack, onUnlockLab = vm::unlockLab, onOpenLab = onOpenLab) }
-    AboutScreen(state, actions)
+    AboutScreen(state, actions, clock = vm.clock)
+}
+
+/**
+ * The version line's tap counter (§6.9): [UNLOCK_TAPS] taps, each within [TAP_GAP_MILLIS] of the one before (read from
+ * [clock], the app's clock; tests pass the compose test clock), unlock the Surprise lab. A longer pause starts again.
+ */
+class UnlockTaps(private val clock: () -> Long) {
+    private var taps = 0
+    private var last = 0L
+
+    /** One tap on the version line; true when it is the tap that unlocks the lab. */
+    fun tap(): Boolean {
+        val now = clock()
+        taps = if (taps == 0 || now - last > TAP_GAP_MILLIS) 1 else taps + 1
+        last = now
+        if (taps < UNLOCK_TAPS) return false
+        taps = 0
+        return true
+    }
 }
 
 /**
@@ -76,36 +95,34 @@ fun AboutScreen(
     toasts: ToastHostState = remember { ToastHostState() },
     scroll: ScrollState = rememberScrollState(),
     initiallyOpen: Set<String> = emptySet(),
+    clock: () -> Long = System::currentTimeMillis,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val resources = LocalResources.current
-    var taps by remember { mutableIntStateOf(0) }
-    var lastTap by remember { mutableLongStateOf(0L) }
+    val unlock = remember(clock) { UnlockTaps(clock) }
     var open by rememberSaveable { mutableStateOf(initiallyOpen.toList()) }
 
     SecondaryScreen(title = stringResource(R.string.about_title), onBack = actions.onBack, modifier = modifier, toasts = toasts) {
         ScreenColumn(state = scroll) {
             PadCard(spacing = 6.dp) {
                 Wordmark(stringResource(R.string.wordmark), Modifier.padding(top = 4.dp))
-                Text(
-                    stringResource(R.string.about_version, state.appVersion),
-                    style = t.fieldValue.copy(color = c.ink),
-                    modifier = Modifier
+                // The whole 48 dp box is the target (§15); the line looks like plain text (the lab is a secret, §6.9).
+                Box(
+                    Modifier
+                        .padding(top = 4.dp)
                         .heightIn(min = 48.dp)
-                        .padding(top = 12.dp)
-                        .clickable(remember { MutableInteractionSource() }, indication = null) {
-                            if (!state.canUnlock) return@clickable
-                            val now = System.currentTimeMillis()
-                            taps = if (now - lastTap > TAP_GAP_MILLIS) 1 else taps + 1
-                            lastTap = now
-                            if (taps >= UNLOCK_TAPS) {
-                                taps = 0
+                        .widthIn(min = 48.dp)
+                        .clickable(interactionSource = null, indication = null) {
+                            if (state.canUnlock && unlock.tap()) {
                                 actions.onUnlockLab()
                                 toasts.show(ToastMessage(resources.getString(R.string.about_lab_unlocked), kind = "lab"))
                             }
                         },
-                )
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Text(stringResource(R.string.about_version, state.appVersion), style = t.fieldValue.copy(color = c.ink))
+                }
                 Text(stringResource(R.string.about_made_for), style = t.body.copy(color = c.ink))
                 PicnicText(
                     "♡ " + stringResource(R.string.about_sun_hint),
@@ -155,7 +172,7 @@ private fun LicenceRow(licence: Licence, expanded: Boolean, onToggle: () -> Unit
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .clickable(role = Role.Button, onClick = onToggle)
+                .clickable(interactionSource = null, indication = highlighterPress(), role = Role.Button, onClick = onToggle)
                 .semantics { stateDescription = state }
                 .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -182,4 +199,4 @@ private fun LicenceRow(licence: Licence, expanded: Boolean, onToggle: () -> Unit
 const val UNLOCK_TAPS: Int = 7
 
 /** A longer pause than this between two taps starts the count again. */
-private const val TAP_GAP_MILLIS = 2_000L
+const val TAP_GAP_MILLIS: Long = 2_000L

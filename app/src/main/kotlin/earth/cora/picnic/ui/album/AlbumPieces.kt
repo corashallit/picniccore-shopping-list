@@ -7,10 +7,11 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -62,6 +64,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -70,6 +73,7 @@ import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.ui.common.MagicAppearBox
+import earth.cora.picnic.ui.common.highlighterPress
 import earth.cora.picnic.ui.theme.ChipFace
 import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.Families
@@ -81,6 +85,7 @@ import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LocalIconCatalog
 import earth.cora.picnic.ui.theme.StickerLibrary
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.PicnicColors
 import earth.cora.picnic.ui.theme.PicnicSurface
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.Stepped
@@ -107,10 +112,10 @@ import kotlinx.coroutines.withContext
  * the back pocket. Owner: WP8. Holo is drawn here only for holo pockets and the perfect-week card (HoloUsageTest).
  */
 
-/** The album's colours (§2.6): the vinyl page and its pinstripes, the empty pocket's inset outline. */
+/** The album's colours (§2.6): the pocket's clear vinyl and sleeve lip (the variant's sticker white), the empty pocket's inset outline. */
 internal object AlbumInk {
-    val pocketFill: Color = Color.White.copy(alpha = 0.55f)
-    val sleeveLip: Color = Color.White.copy(alpha = 0.7f)
+    fun pocketFill(c: PicnicColors): Color = c.stickerWhite.copy(alpha = 0.55f)
+    fun sleeveLip(c: PicnicColors): Color = c.stickerWhite.copy(alpha = 0.7f)
     val emptyOutline: Color = Families.sakura.mid.copy(alpha = 0.45f)
     val question: Color = Families.sakura.mid.copy(alpha = 0.5f)
 
@@ -138,7 +143,22 @@ object AlbumFaces {
  * Tabs and the vinyl page.
  * ------------------------------------------------------------------------------------------------ */
 
-/** The index tabs (§6.10): Groceries · Picnic · Seasonal on sakura, lemon and peach; each a Role.Tab. */
+/** How the album's tabs fit the width: as roomy index tabs, as tighter ones, or wrapped onto two rows as label chips. */
+internal enum class TabFit { Roomy, Compact, Wrapped }
+
+/** A tab's side padding inside its face for [fit]. */
+private fun tabPadding(fit: TabFit, selected: Boolean): Dp = when (fit) {
+    TabFit.Roomy -> if (selected) 16.dp else 14.dp
+    TabFit.Compact, TabFit.Wrapped -> if (selected) 10.dp else 9.dp
+}
+
+/**
+ * The index tabs (§6.10): Groceries · Picnic · Seasonal on sakura, lemon and peach; each a Role.Tab. They always show
+ * whole (§15): when the three no longer fit the width at their roomy padding (large text), the padding tightens; when even
+ * that is too wide (font scale 1.3 and up on a 360 dp phone), they wrap onto two rows as kiss-cut label chips (§4.7 lists
+ * the album tabs among its filter chips) and the vinyl page starts under them.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AlbumTabs(selected: AlbumTab, onSelect: (AlbumTab) -> Unit, modifier: Modifier = Modifier) {
     val labels = mapOf(
@@ -146,41 +166,79 @@ internal fun AlbumTabs(selected: AlbumTab, onSelect: (AlbumTab) -> Unit, modifie
         AlbumTab.Picnic to stringResource(R.string.album_tab_picnic),
         AlbumTab.Seasonal to stringResource(R.string.album_tab_seasonal),
     )
-    Row(
-        // At large font sizes the tabs scroll sideways rather than squeeze or wrap off the page's top edge.
-        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 10.dp, end = 6.dp).selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        AlbumTab.entries.forEach { tab ->
-            val on = tab == selected
-            val family = AlbumInk.family(tab)
-            val shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
-            Box(
-                Modifier
-                    .heightIn(min = 48.dp)
-                    .selectable(selected = on, role = Role.Tab, onClick = { onSelect(tab) }),
-                contentAlignment = Alignment.BottomCenter,
-            ) {
-                Box(
-                    Modifier
-                        .height(if (on) 44.dp else 38.dp)
-                        .hardShadow(shape, PicnicTheme.shadows)
-                        .clip(shape)
-                        .background(PicnicTheme.colors.stickerWhite)
-                        .padding(start = 3.dp, top = 3.dp, end = 3.dp)
-                        .clip(RoundedCornerShape(topStart = 9.dp, topEnd = 9.dp))
-                        .background(if (on) family.mid else family.pastel)
-                        .padding(horizontal = if (on) 16.dp else 14.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val style = if (on) PicnicTheme.type.smallTitle else PicnicTheme.type.label
-                    Text(labels.getValue(tab), style = style.copy(color = PicnicTheme.colors.ballpoint), maxLines = 1)
-                }
+    val type = PicnicTheme.type
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(modifier.fillMaxWidth().padding(start = 10.dp, end = 6.dp)) {
+        val density = LocalDensity.current
+        val labelWidths = remember(labels, selected, density, type) {
+            AlbumTab.entries.associateWith { tab ->
+                val style = if (tab == selected) type.smallTitle else type.label
+                with(density) { measurer.measure(labels.getValue(tab), style, maxLines = 1).size.width.toDp() }
             }
+        }
+        fun needed(fit: TabFit): Dp = AlbumTab.entries.fold(TAB_GAP * (AlbumTab.entries.size - 1)) { sum, tab ->
+            sum + labelWidths.getValue(tab) + tabPadding(fit, tab == selected) * 2 + TAB_BORDER * 2 + 2.dp
+        }
+        val fit = when {
+            needed(TabFit.Roomy) <= maxWidth -> TabFit.Roomy
+            needed(TabFit.Compact) <= maxWidth -> TabFit.Compact
+            else -> TabFit.Wrapped
+        }
+        val tab: @Composable (AlbumTab) -> Unit = { t -> AlbumTabFace(labels.getValue(t), t, t == selected, fit) { onSelect(t) } }
+        if (fit == TabFit.Wrapped) {
+            FlowRow(
+                Modifier.fillMaxWidth().padding(bottom = 8.dp).selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(TAB_GAP),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) { AlbumTab.entries.forEach { tab(it) } }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(TAB_GAP),
+                verticalAlignment = Alignment.Bottom,
+            ) { AlbumTab.entries.forEach { tab(it) } }
         }
     }
 }
+
+/**
+ * One tab in a 48 dp target: a white kiss-cut edge and hard shadow round the family's pastel (mid when selected, and
+ * taller, standing up from the page). Wrapped, it is a whole label (rounded all round) rather than a tab joined to the
+ * page. Selected tabs read in DynaPuff (smallTitle), the others in Zen Maru; both ballpoint (§2.7: text on pastels).
+ */
+@Composable
+private fun AlbumTabFace(text: String, tab: AlbumTab, on: Boolean, fit: TabFit, onClick: () -> Unit) {
+    val family = AlbumInk.family(tab)
+    val wrapped = fit == TabFit.Wrapped
+    val outer = if (wrapped) RoundedCornerShape(12.dp) else RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+    val inner = if (wrapped) RoundedCornerShape(9.dp) else RoundedCornerShape(topStart = 9.dp, topEnd = 9.dp)
+    Box(
+        Modifier
+            .heightIn(min = 48.dp)
+            .selectable(selected = on, interactionSource = null, indication = null, role = Role.Tab, onClick = onClick),
+        contentAlignment = if (wrapped) Alignment.Center else Alignment.BottomCenter,
+    ) {
+        Box(
+            Modifier
+                .heightIn(min = if (wrapped) 40.dp else if (on) 44.dp else 38.dp)
+                .hardShadow(outer, PicnicTheme.shadows)
+                .clip(outer)
+                .background(PicnicTheme.colors.stickerWhite)
+                .padding(start = TAB_BORDER, top = TAB_BORDER, end = TAB_BORDER, bottom = if (wrapped) TAB_BORDER else 0.dp)
+                .clip(inner)
+                .background(if (on) family.mid else family.pastel)
+                .padding(horizontal = tabPadding(fit, on), vertical = 3.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            val style = if (on) PicnicTheme.type.smallTitle else PicnicTheme.type.label
+            Text(text, style = style.copy(color = PicnicTheme.colors.ballpoint), maxLines = 1, softWrap = false)
+        }
+    }
+}
+
+/** The tabs' kiss-cut edge and the gap between two tabs. */
+private val TAB_BORDER: Dp = 3.dp
+private val TAB_GAP: Dp = 6.dp
 
 /**
  * One horizontal slice of the vinyl page (§2.6: `#FFE9F2` with `#FFD6E8` 2 dp pinstripes every 10 dp) inside its 3 dp
@@ -265,7 +323,8 @@ internal fun Pocket(
         else -> stringResource(R.string.album_pocket, pocket.name, pocket.stars)
     }
     val liftLabel = stringResource(R.string.album_pocket_lift)
-    val vinyl = PicnicTheme.colors.albumVinyl
+    val colors = PicnicTheme.colors
+    val vinyl = colors.albumVinyl
     val curlShadow = PicnicTheme.shadows.color.copy(alpha = 0.35f)
     val lift = remember { Animatable(if (lifted) 1f else 0f) }
     val curl = remember { Animatable(if (lifted) 1f else 0f) }
@@ -293,7 +352,10 @@ internal fun Pocket(
             .height(PocketHeight)
             .then(
                 if (pocket.collected) {
+                    // No ripple: the pressed pocket answers with its own lift and curl (§4.25).
                     Modifier.combinedClickable(
+                        interactionSource = null,
+                        indication = null,
                         onClickLabel = liftLabel,
                         onClick = onTap,
                         onLongClick = onLongPress,
@@ -314,7 +376,7 @@ internal fun Pocket(
                 if (pocket.holo) {
                     clipPath(clip) { drawRect(stickerHoloBrush(size)) }
                 } else {
-                    drawPath(clip, AlbumInk.pocketFill)
+                    drawPath(clip, AlbumInk.pocketFill(colors))
                 }
                 if (!pocket.collected) {
                     val inset = 4.dp.toPx()
@@ -328,13 +390,13 @@ internal fun Pocket(
                 }
                 drawContent()
                 // The sleeve lip lies over the sticker's top edge: the sticker sits IN the pocket.
-                clipPath(clip) { drawRect(AlbumInk.sleeveLip, size = Size(size.width, 9.dp.toPx())) }
+                clipPath(clip) { drawRect(AlbumInk.sleeveLip(colors), size = Size(size.width, 9.dp.toPx())) }
                 if (pocket.holo && !reduced) {
                     val phase = loop % glintPeriod
                     if (phase < Holo.glint.durationMillis) drawGlint(Holo.glint.progressAt(phase), clip = clip)
                 }
                 val curlPx = 13.dp.toPx() * curl.value
-                if (curlPx > 0f) drawPageCurl(curlPx, vinyl, Families.periwinkle.mid, curlShadow)
+                if (curlPx > 0f) drawPageCurl(curlPx, vinyl, Families.periwinkle.mid, curlShadow, colors.stickerWhite)
             },
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -454,10 +516,10 @@ private const val FACE_UNITS = 52f
 
 /**
  * A page curl at the top-right ([bottom] = bottom-right) corner, [curl] px along each edge: the corner is gone (the
- * [under] colour shows through) and its flap lies folded back over the face, a white triangle with an [outline] and a
- * small hard shadow.
+ * [under] colour shows through) and its flap lies folded back over the face, a [flapColor] (sticker white) triangle with
+ * an [outline] and a small hard shadow.
  */
-internal fun DrawScope.drawPageCurl(curl: Float, under: Color, outline: Color, shadow: Color, bottom: Boolean = false) {
+internal fun DrawScope.drawPageCurl(curl: Float, under: Color, outline: Color, shadow: Color, flapColor: Color, bottom: Boolean = false) {
     val w = size.width
     val h = size.height
     fun y(v: Float) = if (bottom) h - v else v
@@ -477,7 +539,7 @@ internal fun DrawScope.drawPageCurl(curl: Float, under: Color, outline: Color, s
     }
     val s = 1.5.dp.toPx()
     withTransformTranslate(-s * 0.4f, if (bottom) -s else s) { drawPath(flap, shadow) }
-    drawPath(flap, Color.White)
+    drawPath(flap, flapColor)
     drawPath(flap, outline, style = Stroke(1.dp.toPx()))
 }
 
@@ -490,6 +552,7 @@ private inline fun DrawScope.withTransformTranslate(dx: Float, dy: Float, block:
 /** Three 9 dp rarity stars: filled lemon (lemon trace edge) for each star earned, hollow periwinkle for the rest. */
 @Composable
 internal fun RarityStars(stars: Int, modifier: Modifier = Modifier) {
+    val hollow = PicnicTheme.colors.stickerWhite
     Canvas(modifier.size(width = 33.dp, height = 9.dp).clearAndSetSemantics { }) {
         val s = 9.dp.toPx()
         val gap = 3.dp.toPx()
@@ -500,7 +563,7 @@ internal fun RarityStars(stars: Int, modifier: Modifier = Modifier) {
                 drawPath(path, Families.lemon.mid)
                 drawPath(path, Families.lemon.trace, style = Stroke(0.9.dp.toPx()))
             } else {
-                drawPath(path, Color.White)
+                drawPath(path, hollow)
                 drawPath(path, Families.periwinkle.mid, style = Stroke(0.9.dp.toPx()))
             }
         }
@@ -531,9 +594,13 @@ private fun QuestionMark(wobble: Boolean, modifier: Modifier = Modifier) {
  * Trip-book rows, the perfect-weeks card, seasonal cards, the back pocket.
  * ------------------------------------------------------------------------------------------------ */
 
-/** "Trip sticker books": a backing card with one row per filed book, newest first (§4.25). */
+/**
+ * "Trip sticker books": a backing card with one row per filed book, newest first (§4.25). A book filed since the album
+ * was last open ([BookRowUi.fresh]) blooms in with the magic appear once (§7.8, R5: in place, never a flight), then
+ * [onAppeared] marks it seen.
+ */
 @Composable
-internal fun TripBooksCard(rows: List<BookRowUi>, onOpen: (BookRowUi) -> Unit, modifier: Modifier = Modifier) {
+internal fun TripBooksCard(rows: List<BookRowUi>, onOpen: (BookRowUi) -> Unit, modifier: Modifier = Modifier, onAppeared: (String) -> Unit = {}) {
     val c = PicnicTheme.colors
     PicnicSurface(modifier.fillMaxWidth(), color = c.backing) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -542,14 +609,18 @@ internal fun TripBooksCard(rows: List<BookRowUi>, onOpen: (BookRowUi) -> Unit, m
                 style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint),
                 modifier = Modifier.padding(start = 4.dp).semantics { heading() },
             )
-            rows.forEach { BookRow(it, onOpen = { onOpen(it) }) }
+            rows.forEach { row -> BookRow(row, onOpen = { onOpen(row) }, onAppeared = { onAppeared(row.id) }) }
         }
     }
 }
 
+/** Test hook (AlbumTest): a trip-book row whose magic appear is still to play. */
+val BookRowFresh: SemanticsPropertyKey<Boolean> = SemanticsPropertyKey("BookRowFresh")
+private var SemanticsPropertyReceiver.bookRowFresh: Boolean by BookRowFresh
+
 /** One filed book: up to 6 mini stickers (20 dp), the date (DynaPuff 15 sp), "19 of 19 stickers · perfect · receipt". */
 @Composable
-private fun BookRow(row: BookRowUi, onOpen: () -> Unit) {
+private fun BookRow(row: BookRowUi, onOpen: () -> Unit, onAppeared: () -> Unit) {
     val c = PicnicTheme.colors
     val parts = buildList {
         add(pluralStringResource(R.plurals.album_book_count, row.total, row.stickers, row.total))
@@ -557,18 +628,29 @@ private fun BookRow(row: BookRowUi, onOpen: () -> Unit) {
         if (row.receipt) add(stringResource(R.string.album_book_receipt))
     }
     val line = parts.joinToString(" · ")
-    PicnicSurface(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClickLabel = stringResource(R.string.album_book_open), role = Role.Button, onClick = onOpen)
-            .semantics(mergeDescendants = true) { },
-        color = c.stickerWhite,
-    ) {
-        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MiniStickers(row.minis, row.perfect)
+    PicnicSurface(Modifier.fillMaxWidth(), color = c.stickerWhite) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                // On the white card, so the pressed highlighter lies on the paper, under the minis and the words.
+                .clickable(
+                    interactionSource = null,
+                    indication = highlighterPress(),
+                    onClickLabel = stringResource(R.string.album_book_open),
+                    role = Role.Button,
+                    onClick = onOpen,
+                )
+                .semantics(mergeDescendants = true) { bookRowFresh = row.fresh }
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            MagicAppearBox(key = row.id, play = row.fresh, onPlayed = onAppeared, bloomSize = 40f) {
+                MiniStickers(row.minis, row.perfect)
+            }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(row.dateLabel, style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint), maxLines = 1)
-                Text(line, style = PicnicTheme.type.caption.copy(color = c.ballpoint), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(row.dateLabel, style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint))
+                Text(line, style = PicnicTheme.type.caption.copy(color = c.ballpoint))
             }
         }
     }
@@ -578,13 +660,14 @@ private fun BookRow(row: BookRowUi, onOpen: () -> Unit) {
 @Composable
 private fun MiniStickers(minis: List<IconRef>, perfect: Boolean) {
     val shape = RoundedCornerShape(8.dp)
+    val paper = PicnicTheme.colors.stickerWhite
     Column(
         Modifier
             .clip(shape)
             .background(Families.sakura.pastel)
             .padding(2.dp)
             .clip(RoundedCornerShape(6.dp))
-            .background(if (perfect) Families.lemon.pastel else Color.White)
+            .background(if (perfect) Families.lemon.pastel else paper)
             .padding(5.dp)
             .clearAndSetSemantics { },
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -673,10 +756,11 @@ internal fun StampCircle(family: StickerFamily, pictogram: String, done: Boolean
     val ink = if (c.isDark) family.mid else family.trace
     val id = DecorManifest.pictograms[pictogram]
     val art = id?.let { rememberVectorArt(it) }
+    val paper = c.stickerWhite
     Canvas(modifier.size(size)) {
         val r = this.size.minDimension / 2f
         val center = Offset(r, r)
-        drawCircle(Color.White, r - 1.dp.toPx(), center)
+        drawCircle(paper, r - 1.dp.toPx(), center)
         drawDashedCircle(if (done) ink else Families.periwinkle.mid, center, r - 1.5.dp.toPx(), 2.dp.toPx(), 3.dp.toPx(), 2.dp.toPx())
         if (done && art != null) {
             val box = this.size.minDimension * 0.62f
@@ -684,7 +768,7 @@ internal fun StampCircle(family: StickerFamily, pictogram: String, done: Boolean
                 art,
                 size = Size(box, box),
                 topLeft = Offset(r - box / 2f, r - box / 2f),
-                paint = { p, _ -> if (p.name == "paper") SolidColor(Color.White) else SolidColor(ink) },
+                paint = { p, _ -> if (p.name == "paper") SolidColor(paper) else SolidColor(ink) },
             )
         }
     }
@@ -773,9 +857,9 @@ internal fun BackPocketCard(modifier: Modifier = Modifier) {
                 .height(96.dp)
                 .drawBehind {
                     val r = 10.dp.toPx()
-                    drawRoundRect(Color.White, cornerRadius = CornerRadius(r))
+                    drawRoundRect(c.stickerWhite, cornerRadius = CornerRadius(r))
                     // The page curl at the bottom-right: the sheet's corner folded back.
-                    drawPageCurl(22.dp.toPx(), vinyl, Families.sakura.mid, curlShadow, bottom = true)
+                    drawPageCurl(22.dp.toPx(), vinyl, Families.sakura.mid, curlShadow, c.stickerWhite, bottom = true)
                 }
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {

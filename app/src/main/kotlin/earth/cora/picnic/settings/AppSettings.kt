@@ -13,11 +13,11 @@ import kotlinx.coroutines.flow.asStateFlow
  * fixed in core's ModelDefaults; reduced motion follows the system. The key itself is never part of this
  * class: only whether one is set and a masked hint.
  * DataStore keys (DataStoreSettingsRepository): eggs, sounds, haptics, next_stop_card, celebration, weather,
- * use_my_area, dusk_binder, surprise_lab. Consumers ask [allows] for a Surprises switch, so SurprisesGatingTest
+ * use_my_area, dusk_binder, surprise_lab; and seen_books (the album's shown trip books, §7.8). Consumers ask [allows] for a Surprises switch, so SurprisesGatingTest
  * covers every gate in one table.
  */
 data class AppSettings(
-    /** "Draw new icons with AI" (icon cascade step 3; about 10 s and 1.5 US cents per icon). */
+    /** "Draw new icons with AI" (icon cascade step 3; about 10 s per icon, on her OpenAI key). */
     val drawIcons: Boolean = true,
     /** Read-only for UI: a key is stored and decryptable. */
     val hasToken: Boolean = false,
@@ -98,6 +98,15 @@ interface SettingsRepository {
     /** The Surprise lab is unlocked (7 taps on the version line, §6.9); persisted. */
     suspend fun setSurpriseLab(unlocked: Boolean)
 
+    /**
+     * Filed trip books (TripBook.id) whose album row has played its magic appear (§7.8: a newly filed book's row blooms
+     * in once, the next time the album opens). Device-local, like the rest of these settings.
+     */
+    val seenBooks: Flow<Set<String>>
+
+    /** Marks the filed trip books [ids] as shown in the album. */
+    suspend fun markBooksSeen(ids: Collection<String>)
+
     /** Stores the OpenAI key encrypted (Android Keystore AES-GCM); null or blank clears it. Never logs it. */
     suspend fun setToken(token: String?)
 
@@ -132,6 +141,13 @@ class InMemorySettingsRepository(
 
     override suspend fun setSurpriseLab(unlocked: Boolean) {
         state.value = state.value.copy(surpriseLab = unlocked)
+    }
+
+    private val seen = MutableStateFlow<Set<String>>(emptySet())
+    override val seenBooks: Flow<Set<String>> = seen.asStateFlow()
+
+    override suspend fun markBooksSeen(ids: Collection<String>) {
+        seen.value = seen.value + ids
     }
 
     override suspend fun setToken(token: String?) {

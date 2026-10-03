@@ -46,11 +46,11 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -66,8 +66,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
@@ -100,6 +104,7 @@ import earth.cora.picnic.ui.theme.drawGingham
 import earth.cora.picnic.ui.theme.hardShadow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /** Everything the pantry screen can ask for. Defaults do nothing. */
 @Stable
@@ -258,7 +263,7 @@ fun PantryScreen(
     }
 }
 
-/** "Add to pantry:" with the 48 dp strawberry Add sticker button; Enter adds too. */
+/** "Add to pantry:" with the 48 dp strawberry Add sticker button (a 56 dp target); Enter adds too. */
 @Composable
 private fun AddCard(state: PantryUiState, actions: PantryActions) {
     PicnicSurface(Modifier.fillMaxWidth()) {
@@ -283,7 +288,7 @@ private fun AddCard(state: PantryUiState, actions: PantryActions) {
                 onClick = actions.onAdd,
                 enabled = state.addInput.isNotBlank(),
                 kind = ButtonKind.AddBarSend,
-                faceSize = 40.dp,
+                faceSize = 48.dp,
             )
         }
     }
@@ -310,14 +315,27 @@ private fun Shelves(
     val perShelf = stickersPerShelf(screen, androidx.compose.ui.platform.LocalDensity.current.fontScale)
     Cabinet {
         state.stickers.chunked(perShelf).forEach { row ->
-            Shelf(row, perShelf) { sticker ->
+            Shelf(
+                row = row,
+                perShelf = perShelf,
+                openKey = popCard,
+                onDismissCard = { onPopCard(null) },
+                popCard = { sticker ->
+                    OverflowMenu(
+                        items = listOf(
+                            MenuItem(stringResource(R.string.pantry_take_off), PicnicGlyph.Delete, onClick = { onTakeOff(sticker.key) }),
+                            MenuItem(stringResource(R.string.pantry_change), PicnicGlyph.Gallery, onClick = { onChange(sticker.key) }),
+                        ),
+                        onDismissRequest = { onPopCard(null) },
+                        width = 208.dp,
+                    )
+                },
+            ) { sticker ->
                 ShelfStickerView(
                     sticker = sticker,
                     fresh = sticker.key in state.fresh,
                     popped = state.popped?.takeIf { it.first == sticker.key }?.second,
-                    menuOpen = popCard == sticker.key,
                     onTap = { onPopCard(sticker.key) },
-                    onDismissMenu = { onPopCard(null) },
                     onTakeOff = { onTakeOff(sticker.key) },
                     onChange = { onChange(sticker.key) },
                     onAppeared = { onAppeared(sticker.key) },
@@ -349,6 +367,7 @@ private fun Cabinet(content: @Composable () -> Unit) {
 /** The gingham curtain valance: sakura gingham on white with a scalloped hem traced in sakura (decorative). */
 @Composable
 private fun Valance() {
+    val curtain = PicnicTheme.colors.stickerWhite
     Box(
         Modifier
             .fillMaxWidth()
@@ -370,7 +389,7 @@ private fun Valance() {
                     }
                     close()
                 }
-                drawPath(body, Color.White)
+                drawPath(body, curtain)
                 clipPath(body) { drawGingham(Families.sakura.mid.copy(alpha = 0.55f), 7.dp.toPx(), Rect(Offset.Zero, size)) }
                 drawPath(body, Families.sakura.trace, style = Stroke(1.5.dp.toPx()))
                 // The rod the curtain hangs from.
@@ -382,10 +401,19 @@ private fun Valance() {
 
 /**
  * One shelf: [perShelf] equal slots; each sticker of [row] stands on the board and its name sits under the board, two
- * lines at most, centred (the sticker's own node already reads the name).
+ * lines at most, centred (the sticker's own node already reads the name). The pop card of the sticker [openKey] names
+ * opens under this shelf's name row, so the tapped sticker and its name stay in view; when there is no room below it,
+ * it opens above the shelf instead ([ShelfCardPosition]).
  */
 @Composable
-private fun Shelf(row: List<ShelfSticker>, perShelf: Int, sticker: @Composable (ShelfSticker) -> Unit) {
+private fun Shelf(
+    row: List<ShelfSticker>,
+    perShelf: Int,
+    openKey: String?,
+    onDismissCard: () -> Unit,
+    popCard: @Composable (ShelfSticker) -> Unit,
+    sticker: @Composable (ShelfSticker) -> Unit,
+) {
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
         Row(Modifier.fillMaxWidth()) {
             for (i in 0 until perShelf) {
@@ -412,6 +440,32 @@ private fun Shelf(row: List<ShelfSticker>, perShelf: Int, sticker: @Composable (
                 }
             }
         }
+        val open = row.indexOfFirst { it.key == openKey }
+        if (open >= 0) {
+            val density = LocalDensity.current
+            val position = remember(open, perShelf, density) { ShelfCardPosition(open, perShelf, with(density) { 8.dp.roundToPx() }) }
+            Popup(popupPositionProvider = position, onDismissRequest = onDismissCard, properties = PopupProperties(focusable = true)) {
+                // Room for the card's hard shadow (hs2) on its right and bottom.
+                Box(Modifier.padding(end = 4.dp, bottom = 4.dp)) { popCard(row[open]) }
+            }
+        }
+    }
+}
+
+/**
+ * Where a shelf sticker's pop card opens: horizontally centred on its slot ([index] of [perShelf]), kept [margin] inside
+ * the window; vertically just under the shelf's name row (the anchor is the whole shelf, names included), or, when it
+ * would run off the bottom of the window, just above the shelf.
+ */
+internal class ShelfCardPosition(private val index: Int, private val perShelf: Int, private val margin: Int) : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
+        val slot = anchorBounds.width / perShelf.toFloat()
+        val centre = anchorBounds.left + slot * (index + 0.5f)
+        val maxX = (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin)
+        val x = (centre - popupContentSize.width / 2f).roundToInt().coerceIn(margin, maxX)
+        val below = anchorBounds.bottom
+        val y = if (below + popupContentSize.height <= windowSize.height - margin) below else (anchorBounds.top - popupContentSize.height).coerceAtLeast(margin)
+        return IntOffset(x, y)
     }
 }
 
@@ -444,9 +498,7 @@ private fun ShelfStickerView(
     sticker: ShelfSticker,
     fresh: Boolean,
     popped: Int?,
-    menuOpen: Boolean,
     onTap: () -> Unit,
-    onDismissMenu: () -> Unit,
     onTakeOff: () -> Unit,
     onChange: () -> Unit,
     onAppeared: () -> Unit,
@@ -468,7 +520,8 @@ private fun ShelfStickerView(
     Box(
         Modifier
             .size(width = 64.dp, height = 60.dp)
-            .clickable(role = Role.Button, onClick = onTap)
+            // No ripple: the tap answers with the pop card (§6.13).
+            .clickable(interactionSource = null, indication = null, role = Role.Button, onClick = onTap)
             .semantics {
                 contentDescription = label
                 role = Role.Button
@@ -481,25 +534,6 @@ private fun ShelfStickerView(
     ) {
         MagicAppearBox(key = sticker.key, play = fresh, onPlayed = onAppeared, modifier = Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }) {
             ItemIcon(sticker.icon, contentDescription = null, size = 52.dp, drawing = sticker.busy)
-        }
-        if (menuOpen) {
-            Popup(
-                alignment = Alignment.TopCenter,
-                offset = IntOffset(0, 0),
-                onDismissRequest = onDismissMenu,
-                properties = PopupProperties(focusable = true),
-            ) {
-                Box(Modifier.padding(top = 64.dp, start = 8.dp, end = 8.dp, bottom = 8.dp)) {
-                    OverflowMenu(
-                        items = listOf(
-                            MenuItem(takeOff, PicnicGlyph.Delete, onTakeOff),
-                            MenuItem(change, PicnicGlyph.Gallery, onChange),
-                        ),
-                        onDismissRequest = onDismissMenu,
-                        width = 208.dp,
-                    )
-                }
-            }
         }
     }
 }
@@ -535,7 +569,7 @@ private fun SuggestionChip(name: String, onClick: () -> Unit) {
     Box(
         Modifier
             .heightIn(min = 48.dp)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(interactionSource = null, indication = null, role = Role.Button, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {

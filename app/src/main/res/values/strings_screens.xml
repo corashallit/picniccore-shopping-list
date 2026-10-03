@@ -30,7 +30,7 @@
     <string name="lists_delete_yes">Delete</string>
     <string name="lists_delete_no">Not yet</string>
     <string name="lists_new_label">New list</string>
-    <string name="lists_new_placeholder">Costco run, party snacks…</string>
+    <string name="lists_new_placeholder">Big shop, party snacks…</string>
     <string name="lists_new_action">Start the new list</string>
 
     <!-- Edit sheet (§6.3) -->
@@ -52,7 +52,7 @@
     <string name="edit_fewer_stickers">Fewer stickers</string>
     <string name="edit_draw">Draw a new sticker</string>
     <string name="edit_drawing">Drawing a new sticker…</string>
-    <string name="edit_draw_hint">Takes about 10&#160;s and costs about 1.5¢&#160;(US).</string>
+    <string name="edit_draw_hint">Takes about 10&#160;s and uses your OpenAI key.</string>
     <string name="edit_draw_no_key">Drawing a new sticker needs an OpenAI key (Settings).</string>
     <string name="edit_save">Save</string>
     <string name="edit_delete">Delete</string>
@@ -149,7 +149,7 @@
     <string name="settings_test_ok">Connected</string>
     <string name="settings_stickers">Stickers</string>
     <string name="settings_draw_icons">Draw new stickers with AI</string>
-    <string name="settings_draw_icons_note">Drawing a new sticker takes about 10&#160;s and costs about 1.5¢&#160;(US).</string>
+    <string name="settings_draw_icons_note">Drawing a new sticker takes about 10&#160;s and uses your OpenAI key.</string>
     <string name="settings_surprises">Surprises</string>
     <string name="settings_eggs">Easter eggs</string>
     <string name="settings_eggs_hint">all 18 secrets</string>
@@ -290,8 +290,8 @@
     <string name="album_picnic_sheet">Picnic sheet</string>
     <string name="album_sakura_sheet">Sakura sheet</string>
     <string name="album_pocket_empty">Not collected yet</string>
-    <string name="album_pocket">%1$s, rarity %2$d of 3</string>
-    <string name="album_pocket_holo">%1$s, holo, rarity %2$d of 3</string>
+    <string name="album_pocket">%1$s, collected, rarity %2$d of 3</string>
+    <string name="album_pocket_holo">%1$s, collected, holo, rarity %2$d of 3</string>
     <string name="album_pocket_lift">Lift the sticker</string>
     <string name="album_books_title">Trip sticker books</string>
     <plurals name="album_book_count">
@@ -310,7 +310,7 @@
     <string name="album_season_locked">%1$s, not collected yet</string>
     <string name="album_back_pocket">Back pocket</string>
     <string name="album_back_pocket_sheet">sticker sheet 2 of 2</string>
-    <string name="album_empty_title">Your album is waiting</string>
+    <string name="album_empty_title">Nothing collected yet</string>
     <string name="album_empty_body">Check something off to collect your first sticker.</string>
     <string name="book_sheet_stats">%1$d of %2$d stickers · %3$d of %4$d aisles stamped</string>
     <string name="book_sheet_stamped">%1$s: stamped</string>

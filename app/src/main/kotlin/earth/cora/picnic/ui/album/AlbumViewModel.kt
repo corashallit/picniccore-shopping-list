@@ -77,7 +77,10 @@ data class PocketUi(
 @Immutable
 data class PocketGroup(val title: String, val pockets: List<PocketUi>)
 
-/** One filed trip book's row (§4.25): up to 6 minis, the date, "19 of 19 stickers · perfect · receipt". */
+/**
+ * One filed trip book's row (§4.25): up to 6 minis, the date, "19 of 19 stickers · perfect · receipt". [fresh] = filed
+ * since the album last showed it: the row blooms in with the magic appear once (§7.8), then it is marked seen.
+ */
 @Immutable
 data class BookRowUi(
     val id: String,
@@ -88,6 +91,7 @@ data class BookRowUi(
     val perfect: Boolean,
     val receipt: Boolean,
     val book: TripBook,
+    val fresh: Boolean = false,
 )
 
 /** A seasonal card (§4.25): unlocked or not (55 % until then), flagged "next!" with its date. */
@@ -128,6 +132,9 @@ class AlbumViewModel(
     listTitle: Flow<String> = flowOf(""),
     private val zone: ZoneId = ZoneId.of("America/Toronto"),
     private val now: () -> Long = System::currentTimeMillis,
+    /** Which filed books the album has shown (device-local, SettingsRepository.seenBooks); null: every book counts as seen. */
+    private val seenBooks: Flow<Set<String>>? = null,
+    private val markBooksSeen: suspend (Collection<String>) -> Unit = {},
 ) : ViewModel() {
     private val tab = MutableStateFlow(AlbumTab.Groceries)
     private val builder = AlbumStateBuilder(catalog, today, zone, now)
@@ -135,11 +142,29 @@ class AlbumViewModel(
     /** Keys that were fresh when the album opened: they keep their magic appear until it has played on screen. */
     private val playing = MutableStateFlow<Set<String>?>(null)
 
-    val state: StateFlow<AlbumUiState> = combine(album.album, tab, listTitle, playing) { a, t, title, p ->
-        builder.build(a, t, title, p ?: freshKeys(a).also { playing.value = it })
+    /** Books filed since the album last showed them, fixed when it opens: each row blooms once (§7.8). */
+    private val playingBooks = MutableStateFlow<Set<String>?>(null)
+
+    private val seen: Flow<Set<String>?> = seenBooks ?: flowOf(null)
+
+    val state: StateFlow<AlbumUiState> = combine(album.album, tab, listTitle, playing, combine(playingBooks, seen) { b, s -> b to s }) { a, t, title, p, (b, s) ->
+        val books = b ?: (if (s == null) emptySet() else a.books.map { it.id }.toSet() - s).also { playingBooks.value = it }
+        builder.build(a, t, title, p ?: freshKeys(a).also { playing.value = it }, books)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AlbumUiState())
 
     fun selectTab(t: AlbumTab) = tab.update { t }
+
+    /** A filed book's row played its magic appear (§7.8): it is marked seen and never blooms again. */
+    fun bookAppeared(id: String) {
+        playingBooks.update { it?.minus(id) }
+        viewModelScope.launch {
+            try {
+                markBooksSeen(listOf(id))
+            } catch (e: IOException) {
+                PicnicLog.w("couldn't mark a trip book seen", e)
+            }
+        }
+    }
 
     /** The magic appear of [key] played on screen (R5): it is marked seen and never plays again. */
     fun appeared(key: String) {
@@ -183,6 +208,8 @@ class AlbumViewModel(
                     { Instant.ofEpochMilli(c.clock()).atZone(ZoneId.of("America/Toronto")).toLocalDate() },
                     c.store.states.map { it.currentList().title },
                     now = c.clock,
+                    seenBooks = c.settings.seenBooks,
+                    markBooksSeen = c.settings::markBooksSeen,
                 )
             }
         }
@@ -199,7 +226,7 @@ class AlbumStateBuilder(
     private val zone: ZoneId = ZoneId.of("America/Toronto"),
     private val now: () -> Long = System::currentTimeMillis,
 ) {
-    fun build(a: Album, t: AlbumTab, title: String, fresh: Set<String>): AlbumUiState {
+    fun build(a: Album, t: AlbumTab, title: String, fresh: Set<String>, freshBooks: Set<String> = emptySet()): AlbumUiState {
         val collectibleKeys = catalog.collectibleKeys
         val collectibleSet = collectibleKeys.toSet()
         val drawn = a.collected.filterKeys { it.startsWith(CUSTOM_KEY_PREFIX) }
@@ -257,7 +284,7 @@ class AlbumStateBuilder(
             picnic = picnic,
             sakura = sakura,
             seasons = seasons,
-            books = a.books.map(::bookRow),
+            books = a.books.map { bookRow(it, fresh = it.id in freshBooks) },
             perfectStreak = a.perfectStreak,
             perfectEarned = sakuraOpen || a.perfectStreak >= AlbumViewModel.PERFECT_WEEK,
             perfectHolo = (a.perfectUntil ?: 0L) > now(),
@@ -280,7 +307,7 @@ class AlbumStateBuilder(
         return Seasons.next(date)
     }
 
-    fun bookRow(b: TripBook): BookRowUi {
+    fun bookRow(b: TripBook, fresh: Boolean = false): BookRowUi {
         val times = b.stickers.map { it.at }.sorted()
         var start = times.lastOrNull() ?: b.startedAt
         for (i in times.size - 2 downTo 0) {
@@ -296,6 +323,7 @@ class AlbumStateBuilder(
             perfect = b.perfect,
             receipt = b.receipt != null,
             book = b,
+            fresh = fresh,
         )
     }
 }

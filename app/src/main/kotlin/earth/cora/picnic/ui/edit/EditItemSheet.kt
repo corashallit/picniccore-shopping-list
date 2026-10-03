@@ -50,6 +50,8 @@ import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.core.model.displayName
 import earth.cora.picnic.ui.common.HankoTextButton
 import earth.cora.picnic.ui.common.MagicAppearBox
+import earth.cora.picnic.ui.common.NoMaterialPress
+import earth.cora.picnic.ui.common.highlighterPress
 import earth.cora.picnic.ui.list.EditItemUi
 import earth.cora.picnic.ui.theme.AisleChip
 import earth.cora.picnic.ui.theme.AisleLooks
@@ -109,41 +111,44 @@ fun EditItemSheet(
     var page by rememberSaveable(item.id) { mutableStateOf(initialPage) }
     val changed = name.trim() != item.name || quantity.trim() != item.quantity.orEmpty() || note.trim() != item.note.orEmpty()
 
-    LetterSetSheet(
-        visible = visible,
-        // Dismissing the sheet keeps typed changes rather than silently dropping them.
-        onDismissRequest = { if (changed && name.isNotBlank()) onSave(name, quantity, note) else onClose() },
-        modifier = modifier.imePadding(),
-        footer = {
-            Row(
-                Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                HankoTextButton(stringResource(R.string.edit_delete), onClick = onDelete, glyph = PicnicGlyph.Delete)
-                PicnicButton(stringResource(R.string.edit_save), onClick = { onSave(name, quantity, note) }, enabled = changed && name.isNotBlank())
-            }
-        },
-    ) {
-        EditDetails(
-            state = state,
-            name = name,
-            quantity = quantity,
-            note = note,
-            onNameChange = { name = it },
-            onQuantityChange = { quantity = it },
-            onNoteChange = { note = it },
-            onMoveToAisle = onMoveToAisle,
-            onSetIcon = onSetIcon,
-            allStickers = page == EditPage.Icons,
-            onAllStickersChange = { page = if (it) EditPage.Icons else EditPage.Details },
-            onRedraw = onRedraw,
-            favourite = favourite,
-            inPantry = inPantry,
-            onFavouriteChange = onFavouriteChange,
-            onPantryChange = onPantryChange,
-            aisleStyles = aisleStyles,
-        )
+    // No Material ripple anywhere in the sheet, kit chips included (§0.2).
+    NoMaterialPress {
+        LetterSetSheet(
+            visible = visible,
+            // Dismissing the sheet keeps typed changes rather than silently dropping them.
+            onDismissRequest = { if (changed && name.isNotBlank()) onSave(name, quantity, note) else onClose() },
+            modifier = modifier.imePadding(),
+            footer = {
+                Row(
+                    Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    HankoTextButton(stringResource(R.string.edit_delete), onClick = onDelete, glyph = PicnicGlyph.Delete)
+                    PicnicButton(stringResource(R.string.edit_save), onClick = { onSave(name, quantity, note) }, enabled = changed && name.isNotBlank())
+                }
+            },
+        ) {
+            EditDetails(
+                state = state,
+                name = name,
+                quantity = quantity,
+                note = note,
+                onNameChange = { name = it },
+                onQuantityChange = { quantity = it },
+                onNoteChange = { note = it },
+                onMoveToAisle = onMoveToAisle,
+                onSetIcon = onSetIcon,
+                allStickers = page == EditPage.Icons,
+                onAllStickersChange = { page = if (it) EditPage.Icons else EditPage.Details },
+                onRedraw = onRedraw,
+                favourite = favourite,
+                inPantry = inPantry,
+                onFavouriteChange = onFavouriteChange,
+                onPantryChange = onPantryChange,
+                aisleStyles = aisleStyles,
+            )
+        }
     }
 }
 
@@ -317,7 +322,7 @@ private fun StickerToggle(
     Row(
         Modifier
             .heightIn(min = 48.dp)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+            .toggleable(value = checked, interactionSource = null, indication = highlighterPress(), role = Role.Switch, onValueChange = onCheckedChange),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

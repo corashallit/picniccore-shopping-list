@@ -12,7 +12,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -35,6 +38,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -68,13 +72,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -210,21 +211,14 @@ object AislesTags {
     fun nameField(): String = "aisles_name_field"
 }
 
-/** One label's slot: the 48 dp row (its face is 40 dp) and the 6 dp between labels. */
-private val LabelRow: Dp = 48.dp
+/** The gap between two labels on the sheet. */
 private val LabelGap: Dp = 6.dp
 
-/** The label name's line height; from font scale 1.5 the name gets two of them. */
+/** The label name's line height. */
 private val LabelLine = 20.sp
-private const val LARGE_TEXT = 1.5f
 
-/** The label row: 48 dp, or tall enough for a two-line name with large text (every label alike, so drags keep one slot). */
-@Composable
-private fun labelRowHeight(): Dp {
-    val d = LocalDensity.current
-    // Two line heights converted one at a time (large text scales sp non-linearly, so 2 × 20 sp is not 40 sp).
-    return if (d.fontScale >= LARGE_TEXT) maxOf(LabelRow, with(d) { LabelLine.toDp() } * 2 + 20.dp) else LabelRow
-}
+/** From this font scale a label stacks: its handle, number, swatch and pencil on top, the name under them at full width. */
+private const val LARGE_TEXT = 1.5f
 
 /**
  * My store (§6.7): Back, "My store", "walking order · colours · baskets" on a pad patch, "Done"; the "Store:" field; the
@@ -302,19 +296,44 @@ fun AislesScreen(
     }
 }
 
-/** The labels on their backing sheet, then "Add aisle" and "Re-sort my list". */
+/**
+ * The labels on their backing sheet, then "Add aisle" and "Re-sort my list". Labels grow with their names (§15: names
+ * wrap, never clip), so the drag measures each label: the lifted label's centre moves with the finger and every label
+ * whose centre it passes moves one lifted-label slot the other way.
+ */
 @Composable
 private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDrag: DragPreview?) {
     val c = PicnicTheme.colors
     val density = LocalDensity.current
-    val rowHeight = labelRowHeight()
-    val slot = with(density) { (rowHeight + LabelGap).toPx() }
-    var dragging by remember { mutableIntStateOf(initialDrag?.index ?: -1) }
-    var offset by remember { mutableFloatStateOf((initialDrag?.offsetSlots ?: 0f) * slot) }
+    val gap = with(density) { LabelGap.toPx() }
     val count = state.labels.size
+    // Each label's measured height in px, by position (re-measured whenever the labels change).
+    val heights = remember { mutableStateMapOf<Int, Int>() }
+    var dragging by remember { mutableIntStateOf(initialDrag?.index ?: -1) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    // A golden's held drag ([DragPreview]) is given in slots of the label it moves over; it becomes px once measured.
+    var previewSlots by remember { mutableStateOf(initialDrag?.offsetSlots) }
+    fun slot(i: Int): Float = (heights[i] ?: 0) + gap
+    fun centre(i: Int): Float = (0 until i).fold(0f) { y, j -> y + slot(j) } + (heights[i] ?: 0) / 2f
+    fun offsetNow(): Float = previewSlots?.let { s ->
+        val over = if (s >= 0f) (dragging + 1).coerceAtMost(count - 1) else (dragging - 1).coerceAtLeast(0)
+        s * slot(over)
+    } ?: dragOffset
     // Read at call time (the drop can come before any recomposition of the drag).
-    fun targetNow(): Int = if (dragging < 0) -1 else (dragging + (offset / slot).roundToInt()).coerceIn(0, (count - 1).coerceAtLeast(0))
+    fun targetNow(): Int {
+        if (dragging !in 0 until count) return -1
+        val offset = offsetNow()
+        val y = centre(dragging) + offset
+        var t = dragging
+        if (offset > 0f) {
+            for (k in dragging + 1 until count) if (centre(k) < y) t = k
+        } else {
+            for (k in dragging - 1 downTo 0) if (centre(k) > y) t = k
+        }
+        return t
+    }
     val target = targetNow()
+    val lift = if (dragging in 0 until count) slot(dragging) else 0f
     val newName = stringResource(R.string.aisles_new_name)
 
     PicnicSurface(Modifier.fillMaxWidth(), color = c.backing, large = true) {
@@ -329,13 +348,14 @@ private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDr
             state.labels.forEachIndexed { i, label ->
                 val shift = when {
                     dragging < 0 || i == dragging -> 0f
-                    i in (dragging + 1)..target -> -slot
-                    i in target until dragging -> slot
+                    i in (dragging + 1)..target -> -lift
+                    i in target until dragging -> lift
                     else -> 0f
                 }
                 val reduced = LocalReducedMotion.current
                 val animatedShift by animateFloatAsState(shift, if (reduced) snap() else tween(120), label = "labelShift")
                 val lifted = i == dragging
+                val offset = if (lifted) offsetNow() else 0f
                 AisleLabel(
                     label = label,
                     position = i + 1,
@@ -343,23 +363,26 @@ private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDr
                     editing = state.editing == label.aisle.id,
                     enabled = !state.previewing,
                     lifted = lifted,
-                    liftedPastHalf = lifted && abs(offset) > slot / 2f,
+                    liftedPastHalf = lifted && abs(offset) > slot(if (offset >= 0f) (i + 1).coerceAtMost(count - 1) else (i - 1).coerceAtLeast(0)) / 2f,
                     actions = actions,
                     modifier = Modifier
                         .padding(bottom = LabelGap)
                         .zIndex(if (lifted) 1f else 0f)
-                        .graphicsLayer { translationY = if (lifted) offset else animatedShift },
+                        .graphicsLayer { translationY = if (lifted) offset else animatedShift }
+                        .onSizeChanged { heights[i] = it.height },
                     onDragStart = {
                         if (state.editing != null) actions.onStopEditing()
+                        previewSlots = null
                         dragging = i
-                        offset = 0f
+                        dragOffset = 0f
                     },
-                    onDrag = { dy -> offset += dy },
+                    onDrag = { dy -> dragOffset += dy },
                     onDragEnd = {
                         val to = targetNow()
                         val from = dragging
                         dragging = -1
-                        offset = 0f
+                        dragOffset = 0f
+                        previewSlots = null
                         if (from >= 0 && to >= 0 && to != from) actions.onMove(from, to)
                     },
                 )
@@ -476,10 +499,14 @@ private fun OnPastel(content: @Composable () -> Unit) {
 }
 
 /**
- * One aisle label (§4.26): a kiss-cut label, 40 dp, on the backing sheet: the drag handle (2 × 3 dots, 48 dp target),
- * the number circle, the name (Zen Maru 700 16 sp) and "store aisle 2" (13 sp), the 26 dp colour + pattern swatch and the
- * pencil. Editing expands it: the name field (in focus), the store-aisle number, 10 colours, 10 patterns and the 17
- * basket stickers. Lifted while dragged (tilt −2.4° → +2°, hsLift). TalkBack: one node with "Move up" / "Move down".
+ * One aisle label (§4.26): a kiss-cut label (40 dp for a one-line name) on the backing sheet: the drag handle (2 × 3
+ * dots, 48 dp target), the number circle, the name (Zen Maru 700 16 sp) and "store aisle 2" (13 sp), the 26 dp colour +
+ * pattern swatch and the pencil. The name wraps onto as many lines as it needs and the label grows with it (§15); "store
+ * aisle 2" follows the name on its line when it fits there, else on a line of its own, so the number she set is always
+ * there. From font scale 1.5 the label stacks: handle, number, swatch and pencil on top, the name under them at the
+ * label's full width. Editing expands it: the name field (in focus), the store-aisle number, 10 colours, 10 patterns
+ * and the 17 basket stickers. Lifted while dragged (tilt −2.4° → +2°, hsLift). TalkBack: one node with "Move up" /
+ * "Move down".
  */
 @Composable
 private fun AisleLabel(
@@ -516,6 +543,7 @@ private fun AisleLabel(
     val dragStart by rememberUpdatedState(onDragStart)
     val drag by rememberUpdatedState(onDrag)
     val dragEnd by rememberUpdatedState(onDragEnd)
+    val large = LocalDensity.current.fontScale >= LARGE_TEXT
     Column(
         modifier
             .fillMaxWidth()
@@ -532,22 +560,10 @@ private fun AisleLabel(
             },
     ) {
         OnPastel {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(labelRowHeight())
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = description
-                        customActions = buildList {
-                            if (position > 1) add(CustomAccessibilityAction(moveUp) { actions.onMove(position - 1, position - 2); true })
-                            if (position < count) add(CustomAccessibilityAction(moveDown) { actions.onMove(position - 1, position); true })
-                        }
-                    },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+            val handle: @Composable () -> Unit = {
                 Box(
                     Modifier
-                        .size(44.dp, 48.dp)
+                        .size(48.dp)
                         .testTag(AislesTags.handle(position))
                         .then(
                             if (enabled) {
@@ -570,34 +586,11 @@ private fun AisleLabel(
                 ) {
                     DragDots(look.family.trace)
                 }
-                NumberCircle(position, look, size = 26.dp)
-                Row(
-                    Modifier.weight(1f).padding(start = 8.dp, end = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    // One line (two with large text): the name first, then "store aisle 2" in 13 sp; a long name pushes
-                    // the number out (the label's TalkBack text always has both).
-                    val storeAisle = label.storeAisle?.let { stringResource(R.string.aisles_store_aisle, it) }
-                    val caption = PicnicTheme.type.caption
-                    val line = remember(name, storeAisle, caption) {
-                        buildAnnotatedString {
-                            append(name)
-                            if (storeAisle != null) {
-                                append("  ")
-                                withStyle(SpanStyle(fontSize = caption.fontSize, fontWeight = caption.fontWeight, fontFamily = caption.fontFamily)) {
-                                    append(storeAisle)
-                                }
-                            }
-                        }
-                    }
-                    Text(
-                        line,
-                        style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 16.sp, lineHeight = LabelLine),
-                        maxLines = if (LocalDensity.current.fontScale >= LARGE_TEXT) 2 else 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+            }
+            // The numeral repeats the label's number (TalkBack reads it from the label), one of the two §2.7 exemptions
+            // from the 13 sp floor: it keeps its 1.0 size, so it never overruns the circle's ring at large font scales.
+            val number: @Composable () -> Unit = { FixedFontScale { NumberCircle(position, look, size = 26.dp) } }
+            val tools: @Composable () -> Unit = {
                 Swatch(look, Modifier.size(26.dp))
                 // The round button keeps the page's own colours (its face is the pad: white in Day, navy in Glow).
                 CompositionLocalProvider(LocalPicnicColors provides c) {
@@ -611,9 +604,71 @@ private fun AisleLabel(
                     )
                 }
             }
+            val labelSemantics = Modifier.semantics(mergeDescendants = true) {
+                contentDescription = description
+                customActions = buildList {
+                    if (position > 1) add(CustomAccessibilityAction(moveUp) { actions.onMove(position - 1, position - 2); true })
+                    if (position < count) add(CustomAccessibilityAction(moveDown) { actions.onMove(position - 1, position); true })
+                }
+            }
+            if (large) {
+                Column(Modifier.fillMaxWidth().then(labelSemantics)) {
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        handle()
+                        number()
+                        Spacer(Modifier.weight(1f))
+                        tools()
+                    }
+                    LabelName(name, label.storeAisle, Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 12.dp))
+                }
+            } else {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .then(labelSemantics),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    handle()
+                    number()
+                    LabelName(name, label.storeAisle, Modifier.weight(1f).padding(start = 8.dp, end = 6.dp, top = 10.dp, bottom = 10.dp))
+                    tools()
+                }
+            }
             if (editing) LabelEditor(label, look, actions)
         }
     }
+}
+
+/**
+ * The label's name (Zen Maru 700 16 sp, wrapping, never cut) and its "store aisle 2" (13 sp): on the name's last line
+ * when it fits there, else on the next line.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LabelName(name: String, storeAisle: Int?, modifier: Modifier) {
+    val c = PicnicTheme.colors
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            name,
+            style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 16.sp, lineHeight = LabelLine),
+            modifier = Modifier.alignByBaseline(),
+        )
+        if (storeAisle != null) {
+            Text(
+                stringResource(R.string.aisles_store_aisle, storeAisle),
+                style = PicnicTheme.type.caption.copy(color = c.ballpoint),
+                modifier = Modifier.alignByBaseline(),
+            )
+        }
+    }
+}
+
+/** Runs [content] at font scale 1 (for a numeral that repeats a label and must stay inside its circle). */
+@Composable
+private fun FixedFontScale(content: @Composable () -> Unit) {
+    val d = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(d.density, 1f), content = content)
 }
 
 /** The handle's 2 × 3 grid of 3 dp dots. */
@@ -694,21 +749,16 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
                     },
             )
         }
-        SwatchRow(stringResource(R.string.aisles_colour)) {
-            Families.rotation.forEachIndexed { i, family ->
-                val selected = look.family == family
-                SwatchCell(selected, familyNames.getOrElse(i) { family.name }, onClick = { actions.onFamily(id, family.name) }, modifier = Modifier.weight(1f)) {
-                    Box(Modifier.size(22.dp).clip(CircleShape).background(family.mid).border(1.5.dp, Color.White, CircleShape))
-                }
+        val white = PicnicTheme.colors.stickerWhite
+        SwatchGrid(stringResource(R.string.aisles_colour), Families.rotation) { i, family ->
+            SwatchCell(look.family == family, familyNames.getOrElse(i) { family.name }, onClick = { actions.onFamily(id, family.name) }) {
+                Box(Modifier.size(22.dp).clip(CircleShape).background(family.mid).border(1.5.dp, white, CircleShape))
             }
         }
-        SwatchRow(stringResource(R.string.aisles_pattern)) {
-            TabPattern.entries.forEachIndexed { i, pattern ->
-                val selected = look.pattern == pattern
-                val sample = AisleLook(look.position, look.family, pattern, look.pictogram)
-                SwatchCell(selected, patternNames.getOrElse(i) { pattern.key }, onClick = { actions.onPattern(id, pattern.key) }, modifier = Modifier.weight(1f)) {
-                    PatternDot(sample)
-                }
+        SwatchGrid(stringResource(R.string.aisles_pattern), TabPattern.entries) { i, pattern ->
+            val sample = AisleLook(look.position, look.family, pattern, look.pictogram)
+            SwatchCell(look.pattern == pattern, patternNames.getOrElse(i) { pattern.key }, onClick = { actions.onPattern(id, pattern.key) }) {
+                PatternDot(sample)
             }
         }
         Text(stringResource(R.string.aisles_basket), style = PicnicTheme.type.caption.copy(color = PicnicTheme.colors.ballpoint))
@@ -721,7 +771,8 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
                 Box(
                     Modifier
                         .size(52.dp)
-                        .selectable(selected = selected, role = Role.RadioButton, onClick = { actions.onBasket(id, kind) })
+                        // No ripple: the chosen basket answers with its lemon ring.
+                        .selectable(selected = selected, interactionSource = null, indication = null, role = Role.RadioButton, onClick = { actions.onBasket(id, kind) })
                         .semantics { contentDescription = basketNames.getOrElse(i) { kind.key } }
                         .drawBehind {
                             if (selected) {
@@ -738,22 +789,35 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
     }
 }
 
+/**
+ * A titled set of 10 swatches (§4.26) in two rows of five 48 × 48 dp cells (§15 names swatches among the 48 dp
+ * targets: ten in one row at 360 dp would give each only 29 dp).
+ */
 @Composable
-private fun SwatchRow(title: String, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+private fun <T> SwatchGrid(title: String, entries: List<T>, cell: @Composable (index: Int, entry: T) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, style = PicnicTheme.type.caption.copy(color = PicnicTheme.colors.ballpoint))
-        Row(Modifier.fillMaxWidth().selectableGroup(), verticalAlignment = Alignment.CenterVertically, content = content)
+        Column(Modifier.selectableGroup()) {
+            entries.chunked(SWATCHES_PER_ROW).forEachIndexed { r, row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    row.forEachIndexed { j, entry -> cell(r * SWATCHES_PER_ROW + j, entry) }
+                }
+            }
+        }
     }
 }
 
-/** One 24 dp swatch in a ≥30 dp cell; selected = a 2.5 dp ballpoint ring (§4.26). */
+/** Swatches in one row of a [SwatchGrid]. */
+private const val SWATCHES_PER_ROW = 5
+
+/** One 24 dp swatch in a 48 × 48 dp cell; selected = a 2.5 dp ballpoint ring (§4.26). No ripple: the ring answers. */
 @Composable
-private fun SwatchCell(selected: Boolean, description: String, onClick: () -> Unit, modifier: Modifier, content: @Composable () -> Unit) {
+private fun SwatchCell(selected: Boolean, description: String, onClick: () -> Unit, content: @Composable () -> Unit) {
     val ring = PicnicTheme.colors.ballpoint
     Box(
-        modifier
-            .heightIn(min = 36.dp)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+        Modifier
+            .size(48.dp)
+            .selectable(selected = selected, interactionSource = null, indication = null, role = Role.RadioButton, onClick = onClick)
             .semantics { contentDescription = description }
             .drawBehind {
                 if (selected) drawCircle(ring, 14.5.dp.toPx(), style = Stroke(2.5.dp.toPx()))
@@ -764,7 +828,7 @@ private fun SwatchCell(selected: Boolean, description: String, onClick: () -> Un
     }
 }
 
-/** A pattern swatch: the pattern in the label's mid on white, a 1 dp mid ring. */
+/** A pattern swatch: the pattern in the label's mid on sticker white, a 1.5 dp mid ring. */
 @Composable
 private fun PatternDot(look: AisleLook) {
     val brush = rememberPatternBrush(look.pattern)
@@ -772,7 +836,7 @@ private fun PatternDot(look: AisleLook) {
         Modifier
             .size(22.dp)
             .clip(CircleShape)
-            .background(Color.White)
+            .background(PicnicTheme.colors.stickerWhite)
             .then(if (brush != null) Modifier.patternFill(look, 0.9f) else Modifier)
             .border(1.5.dp, look.family.mid, CircleShape),
     )

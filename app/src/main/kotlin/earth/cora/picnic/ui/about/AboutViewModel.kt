@@ -55,6 +55,8 @@ class AboutViewModel(
     private val settings: SettingsRepository,
     private val appVersion: String,
     private val debugBuild: Boolean,
+    /** The app's clock (AppContainer.clock): the version line's seven taps are timed with it. */
+    val clock: () -> Long = System::currentTimeMillis,
     private val loadLicences: suspend () -> List<Licence>,
 ) : ViewModel() {
     private val licences = MutableStateFlow<List<Licence>>(emptyList())
@@ -88,7 +90,9 @@ class AboutViewModel(
     companion object {
         fun factory(c: AppContainer, context: Context, appVersion: String, debugBuild: Boolean): ViewModelProvider.Factory = viewModelFactory {
             val app = context.applicationContext
-            initializer { AboutViewModel(c.settings, appVersion, debugBuild) { withContext(Dispatchers.IO) { Licences.load(app) } } }
+            initializer {
+                AboutViewModel(c.settings, appVersion, debugBuild, loadLicences = { withContext(Dispatchers.IO) { Licences.load(app) } }, clock = c.clock)
+            }
         }
     }
 }

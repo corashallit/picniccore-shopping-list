@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
@@ -42,7 +43,6 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import earth.cora.picnic.R
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalDensity
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.INLINE_GLYPHS
 import earth.cora.picnic.ui.theme.MenuItem
@@ -92,7 +92,7 @@ fun SecondaryScreen(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    PicnicBackground(modifier.fillMaxSize()) {
+    NoMaterialPress { PicnicBackground(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             val barInsets = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
             if (subtitle != null && subtitle.any { it in INLINE_GLYPHS }) {
@@ -117,12 +117,12 @@ fun SecondaryScreen(
         }
         if (toasts != null) ToastHost(toasts, bottomInset = bottom)
         overlay()
-    }
+    } }
 }
 
 /**
  * [PicnicTopBar]'s pieces for a subtitle that carries inline glyphs ("★ 64 of 216 collected · 3 holo"): the same Back
- * button and puffy title (two lines at large font sizes rather than an ellipsis), then the subtitle on its pad patch in a
+ * button and puffy title (one line, 24 → 20 sp, then an ellipsis, §4.2), then the subtitle on its pad patch in a
  * row of its own under the title, so it never shares its width with the actions (the album's LCD and More) and is never
  * cut. [PicnicText] draws its star as an inline vector (§2.7).
  */
@@ -139,9 +139,9 @@ private fun GlyphSubtitleTopBar(title: String, subtitle: String, onBack: () -> U
         Row(verticalAlignment = Alignment.CenterVertically) {
             BackButton(onBack)
             Box(Modifier.weight(1f).padding(start = 4.dp)) {
-                // One line, shrinking 24 → 20 sp; with large text it may take a second line rather than an ellipsis.
-                val large = LocalDensity.current.fontScale > 1.15f
-                PuffyText(title, style = t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp, maxLines = if (large) 2 else 1, heading = true)
+                // §4.2: one line, shrinking 24 → 20 sp to fit, then an ellipsis (PuffyText keeps the stroke whole and
+                // reports the cut through TextOverflowed). At 2.0 the bar grows and the subtitle wraps under it.
+                PuffyText(title, style = t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp, maxLines = 1, heading = true)
             }
             actions()
         }
@@ -234,7 +234,14 @@ fun SwitchRow(
         modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .toggleable(
+                value = checked,
+                interactionSource = null,
+                indication = highlighterPress(),
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -251,10 +258,16 @@ fun SwitchRow(
 @Composable
 fun RowRule(modifier: Modifier = Modifier) = SectionDivider(modifier)
 
-/** The binder top's text button ("Done", §4.2). */
+/** The binder top's text button ("Done", §4.2): at least 48 × 48 dp (§15), its short label centred in that target. */
 @Composable
 fun DoneButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
-    PicnicButton(stringResource(R.string.screens_done), onClick = onClick, modifier = modifier.padding(end = 6.dp), style = PicnicButtonStyle.Text, enabled = enabled)
+    PicnicButton(
+        stringResource(R.string.screens_done),
+        onClick = onClick,
+        modifier = modifier.padding(end = 6.dp).widthIn(min = 48.dp),
+        style = PicnicButtonStyle.Text,
+        enabled = enabled,
+    )
 }
 
 /**
