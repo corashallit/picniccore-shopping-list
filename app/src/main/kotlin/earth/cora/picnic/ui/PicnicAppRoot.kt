@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -56,7 +57,12 @@ import earth.cora.picnic.ui.settings.SettingsRoute as SettingsDestination
  * the recipe card's "Edit my pantry", the Album and Settings menus). Owner: WP8 (NavTest).
  */
 @Composable
-fun PicnicAppRoot(container: AppContainer, nav: NavHostController = rememberNavController()) {
+fun PicnicAppRoot(
+    container: AppContainer,
+    nav: NavHostController = rememberNavController(),
+    /** Test hook (NavTest): the routes the screens and menus use. */
+    onAppNav: (AppNav) -> Unit = {},
+) {
     val motion = PicnicTheme.motion
     val reduced = motion.reduced
     val short = motion.shortMillis
@@ -86,6 +92,8 @@ fun PicnicAppRoot(container: AppContainer, nav: NavHostController = rememberNavC
             backToList = { nav.backToList() },
         )
     }
+
+    SideEffect { onAppNav(appNav) }
 
     CompositionLocalProvider(LocalAppNav provides appNav) {
         NavHost(

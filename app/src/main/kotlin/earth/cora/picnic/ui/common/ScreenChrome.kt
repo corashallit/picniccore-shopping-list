@@ -42,6 +42,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import earth.cora.picnic.R
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.INLINE_GLYPHS
 import earth.cora.picnic.ui.theme.MenuItem
@@ -120,8 +121,10 @@ fun SecondaryScreen(
 }
 
 /**
- * [PicnicTopBar]'s layout for a subtitle that carries inline glyphs ("★ 64 of 216 collected · 3 holo"): the same Back
- * button, puffy title and pad patch, with the subtitle drawn by [PicnicText] so its star is an inline vector (§2.7).
+ * [PicnicTopBar]'s pieces for a subtitle that carries inline glyphs ("★ 64 of 216 collected · 3 holo"): the same Back
+ * button and puffy title (two lines at large font sizes rather than an ellipsis), then the subtitle on its pad patch in a
+ * row of its own under the title, so it never shares its width with the actions (the album's LCD and More) and is never
+ * cut. [PicnicText] draws its star as an inline vector (§2.7).
  */
 @Composable
 private fun GlyphSubtitleTopBar(title: String, subtitle: String, onBack: () -> Unit, modifier: Modifier, actions: @Composable RowScope.() -> Unit) {
@@ -135,11 +138,15 @@ private fun GlyphSubtitleTopBar(title: String, subtitle: String, onBack: () -> U
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             BackButton(onBack)
-            Column(Modifier.weight(1f).padding(start = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                PuffyText(title, style = t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp, heading = true)
-                PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft), maxLines = 1) }
+            Box(Modifier.weight(1f).padding(start = 4.dp)) {
+                // One line, shrinking 24 → 20 sp; with large text it may take a second line rather than an ellipsis.
+                val large = LocalDensity.current.fontScale > 1.15f
+                PuffyText(title, style = t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp, maxLines = if (large) 2 else 1, heading = true)
             }
             actions()
+        }
+        Box(Modifier.padding(start = 52.dp, end = 8.dp, top = 2.dp)) {
+            PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
         }
     }
 }

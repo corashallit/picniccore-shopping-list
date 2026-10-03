@@ -117,16 +117,21 @@ fun AlbumScreen(
     listState: LazyListState = rememberLazyListState(),
     initialLifted: String? = null,
     initialBook: String? = null,
+    initialBlink: String? = null,
 ) {
     var lifted by rememberSaveable { mutableStateOf(initialLifted) }
     var openBook by rememberSaveable { mutableStateOf(initialBook) }
     var menu by remember { mutableStateOf(false) }
-    var blinks by remember { mutableStateOf(emptyMap<String, Int>()) }
+    var blinks by remember { mutableStateOf(initialBlink?.let { mapOf(it to 1) } ?: emptyMap()) }
     val reduced = LocalReducedMotion.current
     val loop by rememberLoopTime(enabled = !reduced)
     val cycle by remember { derivedStateOf { loop / WOBBLE_MILLIS } }
 
-    val subtitle = stringResource(R.string.album_subtitle, state.collected, state.collectible, state.holo)
+    val subtitle = if (state.holo > 0) {
+        stringResource(R.string.album_subtitle, state.collected, state.collectible, state.holo)
+    } else {
+        stringResource(R.string.album_subtitle_no_holo, state.collected, state.collectible)
+    }
     val lcdLabel = stringResource(R.string.album_lcd_label, state.collected, state.collectible)
     val drawnTitle = stringResource(R.string.album_drawn_for_you)
     val picnicTitle = stringResource(R.string.album_picnic_sheet)
@@ -146,7 +151,8 @@ fun AlbumScreen(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (!state.loading) {
                     Box(Modifier.clearAndSetSemantics { contentDescription = lcdLabel }) {
-                        LcdChip(LcdState(mode = LcdMode.Count, count = state.collected, total = state.collectible), pitch = 1.6.dp)
+                        // "64/216" (§6.10): the count without the trip LCD's star.
+                        LcdChip(LcdState(mode = LcdMode.Text, text = "${state.collected}/${state.collectible}"), pitch = 1.6.dp)
                     }
                 }
                 MoreMenuButton(

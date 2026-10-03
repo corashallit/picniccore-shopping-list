@@ -1,6 +1,7 @@
 package earth.cora.picnic.ui.album
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -136,7 +137,10 @@ fun FiledBookSheet(book: TripBook?, dateLabel: String, onClose: () -> Unit, modi
     }
 }
 
-/** The receipt slip (§13.1 egg 12's print, saved into the book): white paper with a torn zigzag foot, ballpoint lines. */
+/** Thermal-receipt paper: a warm off-white, so the slip reads as paper on the white pad. */
+private val ReceiptPaper = Color(0xFFFFFBEF)
+
+/** The receipt slip (§13.1 egg 12's print, saved into the book): paper with a torn zigzag foot, ballpoint lines. */
 @Composable
 private fun ReceiptSlip(lines: List<String>) {
     val c = PicnicTheme.colors
@@ -147,7 +151,8 @@ private fun ReceiptSlip(lines: List<String>) {
             .offset(x = 4.dp)
             .rotate(-1.5f)
             .hardShadow(shape, PicnicTheme.shadows)
-            .background(Color.White, shape)
+            .background(ReceiptPaper, shape)
+            .border(1.dp, Families.periwinkle.pastel, shape)
             .drawBehind {
                 val tooth = 6.dp.toPx()
                 val y = size.height
@@ -163,7 +168,7 @@ private fun ReceiptSlip(lines: List<String>) {
                     lineTo(size.width, y)
                     close()
                 }
-                drawPath(path, Color.White)
+                drawPath(path, ReceiptPaper)
                 drawLine(Families.periwinkle.pastel, Offset(12.dp.toPx(), 30.dp.toPx()), Offset(size.width - 12.dp.toPx(), 30.dp.toPx()), 1.dp.toPx())
             }
             .padding(horizontal = 14.dp, vertical = 10.dp),

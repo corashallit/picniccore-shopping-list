@@ -21,6 +21,7 @@ import earth.cora.picnic.core.store.TripBook
 import earth.cora.picnic.core.store.markSeen
 import earth.cora.picnic.core.store.StateStore
 import earth.cora.picnic.platform.PicnicLog
+import earth.cora.picnic.ui.theme.StickerLibrary
 import earth.cora.picnic.ui.theme.gen.StickerManifest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -129,12 +130,13 @@ class AlbumViewModel(
     private val now: () -> Long = System::currentTimeMillis,
 ) : ViewModel() {
     private val tab = MutableStateFlow(AlbumTab.Groceries)
+    private val builder = AlbumStateBuilder(catalog, today, zone, now)
 
     /** Keys that were fresh when the album opened: they keep their magic appear until it has played on screen. */
     private val playing = MutableStateFlow<Set<String>?>(null)
 
     val state: StateFlow<AlbumUiState> = combine(album.album, tab, listTitle, playing) { a, t, title, p ->
-        build(a, t, title, p ?: freshKeys(a).also { playing.value = it })
+        builder.build(a, t, title, p ?: freshKeys(a).also { playing.value = it })
     }.stateIn(viewModelScope, SharingStarted.Eagerly, AlbumUiState())
 
     fun selectTab(t: AlbumTab) = tab.update { t }
@@ -152,92 +154,6 @@ class AlbumViewModel(
     }
 
     private fun freshKeys(a: Album): Set<String> = a.collected.filterValues { !it.seen }.keys
-
-    private fun build(a: Album, t: AlbumTab, title: String, fresh: Set<String>): AlbumUiState {
-        val collectibleKeys = catalog.collectibleKeys
-        val collectibleSet = collectibleKeys.toSet()
-        val drawn = a.collected.filterKeys { it.startsWith(CUSTOM_KEY_PREFIX) }
-        val collectedCount = a.collected.keys.count { it in collectibleSet || it.startsWith(CUSTOM_KEY_PREFIX) }
-        val holo = a.collected.values.count { it.holo }
-
-        fun pocket(key: String, name: String, c: Collected?, icon: IconRef) = PocketUi(
-            key = key,
-            name = c?.name?.takeIf { key.startsWith(CUSTOM_KEY_PREFIX) } ?: name,
-            icon = if (c != null) icon else null,
-            holo = c?.holo == true,
-            stars = stars(c),
-            face = key in AlbumFaces.anchors || StickerManifest.entries.firstOrNull { it.key == key }?.hasFace == true,
-            fresh = c != null && key in fresh,
-        )
-
-        val byCategory = collectibleKeys.groupBy { catalog[it]?.category.orEmpty() }
-        val groceries = catalog.categories.mapNotNull { category ->
-            val keys = byCategory[category.key] ?: return@mapNotNull null
-            PocketGroup(category.label, keys.map { key -> pocket(key, catalog[key]?.label ?: key, a.collected[key], IconRef(key)) })
-        } + listOfNotNull(
-            drawn.takeIf { it.isNotEmpty() }?.let { d ->
-                PocketGroup(
-                    DRAWN_FOR_YOU,
-                    d.entries.sortedBy { it.value.firstAt }.map { (key, c) ->
-                        pocket(key, c.name, c, IconRef(StickerManifest.CAPSULE, key.removePrefix(CUSTOM_KEY_PREFIX)))
-                    },
-                )
-            },
-        )
-
-        fun sheetPocket(s: SheetSticker, won: Boolean) = PocketUi(
-            key = s.ref,
-            name = s.label,
-            icon = if (won && !s.isDecor) IconRef(s.key) else null,
-            decor = s.key.takeIf { s.isDecor },
-            stars = if (won) 1 else 0,
-        )
-        val picnic = AlbumSheets.PICNIC.map { sheetPocket(it, it.ref in a.picnic || it.key in a.picnic) }
-        val sakuraOpen = AlbumSheets.SAKURA in a.sheets
-        val sakura = if (sakuraOpen) AlbumSheets.SAKURA_STICKERS.map { sheetPocket(it, true) } else null
-
-        val next = Seasons.next(today())
-        val seasons = AlbumSheets.SEASONS.map { sheet ->
-            SeasonCardUi(sheet, AlbumSheets.unlocked(sheet.season, a.sheets), next?.takeIf { it.first == sheet.season }?.second)
-        }
-
-        return AlbumUiState(
-            loading = false,
-            tab = t,
-            collected = collectedCount,
-            collectible = collectibleKeys.size + drawn.size,
-            holo = holo,
-            groceries = groceries,
-            picnic = picnic,
-            sakura = sakura,
-            seasons = seasons,
-            books = a.books.map(::bookRow),
-            perfectStreak = a.perfectStreak,
-            perfectEarned = sakuraOpen || a.perfectStreak >= PERFECT_WEEK,
-            perfectHolo = (a.perfectUntil ?: 0L) > now(),
-            backPocketOpen = a.backPocketOpen,
-            listTitle = title,
-        )
-    }
-
-    private fun bookRow(b: TripBook): BookRowUi {
-        val times = b.stickers.map { it.at }.sorted()
-        var start = times.lastOrNull() ?: b.startedAt
-        for (i in times.size - 2 downTo 0) {
-            if (start - times[i] > TripStats.SESSION_BREAK_MILLIS) break
-            start = times[i]
-        }
-        return BookRowUi(
-            id = b.id,
-            dateLabel = DATE.format(Instant.ofEpochMilli(start).atZone(zone)),
-            minis = b.stickers.sortedBy { it.slot }.take(6).map { it.icon },
-            stickers = b.stickers.size,
-            total = b.total,
-            perfect = b.perfect,
-            receipt = b.receipt != null,
-            book = b,
-        )
-    }
 
     companion object {
         /** Trips in a row that make a perfect week (egg 14). */
@@ -270,6 +186,117 @@ class AlbumViewModel(
                 )
             }
         }
+    }
+}
+
+/**
+ * Builds the album's UI state from the album (pure, no I/O): the ViewModel, the goldens and the tests build it the same
+ * way. [today] picks the upcoming season ("next!"), [now] tells whether the perfect-week card is holo.
+ */
+class AlbumStateBuilder(
+    private val catalog: IconCatalog,
+    private val today: () -> LocalDate,
+    private val zone: ZoneId = ZoneId.of("America/Toronto"),
+    private val now: () -> Long = System::currentTimeMillis,
+) {
+    fun build(a: Album, t: AlbumTab, title: String, fresh: Set<String>): AlbumUiState {
+        val collectibleKeys = catalog.collectibleKeys
+        val collectibleSet = collectibleKeys.toSet()
+        val drawn = a.collected.filterKeys { it.startsWith(CUSTOM_KEY_PREFIX) }
+        val collectedCount = a.collected.keys.count { it in collectibleSet || it.startsWith(CUSTOM_KEY_PREFIX) }
+        val holo = a.collected.values.count { it.holo }
+
+        fun pocket(key: String, name: String, c: Collected?, icon: IconRef) = PocketUi(
+            key = key,
+            name = c?.name?.takeIf { key.startsWith(CUSTOM_KEY_PREFIX) } ?: name,
+            icon = if (c != null) icon else null,
+            holo = c?.holo == true,
+            stars = AlbumViewModel.stars(c),
+            face = StickerLibrary.resolve(key, catalog)?.hasFace == true,
+            fresh = c != null && key in fresh,
+        )
+
+        val byCategory = collectibleKeys.groupBy { catalog[it]?.category.orEmpty() }
+        val groceries = catalog.categories.mapNotNull { category ->
+            val keys = byCategory[category.key] ?: return@mapNotNull null
+            PocketGroup(category.label, keys.map { key -> pocket(key, catalog[key]?.label ?: key, a.collected[key], IconRef(key)) })
+        } + listOfNotNull(
+            drawn.takeIf { it.isNotEmpty() }?.let { d ->
+                PocketGroup(
+                    AlbumViewModel.DRAWN_FOR_YOU,
+                    d.entries.sortedBy { it.value.firstAt }.map { (key, c) ->
+                        pocket(key, c.name, c, IconRef(StickerManifest.CAPSULE, key.removePrefix(CUSTOM_KEY_PREFIX)))
+                    },
+                )
+            },
+        )
+
+        fun sheetPocket(s: SheetSticker, won: Boolean) = PocketUi(
+            key = s.ref,
+            name = s.label,
+            icon = if (won && !s.isDecor) IconRef(s.key) else null,
+            decor = s.key.takeIf { s.isDecor },
+            stars = if (won) 1 else 0,
+        )
+        val picnic = AlbumSheets.PICNIC.map { sheetPocket(it, it.ref in a.picnic || it.key in a.picnic) }
+        val sakuraOpen = AlbumSheets.SAKURA in a.sheets
+        val sakura = if (sakuraOpen) AlbumSheets.SAKURA_STICKERS.map { sheetPocket(it, true) } else null
+
+        val next = upcoming(today(), a.sheets)
+        val seasons = AlbumSheets.SEASONS.map { sheet ->
+            SeasonCardUi(sheet, AlbumSheets.unlocked(sheet.season, a.sheets), next?.takeIf { it.first == sheet.season }?.second)
+        }
+
+        return AlbumUiState(
+            loading = false,
+            tab = t,
+            collected = collectedCount,
+            collectible = collectibleKeys.size + drawn.size,
+            holo = holo,
+            groceries = groceries,
+            picnic = picnic,
+            sakura = sakura,
+            seasons = seasons,
+            books = a.books.map(::bookRow),
+            perfectStreak = a.perfectStreak,
+            perfectEarned = sakuraOpen || a.perfectStreak >= AlbumViewModel.PERFECT_WEEK,
+            perfectHolo = (a.perfectUntil ?: 0L) > now(),
+            backPocketOpen = a.backPocketOpen,
+            listTitle = title,
+        )
+    }
+
+    /**
+     * The season the Seasonal tab flags "next!" (§6.10: "Thanksgiving Oct 12" on 3 October): the one whose window she
+     * is in, while its day is still to come and its sheet not yet unlocked this year; otherwise the next window to start.
+     */
+    fun upcoming(date: LocalDate, sheets: Set<String>): Pair<Season, LocalDate>? {
+        val current = Seasons.active(date)?.let { season ->
+            (date.year - 1..date.year + 1).mapNotNull { y -> Seasons.dayOf(season, y) }
+                .firstOrNull { day -> date in Seasons.window(season to day) }
+                ?.let { day -> season to day }
+        }
+        if (current != null && !current.second.isBefore(date) && Seasons.sheetId(current.first, current.second) !in sheets) return current
+        return Seasons.next(date)
+    }
+
+    fun bookRow(b: TripBook): BookRowUi {
+        val times = b.stickers.map { it.at }.sorted()
+        var start = times.lastOrNull() ?: b.startedAt
+        for (i in times.size - 2 downTo 0) {
+            if (start - times[i] > TripStats.SESSION_BREAK_MILLIS) break
+            start = times[i]
+        }
+        return BookRowUi(
+            id = b.id,
+            dateLabel = AlbumViewModel.DATE.format(Instant.ofEpochMilli(start).atZone(zone)),
+            minis = b.stickers.sortedBy { it.slot }.take(6).map { it.icon },
+            stickers = b.stickers.size,
+            total = b.total,
+            perfect = b.perfect,
+            receipt = b.receipt != null,
+            book = b,
+        )
     }
 }
 

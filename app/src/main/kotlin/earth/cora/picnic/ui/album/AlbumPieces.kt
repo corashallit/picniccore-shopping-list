@@ -7,6 +7,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,10 +50,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -72,6 +78,8 @@ import earth.cora.picnic.ui.theme.HankoStamp
 import earth.cora.picnic.ui.theme.HankoText
 import earth.cora.picnic.ui.theme.Holo
 import earth.cora.picnic.ui.theme.ItemIcon
+import earth.cora.picnic.ui.theme.LocalIconCatalog
+import earth.cora.picnic.ui.theme.StickerLibrary
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.PicnicSurface
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -115,19 +123,15 @@ internal object AlbumInk {
 }
 
 /**
- * The album-face keys (§6.10: apple, milk bag and sourdough first) and where their kawaii face sits on the 56 dp sticker
- * (fractions of the box). The face is drawn here (two ballpoint eyes, sakura cheeks, a small smile) so it can blink;
- * stickers that ship their own face art (StickerManifest `face`) draw it through ItemIcon instead.
+ * The album faces (§6.10: the stickers that ship a kawaii face, `sk_f_<key>`: apple, milk bag and sourdough first, the
+ * rest as authored). A face drawable's first two paths are its eyes; the blink redraws them half shut, then shut.
  */
 object AlbumFaces {
-    val anchors: Map<String, Offset> = mapOf(
-        "apple" to Offset(0.5f, 0.6f),
-        "milk_bag" to Offset(0.5f, 0.66f),
-        "sourdough" to Offset(0.5f, 0.56f),
-    )
-
     /** The blink (§4.25, "2 frames"): eyes half shut, then shut, each 90 ms, then open again. */
     const val FRAME_MILLIS: Long = 90
+
+    /** The face drawable's paths that are eyes (its first two). */
+    const val EYES: Int = 2
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -143,7 +147,8 @@ internal fun AlbumTabs(selected: AlbumTab, onSelect: (AlbumTab) -> Unit, modifie
         AlbumTab.Seasonal to stringResource(R.string.album_tab_seasonal),
     )
     Row(
-        modifier.fillMaxWidth().padding(start = 10.dp).selectableGroup(),
+        // At large font sizes the tabs scroll sideways rather than squeeze or wrap off the page's top edge.
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 10.dp, end = 6.dp).selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
@@ -225,6 +230,12 @@ internal fun VinylTitle(text: String, modifier: Modifier = Modifier) {
  * Pockets.
  * ------------------------------------------------------------------------------------------------ */
 
+/** Test hooks (AlbumTest): the pocket's sticker is lifted; how many times its face has blinked. */
+val PocketLifted: SemanticsPropertyKey<Boolean> = SemanticsPropertyKey("PocketLifted")
+val PocketBlinks: SemanticsPropertyKey<Int> = SemanticsPropertyKey("PocketBlinks")
+private var SemanticsPropertyReceiver.pocketLifted: Boolean by PocketLifted
+private var SemanticsPropertyReceiver.pocketBlinks: Int by PocketBlinks
+
 /** The pocket's height: sleeve lip, the 56 dp sticker, the stars. */
 internal val PocketHeight: Dp = 88.dp
 
@@ -254,7 +265,8 @@ internal fun Pocket(
         else -> stringResource(R.string.album_pocket, pocket.name, pocket.stars)
     }
     val liftLabel = stringResource(R.string.album_pocket_lift)
-    val shape = RoundedCornerShape(8.dp)
+    val vinyl = PicnicTheme.colors.albumVinyl
+    val curlShadow = PicnicTheme.shadows.color.copy(alpha = 0.35f)
     val lift = remember { Animatable(if (lifted) 1f else 0f) }
     val curl = remember { Animatable(if (lifted) 1f else 0f) }
     LaunchedEffect(lifted, reduced) {
@@ -290,7 +302,11 @@ internal fun Pocket(
                     Modifier
                 },
             )
-            .clearAndSetSemantics { contentDescription = label }
+            .clearAndSetSemantics {
+                contentDescription = label
+                pocketLifted = lifted
+                pocketBlinks = blinkKey
+            }
             .drawWithContent {
                 val r = 8.dp.toPx()
                 val rr = RoundRect(0f, 0f, size.width, size.height, CornerRadius(r))
@@ -318,7 +334,7 @@ internal fun Pocket(
                     if (phase < Holo.glint.durationMillis) drawGlint(Holo.glint.progressAt(phase), clip = clip)
                 }
                 val curlPx = 13.dp.toPx() * curl.value
-                if (curlPx > 0f) drawCurl(curlPx, Families.periwinkle.mid)
+                if (curlPx > 0f) drawPageCurl(curlPx, vinyl, Families.periwinkle.mid, curlShadow)
             },
         contentAlignment = Alignment.TopCenter,
     ) {
@@ -361,23 +377,30 @@ internal fun Pocket(
     }
 }
 
-/** The sticker in a pocket: a library or live-drawn sticker (with its face for the album-face keys) or a decor sticker. */
+/** The sticker in a pocket: a library or live-drawn sticker (with its authored face, if it has one) or a decor sticker. */
 @Composable
 private fun PocketSticker(pocket: PocketUi, blinkKey: Int) {
     val icon = pocket.icon
+    val catalog = LocalIconCatalog.current
     when {
         icon != null -> {
-            val anchor = AlbumFaces.anchors[icon.key]
-            ItemIcon(icon, contentDescription = null, size = 56.dp, face = pocket.face && anchor == null)
-            if (anchor != null) BlinkingFace(anchor, blinkKey)
+            val face = if (pocket.face) remember(icon.key, catalog) { StickerLibrary.resolve(icon.key, catalog)?.face } else null
+            if (face == null) {
+                ItemIcon(icon, contentDescription = null, size = 56.dp)
+            } else {
+                BlinkingFace(icon, face, blinkKey)
+            }
         }
         pocket.decor != null -> DecorSticker(pocket.decor, size = 56.dp)
     }
 }
 
-/** The drawn kawaii face of an album-face key; each change of [blinkKey] blinks it (half shut, shut, open). */
+/**
+ * A sticker with its authored kawaii face; each change of [blinkKey] blinks it: the face's eyes (its first two paths)
+ * half shut, then shut, then open again (§4.25: 2 frames). Open, the face is ItemIcon's own.
+ */
 @Composable
-private fun BlinkingFace(anchor: Offset, blinkKey: Int) {
+private fun BlinkingFace(icon: IconRef, @DrawableRes face: Int, blinkKey: Int) {
     var frame by remember { mutableIntStateOf(0) }
     LaunchedEffect(blinkKey) {
         if (blinkKey == 0) return@LaunchedEffect
@@ -389,49 +412,79 @@ private fun BlinkingFace(anchor: Offset, blinkKey: Int) {
             frame = 0
         }
     }
-    val ink = Families.periwinkle.trace
-    val cheek = Families.sakura.mid.copy(alpha = 0.55f)
-    Canvas(Modifier.size(56.dp).clearAndSetSemantics { }) {
-        val cx = size.width * anchor.x
-        val cy = size.height * anchor.y
-        val gap = size.width * 0.115f
-        val eye = size.width * 0.034f
-        val stroke = 1.4.dp.toPx()
-        for (side in listOf(-1f, 1f)) {
-            val ex = cx + side * gap
-            when (frame) {
-                0 -> drawOval(ink, Offset(ex - eye, cy - eye * 1.25f), Size(eye * 2, eye * 2.5f))
-                1 -> drawOval(ink, Offset(ex - eye, cy - eye * 0.5f), Size(eye * 2, eye))
-                else -> drawLine(ink, Offset(ex - eye * 1.2f, cy), Offset(ex + eye * 1.2f, cy), stroke, StrokeCap.Round)
+    if (frame == 0) {
+        ItemIcon(icon, contentDescription = null, size = 56.dp, face = true)
+        return
+    }
+    val art = rememberVectorArt(face)
+    Box(Modifier.size(56.dp)) {
+        ItemIcon(icon, contentDescription = null, size = 56.dp)
+        Canvas(Modifier.size(56.dp).clearAndSetSemantics { }) {
+            val u = size.minDimension / FACE_UNITS
+            withTransform({ scale(u, u, pivot = Offset.Zero) }) {
+                art.paths.forEachIndexed { i, p ->
+                    if (i < AlbumFaces.EYES) {
+                        val b = p.path.getBounds()
+                        val ink = p.fill ?: return@forEachIndexed
+                        if (frame == 1) {
+                            drawOval(ink, Offset(b.left, b.center.y - b.height / 4f), Size(b.width, b.height / 2f))
+                        } else {
+                            drawLine(
+                                ink,
+                                Offset(b.left - b.width * 0.25f, b.center.y),
+                                Offset(b.right + b.width * 0.25f, b.center.y),
+                                strokeWidth = b.height * 0.42f,
+                                cap = StrokeCap.Round,
+                            )
+                        }
+                    } else {
+                        p.fill?.let { drawPath(p.path, it, alpha = p.fillAlpha) }
+                        if (p.strokeWidth > 0f) {
+                            p.stroke?.let { drawPath(p.path, it, alpha = p.strokeAlpha, style = Stroke(p.strokeWidth, cap = p.cap, join = p.join)) }
+                        }
+                    }
+                }
             }
-            drawOval(cheek, Offset(ex + side * eye * 1.6f - eye * 1.5f, cy + eye * 1.6f), Size(eye * 3f, eye * 1.7f))
         }
-        val mouth = Path().apply {
-            moveTo(cx - eye * 1.1f, cy + eye * 1.4f)
-            quadraticTo(cx, cy + eye * 2.6f, cx + eye * 1.1f, cy + eye * 1.4f)
-        }
-        drawPath(mouth, ink, style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }
 
-/** The pocket's corner curling off the sleeve: a folded white triangle with its shadow, [curl] px from the corner. */
-private fun DrawScope.drawCurl(curl: Float, outline: Color) {
+/** The face drawables' viewport (the sticker box's 52 units). */
+private const val FACE_UNITS = 52f
+
+/**
+ * A page curl at the top-right ([bottom] = bottom-right) corner, [curl] px along each edge: the corner is gone (the
+ * [under] colour shows through) and its flap lies folded back over the face, a white triangle with an [outline] and a
+ * small hard shadow.
+ */
+internal fun DrawScope.drawPageCurl(curl: Float, under: Color, outline: Color, shadow: Color, bottom: Boolean = false) {
     val w = size.width
-    val shadow = Path().apply {
-        moveTo(w - curl, 0f)
-        lineTo(w, 0f)
-        lineTo(w, curl)
+    val h = size.height
+    fun y(v: Float) = if (bottom) h - v else v
+    val corner = Path().apply {
+        moveTo(w - curl, y(0f))
+        lineTo(w, y(0f))
+        lineTo(w, y(curl))
         close()
     }
-    drawPath(shadow, Color(0x33000000))
-    val fold = Path().apply {
-        moveTo(w - curl, 0f)
-        lineTo(w - curl * 0.15f, curl * 0.85f)
-        lineTo(w, curl)
+    drawPath(corner, under)
+    // The flap is the corner reflected over the fold line: (w − curl, 0) – (w − curl, curl) – (w, curl).
+    val flap = Path().apply {
+        moveTo(w - curl, y(0f))
+        lineTo(w - curl, y(curl))
+        lineTo(w, y(curl))
         close()
     }
-    drawPath(fold, Color.White)
-    drawPath(fold, outline, style = Stroke(1.dp.toPx()))
+    val s = 1.5.dp.toPx()
+    withTransformTranslate(-s * 0.4f, if (bottom) -s else s) { drawPath(flap, shadow) }
+    drawPath(flap, Color.White)
+    drawPath(flap, outline, style = Stroke(1.dp.toPx()))
+}
+
+private inline fun DrawScope.withTransformTranslate(dx: Float, dy: Float, block: DrawScope.() -> Unit) {
+    drawContext.transform.translate(dx, dy)
+    block()
+    drawContext.transform.translate(-dx, -dy)
 }
 
 /** Three 9 dp rarity stars: filled lemon (lemon trace edge) for each star earned, hollow periwinkle for the rest. */
@@ -682,7 +735,8 @@ internal fun SeasonCard(card: SeasonCardUi, nextLabel: String?, modifier: Modifi
                 }
             }
         }
-        WashiTape(card.sheet.tape, Modifier.align(Alignment.TopCenter).offset(x = 24.dp, y = 2.dp), length = 92.dp, height = 18.dp, rotation = -3f)
+        // The tape straddles the card's top edge (8 dp on the card), clear of the sheet name below it.
+        WashiTape(card.sheet.tape, Modifier.align(Alignment.TopEnd).offset(x = (-30).dp, y = (-10).dp), length = 92.dp, height = 18.dp, rotation = -3f)
     }
 }
 
@@ -699,6 +753,8 @@ internal fun SheetStickerArt(s: SheetSticker, size: Dp) {
 @Composable
 internal fun BackPocketCard(modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
+    val vinyl = c.albumVinyl
+    val curlShadow = PicnicTheme.shadows.color.copy(alpha = 0.35f)
     Column(
         modifier
             .fillMaxWidth()
@@ -719,15 +775,7 @@ internal fun BackPocketCard(modifier: Modifier = Modifier) {
                     val r = 10.dp.toPx()
                     drawRoundRect(Color.White, cornerRadius = CornerRadius(r))
                     // The page curl at the bottom-right: the sheet's corner folded back.
-                    val curl = 26.dp.toPx()
-                    val fold = Path().apply {
-                        moveTo(size.width - curl, size.height)
-                        lineTo(size.width, size.height - curl)
-                        lineTo(size.width - curl * 0.9f, size.height - curl * 0.9f)
-                        close()
-                    }
-                    drawPath(fold, Families.sakura.pastel)
-                    drawPath(fold, Families.sakura.mid, style = Stroke(1.dp.toPx()))
+                    drawPageCurl(22.dp.toPx(), vinyl, Families.sakura.mid, curlShadow, bottom = true)
                 }
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
