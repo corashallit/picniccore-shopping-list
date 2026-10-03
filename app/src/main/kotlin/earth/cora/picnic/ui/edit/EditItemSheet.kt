@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -174,12 +175,14 @@ internal fun EditDetails(
     val heroLabel = stringResource(R.string.edit_hero, item.name)
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // Hero + the two toggles.
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Hero + the two toggles: side by side, or the toggles under the hero when large text needs the width.
+        val hero: @Composable () -> Unit = {
             Box(Modifier.size(128.dp).semantics { contentDescription = heroLabel }, contentAlignment = Alignment.Center) {
                 ItemIcon(state.icon, contentDescription = null, size = 120.dp, drawing = state.drawing, lifted = true)
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        }
+        val toggles: @Composable (Modifier) -> Unit = { m ->
+            Column(m, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 StickerToggle(
                     label = stringResource(R.string.edit_favourite),
                     checked = favourite,
@@ -192,6 +195,17 @@ internal fun EditDetails(
                     onCheckedChange = onPantryChange,
                     offGlyph = PicnicGlyph.Jar,
                 ) { ItemIcon(IconRef(PANTRY_JAR), contentDescription = null, size = 30.dp) }
+            }
+        }
+        if (LocalDensity.current.fontScale >= LARGE_TEXT) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                hero()
+                toggles(Modifier.fillMaxWidth())
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                hero()
+                toggles(Modifier.weight(1f))
             }
         }
 
@@ -346,6 +360,9 @@ private fun SubTitle(text: String) {
 
 /** The jar sticker of the "In my pantry" toggle. */
 internal const val PANTRY_JAR: String = "spice_jar"
+
+/** From this font scale the toggles stand under the hero, so their labels keep whole words. */
+private const val LARGE_TEXT = 1.5f
 
 /** Stickers shown for an item with no category (the paper bag): the first ones of the catalog. */
 internal const val MIN_GRID = 15

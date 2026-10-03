@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -303,8 +304,11 @@ fun SettingsScreen(
 internal fun backToListLabel(title: String): String =
     if (title.isBlank()) stringResource(R.string.menu_back_to_your_list) else stringResource(R.string.menu_back_to_list, title)
 
-/** "sk-…a1b2" -> "sk-•••••••••• a1b2" (§4.8: masked after save, never pre-filled). */
-internal fun savedMask(hint: String): String = hint.replace("…", "•••••••••• ")
+/**
+ * "sk-…a1b2" -> "sk-•••••••••• a1b2" (§4.8: masked after save, never pre-filled). With large text fewer dots, so the
+ * last four characters (the part that tells keys apart) stay in view.
+ */
+internal fun savedMask(hint: String, dots: Int = 10): String = hint.replace("…", "•".repeat(dots) + " ")
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -318,7 +322,8 @@ private fun KeyCard(state: SettingsUiState, actions: SettingsActions) {
             value = state.tokenInput,
             onValueChange = actions.onTokenChange,
             label = stringResource(R.string.settings_key_label),
-            savedMask = state.tokenHint?.let(::savedMask) ?: stringResource(R.string.settings_key_placeholder),
+            savedMask = state.tokenHint?.let { savedMask(it, dots = if (LocalDensity.current.fontScale >= 1.5f) 3 else 10) }
+                ?: stringResource(R.string.settings_key_placeholder),
             revealed = state.tokenVisible,
             onRevealChange = actions.onRevealChange,
             onPaste = actions.onPaste,

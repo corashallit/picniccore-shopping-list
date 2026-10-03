@@ -214,6 +214,18 @@ object AislesTags {
 private val LabelRow: Dp = 48.dp
 private val LabelGap: Dp = 6.dp
 
+/** The label name's line height; from font scale 1.5 the name gets two of them. */
+private val LabelLine = 20.sp
+private const val LARGE_TEXT = 1.5f
+
+/** The label row: 48 dp, or tall enough for a two-line name with large text (every label alike, so drags keep one slot). */
+@Composable
+private fun labelRowHeight(): Dp {
+    val d = LocalDensity.current
+    // Two line heights converted one at a time (large text scales sp non-linearly, so 2 × 20 sp is not 40 sp).
+    return if (d.fontScale >= LARGE_TEXT) maxOf(LabelRow, with(d) { LabelLine.toDp() } * 2 + 20.dp) else LabelRow
+}
+
 /**
  * My store (§6.7): Back, "My store", "walking order · colours · baskets" on a pad patch, "Done"; the "Store:" field; the
  * sticker sheet of aisle labels on backing paper (drag the dots to reorder; the pencil opens a label: name, store aisle
@@ -295,7 +307,8 @@ fun AislesScreen(
 private fun StickerSheet(state: AislesUiState, actions: AislesActions, initialDrag: DragPreview?) {
     val c = PicnicTheme.colors
     val density = LocalDensity.current
-    val slot = with(density) { (LabelRow + LabelGap).toPx() }
+    val rowHeight = labelRowHeight()
+    val slot = with(density) { (rowHeight + LabelGap).toPx() }
     var dragging by remember { mutableIntStateOf(initialDrag?.index ?: -1) }
     var offset by remember { mutableFloatStateOf((initialDrag?.offsetSlots ?: 0f) * slot) }
     val count = state.labels.size
@@ -522,7 +535,7 @@ private fun AisleLabel(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(LabelRow)
+                    .height(labelRowHeight())
                     .semantics(mergeDescendants = true) {
                         contentDescription = description
                         customActions = buildList {
@@ -563,8 +576,8 @@ private fun AisleLabel(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    // One line: the name first, then "store aisle 2" in 13 sp; a long name pushes the number out
-                    // (the label's TalkBack text always has both).
+                    // One line (two with large text): the name first, then "store aisle 2" in 13 sp; a long name pushes
+                    // the number out (the label's TalkBack text always has both).
                     val storeAisle = label.storeAisle?.let { stringResource(R.string.aisles_store_aisle, it) }
                     val caption = PicnicTheme.type.caption
                     val line = remember(name, storeAisle, caption) {
@@ -580,8 +593,8 @@ private fun AisleLabel(
                     }
                     Text(
                         line,
-                        style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 16.sp, lineHeight = 20.sp),
-                        maxLines = 1,
+                        style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 16.sp, lineHeight = LabelLine),
+                        maxLines = if (LocalDensity.current.fontScale >= LARGE_TEXT) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
