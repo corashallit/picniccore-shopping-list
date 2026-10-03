@@ -1,4 +1,5 @@
 from engine import *
+import math
 
 ICONS = []
 
@@ -48,19 +49,65 @@ add('blueberries', 'Blueberries', parts + [
 ], gloss=[G('M20.2 17.4Q20.8 14.6 23 14', 2.2), G('M9.2 18.6Q9.6 16.2 11.6 15.6', 2.2), G('M32 18.6Q32.4 16.2 34.4 15.6', 2.2), G('M9.5 25.2H17', 2.2), DOT(20.4, 25.2, .9)],
     qty='551 mL pint', aisle='produce')
 
-# 3 banana bunch
+def banana(P, w, nub='cocoa', neck=1.6, tip=2.0):
+    """one plump banana grown along the cubic spine P = (stem end, c1, c2, flower end): a slim stalk neck (half-width
+    `neck`) swelling into a body `w` half-wide, then a short rounded taper to a blunt flower end (half-width `tip`) that
+    wears a small dark nub. Returns [fruit, nub]: the fruit is lemon mid with its puffy band along the underside (the
+    side facing down at mid-length, 30 % of the thickness, clipped) and one deep facet ridge along its back; the nub is a
+    die-cut dot in the `nub` family's trace. Used by `banana` and `fruit_generic` (icons_c1.py)."""
+    def at(t):
+        u = 1 - t
+        x = u ** 3 * P[0][0] + 3 * u * u * t * P[1][0] + 3 * u * t * t * P[2][0] + t ** 3 * P[3][0]
+        y = u ** 3 * P[0][1] + 3 * u * u * t * P[1][1] + 3 * u * t * t * P[2][1] + t ** 3 * P[3][1]
+        dx = 3 * u * u * (P[1][0] - P[0][0]) + 6 * u * t * (P[2][0] - P[1][0]) + 3 * t * t * (P[3][0] - P[2][0])
+        dy = 3 * u * u * (P[1][1] - P[0][1]) + 6 * u * t * (P[2][1] - P[1][1]) + 3 * t * t * (P[3][1] - P[2][1])
+        L = math.hypot(dx, dy) or 1
+        if t < .3:
+            r = neck + (w - neck) * math.sin(t / .3 * math.pi / 2) ** 1.6
+        elif t > .66:
+            r = tip + (w - tip) * max(0.0, math.cos((t - .66) / .34 * math.pi / 2)) ** .6
+        else:
+            r = w
+        return x, y, dx / L, dy / L, r
+    n = 39
+    sp = [at(i / n) for i in range(n + 1)]
+    side = 1 if sp[n // 2][2] > 0 else -1          # the normal (-ty, tx) * side points down at mid-length
+
+    def off(s, k, extra=0.0):
+        return [(x - ty * s * (r * k + extra), y + tx * s * (r * k + extra)) for x, y, tx, ty, r in sp]
+
+    def cap(i, s, fwd):
+        """a round end: from the s side of the spine, round the tangent's fwd direction, to the other side"""
+        x, y, tx, ty, r = sp[i]
+        return [(x + (-ty * s * math.cos(a) + tx * fwd * math.sin(a)) * r, y + (tx * s * math.cos(a) + ty * fwd * math.sin(a)) * r)
+                for a in [math.pi * j / 6 for j in range(1, 6)]]
+    ring = off(side, 1)[::3] + cap(n, side, 1) + off(-side, 1)[::-1][::3] + cap(0, -side, -1)
+    pts = []
+    for p in ring:
+        if not pts or math.dist(pts[-1], p) > .6:
+            pts.append(p)
+    # the band: the outer 60 % of the half-width on the underside (30 % of the thickness), drawn out past the outline
+    # and past both ends (it is clipped to the fruit)
+    inner, outer = off(side, .4), off(side, 1, 3)
+    (x0, y0, tx0, ty0, _), (x1, y1, tx1, ty1, _) = sp[0], sp[-1]
+    band = inner[::3] + [(inner[-1][0] + tx1 * 4, inner[-1][1] + ty1 * 4), (outer[-1][0] + tx1 * 4, outer[-1][1] + ty1 * 4)] + \
+        outer[::-1][::3] + [(outer[0][0] - tx0 * 4, outer[0][1] - ty0 * 4), (inner[0][0] - tx0 * 4, inner[0][1] - ty0 * 4)]
+    ridge = smooth(off(-side, .36)[int(.32 * n):int(.82 * n) + 1:2], closed=False)
+    return [F(('path', smooth(pts)), 'lemon', 'm', band='M' + 'L'.join(f'{fmt(x)} {fmt(y)}' for x, y in band) + 'Z',
+              det=[ridge], det_t='deep'),
+            F(('circle', x1 + tx1 * .4, y1 + ty1 * .4, 1.7), nub, 'tr', ol=0)]
+
+
+# 3 bananas: a plump hand of three lying hump-up, fanned from one cocoa crown at the lower left, the tips spread down
+# the right side; each fruit overlaps the one behind it so the bunch is one solid silhouette, and each carries its own
+# gloss along its back (gloss.py) and its puffy band along its belly
 add('banana', 'Bananas', [
-    F(('path', 'M12.6 11C21 4.6 36 7.6 41.6 17.4Q42.6 20 40 20.6C32.4 16 22.4 15.6 15 19.6Z'), 'lemon', 'm', band=.3,
-      det=['M18.4 12.8C25.4 11.2 32.8 13 37.8 16.6']),
-    F(('path', 'M12 14.6C15 25.4 27.6 31.8 40.6 28.4Q42.6 28.4 42 30.8C30 39 14.4 33 9.6 20Z'), 'lemon', 'm', band=.3,
-      det=['M14 21.4C18.8 28.4 27.6 32.4 36.8 31.6']),
-    F(('path', 'M10.6 15.8C7.4 29 17 41.6 32.8 41.6Q35 41.4 34.2 39C21.6 34.6 15.6 27.4 16 16.6Z'), 'lemon', 'm', band=.25,
-      det=['M11.6 24.6C13.2 32 19.4 37.6 28 39.4']),
-    F(('rect', 8.4, 9.2, 7.6, 8, 2.6, -35), 'cocoa', 'm'),
-    F(('circle', 40.8, 18.8, 1.6), 'cocoa', 'tr', ol=0, cut=False),
-    F(('circle', 41, 29.8, 1.6), 'cocoa', 'tr', ol=0, cut=False),
-    F(('circle', 33.4, 40.2, 1.6), 'cocoa', 'tr', ol=0, cut=False),
-], gloss=[G('M18.6 11Q24.6 8.6 30.4 9.6', 2.2), G('M12.4 23Q13.4 29 17.6 33.4'), DOT(20.4, 35.8)], qty='6 bananas', aisle='produce')
+    *banana(((11, 33.4), (11, 15.4), (26.6, 7.8), (40, 17.4)), 5.4),
+    *banana(((11.4, 34.2), (15.4, 22.4), (32.4, 18.4), (41, 31)), 5.8),
+    *banana(((11.8, 35), (20.4, 28.6), (31.4, 29.6), (35, 39.2)), 5.8),
+    TUBE('M11.8 34.8L9.8 38.6', 'cocoa', 6.4, 'm'),
+    F(('ellipse', 9.8, 38.6, 1.3, 1.9, 117.76), 'cocoa', 'p', ol=1.3, cut=False),
+], qty='6 bananas', aisle='produce', subs=3)
 
 # 4 lemon
 add('lemon', 'Lemons', [

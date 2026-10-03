@@ -110,14 +110,15 @@ def _c1_bumpy(cx, cy, rx, ry, n, amp, a0=0):
 
 # ================================================================ generics (priority 1)
 
-# fruit: a red apple in front, a purple grape bunch behind it on the right, a banana arching over the back
+# fruit: a red apple in front, a purple grape bunch behind it on the right, a banana arching over the back (drawn like
+# the `banana` sticker, icons.py: plump, its gloss along its back, its dark tip peeking out left of the apple; its
+# stalk and nub stay in the lemon family so the sticker keeps to three families)
 _C1_APPLE = 'M24 16C20 12.5 9.5 12 8.2 23.5C7 33.5 14 41.8 19.5 41.5C21.5 41.4 22.5 40.6 24 40.6C25.5 40.6 26.5 41.4 28.5 41.5C34 41.8 41 33.5 39.8 23.5C38.5 12 28 12.5 24 16Z'
 _C1_GR = [(30, 19.4), (36.6, 19.4), (26.8, 25.2), (33.3, 25.2), (39.2, 25.4), (30, 31), (36.6, 30.8), (33.3, 36.4)]
 add('fruit_generic', 'Fruit', [
-    F(('path', 'M6.8 27.6C5.4 14.6 17 5.6 30.4 6.2L31.4 12.6C20.8 12.6 13.8 18.4 12.8 27.2Q10.4 31.4 6.8 27.6Z'), 'lemon', 'm', band=.28,
-      det=['M10.6 19.4C13.6 13.4 19.4 9.8 27 9.2']),
-    F(('rect', 29.2, 5.4, 4.8, 7.6, 2, -6), 'lemon', 'deep', ol=1.6),
-    F(('circle', 9, 28.6, 1.5), 'lemon', 'tr', ol=0, cut=False),
+    *banana(((31, 13.4), (22, 7.6), (10.6, 9), (7.6, 20.6)), 4.8, nub='lemon'),
+    TUBE('M30.8 13.2L33.4 9.4', 'lemon', 5, 'deep'),
+    F(('ellipse', 33.4, 9.4, 1, 1.3, -55.62), 'lemon', 'lp', ol=1.2, cut=False),
     TUBE('M33.3 17.6C33.3 14.6 34.2 12.8 36 11.6', 'grape', 3, 'tr'),
     *[F(('circle', x, y, 3.6), 'grape', 'm', band=.26) for x, y in _C1_GR],
     LINE('M19.4 23.8C19.4 20.6 20.2 18.6 21.8 17', 'strawberry', 2.4),
