@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -487,9 +488,9 @@ private fun PracticeStrip(model: PracticeModel, s: AisleSection, eggs: SurpriseS
     val spokenCount = if (toGet == 0) stringResource(R.string.egg_practice_strip_done, s.total, s.total) else stringResource(R.string.egg_practice_strip_left, toGet, s.total)
     val label = if (s.position > 0) stringResource(R.string.egg_practice_strip, s.position, name, spokenCount) else stringResource(R.string.egg_practice_strip_unsorted, name, spokenCount)
     // The strip's height (it grows with large text) and where its words end, for the ribbon (§4.10 folded strip).
-    var stripPx by remember { mutableStateOf(0) }
-    var tabPx by remember { mutableStateOf(0) }
-    var metaPx by remember { mutableStateOf(0) }
+    var stripPx by remember { mutableIntStateOf(0) }
+    var tabPx by remember { mutableIntStateOf(0) }
+    var metaPx by remember { mutableIntStateOf(0) }
     with(anchors) {
         BoxWithConstraints(
             Modifier

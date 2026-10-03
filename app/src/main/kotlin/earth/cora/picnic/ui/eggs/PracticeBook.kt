@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -218,7 +219,10 @@ internal fun PracticeBook(
                 val shape = RoundedCornerShape(12.dp)
                 val stamped = grouped.sections.count { it.complete }
                 val label = stringResource(
-                    R.string.egg_practice_book, date, list.items.count { it.checked }, list.items.size, stamped, grouped.stops,
+                    R.string.egg_practice_book,
+                    date,
+                    pluralStringResource(R.plurals.egg_practice_book_stickers, list.items.size, list.items.count { it.checked }, list.items.size),
+                    pluralStringResource(R.plurals.egg_practice_book_aisles, grouped.stops, stamped, grouped.stops),
                 )
                 Row(
                     Modifier
