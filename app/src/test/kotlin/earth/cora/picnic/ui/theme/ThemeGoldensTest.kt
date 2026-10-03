@@ -96,6 +96,8 @@ class ThemeGoldensTest(private val variant: ThemeVariant, private val v: String)
 
     @Test fun chipsAll() = compose.recordGolden("chips_all_$v", variant) { ChipsKit() }
 
+    @Test fun chipFocused() = compose.recordGolden("chip_focused_$v", variant) { ChipsFocusedState() }
+
     @Test fun switchStates() = compose.recordGolden("switch_states_$v", variant) { SwitchKit() }
 
     @Test fun fieldRest() = compose.recordGolden("field_rest_$v", variant) { FieldState("rest") }

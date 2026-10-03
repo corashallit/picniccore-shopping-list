@@ -118,6 +118,16 @@ internal fun TextButtonState(state: String) {
     }
 }
 
+/** Chips with keyboard focus (§4.6 focus ring, §15): a label chip, a selected one and a source chip. */
+@Composable
+internal fun ChipsFocusedState() {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        PicnicChip("Favourites", selected = false, onClick = {}, interactionSource = rememberHeldInteraction(focused = true))
+        PicnicChip("Weekly shop", selected = true, onClick = {}, interactionSource = rememberHeldInteraction(focused = true))
+    }
+    SourceChip("pancake recipe", onClick = {}, interactionSource = rememberHeldInteraction(focused = true))
+}
+
 /** The round sticker buttons in one state. */
 @Composable
 internal fun RoundButtonsState(state: String) {

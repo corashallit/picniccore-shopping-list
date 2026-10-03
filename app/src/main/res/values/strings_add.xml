@@ -69,12 +69,6 @@
         <item quantity="other">Stick all %1$d on my list</item>
     </plurals>
     <string name="add_stick_none">Switch one on to add it</string>
-    <!-- The same, short, for very large text (the pill keeps one line; TalkBack hears the long form) -->
-    <plurals name="add_stick_short">
-        <item quantity="one">Stick %1$d</item>
-        <item quantity="other">Stick all %1$d</item>
-    </plurals>
-    <string name="add_stick_none_short">Switch one on</string>
     <string name="add_reading_progress">Reading… %1$d of %2$d</string>
     <string name="add_reading">Reading…</string>
 

@@ -322,12 +322,22 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
             }
         }
     }
-    val blinkTime by rememberLoopTime(enabled = !reduced && state.mode == LcdMode.Count)
-    val starAlpha = if ((blinkTime % PicnicMotion.lcdBlinkPeriod) in (PicnicMotion.lcdBlinkPeriod - PicnicMotion.lcdBlinkOn) until PicnicMotion.lcdBlinkPeriod) {
-        PicnicMotion.lcdBlinkAlpha
-    } else {
-        1f
+    // The star's blink: dim for the last 120 ms of every 4 s. Timed by delays, not frames, so the chip recomposes twice
+    // per blink and the frame clock idles between them (the LCD sits on the List screen for a whole shop). The
+    // infinite-animation policy still decides whether it runs at all (tests: the lit star, unless the clock is held).
+    var dim by remember { mutableStateOf(false) }
+    LaunchedEffect(reduced, state.mode) {
+        dim = false
+        if (reduced || state.mode != LcdMode.Count) return@LaunchedEffect
+        while (true) {
+            withInfiniteAnimationFrameMillis { }
+            delay(PicnicMotion.lcdBlinkPeriod - PicnicMotion.lcdBlinkOn)
+            dim = true
+            delay(PicnicMotion.lcdBlinkOn)
+            dim = false
+        }
     }
+    val starAlpha = if (dim) PicnicMotion.lcdBlinkAlpha else 1f
 
     Box(
         modifier

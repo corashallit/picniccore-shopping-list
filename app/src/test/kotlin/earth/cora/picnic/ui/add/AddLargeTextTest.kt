@@ -211,6 +211,46 @@ class AddLargeTextTest {
         compose.assertNoClippedText("error at 2.0", LETTERSET_TAG)
     }
 
+    /**
+     * §4.6 "No screen keeps a short label for large text" (item 337): the footer's candy pill says the whole "Stick all n
+     * on my list" (and "Switch one on to add it" with nothing kept) at 1.3, 1.5 and 2.0, the same words TalkBack hears,
+     * wrapping onto 2 lines when it must; nothing in it is cut or reported cut.
+     */
+    @Test
+    fun footerKeepsItsWholeLabel() {
+        val review = f.review(3, f.pancakes(withPantry = true), ItemSource.AI_TEXT, PANCAKES)
+        val none = review.copy(rows = review.rows.map { it.copy(keep = false) })
+        val recipe = base.copy(sheetOpen = true, mode = AddMode.WRITE, text = PANCAKES, sentText = PANCAKES, phase = AddPhase.Preview, review = review)
+        var current by mutableStateOf(recipe)
+        var fontScale by mutableStateOf(1.3f)
+        val res = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>().resources
+        compose.setContent {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, fontScale)) {
+                PicnicTheme(ThemeVariant.Day, reducedMotion = false) { SheetStage { AddSheet(current, AddActions(onEditPantry = {})) } }
+            }
+        }
+        for (scale in listOf(1.3f, 1.5f, 2f)) {
+            fontScale = scale
+            for (state in listOf(recipe, recipe.copy(review = none))) {
+                current = state
+                compose.waitForIdle()
+                compose.mainClock.advanceTimeBy(800)
+                compose.waitForIdle()
+                val kept = state.keptCount
+                val whole = if (kept == 0) res.getString(earth.cora.picnic.R.string.add_stick_none) else res.getQuantityString(earth.cora.picnic.R.plurals.add_stick, kept, kept)
+                val pill = compose.onNode(hasTestTag(ADD_FOOTER_TAG), useUnmergedTree = true).fetchSemanticsNode()
+                fun walk(n: androidx.compose.ui.semantics.SemanticsNode): List<androidx.compose.ui.semantics.SemanticsNode> = listOf(n) + n.children.flatMap { walk(it) }
+                val nodes = walk(pill)
+                val said = nodes.mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.joinToString() }
+                assertTrue("footer at $scale says '$whole' (it said $said)", whole in said)
+                assertTrue("footer at $scale: no short label under a long description", nodes.none { it.config.getOrNull(SemanticsProperties.ContentDescription) != null })
+                assertTrue("footer at $scale: label reported cut", nodes.none { it.config.getOrNull(earth.cora.picnic.ui.a11y.TextOverflowed) == true })
+                compose.assertNoClippedText("footer '$whole' at $scale", ADD_FOOTER_TAG)
+            }
+        }
+    }
+
     /** Item 207 at 2.0: the polaroid keeps its whole caption inside its lip ("fridge list · Sat"). */
     @Test
     fun snapReadingAt200() {

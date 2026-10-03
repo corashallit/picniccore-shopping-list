@@ -43,6 +43,7 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -310,7 +311,7 @@ internal class PuffyFit(
 internal fun fitPuffy(
     measurer: TextMeasurer,
     text: AnnotatedString,
-    style: TextStyle,
+    textStyle: TextStyle,
     strokePx: Float,
     sx: Float,
     sy: Float,
@@ -322,6 +323,9 @@ internal fun fitPuffy(
     shadowColor: Color = Color.Black,
     wrapLast: Boolean = false,
 ): PuffyFit {
+    // A label that wraps as a last resort breaks into balanced lines ("Stick all 12 / on my list", never an orphan word),
+    // in every pass alike.
+    val style = if (wrapLast && maxLines > 1) textStyle.copy(lineBreak = LineBreak.Heading) else textStyle
     val half = strokePx / 2f
     val room = half * 2 + sx
     val maxText = if (maxWidth == Constraints.Infinity) Constraints.Infinity else max(0, (maxWidth - room).toInt())

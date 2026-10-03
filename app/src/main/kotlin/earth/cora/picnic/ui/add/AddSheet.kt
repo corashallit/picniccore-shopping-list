@@ -718,7 +718,6 @@ private fun footerFor(state: AddUiState, reveals: Reveals): FooterKind? {
 @Composable
 private fun AddFooter(kind: FooterKind, state: AddUiState, actions: AddActions) {
     val busy = state.phase.busy || state.committing
-    val veryLarge = LocalDensity.current.fontScale >= VERY_LARGE_TEXT
     Row(
         Modifier.fillMaxWidth().testTag(ADD_FOOTER_TAG),
         verticalAlignment = Alignment.CenterVertically,
@@ -733,20 +732,14 @@ private fun AddFooter(kind: FooterKind, state: AddUiState, actions: AddActions) 
                     kept == 0 -> stringResource(R.string.add_stick_none)
                     else -> pluralStringResource(R.plurals.add_stick, kept, kept)
                 }
-                // The pill keeps one line: at very large text it shows the short words and TalkBack hears the long ones.
-                val short = when {
-                    !veryLarge -> label
-                    kind.reading -> stringResource(R.string.add_reading)
-                    kept == 0 -> stringResource(R.string.add_stick_none_short)
-                    else -> pluralStringResource(R.plurals.add_stick_short, kept, kept)
-                }
+                // The whole label at any font scale: the pill wraps it onto 2 lines rather than shorten it (§4.6).
                 PicnicButton(
-                    short,
+                    label,
                     onClick = actions.onCommit,
                     enabled = !kind.revealing && !busy && kept > 0,
                     busy = kind.reading || busy,
                     leadingStar = !kind.reading,
-                    modifier = Modifier.weight(1f).then(if (short != label) Modifier.semantics { contentDescription = label } else Modifier),
+                    modifier = Modifier.weight(1f),
                 )
             }
             FooterKind.Acknowledge -> PicnicButton(

@@ -61,9 +61,9 @@ class LargeTextComponentsTest {
     private val screen by lazy { SwappableContent(compose) }
     private val px = 3f
 
-    private fun show(fontScale: Float, content: @Composable () -> Unit) {
+    private fun show(fontScale: Float, density: Float = px, content: @Composable () -> Unit) {
         screen.show {
-            CompositionLocalProvider(LocalDensity provides Density(px, fontScale)) {
+            CompositionLocalProvider(LocalDensity provides Density(density, fontScale)) {
                 PicnicTheme(ThemeVariant.Day) {
                     Box(Modifier.background(Color.White).padding(12.dp)) { content() }
                 }
@@ -92,47 +92,70 @@ class LargeTextComponentsTest {
     }
 
     /**
-     * The aisle number circle (§2.7, §4.10, §4.7): 24 / 20 dp at 1.0, and from 1.3 up it grows so its numeral, which
-     * scales with the font, is never cut: the numeral's ink inside the ring is exactly the ink of the same numeral drawn
-     * on its own (nothing lost under the ring or outside the circle).
+     * The aisle number circle (§2.7, §4.10, §4.7, item 337): 20 / 24 / 26 dp at 1.0, and it grows until its ring clears
+     * its numeral, which scales with the font. For every numeral 1 to 24, at font scale 1.0, 1.15, 1.3, 1.5 and 2.0 and
+     * at 2.625 and 3 px per dp, no numeral ink lies within 0.75 dp of the ring's inner edge: read off the pixels by their
+     * distance from the centre, so a glyph's corner reaching the ring's curve counts (a bounding box inside the ring would
+     * miss it). Half a px is allowed for anti-aliasing. At 1.0 every circle keeps its drawn size.
      */
     @Test
+    @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
     fun numberCircleGrowsWithItsNumeral() {
-        val cases = listOf(4 to 24, 12 to 24, 24 to 24, 8 to 20, 24 to 20, 7 to 28)
-        for (scale in listOf(1f, 1.3f, 2f)) for ((n, size) in cases) {
-            val look = AisleLooks.of(n)
-            show(scale) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.testTag("circle")) { NumberCircle(n, look, size = size.dp) }
-                    val style = if (size <= 20) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
-                    Box(Modifier.testTag("bare").background(Color.White)) { Text("$n", style = style.copy(color = look.family.trace), maxLines = 1) }
+        val failures = mutableListOf<String>()
+        var checked = 0
+        for (density in listOf(3f, 2.625f)) for (scale in listOf(1f, 1.15f, 1.3f, 1.5f, 2f)) for (size in listOf(20, 24, 26)) {
+            show(scale, density) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (row in (1..24).chunked(6)) {
+                        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            for (n in row) Box(Modifier.testTag("circle$n")) { NumberCircle(n, AisleLooks.of(n), size = size.dp) }
+                        }
+                    }
                 }
             }
-            val what = "$n in $size dp at $scale"
-            val circle = node("circle").boundsInRoot
-            if (scale == 1f) {
-                assertEquals("$what: drawn size kept", size * px, circle.width, 0.5f)
-                assertEquals("$what: drawn size kept", size * px, circle.height, 0.5f)
+            val img = compose.onRoot().captureToImage().asAndroidBitmap()
+            val drawn = Density(density).run { size.dp.roundToPx() }
+            for (n in 1..24) {
+                val what = "$n in $size dp at $scale, ${density}x"
+                val b = node("circle$n").boundsInRoot
+                if (scale == 1f) {
+                    if (abs(b.width - drawn) > 0.5f || abs(b.height - drawn) > 0.5f) failures += "$what: drawn size not kept (${b.width} px for $drawn)"
+                }
+                if (abs(b.width - b.height) > 0.5f) failures += "$what: not a circle (${b.width} × ${b.height})"
+                val gap = numeralRingGap(img, b, density, AisleLooks.of(n).family.trace.toArgb())
+                if (gap == null) failures += "$what: no numeral ink"
+                else if (gap < 0.75f * density - 0.5f) failures += "$what: ink ${"%.2f".format(gap / density)} dp from the ring"
+                checked++
             }
-            assertEquals("$what: still a circle", circle.width, circle.height, 0.5f)
-            val trace = look.family.trace.toArgb()
-            val isInk: (Int) -> Boolean = { near(it, trace, 90) }
-            val img = compose.onNodeWithTag("circle", useUnmergedTree = true).captureToImage().asAndroidBitmap()
-            // Only the inside of the ring: the 2 dp ring is trace-coloured too.
-            val r = img.width / 2f
-            val inner = r - 2f * px - 1f
-            val inside = android.graphics.Bitmap.createBitmap(img.width, img.height, android.graphics.Bitmap.Config.ARGB_8888)
-            for (y in 0 until img.height) for (x in 0 until img.width) {
-                val keep = hypot(x + 0.5f - r, y + 0.5f - img.height / 2f) <= inner
-                inside.setPixel(x, y, if (keep) img.getPixel(x, y) else Color.White.toArgb())
-            }
-            val inCircle = inkBox(inside, isInk = isInk)
-            val bare = inkBox(compose.onNodeWithTag("bare", useUnmergedTree = true).captureToImage().asAndroidBitmap(), isInk = isInk)
-            assertNotNull(what, inCircle)
-            assertNotNull(what, bare)
-            assertTrue("$what: numeral width kept inside the ring (${bare!!.width()} vs ${inCircle!!.width()})", abs(bare.width() - inCircle.width()) <= 1)
-            assertTrue("$what: numeral height kept inside the ring (${bare.height()} vs ${inCircle.height()})", abs(bare.height() - inCircle.height()) <= 1)
         }
+        assertEquals(24 * 5 * 3 * 2, checked)
+        assertTrue("number circles: ${failures.joinToString("\n")}", failures.isEmpty())
+    }
+
+    /**
+     * The least distance (px) from the numeral's ink to the inside of the ring of the circle at [b] in [img]: over every
+     * pixel inside the ring's inner edge (half a px in, clear of the ring's own anti-aliasing) at least half-way from
+     * white to [trace]. Null when there is no ink.
+     */
+    private fun numeralRingGap(img: android.graphics.Bitmap, b: androidx.compose.ui.geometry.Rect, density: Float, trace: Int): Float? {
+        val cx = b.center.x
+        val cy = b.center.y
+        val inner = b.width / 2f - 2f * density
+        val lum = { c: Int -> (((c shr 16) and 0xFF) + ((c shr 8) and 0xFF) + (c and 0xFF)) / 3f }
+        val threshold = (255f + lum(trace)) / 2f
+        val left = b.left.toInt()
+        val top = b.top.toInt()
+        val w = b.width.toInt()
+        val h = b.height.toInt()
+        val px = IntArray(w * h)
+        img.getPixels(px, 0, w, left, top, w, h)
+        var gap: Float? = null
+        for (y in 0 until h) for (x in 0 until w) {
+            val dist = hypot(left + x + 0.5f - cx, top + y + 0.5f - cy)
+            if (dist >= inner - 0.5f) continue
+            if (lum(px[y * w + x]) <= threshold) gap = minOf(gap ?: Float.MAX_VALUE, inner - dist)
+        }
+        return gap
     }
 
     /**
@@ -218,11 +241,11 @@ class LargeTextComponentsTest {
     }
 
     /**
-     * The spec's longest real labels in a 328 dp column (a 360 dp phone's sheet), at 1.0, 1.3 and 2.0: the New trip
-     * sheet's pills, the Edit sheet's "Draw a new sticker", the Add sheet's "Stick all 12 on my list", a disabled
-     * "Reading… 6 of 9" and every default aisle in an aisle chip. Each wraps rather than loses a word: every line whole,
-     * no "…", no TextOverflowed, nothing clipped, inside its face. A label too long even for 2 lines ends in "…" and
-     * says so (TextOverflowed), never silently.
+     * The spec's longest real labels in the letter-set sheet's 308 dp column (a 360 dp phone) and a 328 dp one, at 1.0,
+     * 1.15 (Android's "Large"), 1.3 and 2.0: the New trip sheet's pills, the Edit sheet's "Draw a new sticker", the Add
+     * sheet's "Stick all 12 on my list", a disabled "Reading… 6 of 9" and every default aisle in an aisle chip. Each
+     * wraps rather than loses a word: every line whole, no "…", no TextOverflowed, nothing clipped, inside its face. A
+     * label too long even for 2 lines ends in "…" and says so (TextOverflowed), never silently.
      */
     private fun longRealLabelsStayWhole() {
         val pills = listOf(
@@ -232,9 +255,9 @@ class LargeTextComponentsTest {
             Triple("Stick all 12 on my list", PicnicButtonStyle.Primary, null),
         )
         val aisles = Aisles.parse(Aisles.DEFAULT_TEXT)
-        for (scale in listOf(1f, 1.3f, 2f)) {
+        for (column in listOf(308, 328)) for (scale in listOf(1f, 1.15f, 1.3f, 2f)) {
             show(scale) {
-                Column(Modifier.width(328.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.width(column.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     pills.forEachIndexed { i, (label, style, glyph) ->
                         Box(Modifier.testTag("pill$i")) {
                             PicnicButton(label, onClick = {}, style = style, glyph = glyph, leadingStar = label.startsWith("Stick"))
@@ -257,12 +280,24 @@ class LargeTextComponentsTest {
             for (tag in tags) {
                 val root = node(tag)
                 val texts = walkTexts(root)
-                if (texts.isNotEmpty()) assertTextWhole(root, "$tag at $scale")
-                for (n in walkAll(root)) assertTrue("$tag at $scale: TextOverflowed", n.config.getOrNull(TextOverflowed) != true)
+                val at = "$scale in $column dp"
+                if (texts.isNotEmpty()) assertTextWhole(root, "$tag at $at")
+                for (n in walkAll(root)) assertTrue("$tag at $at: TextOverflowed", n.config.getOrNull(TextOverflowed) != true)
+                // Balanced breaks: a wrapped pill label is two even lines, never a long line and a stub ("…, uncheck / it all").
+                if (tag in listOf("pill1", "pill2", "pillWide")) for (t in texts) {
+                    val results = mutableListOf<TextLayoutResult>()
+                    t.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+                    val r = results.single()
+                    if (r.lineCount == 2) {
+                        val widths = (0 until 2).map { r.getLineRight(it) - r.getLineLeft(it) }
+                        val lines = (0 until 2).joinToString(" / ") { r.layoutInput.text.text.substring(r.getLineStart(it), r.getLineEnd(it, visibleEnd = true)) }
+                        assertTrue("$tag at $at: lopsided lines '$lines' (${widths.map { (it / px).toInt() }} dp)", widths.min() >= widths.max() * 0.5f)
+                    }
+                }
                 // A puffy label (the candy pill): whole, unclipped and inside its face.
                 for (n in walkAll(root).filter { it.config.getOrNull(PuffyFontSize) != null }) {
-                    assertTrue("$tag at $scale: puffy label clipped ${n.clippedAndWhole()}", n.isWhole())
-                    assertTrue("$tag at $scale: puffy label shrank below 15 sp", n.config[PuffyFontSize] >= 15f - 0.01f)
+                    assertTrue("$tag at $at: puffy label clipped ${n.clippedAndWhole()}", n.isWhole())
+                    assertTrue("$tag at $at: puffy label shrank below 15 sp", n.config[PuffyFontSize] >= 15f - 0.01f)
                 }
                 val faces = compose.onAllNodes(androidx.compose.ui.test.hasTestTag(FACE_TAG), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
                 val box = root.boundsInRoot
@@ -270,7 +305,7 @@ class LargeTextComponentsTest {
                 if (face != null) {
                     for (t in walkAll(root).filter { it.config.getOrNull(SemanticsProperties.Text) != null }) {
                         val b = t.boundsInRoot
-                        assertTrue("$tag at $scale: label $b leaves its face $face", b.top >= face.top - 0.5f && b.bottom <= face.bottom + 0.5f && b.left >= face.left - 0.5f && b.right <= face.right + 0.5f)
+                        assertTrue("$tag at $at: label $b leaves its face $face", b.top >= face.top - 0.5f && b.bottom <= face.bottom + 0.5f && b.left >= face.left - 0.5f && b.right <= face.right + 0.5f)
                     }
                 }
             }
@@ -288,6 +323,86 @@ class LargeTextComponentsTest {
             long.single().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
             assertTrue("the too-long source chip ends in an ellipsis at $scale", (0 until results.single().lineCount).any { results.single().isLineEllipsized(it) })
         }
+    }
+
+    /**
+     * §4.6 "Long labels", item 337: a wrapped pill keeps the room a one-line label has above and below it (never flush
+     * with the face's edge), and on the secondary its first and last lines' ink keeps at least 3 dp from the inset ring
+     * (read off the pixels: the highest and lowest ballpoint ink against the ring's inner edges, 4 dp inside the face).
+     * Every real secondary label in the letter-set sheet's 308 dp column, a 328 dp one and a crowded 240 dp one, at 1.15,
+     * 1.3 and 2.0; the candy and disabled pills keep their one-line room too.
+     */
+    @Test
+    @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
+    fun wrappedPillsKeepTheirRoom() {
+        val secondaries = listOf(
+            "Keep everything, uncheck it all" to null,
+            "Draw a new sticker" to PicnicGlyph.Sparkle,
+            "Add as plain lines" to PicnicGlyph.Edit,
+            "Open phone settings" to PicnicGlyph.Settings,
+            "Try again" to PicnicGlyph.Refresh,
+        )
+        val ink = DayColors.ballpoint.toArgb()
+        val ring = Families.periwinkle.trace.toArgb()
+        val faces = { compose.onAllNodes(androidx.compose.ui.test.hasTestTag(FACE_TAG), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot } }
+        fun faceOf(tag: String) = node(tag).boundsInRoot.let { box -> faces().first { box.contains(it.center) } }
+        fun labelOf(tag: String) = walkAll(node(tag)).first { it.config.getOrNull(SemanticsProperties.Text) != null }.boundsInRoot
+        var wrappedSecondaries = 0
+        for (scale in listOf(1.15f, 1.3f, 2f)) for (column in listOf(308, 328, 240)) {
+            val at = "$scale in $column dp"
+            show(scale) {
+                Column(Modifier.width(column.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    secondaries.forEachIndexed { i, (label, glyph) ->
+                        Box(Modifier.testTag("s$i")) { PicnicButton(label, {}, style = PicnicButtonStyle.Secondary, glyph = glyph) }
+                    }
+                    Box(Modifier.testTag("sWide")) { PicnicButton("Keep everything, uncheck it all", {}, style = PicnicButtonStyle.Secondary, modifier = Modifier.fillMaxWidth()) }
+                    Box(Modifier.testTag("candy")) { PicnicButton("Stick all 12 on my list", {}, leadingStar = true) }
+                    Box(Modifier.testTag("disabled")) { PicnicButton("Keep everything, uncheck it all", {}, style = PicnicButtonStyle.Secondary, enabled = false) }
+                    // One-line labels in each style: the room a wrapped one keeps.
+                    Box(Modifier.testTag("candyOne")) { PicnicButton("Go", {}) }
+                    Box(Modifier.testTag("secondaryOne")) { PicnicButton("Go", {}, style = PicnicButtonStyle.Secondary) }
+                }
+            }
+            val img = compose.onRoot().captureToImage().asAndroidBitmap()
+            fun room(tag: String): Float = faceOf(tag).height.let { h -> (h - labelOf(tag).height) / 2f }
+            val candyRoom = room("candyOne")
+            val secondaryRoom = room("secondaryOne")
+            fun wrapped(tag: String, oneLine: String) = labelOf(tag).height > labelOf(oneLine).height * 1.4f
+            fun assertRoom(tag: String, roomPx: Float) {
+                val face = faceOf(tag)
+                val label = labelOf(tag)
+                assertTrue("$tag at $at: label ${label.top - face.top} px under the face's top, one line keeps $roomPx", label.top - face.top >= roomPx - 1f)
+                assertTrue("$tag at $at: label ${face.bottom - label.bottom} px over the face's bottom, one line keeps $roomPx", face.bottom - label.bottom >= roomPx - 1f)
+            }
+            for (tag in secondaries.indices.map { "s$it" } + "sWide") {
+                if (!wrapped(tag, "secondaryOne")) continue
+                wrappedSecondaries++
+                assertRoom(tag, secondaryRoom)
+                // The label's ink rows (ballpoint, at least half-way from white, nearer the ink than the ring's colour).
+                val face = faceOf(tag)
+                val rows = (face.top.toInt() until face.bottom.toInt()).filter { y ->
+                    (face.left.toInt() until face.right.toInt()).count { x -> isInkNotRing(img.getPixel(x, y), ink, ring) } >= 2
+                }
+                assertTrue("$tag at $at: no ink", rows.isNotEmpty())
+                val ringTop = face.top + 4f * px
+                val ringBottom = face.bottom - 4f * px
+                val above = rows.first() - ringTop
+                val below = ringBottom - (rows.last() + 1)
+                assertTrue("$tag at $at: ink ${"%.2f".format(above / px)} dp under the ring", above >= 3f * px - 1f)
+                assertTrue("$tag at $at: ink ${"%.2f".format(below / px)} dp over the ring", below >= 3f * px - 1f)
+            }
+            if (wrapped("candy", "candyOne")) assertRoom("candy", candyRoom)
+            if (wrapped("disabled", "secondaryOne")) assertRoom("disabled", secondaryRoom)
+        }
+        assertTrue("wrapped secondary pills checked ($wrappedSecondaries)", wrappedSecondaries >= 15)
+    }
+
+    /** A pixel of a label's ink: at least half-way from white to [ink], and nearer [ink] than the ring's [ring] colour. */
+    private fun isInkNotRing(argb: Int, ink: Int, ring: Int): Boolean {
+        fun ch(c: Int, s: Int) = (c shr s) and 0xFF
+        fun lum(c: Int) = (ch(c, 16) + ch(c, 8) + ch(c, 0)) / 3f
+        fun d2(a: Int, b: Int) = listOf(16, 8, 0).sumOf { s -> (ch(a, s) - ch(b, s)).let { it * it } }
+        return lum(argb) <= (255f + lum(ink)) / 2f && d2(argb, ink) < d2(argb, ring)
     }
 
     private fun walkAll(n: SemanticsNode): List<SemanticsNode> = listOf(n) + n.children.flatMap { walkAll(it) }
