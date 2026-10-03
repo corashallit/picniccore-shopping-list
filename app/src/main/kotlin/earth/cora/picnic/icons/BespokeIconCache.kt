@@ -29,8 +29,11 @@ internal data class IconIndex(
 )
 
 /**
- * Bespoke (live-drawn) icons on disk: `<root>/custom/<customIconId>.webp` plus `<root>/index.json`.
- * Every write is atomic (tmp + rename) and all access is serialized by one Mutex. Main-safe.
+ * Bespoke (live-drawn) icons on disk: `<root>/custom/<customIconId>.webp`, its die-cut path `<customIconId>.cut`
+ * (live stickers v4, docs/DESIGN_STICKER.md §18.3 step 5) and `<root>/index.json`. An icon without a `.cut` file is a
+ * **legacy** icon drawn before v4 (192 px, baked ink outline, border and shadow): it renders as it is (§3.3 step 5)
+ * and is redrawn in v4 in the background ([legacyIcons]). Every write is atomic (tmp + rename) and all access is
+ * serialized by one Mutex. Main-safe.
  */
 class BespokeIconCache(
     private val root: File,
@@ -69,12 +72,15 @@ class BespokeIconCache(
     }
 
     /**
-     * Writes [webp] as the icon [id] and points [key] at it. Returns the id [key] pointed at before
-     * (the caller may delete that file after a redraw). Throws [IOException] on a failed write.
+     * Writes [webp] (and its die-cut path [cut], null for a legacy icon) as the icon [id] and points [key] at it.
+     * The cut is written first, so a crash in between never leaves a v4 bitmap without its cut. Returns the id [key]
+     * pointed at before (after a redraw the caller releases that one with [deleteIfUnreferenced]). Throws
+     * [IOException] on a failed write.
      */
-    suspend fun put(key: String, id: String, webp: ByteArray): String? {
+    suspend fun put(key: String, id: String, webp: ByteArray, cut: String? = null): String? {
         var previous: String? = null
         mutate { index ->
+            if (cut != null) writeAtomically(cutFileFor(id), cut.toByteArray(Charsets.UTF_8))
             writeAtomically(fileFor(id), webp)
             previous = index.byName[key]
             index.copy(byName = index.byName + (key to id))
@@ -82,25 +88,56 @@ class BespokeIconCache(
         return previous
     }
 
+    /** The stored die-cut path of icon [id], or null for a legacy (or missing) icon. */
+    suspend fun readCut(id: String): String? = locked {
+        val f = cutFileFor(id)
+        if (f.isFile) f.readText(Charsets.UTF_8) else null
+    }
+
+    /**
+     * Legacy icons the index still points at (a bitmap and no `.cut` file), oldest first, as (normalized name, id).
+     * The repository redraws them in v4 in the background, under the daily cap (§18.3 step 5).
+     */
+    suspend fun legacyIcons(): List<Pair<String, String>> = locked { index ->
+        index.byName.entries
+            .filter { (_, id) -> fileFor(id).isFile && !cutFileFor(id).isFile }
+            .sortedWith(compareBy({ fileFor(it.value).lastModified() }, { it.value }))
+            .map { it.key to it.value }
+    }
+
     /** The user picked a catalog icon for [key]: stop attaching its bespoke icon to new items. */
     suspend fun forget(key: String) {
         mutate { if (key in it.byName) it.copy(byName = it.byName - key) else it }
     }
 
-    /** Deletes one icon file (after a redraw replaced it and nothing references it). */
+    /** Deletes one icon's files (bitmap and cut). After a redraw, use [deleteIfUnreferenced] instead. */
     suspend fun deleteFile(id: String) {
-        locked { fileFor(id).delete() }
+        locked {
+            fileFor(id).delete()
+            cutFileFor(id).delete()
+        }
     }
 
     /**
-     * Deletes icon files that neither an item ([referencedIds]) nor the index points at, and that
-     * are older than [minAgeMs] (so a drawing that is being attached right now is never swept).
+     * After a redraw replaced icon [id]: deletes its files only when nothing references it any more, neither an item
+     * or pantry entry nor `album.json` (both in [referencedIds]) nor the index. Returns whether it deleted them.
+     */
+    suspend fun deleteIfUnreferenced(id: String, referencedIds: Set<String>): Boolean = locked { index ->
+        if (id in referencedIds || id in index.byName.values) return@locked false
+        fileFor(id).delete()
+        cutFileFor(id).delete()
+        true
+    }
+
+    /**
+     * Deletes icon files (bitmaps and cuts) that neither an item, a pantry entry or the album ([referencedIds]) nor
+     * the index points at, and that are older than [minAgeMs] (so a drawing being attached right now is never swept).
      */
     suspend fun sweep(referencedIds: Set<String>, now: Long, minAgeMs: Long = 10 * 60 * 1000L): Int = locked { index ->
         val keep = referencedIds + index.byName.values
         var removed = 0
         customDir.listFiles()?.forEach { f ->
-            val id = f.name.removeSuffix(".webp")
+            val id = f.name.removeSuffix(".webp").removeSuffix(".cut")
             val stale = now - f.lastModified() > minAgeMs
             val orphanTmp = f.name.endsWith(".tmp")
             if (f.isFile && stale && (orphanTmp || id !in keep) && f.delete()) removed++
@@ -109,6 +146,9 @@ class BespokeIconCache(
     }
 
     fun fileFor(id: String): File = File(customDir, "$id.webp")
+
+    /** The die-cut path file of icon [id] (absent for legacy icons). */
+    fun cutFileFor(id: String): File = File(customDir, "$id.cut")
 
     private suspend fun <T> locked(block: (IconIndex) -> T): T = withContext(io) {
         mutex.withLock { block(loadLocked()) }

@@ -475,7 +475,7 @@ object IconPostProcessorV4 {
     }
 
     /** Keeps the main pile: components over 2 % of the largest one (drops stray specks around it). */
-    private fun keepMainPile(art: BooleanArray, w: Int, h: Int): BooleanArray {
+    internal fun keepMainPile(art: BooleanArray, w: Int, h: Int): BooleanArray {
         val labels = IntArray(art.size)
         val count = Raster.label(art, w, h, labels)
         if (count <= 1) return art
