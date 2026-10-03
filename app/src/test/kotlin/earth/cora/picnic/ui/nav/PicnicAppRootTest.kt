@@ -30,8 +30,8 @@ class PicnicAppRootTest {
     @get:Rule
     val compose = createAndroidComposeRule<MainActivity>()
 
-    private fun waitForText(text: String) =
-        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitForText(text: String, substring: Boolean = false) =
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
 
     @Test
     fun navigatesToSettingsAndAislesAndBack() {
@@ -55,12 +55,13 @@ class PicnicAppRootTest {
     fun addAsTypedPutsItemsOnTheList() {
         waitForText("The basket is empty")
         compose.onNodeWithText("Add items").performClick()
-        waitForText("Add to your list")
+        // The Add sheet opens on its Write tab (WP7).
+        waitForText("Write")
         compose.onNode(hasSetTextAction()).performTextInput("milk, 2 lemons")
-        compose.onNodeWithText("Add as typed").performClick()
+        compose.onNodeWithText("As typed").performClick()
 
         waitForText("Lemons")
-        waitForText("Added 2 items")
+        waitForText("Added 2 items", substring = true)
         val app = compose.activity.application as PicnicApp
         val names = runBlocking { app.container.store.current().currentList().items.map { it.name } }
         assertEquals(listOf("Milk", "Lemons"), names)

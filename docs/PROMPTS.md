@@ -88,7 +88,7 @@ Photo lines and recipes
 Tools
 - Use web search only to open a recipe link or to look up a dish, product or term you do not know. Never search for simple lists or well-known recipes.
 
-message: one short, friendly sentence for the user saying what you added (and skipped), at most 140 characters, with no links or markdown.
+message: "" (empty) when the request is a plain list and every item is one the user named, added as asked: nothing skipped, guessed or left out. Otherwise one short, friendly sentence that tells the user what they need to know (what you skipped or left out and why, what you guessed, or what you can help with), at most 140 characters, with no links or markdown. Never just repeat the items you added.
 ```
 
 The rules are followed, in the same developer message, by the generated catalog listing (`Prompts.catalogListing`, all 236 keys including the `*_generic` ones; `peameal_bacon` joined in the art pass):
@@ -280,6 +280,10 @@ Items 17-21 come from the art pass (DESIGN_STICKER §0.4, §6.2, §19.1; 2026-10
 20. **"Spices" sometimes covers salt.** With only "spices" in the pantry, terra skipped salt as `in_pantry` in 2 of 3 early runs. Salt is a seasoning, not a spice, but many kitchens shelve them together; it shows as a switched-off row she can turn on, so it is left to the model for now (§10.6).
 21. **"Ground cinnamon" was approximate once.** The catalog listed "cinnamon" but not "ground cinnamon"; `spice_jar` now lists the ground spices too, so the client upgrades the fit to exact.
 
+Item 22 comes from the WP7 audit (DESIGN_STICKER §6.2 rule 4, checklist 201; 2026-10-03, measured in §10.3):
+
+22. **A plain list needs no message.** The v-C rule asked for "one short, friendly sentence saying what you added" on every answer, so almost every answer carried a message that was not an echo of the note, and the app's quick add (≤ 3 items, nothing skipped, no message worth showing) almost never happened. The message is now empty for a plain list added exactly as named, and present only when there is something to explain: a skipped or left-out row and why, a guess, or nothing to buy. The eval checks the message only when something needs explaining, and its language only when there is one.
+
 ### Live results with the shipped prompts (2026-10-01, `./gradlew -p core test -Plive=true`, prompts v1)
 
 | Case | Result | Latency |
@@ -344,7 +348,7 @@ After changing a prompt: run the unit tests (this page must still quote the file
 - **Names:** phrases that ignore accents, case and plurals and match whole words, or `re:` regexes.
 - **Aisles and icons:** a set of acceptable aisles, and the catalog keys that depict the item. A matching key is expected with fit exact. `approx` is set when no key depicts the item, so a live drawing is the right outcome.
 - **Allowed and forbidden items:** optional items cover reasonable recipe variations. Forbidden items catch what the user said they have, crossed-out lines and spices.
-- **Other checks:** quantity and detail regexes, the message (≤ 140 chars, no unrelated list items, language) and search behaviour (a pasted link must be opened; plain lists and well-known recipes should not search).
+- **Other checks:** quantity and detail regexes, the message (≤ 140 chars; present when something was skipped or worked out, or there is nothing to buy; no unrelated list items; its language when there is one) and search behaviour (a pasted link must be opened; plain lists and well-known recipes should not search).
 - **Skip reasons:** an expectation's `skip` ("none", "in_pantry", "optional") is checked against the matched row's `skip_reason`. A case's `pantry` goes into the context block. Rows already on the list are not counted as produced (they used to be dropped; they are named in `skipped`).
 
 Icon expectations follow the catalog's own curation: ricotta is `sour_cream` ("Sour cream & cottage cheese"), kimchi is `pickles`, bread is `bakery_generic`. `EvalSetTest` validates the file offline. Every alias, key, basket, regex and media file must resolve, and an ideal answer built from the expectations must score 100%. `EvalScoringTest` covers the scorer and the pricing.
@@ -403,6 +407,8 @@ Every row is re-scored against the final `cases.json`, so the rows are comparabl
 | pantry-v2 | the 2 revised cases × 3 | 4/6 | 92.6% | 100% | 100% | 100% | 100% | 100% | 6.6 / 7.2 s | $0.06 |
 | regress-v1 | recipe-pancakes, banana-bread-have-some, already-on-list, duplicates, imperial units, typos, both list photos × 1 | **8/8** | 100% | 100% | 100% | 100% | 97.9% | 100% | 4.4 / 8.9 s | $0.08 |
 | **pantry-final** | **5 pantry × 3** | **14/15** | **100%** | **100%** | **100%** | **97.8%** | **96.7%** | **100%** | **3.7 / 6.5 s** | **$0.12** |
+
+**Message rule (2026-10-03, §8 item 22), one run each on the shipped `ModelDefaults`:** `recipe-pancakes`, `list-canadian-shorthand`, `list-french`, `list-vague-sam`, `list-already-on-list`, `list-learned-corrections`, `nothing-to-buy`, `pantry-plain-list`: **8/8 clean**, recall, precision, aisle and icon 100%, checks 46/46, latency median 2.7 s, US$0.067 in all. The four plain lists answered with an empty message; the recipe ("Butter is already on your list."), the duplicates, the vague item ("check with Sam") and the small talk each said why.
 
 **Pantry gate (pantry-final, 3 runs):** pantry-covered worked-out items skipped **18/18** (flour, sugar, salt and baking powder in every pancake run; cinnamon and nutmeg in every spiced banana bread run); named items skipped for the pantry **0/21** ("flour, milk" and the photographed salt were kept every time); almond flour kept 3/3. The one unclean run was "Ground cinnamon" / "Ground nutmeg" answered approximate (fixed afterwards in the catalog, §8 item 21). pantry-v1 and v2 misses were eval gaps (macarons with a pinch of salt and a buttercream, brown sugar in a spiced loaf), fixed in `cases.json`. The art pass spent about **US$0.42** (the runs above and one CLI probe).
 

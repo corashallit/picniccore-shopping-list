@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.ui.theme.gen.DecorManifest
@@ -101,7 +102,7 @@ class ButtonGlossTest {
             val p = Offset(g.dotCenter.x + g.dotRadius * kotlin.math.cos(rad).toFloat(), g.dotCenter.y + g.dotRadius * kotlin.math.sin(rad).toFloat())
             assertTrue("$name dot outside the face", insidePill(p, face))
         }
-        assertTrue("$name gloss within 4 dp of the label: ${g.distanceTo(label) / 3f} dp", g.distanceTo(label) >= clearance)
+        assertTrue("$name gloss within 4 dp of the label: ${g.distanceTo(label) / 3f} dp (face $face, label $label, dot ${g.dotCenter}, bounds ${g.bounds})", g.distanceTo(label) >= clearance)
         return g
     }
 
@@ -150,6 +151,36 @@ class ButtonGlossTest {
             val fontPx = (if (primary) 18f else 16f) * d
             val g = assertPillGloss(face.size, labelInkBand(row, fontPx), "${if (primary) "primary" else "secondary"} '$text'")
             assertFalse(g.mirrored)
+        }
+    }
+
+    /**
+     * R3 at large text (§4.6, §15): at font scale 1.3 and 2.0 the label's ink band reaches the gloss's height, so the
+     * label starts past the dot; the gloss stays in the left cap, inside the face and ≥ 4 dp from the label.
+     */
+    @Test
+    fun geometryAtLargeText() {
+        val labels = listOf("Go", "Stick all 2", "Try again", "Plain lines")
+        for (scale in listOf(1.3f, 2f)) for (primary in listOf(true, false)) for (text in labels) {
+            show {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides Density(3f, scale),
+                ) {
+                    PicnicButton(
+                        text, {}, style = if (primary) PicnicButtonStyle.Primary else PicnicButtonStyle.Secondary,
+                        leadingStar = primary, glyph = if (primary) null else PicnicGlyph.Refresh,
+                    )
+                }
+            }
+            val face = faceRects().single()
+            val textBounds = compose.onNodeWithText(text, useUnmergedTree = true).getBoundsInRoot()
+            val d = 3f
+            val rowLeft = textBounds.left.value * d - 24f * d
+            val row = Rect(rowLeft - face.left, textBounds.top.value * d - face.top, textBounds.right.value * d - face.left, textBounds.bottom.value * d - face.top)
+            // The label's real size: Android scales large text non-linearly, as the button does.
+            val fontPx = with(Density(3f, scale)) { (if (primary) 18 else 16).sp.toPx() }
+            val g = assertPillGloss(face.size, labelInkBand(row, fontPx), "${if (primary) "primary" else "secondary"} '$text' at $scale")
+            assertFalse("$text at $scale: the gloss stays in the left cap", g.mirrored)
         }
     }
 

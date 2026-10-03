@@ -196,6 +196,7 @@ fun PicnicText(
     textAlign: TextAlign? = null,
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
+    /** The laid-out text (a caller that hides it from TalkBack can still report clipping, §15). */
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
     val annotated = remember(text) {

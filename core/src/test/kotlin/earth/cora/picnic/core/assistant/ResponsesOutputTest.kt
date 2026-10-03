@@ -88,6 +88,24 @@ class ResponsesOutputTest {
         assertEquals(1, ResponsesOutput.webSearches(withSources))
     }
 
+    /** The thinking box quotes what the model really searched for (DESIGN_STICKER §4.18, D16), never her note. */
+    @Test
+    fun searchQueriesAreTheActionsOwnQueries() {
+        assertEquals(
+            listOf("kuku sabzi recipe ingredients serves 4"),
+            ResponsesOutput.searchQueries(result("ingest_terra_kuku_search.json").json),
+            "query and queries name the same search once",
+        )
+        assertEquals(emptyList<String>(), ResponsesOutput.searchQueries(result("ingest_terra_url_open_page.json").json), "open_page is not a search")
+        val two = TestSupport.parse(
+            """{"output":[
+               {"type":"web_search_call","action":{"type":"search","query":"  pancakes\n from scratch "}},
+               {"type":"web_search_call","action":{"type":"search","queries":["buttermilk pancakes","pancakes from scratch"]}},
+               {"type":"web_search_call","action":{"type":"find_in_page","url":"https://a.example","pattern":"flour"}}]}""",
+        )
+        assertEquals(listOf("pancakes from scratch", "buttermilk pancakes"), ResponsesOutput.searchQueries(two))
+    }
+
     @Test
     fun messageMarkdownLinksAreReducedToText() {
         assertEquals(

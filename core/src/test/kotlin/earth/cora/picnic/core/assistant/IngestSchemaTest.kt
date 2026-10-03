@@ -188,6 +188,11 @@ class PromptsContractTest {
         assertTrue("lines: for a photo only" in rules)
         assertTrue("recipe: when the items come from a dish" in rules)
         assertTrue("convert imperial amounts to metric" in rules)
+        // DESIGN_STICKER §6.2 rule 4 (quick add): a plain list added as named carries no message; a message says only
+        // what needs explaining, never the items again.
+        assertTrue("message: \"\" (empty) when the request is a plain list" in rules, "the empty message for a plain list")
+        assertTrue("Never just repeat the items you added." in rules)
+        assertTrue("saying what you added" !in rules, "the old always-a-message rule is gone")
     }
 
     @Test

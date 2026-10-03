@@ -1,9 +1,13 @@
 package earth.cora.picnic.ui.add
 
+import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -14,27 +18,42 @@ import earth.cora.picnic.core.assistant.AudioClip
 import earth.cora.picnic.core.assistant.GroceryAssistant
 import earth.cora.picnic.core.assistant.IngestContext
 import earth.cora.picnic.core.assistant.IngestInput
+import earth.cora.picnic.core.assistant.IngestResult
 import earth.cora.picnic.core.assistant.OfflineParser
 import earth.cora.picnic.core.assistant.ProposedItem
 import earth.cora.picnic.core.assistant.SkipReason
-import earth.cora.picnic.core.assistant.WebSource
 import earth.cora.picnic.core.assistant.toGroceryItem
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.llm.LlmError
+import earth.cora.picnic.core.model.AddOutcome
+import earth.cora.picnic.core.model.AppState
+import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.core.model.ItemSource
-import earth.cora.picnic.core.model.ListGrouping
 import earth.cora.picnic.core.model.addItems
-import earth.cora.picnic.core.model.findItem
+import earth.cora.picnic.core.model.aisles
+import earth.cora.picnic.core.model.displayName
 import earth.cora.picnic.core.model.ingestContext
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.normalizeName
+import earth.cora.picnic.core.model.Rarity
+import earth.cora.picnic.core.model.removeItem
+import earth.cora.picnic.core.model.setRarity
+import earth.cora.picnic.core.model.restoreItem
+import earth.cora.picnic.core.model.storeAisleNumber
 import earth.cora.picnic.core.store.StateStore
+import earth.cora.picnic.R
 import earth.cora.picnic.icons.IconRepository
+import earth.cora.picnic.platform.Announcer
 import earth.cora.picnic.platform.AudioRecorder
+import earth.cora.picnic.platform.Cue
+import earth.cora.picnic.platform.Feedback
+import earth.cora.picnic.platform.NoOpAnnouncer
+import earth.cora.picnic.platform.NoOpFeedback
 import earth.cora.picnic.platform.PhotoPreparer
-import earth.cora.picnic.ui.common.ScreenText
-import earth.cora.picnic.ui.common.needsSettings
+import earth.cora.picnic.ui.eggs.NoOpSurpriseEngine
+import earth.cora.picnic.ui.eggs.SurpriseEngine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -54,19 +73,26 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicLong
 
 /**
- * The Add sheet: write (AI or as typed), snap (camera / gallery) and speak (record, transcribe),
- * then a preview with keep toggles, then commit (docs/ARCHITECTURE.md §10.4).
+ * The add flows (docs/DESIGN_STICKER.md §6.2; ARCHITECTURE §10.4): the docked bar's Send, the letter-set sheet's Write,
+ * Snap and Speak tabs, quick add versus review, the recipe card's keep switches, Snap + Speak merged (D19), duplicates
+ * (rule 7), the commit and its Undo. Owner: WP7.
  *
- * Scopes: the LLM calls the user waits for run in viewModelScope and are cancelled by [cancel] /
- * [close]; the commit runs in [appScope] so closing the sheet never loses a save. The VM lives as
- * long as the List destination; [open] starts a session, [close] ends it (keeping the typed text as
- * a draft, so a sheet swiped away by accident loses nothing).
+ * Send rules (§6.2), in order: 1 the magic word is intercepted before any network call (nothing is added, the field
+ * clears); 2 no key: the text is parsed as typed and committed at once; 3 otherwise one ingest call, the bar's Send a
+ * wobbling capsule meanwhile; 4 a small sure answer commits at once; 5 anything else opens the sheet for review; 6 a
+ * failure shows the friendly message with Try again and Add as plain lines; 7 duplicates are never added twice (an
+ * unchecked one pops, a checked one is revived); 8 the pantry: worked-out items it covers come back skipped and force a
+ * review.
  *
- * Process death: the draft text, the mode and the target list live in [savedState], so the sheet
- * that ListRoute restores comes back with them. A camera result can reach the fresh VM before the
- * List screen calls [attachList]; the target list then falls back to the current list.
+ * Scopes (ARCHITECTURE §10.3, §13): the calls she waits for (photo prep, transcription, ingest) run in viewModelScope
+ * as [work] and are cancelled by [cancel] / [closeSheet]; every commit (quick add, As typed, no key, Stick all), the
+ * background aisle sort after it, and Undo run in [appScope], so closing the sheet or stopping a later request never
+ * loses a save or leaves typed items unsorted. Process death: the draft, the mode, the target list and
+ * whether the sheet was up live in [savedState]; a camera result can reach a fresh VM before the List screen calls
+ * [showList], so the target list then falls back to the current list.
  */
 class AddViewModel(
     private val store: StateStore,
@@ -80,34 +106,46 @@ class AddViewModel(
     private val newId: () -> String,
     private val appScope: CoroutineScope,
     private val savedState: SavedStateHandle,
+    /** Whether an OpenAI key is set (rule 2). */
+    private val hasKey: suspend () -> Boolean = { true },
+    private val surprises: SurpriseEngine = NoOpSurpriseEngine,
+    private val feedback: Feedback = NoOpFeedback,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Decodes the photo's JPEG into the polaroid's small copy (null when it cannot). */
+    private val thumbs: suspend (ByteArray) -> ImageBitmap? = ::decodeThumb,
+    /** Polite TalkBack lines (§15: the loader's label, once). */
+    private val announcer: Announcer = NoOpAnnouncer,
+    /** The app's words for [announcer] (a string resource id to its text). */
+    private val words: (Int) -> String = { "" },
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         AddUiState(
             listId = savedState.get<String>(KEY_LIST).orEmpty(),
             mode = savedState.get<String>(KEY_MODE)?.let { m -> AddMode.entries.firstOrNull { it.name == m } } ?: AddMode.WRITE,
             text = savedState.get<String>(KEY_TEXT).orEmpty(),
+            sheetOpen = savedState.get<Boolean>(KEY_SHEET) ?: false,
         ),
     )
     val state: StateFlow<AddUiState> = _state.asStateFlow()
 
     init {
-        // What survives process death: the draft, the mode and the target list (never photos or audio).
+        // What survives process death: the draft, the mode, the target list and the open sheet (never photos or audio).
         viewModelScope.launch {
-            _state.map { Triple(it.listId, it.mode, it.text) }.distinctUntilChanged().collect { (listId, mode, text) ->
-                savedState[KEY_LIST] = listId
-                savedState[KEY_MODE] = mode.name
-                savedState[KEY_TEXT] = text
+            _state.map { Saved(it.listId, it.mode, it.text, it.sheetOpen) }.distinctUntilChanged().collect { saved ->
+                savedState[KEY_LIST] = saved.listId
+                savedState[KEY_MODE] = saved.mode.name
+                savedState[KEY_TEXT] = saved.text
+                savedState[KEY_SHEET] = saved.sheetOpen
             }
         }
     }
 
     private val _events = Channel<AddEvent>(Channel.BUFFERED)
 
-    /** One-off events for the List screen (close the sheet, snackbars). */
+    /** One-off events for the List screen: the commit (toast, pops, Undo), sort failures, save failures, focus. */
     val events: Flow<AddEvent> = _events.receiveAsFlow()
 
-    /** The call the user is waiting for (photo prep, transcription, ingest). Main thread only. */
+    /** The call she is waiting for (photo prep, transcription, ingest). Main thread only. */
     private var work: Job? = null
 
     /** Level polling while recording. Main thread only. */
@@ -118,96 +156,215 @@ class AddViewModel(
     @Volatile
     private var retryAction: (() -> Unit)? = null
 
-    /** Starts a session for [listId] (the list current when the sheet opened). Keeps a draft text. */
-    fun open(listId: String, mode: AddMode = AddMode.WRITE) {
-        stopWork()
-        _state.value = AddUiState(listId = listId, mode = mode, text = _state.value.text)
-    }
+    private val ids = AtomicLong(0)
+
+    /** Reveals whose capsule pop has been cued (once each). Main thread only. */
+    private val poppedReveals = HashSet<Long>()
+
+    /** What each recent commit's Undo takes back (the last [MAX_UNDO] commits). */
+    private val undoRecords = LinkedHashMap<Long, UndoRecord>()
+
+    /* ---------------- the target list and the sheet ---------------- */
 
     /**
-     * Non-destructive [open] for a sheet restored after process death: sets the target list only if
-     * none is known yet, and never cancels what is running (a camera result may already be read).
+     * The List screen shows [listId]: the bar adds there. Non-destructive: while something runs or a review is up, the
+     * target stays (a camera result may already be being read after process death).
      */
-    fun attachList(listId: String) {
+    fun showList(listId: String) {
         if (listId.isEmpty()) return
-        _state.update { if (it.listId.isEmpty()) it.copy(listId = listId) else it }
+        _state.update { s ->
+            val idle = !s.phase.busy && s.review == null && !s.committing
+            if (s.listId.isEmpty() || (idle && s.listId != listId)) s.copy(listId = listId) else s
+        }
     }
 
-    /** The sheet was dismissed: cancels whatever runs and forgets everything but the draft text. */
-    fun close() {
+    /** v1 name for [showList] (after process death). */
+    fun attachList(listId: String) = showList(listId)
+
+    /** Opens the letter-set sheet on [mode] for [listId] (the List screen's Add, the empty state). Keeps the draft. */
+    fun openSheet(mode: AddMode = AddMode.WRITE, listId: String? = null) {
+        if (listId != null) showList(listId)
+        _state.update { it.copy(sheetOpen = true, mode = if (it.phase.busy || it.review != null) it.mode else mode) }
+    }
+
+    /** v1 name: opens the sheet on [mode] for [listId]. */
+    fun open(listId: String, mode: AddMode = AddMode.WRITE) = openSheet(mode, listId)
+
+    /**
+     * The sheet was dismissed (Back, the scrim, swipe): cancels whatever runs and forgets the review, the photo and the
+     * transcript; the draft text stays, so a sheet closed by accident loses no typing.
+     */
+    fun closeSheet() {
         stopWork()
-        _state.value = AddUiState(listId = "", text = _state.value.text)
+        _state.update { it.cleared().copy(sheetOpen = false, committing = it.committing) }
     }
 
+    /** v1 name for [closeSheet]. */
+    fun close() = closeSheet()
+
+    /**
+     * Switches the sheet's tab. With a review open, only the tabs that show it switch (Speak adds to any review, D19);
+     * a new note or photo would replace a review she has not committed, so those tabs wait (dimmed) until it is done.
+     */
     fun setMode(mode: AddMode) {
         val s = _state.value
-        if (s.mode == mode || s.phase.busy || s.committing) return
-        retryAction = null
-        _state.update { it.cleared().copy(mode = mode) }
+        if (s.mode == mode || s.phase.busy || s.committing || !s.tabEnabled(mode)) return
+        _state.update { it.copy(mode = mode, phase = if (it.phase is AddPhase.Failed) it.restingPhase() else it.phase) }
     }
 
     fun setText(text: String) {
+        val s = _state.value
+        if (s.phase is AddPhase.Thinking && s.origin == AddOrigin.BAR) return // the field is read-only while waiting
         // Editing after a failure brings the normal buttons back.
-        _state.update { it.copy(text = text, phase = if (it.phase is AddPhase.Failed && it.mode == AddMode.WRITE) AddPhase.Idle else it.phase) }
+        _state.update { it.copy(text = text, phase = if (it.phase is AddPhase.Failed && it.mode == AddMode.WRITE) it.restingPhase() else it.phase) }
     }
 
-    /** "Sort it out": the smart model (with web search) turns the text into categorized items. */
-    fun submitText() {
+    /** Asks the List screen to focus the bar's field (the FAB, "Start my list"). */
+    fun requestFieldFocus() {
+        _events.trySend(AddEvent.FocusField)
+    }
+
+    /* ---------------- Write: send, as typed ---------------- */
+
+    /** Send (the bar's envelope, Enter, the Write tab's Send): the §6.2 send rules. */
+    fun send(origin: AddOrigin = AddOrigin.BAR) {
         val s = _state.value
         val text = s.text.trim()
-        if (text.isEmpty() || s.phase.busy || s.committing) return
-        ingest(IngestInput.Text(text), ItemSource.AI_TEXT, plainLines = text, recipe = looksLikeRecipe(text))
+        // A review she has not committed is never replaced by a new note (its tab shows no Send meanwhile).
+        if (s.phase.busy || s.committing || s.review != null || work?.isActive == true) return
+        if (text.isEmpty()) {
+            if (origin == AddOrigin.BAR) requestFieldFocus()
+            return
+        }
+        // Rule 1: the magic word never reaches the network and adds nothing; the field clears.
+        if (surprises.interceptText(text)) {
+            _state.update { it.copy(text = "") }
+            return
+        }
+        retryAction = null
+        work = viewModelScope.launch {
+            if (!hasKey()) {
+                // Rule 2: no key, so the text goes on as typed, with the toast that says how to get smart sorting.
+                commitTyped(text, noKey = true)
+                return@launch
+            }
+            runTextIngest(text, origin)
+        }
     }
 
-    /** "Add as typed": no AI, commits at once; unsorted items are placed in the background. */
-    fun addTyped() {
-        val s = _state.value
-        if (s.text.isBlank() || s.phase.busy || s.committing) return
-        _state.update { it.copy(committing = true) }
-        appScope.launch {
-            val listId = targetListId()
-            val ctx = store.current().ingestContext(listId)
-            val items = OfflineParser.parse(s.text, catalog, ctx)
-            if (items.isEmpty()) {
-                _state.update { it.copy(committing = false, text = "") }
-                _events.send(AddEvent.Message(ScreenText.NOTHING_NEW))
-            } else {
-                commitItems(listId, items, ItemSource.TYPED)
+    /**
+     * Snap and Speak need the key before anything is captured (rule 2 covers only text): without one, the sheet opens on
+     * [mode] with "Add your OpenAI key in Settings first." and Open Settings, and [capture] (the camera, the picker, the
+     * microphone and its permission prompt) never runs, so no photo is taken and no voice note recorded only to be
+     * refused. With a key, [capture] runs at once.
+     */
+    fun requireKey(mode: AddMode, capture: () -> Unit) {
+        viewModelScope.launch {
+            if (!needsKey()) {
+                capture()
+                return@launch
+            }
+            val s = _state.value
+            if (s.phase.busy || s.committing) return@launch
+            retryAction = null
+            _state.update {
+                it.copy(
+                    sheetOpen = true,
+                    // An open review stays; the tab moves only where that review shows (Speak always does, D19).
+                    mode = if (it.review == null || it.review.showsOn(mode)) mode else it.mode,
+                    phase = AddPhase.Failed(AddProblem.AI, message = LlmError.NotConfigured("no key").friendlyMessage, needsSettings = true),
+                )
             }
         }
     }
 
-    /** A photo from the camera or the picker: read the handwriting. The capture file is deleted after reading. */
+    /** True when no OpenAI key is set, so Snap and Speak would only be refused ([requireKey]). */
+    suspend fun needsKey(): Boolean = !hasKey()
+
+    /** v1 name for [send] from the sheet. */
+    fun submitText() = send(AddOrigin.SHEET)
+
+    /** "As typed" (Write tab): no AI; the offline parse commits at once. */
+    fun addAsTyped() {
+        val s = _state.value
+        val text = s.text.trim()
+        if (text.isEmpty() || s.phase.busy || s.committing || s.review != null || work?.isActive == true) return
+        retryAction = null
+        commitTyped(text, noKey = false)
+    }
+
+    /** v1 name for [addAsTyped]. */
+    fun addTyped() = addAsTyped()
+
+    /** The note under review goes back to editing (the Write review's pencil): the review is dropped, the text kept. */
+    fun editNote() {
+        stopWork()
+        _state.update { it.cleared().copy(mode = AddMode.WRITE) }
+    }
+
+    /** v1 name for [editNote]. */
+    fun startOver() = editNote()
+
+    /* ---------------- Snap ---------------- */
+
+    /**
+     * A photo from the camera or the picker: the sheet opens on Snap with the polaroid being read. A review she has not
+     * committed is never dropped for it (the Snap tab offers no photo while one is open), so a stray result is discarded.
+     */
     fun onPhoto(uri: Uri) {
         val s = _state.value
-        if (s.phase.busy || s.committing) {
+        if (s.phase.busy || s.committing || s.review != null) {
             appScope.launch { photos.discard(uri) }
             return
         }
         work?.cancel()
         retryAction = null
-        _state.update { it.cleared().copy(mode = AddMode.SNAP, photo = uri, phase = AddPhase.Thinking(ItemSource.PHOTO)) }
+        _state.update {
+            it.cleared().copy(
+                sheetOpen = true, mode = AddMode.SNAP, phase = AddPhase.Thinking(ItemSource.PHOTO),
+                photo = SnapPhoto(thumb = null, takenAt = clock()),
+            )
+        }
         work = viewModelScope.launch {
             val bytes = try {
                 photos.jpegBytes(uri)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
-                fail(ScreenText.PHOTO_UNREADABLE)
+                photoUnreadable()
                 return@launch
             } catch (e: RuntimeException) {
-                fail(ScreenText.PHOTO_UNREADABLE)
+                photoUnreadable()
                 return@launch
             } finally {
                 withContext(NonCancellable) { photos.discard(uri) }
             }
-            runIngest(IngestInput.Image(bytes), ItemSource.PHOTO, plainLines = null, recipe = false)
+            val thumb = try {
+                thumbs(bytes)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            _state.update { it.copy(photo = it.photo?.copy(thumb = thumb)) }
+            runPhotoIngest(bytes)
         }
     }
 
-    fun cameraUnavailable() = fail(ScreenText.CAMERA_UNAVAILABLE, mode = AddMode.SNAP)
+    fun cameraUnavailable() = fail(AddProblem.CAMERA_UNAVAILABLE, mode = AddMode.SNAP, open = true)
 
-    /** Call once RECORD_AUDIO is granted (rememberAddSources does the asking). */
+    /** The photo could not be opened: no polaroid stays behind, so the Snap tab offers another photo (chip and pill). */
+    private fun photoUnreadable() {
+        _state.update { it.copy(photo = null, committing = false, phase = AddPhase.Failed(AddProblem.PHOTO_UNREADABLE)) }
+    }
+
+    /* ---------------- Speak ---------------- */
+
+    /**
+     * Call once RECORD_AUDIO is granted (the route asks): the sheet opens on Speak with the cassette recording ("clunk"
+     * + KEYBOARD_TAP). With a review open (a photo's, D19, or a note's or an earlier voice note's) the recording adds to
+     * it as heard rows, de-duplicated, so nothing she has not committed is lost; the tab stays where it is.
+     */
     fun startRecording() {
         val s = _state.value
         if (s.phase.busy || s.committing) return
@@ -216,20 +373,30 @@ class AddViewModel(
         try {
             r.start()
         } catch (e: IOException) {
-            fail(ScreenText.MIC_UNAVAILABLE, mode = AddMode.SPEAK)
+            fail(AddProblem.MIC_UNAVAILABLE, mode = AddMode.SPEAK, open = true)
             return
         } catch (e: RuntimeException) {
-            fail(ScreenText.MIC_UNAVAILABLE, mode = AddMode.SPEAK)
+            fail(AddProblem.MIC_UNAVAILABLE, mode = AddMode.SPEAK, open = true)
             return
         }
         recorder = r
+        feedback.cue(Cue.CASSETTE)
         val started = clock()
-        _state.update { it.cleared().copy(mode = AddMode.SPEAK, phase = AddPhase.Recording(0, 0f)) }
+        val merging = s.review != null
+        _state.update {
+            val base = if (merging) it else it.cleared()
+            base.copy(
+                sheetOpen = true,
+                mode = if (merging && it.mode != AddMode.WRITE) it.mode else AddMode.SPEAK,
+                phase = AddPhase.Recording(0, 0f),
+                transcript = null,
+            )
+        }
         meter = viewModelScope.launch {
             val levels = ArrayDeque<Float>()
             while (true) {
                 delay(LEVEL_POLL_MS)
-                val level = r.level()
+                val level = r.level().coerceIn(0f, 1f)
                 levels.addLast(level)
                 if (levels.size > METER_SAMPLES) levels.removeFirst()
                 _state.update { it.copy(phase = AddPhase.Recording(clock() - started, level, levels.toList())) }
@@ -241,25 +408,26 @@ class AddViewModel(
         }
     }
 
-    fun micDenied() = fail(ScreenText.MIC_DENIED, mode = AddMode.SPEAK)
+    fun micDenied() = fail(AddProblem.MIC_DENIED, mode = AddMode.SPEAK, open = true)
 
-    /** "Done" while recording (also on Lifecycle ON_STOP): stop, transcribe, then ingest the transcript. */
+    /** The stop sticker (also on Lifecycle ON_STOP): stop ("clunk"), transcribe, then read the transcript. */
     fun stopRecording() {
         val r = recorder ?: return
         recorder = null
         meter?.cancel()
         meter = null
+        feedback.cue(Cue.CASSETTE)
         _state.update { it.copy(phase = AddPhase.Transcribing) }
         work = viewModelScope.launch {
             val file = r.stop()
             if (file == null) {
-                fail(ScreenText.TOO_SHORT, mode = AddMode.SPEAK)
+                fail(AddProblem.TOO_SHORT, mode = _state.value.mode)
                 return@launch
             }
             val bytes = try {
                 withContext(ioDispatcher) { file.readBytes() }
             } catch (e: IOException) {
-                fail(ScreenText.TOO_SHORT, mode = AddMode.SPEAK)
+                fail(AddProblem.TOO_SHORT, mode = _state.value.mode)
                 return@launch
             } finally {
                 withContext(NonCancellable + ioDispatcher) { file.delete() }
@@ -273,59 +441,144 @@ class AddViewModel(
         if (recorder != null) stopRecording()
     }
 
-    /** Cancel button while busy: stops the call or the recording and returns to the start (text kept). */
+    /* ---------------- the review ---------------- */
+
+    /** Cancel while busy: stops the call or the recording; a review that was already there stays. */
     fun cancel() {
         stopWork()
-        _state.update { it.copy(phase = AddPhase.Idle, committing = false) }
+        _state.update { it.copy(phase = it.restingPhase(), committing = false) }
     }
 
+    /** A keep switch (§4.17): a pantry row switched on is added this time only; the pantry never changes. */
     fun toggleKeep(key: Int) {
-        _state.update { s -> s.copy(preview = s.preview.map { if (it.key == key) it.copy(keep = !it.keep) else it }) }
+        _state.update { s ->
+            val review = s.review ?: return@update s
+            s.copy(review = review.copy(rows = review.rows.map { if (it.key == key && it.canKeep) it.copy(keep = !it.keep) else it }))
+        }
     }
 
-    /** "Try again" after a retryable failure (the photo / recording bytes are still in memory). */
+    /**
+     * "OK" under a review with nothing she could switch on (an answer with no items, or only names already on her
+     * list): the names already there pop on the list (rule 7, "Milk is already on your list"); otherwise the sheet closes
+     * and the draft stays.
+     */
+    fun acknowledge() {
+        val s = _state.value
+        val review = s.review ?: return
+        if (s.committing || s.phase.busy) return
+        if (review.rows.any { it.skipReason == SkipReason.ALREADY_ON_LIST }) commit() else closeSheet()
+    }
+
+    /** The thinking box's capsule popped for [revealId] ("pon!" + CONFIRM, §14.3): once per reveal, never on a replay. */
+    fun capsulePopped(revealId: Long) {
+        if (poppedReveals.add(revealId)) feedback.cue(Cue.CAPSULE_POP)
+    }
+
+    /** The sheet finished revealing [revealId] (steps, lines, fan-out): it never replays for that answer. */
+    fun revealFinished(revealId: Long) {
+        _state.update { s ->
+            val review = s.review ?: return@update s
+            if (revealId in review.revealed) s else s.copy(review = review.copy(revealed = review.revealed + revealId))
+        }
+    }
+
+    /** "Try again" after a retryable failure (the photo or recording bytes are still in memory). */
     fun retry() {
         val action = retryAction ?: return
         if (_state.value.phase.busy) return
         action()
     }
 
-    /** "Add as plain lines" after a failed AI call: OfflineParser on the text or transcript, then the preview. */
+    /**
+     * "Add as plain lines" after a failed AI call (ARCHITECTURE §10.4): the note (or the transcript) split into lines with
+     * no AI (OfflineParser), then a review, so she can switch off any fragment before it lands ("oh and frozen corn" is
+     * a spoken sentence, not a name). A note's lines open the Write tab's card, a voice note's the Speak tab's Heard
+     * tray; with a review already open the transcript's lines join it as heard rows (D19). The rows commit as TYPED, so
+     * the ones with no aisle are placed in the background after "Stick all".
+     */
     fun usePlainLines() {
         val s = _state.value
         if (s.phase.busy || s.committing) return
-        val text = (if (s.mode == AddMode.SPEAK) s.transcript else s.text)?.takeIf { it.isNotBlank() } ?: return
-        work?.cancel()
+        val voice = s.transcript?.takeIf { it.isNotBlank() && (s.mode != AddMode.WRITE) }
+        val text = voice ?: s.sentText ?: s.text
+        if (text.isBlank()) return
         retryAction = null
+        work?.cancel()
         work = viewModelScope.launch {
-            val ctx = store.current().ingestContext(targetListId())
-            showPreview(OfflineParser.parse(text, catalog, ctx), ctx, ItemSource.TYPED, message = null, sources = emptyList(), skipped = emptyList())
+            val st = store.current()
+            val ctx = st.ingestContext(targetListId())
+            val lines = plainLines(text, ctx)
+            if (voice != null && _state.value.review != null) {
+                appendHeard(lines, st, ctx, steps = emptyList(), typed = true)
+            } else {
+                val source = if (voice != null) ItemSource.VOICE else ItemSource.TYPED
+                val review = AddReview(
+                    id = ids.incrementAndGet(),
+                    source = source,
+                    rows = AddRules.rows(lines, ctx.aisles, st.store.aisleStyles, RowBatch.MAIN, firstKey = 0).map { it.copy(typed = true) },
+                    steps = emptyList(),
+                    plain = true,
+                )
+                _state.update {
+                    it.copy(
+                        sheetOpen = true, phase = AddPhase.Preview, review = review, committing = false,
+                        mode = if (source == ItemSource.VOICE) AddMode.SPEAK else AddMode.WRITE,
+                    )
+                }
+            }
         }
     }
 
-    /** "Start over" from the preview or a failure: back to the start of the current mode (text kept). */
-    fun startOver() {
-        stopWork()
-        _state.update { it.cleared() }
+    /**
+     * The offline parse of [text] for a review: every line, a name already unchecked on the list marked "already on your
+     * list" (rule 7: it pops on commit and is never added twice; a checked one stays a row and revives).
+     */
+    private fun plainLines(text: String, ctx: IngestContext): List<ProposedItem> {
+        val unchecked = ctx.existingNames.mapTo(HashSet()) { normalizeName(it) }
+        return OfflineParser.parse(text, catalog, ctx.copy(existingNames = emptyList())).map {
+            if (normalizeName(it.name) in unchecked) it.copy(skipReason = SkipReason.ALREADY_ON_LIST) else it
+        }
     }
 
-    /** Moves the voice transcript into the Write tab so the user can fix it before sending. */
-    fun editTranscript() {
-        val transcript = _state.value.transcript ?: return
-        stopWork()
-        _state.update { it.cleared().copy(mode = AddMode.WRITE, text = transcript) }
-    }
-
-    /** "Add N items": commits the kept preview items in the app scope; [AddEvent.Added] closes the sheet. */
+    /**
+     * "Stick all n on my list": commits the kept rows in the app scope; the sheet closes once they are saved. Rows
+     * already on her list go along so their stickers pop (rule 7); they are never added twice.
+     */
     fun commit() {
         val s = _state.value
-        if (s.phase != AddPhase.Preview || s.committing) return
-        // The model's own order (the preview is sorted by aisle only for display).
-        val kept = s.preview.filter { it.keep }.sortedBy { it.key }.map { it.item }
-        if (kept.isEmpty()) return
-        val source = s.previewSource ?: ItemSource.AI_TEXT
+        val review = s.review ?: return
+        if (s.committing || s.phase.busy) return
+        // The answer's rows, then the heard rows (D19), each in row order; plain lines commit as TYPED (sorted later).
+        val rows = review.rows.filter { it.keep || it.skipReason == SkipReason.ALREADY_ON_LIST }.sortedBy { it.key }
+        if (rows.isEmpty()) return
         _state.update { it.copy(committing = true) }
-        appScope.launch { commitItems(targetListId(), kept, source) }
+        val batches = rows
+            .groupBy { row -> if (row.typed) ItemSource.TYPED else if (row.batch == RowBatch.HEARD) ItemSource.VOICE else review.source }
+            .map { (source, group) -> source to group.map { it.item } }
+        // A note's review (its answer or its plain lines) used the draft: it clears once the rows are on the list.
+        val clearsText = review.source == ItemSource.AI_TEXT || review.source == ItemSource.TYPED
+        appScope.launch { commitItems(targetListId(), batches, noKey = false, clearsText = clearsText) }
+    }
+
+    /** The toast's Undo for [commitId]: removes exactly the items that commit added and checks the revived ones again. */
+    fun undo(commitId: Long) {
+        val record = synchronized(undoRecords) { undoRecords.remove(commitId) } ?: return
+        appScope.launch {
+            val now = clock()
+            try {
+                store.update { st ->
+                    var next = st
+                    for (id in record.added) next = next.removeItem(record.listId, id, now)
+                    for ((index, before) in record.revived) {
+                        next = next.removeItem(record.listId, before.id, now).restoreItem(record.listId, before, index, now)
+                    }
+                    next
+                }
+                _events.send(AddEvent.Undone(commitId))
+            } catch (e: IOException) {
+                _events.send(AddEvent.SaveFailed)
+            }
+        }
     }
 
     override fun onCleared() {
@@ -335,28 +588,49 @@ class AddViewModel(
 
     /* ---------------- internals ---------------- */
 
-    private fun ingest(input: IngestInput, source: ItemSource, plainLines: String?, recipe: Boolean) {
-        work?.cancel()
-        work = viewModelScope.launch { runIngest(input, source, plainLines, recipe) }
-    }
-
-    private suspend fun runIngest(input: IngestInput, source: ItemSource, plainLines: String?, recipe: Boolean) {
-        retryAction = null
+    private suspend fun runTextIngest(text: String, origin: AddOrigin) {
         _state.update {
             it.copy(
-                phase = AddPhase.Thinking(source, recipe),
-                preview = emptyList(), message = null, sources = emptyList(), skipped = emptyList(), previewSource = null,
+                phase = AddPhase.Thinking(ItemSource.AI_TEXT), origin = origin, sentText = text, review = null,
+                photo = null, transcript = null, mode = if (origin == AddOrigin.SHEET) AddMode.WRITE else it.mode,
             )
         }
-        val ctx = store.current().ingestContext(targetListId())
+        // §15 "loader labels once": the bar's Send became the capsule (the focused node is gone), so TalkBack hears what
+        // is happening. The sheet's thinking box says it through its own polite headline.
+        if (origin == AddOrigin.BAR) announcer.polite(words(R.string.add_thinking_reading))
+        val st = store.current()
+        val ctx = st.ingestContext(targetListId())
         val result = try {
-            assistant.ingest(input, ctx)
+            assistant.ingest(IngestInput.Text(text), ctx)
         } catch (e: LlmError) {
-            retryAction = { ingest(input, source, plainLines, recipe) }
-            fail(e, canUsePlainLines = plainLines != null)
+            retryAction = { send(origin) }
+            failAi(e, canUsePlainLines = true, mode = AddMode.WRITE)
             return
         }
-        showPreview(result.items, ctx, source, result.message.ifBlank { null }, result.sources, result.skippedDuplicates)
+        if (AddRules.isQuickAdd(result, text)) {
+            // Rule 4: small and sure (nothing skipped), so it commits at once; a checked name revives (rule 7).
+            feedback.cue(Cue.CAPSULE_POP)
+            _state.update { it.copy(committing = true, phase = AddPhase.Idle) }
+            val listId = targetListId()
+            appScope.launch { commitItems(listId, listOf(ItemSource.AI_TEXT to result.items), noKey = false, clearsText = true) }
+            return
+        }
+        // Rule 5: review in the sheet's Write tab, the thinking box first.
+        showReview(result, ItemSource.AI_TEXT, query = text, st = st, ctx = ctx, mode = AddMode.WRITE)
+    }
+
+    private suspend fun runPhotoIngest(bytes: ByteArray) {
+        _state.update { it.copy(phase = AddPhase.Thinking(ItemSource.PHOTO)) }
+        val st = store.current()
+        val ctx = st.ingestContext(targetListId())
+        val result = try {
+            assistant.ingest(IngestInput.Image(bytes), ctx)
+        } catch (e: LlmError) {
+            retryAction = { work = viewModelScope.launch { runPhotoIngest(bytes) } }
+            failAi(e, canUsePlainLines = false, mode = AddMode.SNAP)
+            return
+        }
+        showReview(result, ItemSource.PHOTO, query = null, st = st, ctx = ctx, mode = AddMode.SNAP)
     }
 
     private suspend fun transcribe(bytes: ByteArray) {
@@ -365,16 +639,156 @@ class AddViewModel(
             assistant.transcribe(AudioClip(bytes), keywords())
         } catch (e: LlmError) {
             retryAction = { work = viewModelScope.launch { transcribe(bytes) } }
-            fail(e, canUsePlainLines = false)
+            failAi(e, canUsePlainLines = false, mode = _state.value.mode)
             return
         }
         if (transcript.isEmpty) {
-            fail(ScreenText.NOTHING_HEARD, mode = AddMode.SPEAK)
+            fail(AddProblem.NOTHING_HEARD, mode = _state.value.mode)
             return
         }
         val text = transcript.text.trim()
         _state.update { it.copy(transcript = text) }
-        runIngest(IngestInput.Transcript(text), ItemSource.VOICE, plainLines = text, recipe = looksLikeRecipe(text))
+        runVoiceIngest(text)
+    }
+
+    private suspend fun runVoiceIngest(text: String) {
+        _state.update { it.copy(phase = AddPhase.Thinking(ItemSource.VOICE)) }
+        val st = store.current()
+        val ctx = st.ingestContext(targetListId())
+        val result = try {
+            assistant.ingest(IngestInput.Transcript(text), ctx)
+        } catch (e: LlmError) {
+            retryAction = { work = viewModelScope.launch { runVoiceIngest(text) } }
+            failAi(e, canUsePlainLines = true, mode = _state.value.mode)
+            return
+        }
+        val review = _state.value.review
+        if (review != null) {
+            // D19: Speak after Snap (or after a note, or a second voice note) appends a batch to the same preview,
+            // merged and de-duplicated; what she has not committed stays.
+            appendHeard(result.items, st, ctx, AddRules.thinkingSteps(result))
+        } else {
+            showReview(result, ItemSource.VOICE, query = text, st = st, ctx = ctx, mode = AddMode.SPEAK)
+        }
+    }
+
+    /** D19: [items] join the open review as a heard batch; [typed] rows came from plain lines and commit as TYPED. */
+    private fun appendHeard(items: List<ProposedItem>, st: AppState, ctx: IngestContext, steps: List<ThinkingStep>, typed: Boolean = false) {
+        _state.update { s ->
+            val review = s.review ?: return@update s.copy(phase = AddPhase.Idle)
+            val fresh = AddRules.newHeard(review.rows.map { it.item.name }, items)
+            val firstKey = (review.rows.maxOfOrNull { it.key } ?: -1) + 1
+            val rows = AddRules.rows(fresh, ctx.aisles, st.store.aisleStyles, RowBatch.HEARD, firstKey).map { it.copy(typed = typed) }
+            s.copy(
+                phase = AddPhase.Preview,
+                review = review.copy(
+                    rows = review.rows + rows,
+                    heardId = ids.incrementAndGet(),
+                    heardSteps = steps,
+                    heardFresh = rows.mapTo(HashSet()) { it.key },
+                ),
+            )
+        }
+    }
+
+    private fun showReview(result: IngestResult, source: ItemSource, query: String?, st: AppState, ctx: IngestContext, mode: AddMode) {
+        val review = AddRules.review(ids.incrementAndGet(), result, source, query, ctx.aisles, st.store.aisleStyles)
+        _state.update { it.copy(sheetOpen = true, mode = mode, phase = AddPhase.Preview, review = review, committing = false) }
+    }
+
+    /**
+     * Rules 2 and "As typed": the offline parse commits at once (duplicates included, so they pop, rule 7), in [appScope]:
+     * nothing she does next (a new note, closing the sheet, a photo) can cancel the save or the aisle sort after it.
+     */
+    private fun commitTyped(text: String, noKey: Boolean) {
+        _state.update { it.copy(committing = true) }
+        appScope.launch {
+            val listId = targetListId()
+            val ctx = store.current().ingestContext(listId).copy(existingNames = emptyList())
+            val items = OfflineParser.parse(text, catalog, ctx)
+            commitItems(listId, listOf(ItemSource.TYPED to items), noKey = noKey, clearsText = true)
+        }
+    }
+
+    /**
+     * The shared commit (§6.2 "Commit"), always in [appScope]: rarity rolls (egg 6), addItems (duplicates pop, checked
+     * ones revive; Q8), the commit event (toast, pops 80 ms apart, Undo), the sheet closes, the SurpriseEngine hears of
+     * the new rows (eggs 3, 9, 17), the icon cascade, and typed rows without an aisle are placed in the background (a
+     * network call with a key). The add flows are free again as soon as the rows are saved: the sort never holds them.
+     */
+    private suspend fun commitItems(listId: String, batches: List<Pair<ItemSource, List<ProposedItem>>>, noKey: Boolean, clearsText: Boolean) {
+        val now = clock()
+        val items = batches.flatMap { (source, proposed) -> proposed.map { it.toGroceryItem(newId(), now, source) } }
+        var outcome = AddOutcome.NONE
+        var before: List<GroceryItem> = emptyList()
+        // Egg 6: only a new sticker rolls (optional and pantry rows she switched on too); a revived row or one already
+        // there keeps its own. Remembered per id, so the roll is the same however often the update runs.
+        val rolled = HashMap<String, Rarity>()
+        val after = try {
+            store.update { st ->
+                before = st.list(listId)?.items.orEmpty()
+                val (next, o) = st.addItems(listId, items, now)
+                outcome = o
+                o.added.fold(next) { acc, id ->
+                    val rarity = rolled.getOrPut(id) { surprises.rollRarity() }
+                    if (rarity == Rarity.NONE) acc else acc.setRarity(listId, id, rarity)
+                }
+            }
+        } catch (e: IOException) {
+            retryAction = {
+                _state.update { it.copy(committing = true) }
+                appScope.launch { commitItems(listId, batches, noKey, clearsText) }
+            }
+            _state.update { it.copy(committing = false, phase = AddPhase.Failed(AddProblem.SAVE_FAILED, retryable = true)) }
+            _events.send(AddEvent.SaveFailed)
+            return
+        }
+        val list = after.list(listId)
+        val now2 = list?.items.orEmpty().associateBy { it.id }
+        val added = outcome.added.mapNotNull(now2::get)
+        val revived = outcome.revived.mapNotNull(now2::get)
+        val already = outcome.alreadyThere.mapNotNull(now2::get)
+        val revivedBefore = outcome.revived.mapNotNull { id -> before.withIndex().firstOrNull { it.value.id == id } }
+        val commitId = ids.incrementAndGet()
+        if (added.isNotEmpty() || revived.isNotEmpty()) {
+            synchronized(undoRecords) {
+                undoRecords[commitId] = UndoRecord(listId, added.map { it.id }, revivedBefore)
+                while (undoRecords.size > MAX_UNDO) undoRecords.remove(undoRecords.keys.first())
+            }
+        }
+        val aisleTitle = added.singleOrNull()?.let { item ->
+            after.store.aisles().firstOrNull { it.id == item.aisleId }?.displayName().orEmpty()
+        }
+        val commit = AddCommit(
+            id = commitId,
+            listId = listId,
+            listTitle = list?.title.orEmpty(),
+            added = added,
+            alreadyThere = already,
+            revived = revived,
+            aisleTitle = aisleTitle,
+            asTypedNoKey = noKey && added.isNotEmpty(),
+        )
+        _state.update {
+            it.cleared().copy(
+                sheetOpen = false,
+                text = if (clearsText) "" else it.text,
+                mode = it.mode,
+            )
+        }
+        _events.send(AddEvent.Committed(commit))
+        if (added.isEmpty()) return
+        surprises.onCommitted(added)
+        icons.submit(added)
+        val unsorted = added.filter { it.source == ItemSource.TYPED && it.aisleId == null }.map { it.id }
+        if (unsorted.isNotEmpty()) {
+            val report = aisleSync.sortItems(unsorted)
+            val error = report.error
+            // No key means "AI is off": typed items simply stay in Everything else, no need to nag.
+            if (error != null && error !is LlmError.NotConfigured) {
+                _events.send(AddEvent.SortFailed(error.friendlyMessage, report.leftUnsorted))
+            }
+        }
     }
 
     /** Transcription vocabulary: names on the target list and learned names (core caps it at 100). */
@@ -384,40 +798,7 @@ class AddViewModel(
         return names.distinct().take(MAX_KEYWORDS)
     }
 
-    private fun showPreview(
-        items: List<ProposedItem>,
-        ctx: IngestContext,
-        source: ItemSource,
-        message: String?,
-        sources: List<WebSource>,
-        skipped: List<String>,
-    ) {
-        val aisles = ctx.aisles.associateBy { it.id }
-        // Phase-0 bridge until WP7's recipe card: rows already on the list are shown as "skipped" names only,
-        // and optional or pantry rows start switched off (§4.17).
-        val rows = items.filter { it.skipReason != SkipReason.ALREADY_ON_LIST }.mapIndexed { i, item ->
-            val aisle = item.aisleId?.let(aisles::get)
-            PreviewItemUi(
-                key = i,
-                item = item,
-                keep = item.skipReason == SkipReason.NONE,
-                aisleTitle = aisle?.name ?: ListGrouping.UNSORTED_TITLE,
-                icon = if (item.iconFit == IconFit.PENDING) IconRef(catalog.fallbackFor(item.icon)) else IconRef(item.icon),
-                aisleIndex = aisle?.let { it.position - 1 } ?: -1,
-            )
-        }.sortedWith(compareBy({ it.aisleIndex }, { it.key }))
-        _state.update {
-            it.copy(
-                phase = AddPhase.Preview, preview = rows, message = message, sources = sources, skipped = skipped,
-                previewSource = source, committing = false,
-            )
-        }
-    }
-
-    /**
-     * The list items go to: the one the sheet opened on, else the current list. The fallback covers
-     * a camera result that a fresh VM receives after process death before ListRoute attaches the list.
-     */
+    /** The list items go to: the one shown, else the current list (a camera result after process death). */
     private suspend fun targetListId(): String {
         _state.value.listId.takeIf { it.isNotEmpty() }?.let { return it }
         val current = store.current().currentListId
@@ -425,47 +806,34 @@ class AddViewModel(
         return _state.value.listId
     }
 
-    /** Commit procedure (§10.4): addItems -> icons.submit(added) -> sortItems for typed items left Unsorted. */
-    private suspend fun commitItems(listId: String, proposed: List<ProposedItem>, source: ItemSource) {
-        // One timestamp for the batch: equal addedAt keeps the model's order inside each aisle.
-        val now = clock()
-        val items = proposed.map { it.toGroceryItem(newId(), now, source) }
-        val after = try {
-            // TODO(WP7): use the AddOutcome (alreadyThere pops, revived un-checks; §6.2 rule 7).
-            store.update { it.addItems(listId, items, now).first }
-        } catch (e: IOException) {
-            retryAction = {
-                _state.update { it.copy(committing = true) }
-                appScope.launch { commitItems(listId, proposed, source) }
-            }
-            _state.update { it.copy(committing = false, phase = AddPhase.Failed(ScreenText.SAVE_FAILED, true, false, false)) }
-            return
-        }
-        val added = items.filter { after.findItem(it.id) != null }
-        _state.update { it.copy(text = "", committing = false) }
-        _events.send(if (added.isEmpty()) AddEvent.Message(ScreenText.NOTHING_NEW) else AddEvent.Added(added.size, listId))
-        if (added.isEmpty()) return
-        icons.submit(added)
-        val unsorted = added.filter { it.source == ItemSource.TYPED && it.aisleId == null }.map { it.id }
-        if (unsorted.isNotEmpty()) {
-            val report = aisleSync.sortItems(unsorted)
-            val error = report.error
-            // No token means "AI is off": typed items simply stay in Unsorted, no need to nag.
-            if (error != null && error !is LlmError.NotConfigured) {
-                _events.send(AddEvent.SortFailed(error.friendlyMessage, report.leftUnsorted))
-            }
+    private fun failAi(e: LlmError, canUsePlainLines: Boolean, mode: AddMode) {
+        val settingsError = e is LlmError.NotConfigured || e is LlmError.Unauthorized
+        _state.update {
+            it.copy(
+                sheetOpen = true,
+                mode = mode,
+                committing = false,
+                phase = AddPhase.Failed(
+                    problem = AddProblem.AI,
+                    message = e.friendlyMessage,
+                    // A key problem keeps what she captured (the photo or recording bytes, the note): once the key is
+                    // fixed in Settings, Try again picks up where it stopped.
+                    retryable = e.retryable || (settingsError && retryAction != null),
+                    canUsePlainLines = canUsePlainLines,
+                    needsSettings = settingsError,
+                ),
+            )
         }
     }
 
-    private fun fail(e: LlmError, canUsePlainLines: Boolean) {
+    private fun fail(problem: AddProblem, mode: AddMode? = null, open: Boolean = false) {
         _state.update {
-            it.copy(phase = AddPhase.Failed(e.friendlyMessage, e.retryable, canUsePlainLines, e.needsSettings()), committing = false)
-        }
-    }
-
-    private fun fail(message: String, mode: AddMode? = null) {
-        _state.update {
-            it.copy(mode = mode ?: it.mode, phase = AddPhase.Failed(message, retryable = false, canUsePlainLines = false, needsSettings = false))
+            it.copy(
+                mode = mode ?: it.mode,
+                sheetOpen = it.sheetOpen || open,
+                committing = false,
+                phase = AddPhase.Failed(problem),
+            )
         }
     }
 
@@ -479,22 +847,33 @@ class AddViewModel(
         retryAction = null
     }
 
-    /** Back to the start of the current mode: no preview, transcript, photo or failure (text kept). */
+    /** Back to the start: no review, photo, transcript or failure (the draft text and the tab stay). */
     private fun AddUiState.cleared() = copy(
-        phase = AddPhase.Idle, transcript = null, photo = null, preview = emptyList(), message = null,
-        sources = emptyList(), skipped = emptyList(), previewSource = null, committing = false,
+        phase = AddPhase.Idle, review = null, photo = null, transcript = null, sentText = null, committing = false,
     )
+
+    /** The phase to rest in when nothing runs: the review if there is one. */
+    private fun AddUiState.restingPhase(): AddPhase = if (review != null) AddPhase.Preview else AddPhase.Idle
+
+    /** What survives process death. */
+    private data class Saved(val listId: String, val mode: AddMode, val text: String, val sheetOpen: Boolean)
+
+    /** What one commit's Undo takes back: the new rows, and the revived rows as they were (with their indices). */
+    private class UndoRecord(val listId: String, val added: List<String>, val revived: List<IndexedValue<GroceryItem>>)
 
     companion object {
         private const val LEVEL_POLL_MS = 100L
         private const val METER_SAMPLES = 28
         private const val MAX_KEYWORDS = 100
+        private const val MAX_UNDO = 8
         private const val KEY_LIST = "add.listId"
         private const val KEY_MODE = "add.mode"
         private const val KEY_TEXT = "add.text"
+        private const val KEY_SHEET = "add.sheet"
 
         fun factory(c: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
+                val app = this[APPLICATION_KEY]
                 AddViewModel(
                     store = c.store,
                     assistant = c.assistant,
@@ -507,27 +886,25 @@ class AddViewModel(
                     newId = c::newId,
                     appScope = c.appScope,
                     savedState = createSavedStateHandle(),
+                    hasKey = { c.settings.current().hasToken },
+                    surprises = c.surprises,
+                    feedback = c.feedback,
+                    announcer = c.announcer,
+                    words = { id -> app?.getString(id).orEmpty() },
                 )
             }
         }
     }
 }
 
-private val URL = Regex("""https?://""", RegexOption.IGNORE_CASE)
-private val LIST_SEPARATORS = Regex("""[,;\n]""")
-private val RECIPE_WORDS = listOf(
-    "recipe", "ingredient", "ingrédient", "from scratch", "to make", "for making", "homemade", "home made",
-    "dinner", "lunch", "breakfast", "brunch", "supper", "party", "potluck", "bake ", "baking", "cook",
-    "for a ", "for the ", "for my ", "for some ", "stuff for", "things for", "what i need",
-)
-
-/**
- * Guess for the "thinking" label only: a URL or dish-like phrasing ("ingredients for pancakes",
- * "stuff for tacos") reads as a recipe; a list with several separators reads as a plain list.
- */
-internal fun looksLikeRecipe(text: String): Boolean {
-    val t = " " + text.lowercase().trim() + " "
-    if (URL.containsMatchIn(t)) return true
-    if (LIST_SEPARATORS.findAll(t).count() >= 2) return false
-    return RECIPE_WORDS.any { it in t }
+/** The polaroid's copy of the photo: decoded at most [THUMB_EDGE] px on its long edge, off the main thread. */
+internal suspend fun decodeThumb(bytes: ByteArray): ImageBitmap? = withContext(Dispatchers.Default) {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= THUMB_EDGE) sample *= 2
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
 }
+
+private const val THUMB_EDGE = 480

@@ -1,46 +1,160 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Add flow strings: WP7 (add bar, Add sheet; docs/DESIGN_STICKER.md §21). -->
+    <!-- Add flow strings: WP7 (the add bar, the FAB, the letter-set Add sheet; docs/DESIGN_STICKER.md §6.2, §16).
+         Copy says plain true things (§16): no object remembers, forgets, wants or feels. Hearts and stars are drawn
+         as inline vectors (PicnicText), never glyphs. -->
 
-    <string name="add_title">Add to your list</string>
-    <string name="add_title_preview">Here\'s what I found</string>
-    <string name="add_mode_write">Write</string>
-    <string name="add_mode_snap">Snap</string>
-    <string name="add_mode_speak">Speak</string>
-    <string name="add_write_placeholder">milk, 2 lemons, eggs…\nor \"ingredients for pancakes from scratch\"</string>
-    <string name="add_write_ai">Sort it out</string>
-    <string name="add_write_typed">Add as typed</string>
-    <string name="add_write_hint">\"Sort it out\" can look up recipes on the web and puts everything in your aisles. \"Add as typed\" adds each line as it is.</string>
-    <string name="add_snap_camera">Take a photo</string>
-    <string name="add_snap_gallery">Choose a photo</string>
-    <string name="add_snap_hint">A clear, well-lit photo of a handwritten list works best.</string>
-    <string name="add_speak_start">Tap to speak</string>
-    <string name="add_speak_again">Record again</string>
-    <string name="add_speak_hint">Say your list out loud, like \"milk, two lemons and stuff for tacos\".</string>
-    <string name="add_speak_listening">Listening…</string>
-    <string name="add_speak_done">Done</string>
+    <!-- The add bar (§6.2, §4.8, §15) -->
+    <string name="add_bar_placeholder">Write a note…</string>
+    <string name="add_bar_example">“pancakes from scratch”</string>
+    <string name="add_bar_doodle">♡ picnic day ☆</string>
+    <string name="add_bar_field">Write a note</string>
+    <string name="add_bar_snap">Snap a photo of a list</string>
+    <string name="add_bar_speak">Speak a voice note</string>
+    <string name="add_bar_send">Send</string>
+    <string name="add_bar_choose_photo">Choose a photo</string>
+    <string name="add_bar_stop">Stop reading</string>
+    <string name="add_fab">Add to your list</string>
+
+    <!-- The sheet's index tabs (§4.16) -->
+    <string name="add_tab_write">Write</string>
+    <string name="add_tab_snap">Snap</string>
+    <string name="add_tab_speak">Speak</string>
+    <string name="add_tab_recording">recording</string>
+
+    <!-- Write (§6.2) -->
+    <string name="add_note_label">Note:</string>
+    <string name="add_note_field">Note</string>
+    <string name="add_as_typed">As typed</string>
+    <string name="add_send">Send</string>
+    <string name="add_edit_note">Change the note</string>
+    <string name="add_stop">Stop</string>
+
+    <!-- The thinking box (§4.18, D16): only real steps -->
+    <string name="add_thinking_reading">Reading your note…</string>
+    <string name="add_thinking_recipe">Looking up a recipe…</string>
+    <string name="add_step_web">Searched the web: “%1$s”</string>
+    <!-- When the answer names no query (the step never quotes her note: it may not be what was searched) -->
+    <string name="add_step_web_plain">Searched the web</string>
+    <plurals name="add_step_compared">
+        <item quantity="one">Compared %1$d recipe</item>
+        <item quantity="other">Compared %1$d recipes</item>
+    </plurals>
+    <string name="add_step_makes">makes\u00A0%1$d</string>
+    <string name="add_step_makes_alone">Makes\u00A0%1$d</string>
+    <string name="add_step_pantry">Checked your pantry\u00A0· left\u00A0out\u00A0%1$d</string>
+    <plurals name="add_step_sorted">
+        <item quantity="one">Checked your list, sorted into %1$d aisle</item>
+        <item quantity="other">Checked your list, sorted into %1$d aisles</item>
+    </plurals>
+    <string name="add_step_checked">Checked your list</string>
+
+    <!-- The recipe card (§4.17) -->
+    <string name="add_card_kitchen">from the kitchen of ♡ the web</string>
+    <string name="add_card_web">web search</string>
+    <plurals name="add_card_recipes">
+        <item quantity="one">%1$d recipe</item>
+        <item quantity="other">%1$d recipes</item>
+    </plurals>
+    <string name="add_card_kept">%1$d of %2$d kept</string>
+    <string name="add_tray_kept">%1$d of %2$d kept</string>
+    <string name="add_reason_already">already on your list</string>
+    <string name="add_reason_pantry">in your pantry</string>
+    <string name="add_reason_optional">optional · skipped</string>
+    <string name="add_edit_pantry">Edit my pantry</string>
+    <string name="add_sources">Sources</string>
+    <string name="add_everything_else">Everything else</string>
+    <plurals name="add_stick">
+        <item quantity="one">Stick %1$d on my list</item>
+        <item quantity="other">Stick all %1$d on my list</item>
+    </plurals>
+    <string name="add_stick_none">Switch one on to add it</string>
+    <!-- The same, short, for very large text (the pill keeps one line; TalkBack hears the long form) -->
+    <plurals name="add_stick_short">
+        <item quantity="one">Stick %1$d</item>
+        <item quantity="other">Stick all %1$d</item>
+    </plurals>
+    <string name="add_stick_none_short">Switch one on</string>
+    <string name="add_reading_progress">Reading… %1$d of %2$d</string>
+    <string name="add_reading">Reading…</string>
+
+    <!-- Snap (§4.19) -->
+    <string name="add_snap_reading">Reading your list…</string>
+    <string name="add_snap_caption">fridge list · %1$s</string>
+    <string name="add_snap_popped">Popped into stickers</string>
+    <string name="add_snap_popped_count">%1$d of %2$d</string>
+    <string name="add_snap_take">Take a photo</string>
+    <string name="add_snap_choose">Choose a photo</string>
+    <string name="add_snap_hint">A clear, well-lit photo of a paper list works best.</string>
+    <string name="add_snap_photo">Your photo</string>
+    <string name="add_snap_no_photo">no photo yet</string>
+    <string name="add_snap_crossed">crossed out</string>
+
+    <!-- Speak (§4.20; the prompt after a photo is item 333's copy) -->
+    <string name="add_speak_after_photo">Anything else? Say it out loud.</string>
+    <string name="add_speak_prompt">Say your list out loud.</string>
+    <string name="add_speak_record">Record a voice note</string>
+    <string name="add_speak_stop">Stop recording</string>
+    <string name="add_speak_transcribing">Writing down what you said…</string>
+    <string name="add_speak_recording">Recording, %1$s</string>
     <string name="add_speak_limit">Recordings stop by themselves after 5 minutes.</string>
-    <string name="add_busy_transcribing">Transcribing…</string>
-    <string name="add_busy_photo">Reading your handwriting…</string>
-    <string name="add_busy_recipe">Looking up a recipe…</string>
-    <string name="add_busy_voice">Turning that into a list…</string>
-    <string name="add_busy_list">Sorting your list into aisles…</string>
-    <string name="add_busy_slow">Still working. A recipe with a web search can take up to a minute.</string>
+    <string name="add_speak_quoted">“%1$s”</string>
+    <plurals name="add_speak_heard">
+        <item quantity="one">Heard · %1$d sticker</item>
+        <item quantity="other">Heard · %1$d stickers</item>
+    </plurals>
+    <plurals name="add_speak_heard_more">
+        <item quantity="one">Heard · %1$d more sticker</item>
+        <item quantity="other">Heard · %1$d more stickers</item>
+    </plurals>
+
+    <!-- Failures (rule 6, §6.12) -->
     <string name="add_retry">Try again</string>
-    <string name="add_open_settings">Open Settings</string>
     <string name="add_plain_lines">Add as plain lines</string>
-    <string name="add_transcript_label">You said</string>
-    <string name="add_transcript_quoted">\"%1$s\"</string>
-    <string name="add_transcript_edit">Fix the words</string>
-    <string name="add_preview_plain_note">Added line by line, without AI. Items without an aisle get sorted in the background.</string>
-    <string name="add_preview_empty">Nothing new to add.</string>
-    <string name="add_preview_keep">will be added</string>
-    <string name="add_preview_skip">left out</string>
-    <string name="add_preview_skipped">Already on your list: %1$s</string>
-    <string name="add_preview_sources">Sources</string>
-    <string name="add_start_over">Start over</string>
-    <plurals name="add_commit">
-        <item quantity="one">Add %1$d item</item>
-        <item quantity="other">Add %1$d items</item>
+    <string name="add_open_settings">Open Settings</string>
+    <!-- Microphone permission turned off for good: Android's page for this app, where she can allow it -->
+    <string name="add_open_phone_settings">Open phone settings</string>
+    <!-- The same, short, for very large text (the pill keeps one line; TalkBack hears the long form) -->
+    <string name="add_plain_lines_short">Plain lines</string>
+    <string name="add_open_settings_short">Settings</string>
+    <string name="add_open_phone_settings_short">Phone settings</string>
+    <!-- A review with no rows and no message from the answer (rule 4): says so plainly above "OK" -->
+    <string name="add_nothing_note">Nothing to add from that note.</string>
+    <string name="add_nothing_photo">Nothing to add from that photo.</string>
+    <!-- Under a review with nothing to switch on (an empty answer, or only names already on the list) -->
+    <string name="add_ok">OK</string>
+    <string name="add_problem_ai">Something went wrong reading that. Try again.</string>
+    <string name="add_problem_photo">Couldn\'t open that photo. Try another one?</string>
+    <string name="add_problem_camera">There\'s no camera app on this phone. Choose a photo instead.</string>
+    <string name="add_problem_mic">The microphone isn\'t available right now. Try again in a moment.</string>
+    <string name="add_problem_mic_denied">Speak needs the microphone. You can allow it in the phone\'s settings.</string>
+    <string name="add_problem_too_short">That was too short to hear. Try again.</string>
+    <string name="add_problem_nothing">Didn\'t catch that. Try again a little closer to the mic.</string>
+    <string name="add_problem_save">Couldn\'t save. Try again.</string>
+
+    <!-- Toasts after a commit (§4.15, §16) -->
+    <string name="add_toast_added_one">Added %1$s to %2$s ♡</string>
+    <plurals name="add_toast_added_many">
+        <item quantity="one">Added %1$d item to %2$s ♡</item>
+        <item quantity="other">Added %1$d items to %2$s ♡</item>
+    </plurals>
+    <string name="add_toast_already_one">%1$s is already on your list</string>
+    <plurals name="add_toast_already_many">
+        <item quantity="one">%1$d item is already on your list</item>
+        <item quantity="other">%1$d items are already on your list</item>
+    </plurals>
+    <string name="add_toast_back_one">%1$s is back on your list</string>
+    <plurals name="add_toast_back_many">
+        <item quantity="one">%1$d item is back on your list</item>
+        <item quantity="other">%1$d items are back on your list</item>
+    </plurals>
+    <string name="add_toast_as_typed">Added as typed · add your OpenAI key for smart sorting</string>
+    <string name="add_toast_shiny">★ shiny!</string>
+    <string name="add_toast_nothing">Nothing to add</string>
+    <string name="add_toast_undo">Undo</string>
+    <string name="add_toast_join">%1$s · %2$s</string>
+    <plurals name="add_toast_sort_failed">
+        <item quantity="one">%1$s · %2$d left in Everything else</item>
+        <item quantity="other">%1$s · %2$d left in Everything else</item>
     </plurals>
 </resources>

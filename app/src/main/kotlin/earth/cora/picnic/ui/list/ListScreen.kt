@@ -31,7 +31,6 @@ import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxState
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,8 +63,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.add.AddEvent
-import earth.cora.picnic.ui.add.AddSheetRoute
+import earth.cora.picnic.ui.add.AddMode
+import earth.cora.picnic.ui.add.AddSheetHost
 import earth.cora.picnic.ui.add.AddViewModel
+import earth.cora.picnic.ui.add.rememberAddFlows
+import earth.cora.picnic.ui.add.toastText
 import earth.cora.picnic.ui.common.HintText
 import earth.cora.picnic.ui.common.ScreenScaffold
 import earth.cora.picnic.ui.edit.EditItemSheet
@@ -126,9 +128,10 @@ fun ListRoute(
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val resources = LocalResources.current
-    var showAdd by rememberSaveable { mutableStateOf(false) }
     var showLists by rememberSaveable { mutableStateOf(false) }
-    val addSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // WP7's add flows; WP5 docks the add bar and the FAB here (phase 1 keeps v1's Add button).
+    val addState by addVm.state.collectAsStateWithLifecycle()
+    val addFlows = rememberAddFlows(addVm)
 
     fun snack(message: String, action: String? = null, onAction: () -> Unit = {}) {
         scope.launch {
@@ -140,13 +143,6 @@ fun ListRoute(
                 duration = if (action != null) SnackbarDuration.Long else SnackbarDuration.Short,
             )
             if (result == SnackbarResult.ActionPerformed) onAction()
-        }
-    }
-
-    fun closeAddSheet() {
-        scope.launch { addSheetState.hide() }.invokeOnCompletion {
-            showAdd = false
-            addVm.close()
         }
     }
 
@@ -168,24 +164,24 @@ fun ListRoute(
     LaunchedEffect(addVm) {
         addVm.events.collect { event ->
             when (event) {
-                is AddEvent.Added -> {
-                    closeAddSheet()
-                    snack(resources.getQuantityString(R.plurals.list_added, event.count, event.count))
-                }
-                is AddEvent.Message -> {
-                    closeAddSheet()
-                    snack(event.text)
+                is AddEvent.Committed -> {
+                    val commit = event.commit
+                    if (commit.canUndo) {
+                        snack(commit.toastText(resources), resources.getString(R.string.list_undo)) { addVm.undo(commit.id) }
+                    } else {
+                        snack(commit.toastText(resources))
+                    }
                 }
                 is AddEvent.SortFailed -> snack(
                     resources.getQuantityString(R.plurals.list_sort_failed, event.leftUnsorted, event.friendlyMessage, event.leftUnsorted),
                 )
+                AddEvent.SaveFailed, is AddEvent.Undone, AddEvent.FocusField -> Unit
             }
         }
     }
-    // After process death the sheet comes back open with a fresh AddViewModel (its draft restored):
-    // give it its list without resetting it, since a camera result may already be being read.
-    LaunchedEffect(showAdd, state.listId) {
-        if (showAdd && state.listId.isNotEmpty()) addVm.attachList(state.listId)
+    // The add flows send to the list on screen.
+    LaunchedEffect(state.listId) {
+        if (state.listId.isNotEmpty()) addVm.showList(state.listId)
     }
 
     val actions = remember(vm, addVm) {
@@ -195,10 +191,7 @@ fun ListRoute(
             onToggleSection = vm::toggleSection,
             onClearChecked = vm::clearChecked,
             onOpenEdit = vm::openEdit,
-            onAdd = {
-                addVm.open(vm.state.value.listId)
-                showAdd = true
-            },
+            onAdd = { addVm.openSheet(AddMode.WRITE, vm.state.value.listId) },
             onOpenAisles = onOpenAisles,
             onOpenSettings = onOpenSettings,
             onOpenLists = { showLists = true },
@@ -223,20 +216,15 @@ fun ListRoute(
 
     ListScreen(state = state, actions = actions, snackbarHostState = snackbar, showLists = showLists)
 
-    if (showAdd) {
-        AddSheetRoute(
-            vm = addVm,
-            sheetState = addSheetState,
-            onDismiss = {
-                showAdd = false
-                addVm.close()
-            },
-            onOpenSettings = {
-                closeAddSheet()
-                onOpenSettings()
-            },
-        )
-    }
+    AddSheetHost(
+        addFlows,
+        addState,
+        onOpenSettings = {
+            addVm.closeSheet()
+            onOpenSettings()
+        },
+        onEditPantry = null,
+    )
 }
 
 /**

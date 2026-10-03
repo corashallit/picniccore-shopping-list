@@ -82,6 +82,7 @@ class OpenAiGroceryAssistant(
                 requestId = result.requestId,
                 latencyMs = result.latencyMs,
                 webSearches = ResponsesOutput.webSearches(result.json),
+                searchQueries = ResponsesOutput.searchQueries(result.json),
                 usage = ResponsesOutput.usage(result.json),
             ),
             lines = if (input is IngestInput.Image) photoLines(wire.lines, processed.indexOf) else emptyList(),
