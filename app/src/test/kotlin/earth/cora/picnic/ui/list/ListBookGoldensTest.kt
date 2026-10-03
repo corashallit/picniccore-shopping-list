@@ -38,7 +38,7 @@ class ListBookGoldensTest {
             val clock = remember { MotionClock() }
             val dateOnPage = LocalDensity.current.fontScale <= 1.3f
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (!dateOnPage) BookDateCaption(b.dateLabel)
+                if (!dateOnPage) BookDateCaption(b.dateLabel, season = b.season)
                 StickerBook(b, BookPresentation.Identity, clock, width = 336.dp, collapsed = collapsed, dateOnPage = dateOnPage)
             }
         }
@@ -61,6 +61,21 @@ class ListBookGoldensTest {
 
     @Test
     fun bookGlow() = book("book_glow", ListFixture.ui(), ThemeVariant.Glow)
+
+    /** Items 146/153: PERFECT in Glow: the holo stamp page keeps the Day inks, the PER-FECT! hanko Day vermilion. */
+    @Test
+    fun bookPerfectGlow() = book("book_perfect_glow", ListFixture.ui(ListFixture.doneWithReceipt(), now = ListFixture.TRIP_START + 44 * ListFixture.MIN), ThemeVariant.Glow)
+
+    /** §7.3, egg 11: each seasonal sheet's pictogram after the date (Thanksgiving's pumpkin is the fixture's own). */
+    @Test
+    fun bookSeasonal() = compose.recordPiece("book_seasonal", pad = 12.dp) {
+        val clock = remember { MotionClock() }
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            for (season in earth.cora.picnic.core.calendar.Season.entries) {
+                StickerBook(ListFixture.ui(season = season).book!!, BookPresentation.Identity, clock, width = 336.dp, collapsed = season.ordinal % 2 == 1)
+            }
+        }
+    }
 
     @Test
     fun bookDusk() = book("book_dusk", ListFixture.ui(), ThemeVariant.Dusk)

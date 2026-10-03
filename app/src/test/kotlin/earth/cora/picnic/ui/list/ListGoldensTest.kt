@@ -85,7 +85,7 @@ class ListGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pri
     /** Item 98: the keyboard open (300 dp): the add bar rides on it and the book collapses. */
     @Test
     fun ime() {
-        val rig = ListRig()
+        val rig = ListRig().inSeason()
         compose.recordScreen(goldenName("list_ime", variant), variant, before = {
             compose.focusWithoutTouch(compose.onNodeWithTag(ADD_FIELD_TAG))
             val view = compose.activity.findViewById<android.view.ViewGroup>(android.R.id.content).getChildAt(0)
@@ -102,7 +102,7 @@ class ListGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pri
     /** Item 98: scrolled down past 140 dp: the add bar folded into the FAB, the bar and the book collapsed. */
     @Test
     fun fab() {
-        val rig = ListRig()
+        val rig = ListRig().inSeason()
         compose.recordScreen(goldenName("list_fab", variant), variant, settleMillis = 1500, before = {
             compose.onNodeWithTag(ListTags.LIST).performTouchInput { swipeUp(startY = bottom - 300f, endY = top + 40f, durationMillis = 900) }
             compose.waitForIdle()

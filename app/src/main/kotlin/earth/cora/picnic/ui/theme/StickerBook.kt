@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
@@ -58,7 +59,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -530,19 +530,18 @@ private fun MoreCircle(n: Int, size: Dp, modifier: Modifier) {
 @Composable
 fun DateTag(label: String, modifier: Modifier = Modifier, onPage: Boolean = false, season: Season? = null) {
     val c = PicnicTheme.colors
-    val k = if (onPage) 1f / LocalDensity.current.fontScale.coerceAtLeast(1f) else 1f
-    val style = PicnicTheme.type.label.copy(
-        color = c.ballpoint,
-        fontSize = (13f * k).sp,
-        lineHeight = ((if (onPage) 12f else 14f) * k).sp,
-        lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
-    )
+    val density = LocalDensity.current
+    val k = if (onPage) 1f / density.fontScale.coerceAtLeast(1f) else 1f
+    val style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = (13f * k).sp, lineHeight = (14f * k).sp)
+    // The lemon face holds the letters' own ink (cap tops to descenders, 0.92 em): 12 dp on the page, at least 14 dp
+    // elsewhere, growing with the text off the page.
+    val face = if (onPage) (DATE_TAG_ON_PAGE - 4f).dp else maxOf(14.dp, with(density) { (style.fontSize * GLYPH_SPAN_EM).toDp() } + 2.dp)
     val shape = RoundedCornerShape(topStart = 5.dp, bottomStart = 5.dp, topEnd = 9.dp, bottomEnd = 9.dp)
     Row(
         modifier
             .rotate(-2f)
             .decorative()
-            .then(if (onPage) Modifier.height(DATE_TAG_ON_PAGE.dp) else Modifier.heightIn(min = 18.dp))
+            .height(face + 4.dp)
             .hardShadow(shape, PicnicTheme.shadows)
             .clip(shape)
             .background(c.stickerWhite)
@@ -554,9 +553,25 @@ fun DateTag(label: String, modifier: Modifier = Modifier, onPage: Boolean = fals
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         DecorSticker("heart", size = 12.dp, shadow = false)
-        Text(label, style = style, maxLines = 1)
+        Text(label, style = style, maxLines = 1, modifier = Modifier.glyphsCentred(face, style.fontSize))
         if (season != null) SeasonMark(season, 12.dp)
     }
+}
+
+/**
+ * Zen Maru Gothic's letters run from the cap height (0.718 em) to the descenders (−0.199 em): 0.917 em of ink in a
+ * 1.448 em line. A tag face shorter than the line centres that ink, not the line box, so nothing is cut ([glyphsCentred]).
+ */
+private const val GLYPH_SPAN_EM: Float = 0.917f
+private const val GLYPH_CENTRE_EM: Float = (0.718f - 0.199f) / 2f
+
+/** Lays the text out [height] tall with its letters' ink centred in it (its first baseline placed by [GLYPH_CENTRE_EM]). */
+private fun Modifier.glyphsCentred(height: Dp, fontSize: androidx.compose.ui.unit.TextUnit): Modifier = layout { measurable, constraints ->
+    val p = measurable.measure(constraints.copy(minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity))
+    val h = height.roundToPx()
+    val baseline = p[androidx.compose.ui.layout.FirstBaseline]
+    val target = h / 2f + GLYPH_CENTRE_EM * fontSize.toPx()
+    layout(p.width, h) { p.place(0, kotlin.math.round(target - baseline).toInt()) }
 }
 
 /** The pictogram of a seasonal sheet (egg 11), in its season's ink: maple, pumpkin, ghost, snowflake, heart, envelope. */
@@ -882,11 +897,13 @@ private const val COLLAPSED_TWINS: Int = 6
  */
 @Composable
 fun BookDateCaption(label: String, modifier: Modifier = Modifier, season: Season? = null) {
+    // The heart and the season's mark keep their size beside the text as it grows (12 dp at 1.0).
+    val mark = with(LocalDensity.current) { 12.sp.toDp() }
     PadPatch(modifier.decorative()) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            DecorSticker("heart", size = 12.dp, shadow = false)
+            DecorSticker("heart", size = mark, shadow = false)
             Text(label, style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.onPad, fontSize = 13.sp))
-            if (season != null) SeasonMark(season, 12.dp)
+            if (season != null) SeasonMark(season, mark)
         }
     }
 }

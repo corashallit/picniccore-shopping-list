@@ -56,7 +56,8 @@ class BasketBadgeTest {
                 PicnicTheme {
                     // The numeral as the badge sets it, measured on its own.
                     val measurer = rememberTextMeasurer()
-                    val style = PicnicTheme.type.badgeNumeral.copy(fontSize = (13f * minOf(fontScale, BADGE_MAX_SCALE) / fontScale).sp)
+                    val sp = 13f * minOf(fontScale, BADGE_MAX_SCALE) / fontScale
+                    val style = PicnicTheme.type.badgeNumeral.copy(fontSize = sp.sp, lineHeight = (sp * 1.15f).sp)
                     for (n in counts) numerals[n] = measurer.measure(if (n > 99) "99+" else n.toString(), style).size
                     Row(
                         Modifier.testTag("badges").background(PicnicTheme.colors.binder).padding(start = 10.dp, end = 30.dp, top = 6.dp, bottom = 10.dp),

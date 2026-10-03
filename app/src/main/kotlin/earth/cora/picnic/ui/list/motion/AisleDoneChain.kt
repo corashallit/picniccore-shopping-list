@@ -331,7 +331,7 @@ private fun Badge(count: Int, look: AisleLook, basket: DpSize, tray: Boolean, po
     val measurer = rememberTextMeasurer(cacheSize = 4)
     val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
     val sp = 13f * minOf(fontScale, BADGE_MAX_SCALE) / fontScale
-    val style = PicnicTheme.type.badgeNumeral.copy(color = look.family.trace, fontSize = sp.sp)
+    val style = PicnicTheme.type.badgeNumeral.copy(color = look.family.trace, fontSize = sp.sp, lineHeight = (sp * 1.15f).sp)
     val shadow = PicnicTheme.shadows
     val label = if (count > 99) "99+" else count.toString()
     val layout = measurer.measure(label, style)

@@ -151,7 +151,21 @@ object ListFixture {
         return s
     }
 
-    /** The list's UI state for [state] at [now]. */
-    fun ui(state: AppState = state(), now: Long = NOW, busy: Set<String> = emptySet(), editingId: String? = null, bonusStage: Boolean = false): ListUiState =
-        buildListUiState(state, busy, hasToken = true, editingId = editingId, catalog = catalog, now = now, bonusStage = bonusStage)
+    /**
+     * The list's UI state for [state] at [now], with the eggs on: the seasonal sheet of [now]'s day in Toronto rides on
+     * the book (Appendix A: Sat 3 Oct falls in the Thanksgiving window, so the pumpkin), as the app shows it.
+     */
+    fun ui(
+        state: AppState = state(),
+        now: Long = NOW,
+        busy: Set<String> = emptySet(),
+        editingId: String? = null,
+        bonusStage: Boolean = false,
+        season: earth.cora.picnic.core.calendar.Season? = seasonAt(now),
+    ): ListUiState =
+        buildListUiState(state, busy, hasToken = true, editingId = editingId, catalog = catalog, now = now, bonusStage = bonusStage, season = season)
+
+    /** The seasonal sheet active on [now]'s day in Toronto (egg 11). */
+    fun seasonAt(now: Long): earth.cora.picnic.core.calendar.Season? =
+        earth.cora.picnic.core.calendar.Seasons.active(java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneId.of("America/Toronto")).toLocalDate())
 }

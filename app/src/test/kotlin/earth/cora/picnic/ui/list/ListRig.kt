@@ -172,6 +172,9 @@ class ListRig(
         words = ApplicationProvider.getApplicationContext<Context>()::getString,
     )
 
+    /** The eggs as the app shows them on [now]'s day (Appendix A: Thanksgiving's sheet, the pumpkin tape and pictogram). */
+    fun inSeason(): ListRig = apply { surprises.states.value = SurpriseState(season = ListFixture.seasonAt(now)) }
+
     /** The committed state now. */
     val app: AppState get() = (store.states as kotlinx.coroutines.flow.StateFlow<AppState>).value
 

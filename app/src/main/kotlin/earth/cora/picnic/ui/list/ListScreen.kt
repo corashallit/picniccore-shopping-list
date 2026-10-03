@@ -426,9 +426,9 @@ internal class TearToasts(private val resources: Resources, private val undo: (G
 
 /**
  * The stateless List screen. [engine] plays the chains ([MotionEngineHost] runs it here); [dock] is the docked add bar
- * (the app: WP7's AddDock; previews and goldens: the bar at rest), [dockHeight] its measured height (the toasts sit 20 dp
- * above it, the list's bottom padding is it + 26 dp) and [collapse] its fold rules (programmatic scrolls are ignored).
- * [eggs] is WP9's overlay slot.
+ * (the app: WP7's AddDock; previews and goldens: the bar at rest, wearing the tape of the season the book shows),
+ * [dockHeight] its measured height (the toasts sit 20 dp above it, the list's bottom padding is it + 26 dp) and
+ * [collapse] its fold rules (programmatic scrolls are ignored). [eggs] is WP9's overlay slot.
  */
 @Composable
 fun ListScreen(
@@ -442,7 +442,7 @@ fun ListScreen(
     listState: LazyListState = rememberLazyListState(),
     dockHeight: Dp = 84.dp,
     collapse: AddBarCollapseState? = null,
-    dock: @Composable BoxScope.() -> Unit = { StaticDock() },
+    dock: @Composable BoxScope.() -> Unit = { StaticDock(tape = AddRules.addBarTape(earth.cora.picnic.ui.eggs.SurpriseState(season = state.book?.season))) },
     eggs: @Composable BoxScope.() -> Unit = {},
     talkBackOverride: Boolean? = null,
 ) {

@@ -212,7 +212,13 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
 
     @Test
     fun basketShinyMini() = compose.recordPiece(name("basket_shiny_mini"), variant) {
-        AisleBasket(BasketKind.JAR_SHELF, minis(3, holo = 2), toGet = 1, state = BasketVisual(), size = BasketSize.Card, look = AisleLooks.of(5))
+        // The shiny one in plain view: alone and upright in the wicker basket, and as the newest of three on top.
+        // Stickers whose main colour is a big field, where the foil shows: an apple alone, and a milk bag as the newest of three.
+        fun mini(id: String, key: String, holo: Boolean = false) = BasketMini(id, IconRef(key), holo = holo)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AisleBasket(BasketKind.WICKER_PICNIC, listOf(mini("a", "apple", holo = true)), toGet = 1, state = BasketVisual(), size = BasketSize.Card, look = AisleLooks.of(1))
+            AisleBasket(BasketKind.FRUIT_CRATE, listOf(mini("b", "banana"), mini("c", "carrot"), mini("m", "milk_bag", holo = true)), toGet = 1, state = BasketVisual(), size = BasketSize.Card, look = AisleLooks.of(4))
+        }
     }
 
     @Test

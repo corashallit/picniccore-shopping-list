@@ -434,9 +434,10 @@ internal fun TrayHeader(
         val basketX = chevronX - px(4.dp) - basketM.width
         val start = px(TrayMetrics.border) + px(6.dp)
         val chip = measurables.firstOrNull { it.layoutId == "chip" }?.measure(Constraints())
-        val chipRoom = chip?.let { it.width + px(CHIP_GAP) } ?: 0
-        // The tab ends 8 dp before the store chip (or the basket, §4.10).
-        val tabMax = (basketX - px(8.dp) - chipRoom - start).coerceAtLeast(px(60.dp))
+        // The tab ends 8 dp before the store chip (or the basket, §4.10); a chip may run on to 2 dp from the basket's box
+        // (its art has its own margin), so a short name keeps its letters at large text ("Baking" at 1.3).
+        val tabEnd = if (chip != null) basketX - px(CHIP_TO_BASKET) - chip.width - px(CHIP_GAP) else basketX - px(8.dp)
+        val tabMax = (tabEnd - start).coerceAtLeast(px(60.dp))
         val tab = measurables.first { it.layoutId == "tab" }.measure(Constraints(maxWidth = tabMax))
         val doodle = measurables.firstOrNull { it.layoutId == "doodle" }?.measure(Constraints())
         val bee = measurables.firstOrNull { it.layoutId == "bee" }?.measure(Constraints())
@@ -460,6 +461,9 @@ internal fun TrayHeader(
 
 /** The room between the tray tab's end and the store chip (§4.10): 8 dp. */
 private val CHIP_GAP: Dp = 8.dp
+
+/** The least room between the store chip and the basket's box. */
+private val CHIP_TO_BASKET: Dp = 2.dp
 
 /** The bee flying a small figure 8 (3.2 s, 38 steps) over the current tray; still under reduced motion. Decorative. */
 @Composable
