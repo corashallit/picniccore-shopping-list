@@ -31,7 +31,7 @@ import java.util.EnumMap
 import java.util.concurrent.atomic.AtomicReference
 
 /*
- * Sounds and haptics as one service (docs/DESIGN_STICKER.md §14). Owner: WP10 (FeedbackGateTest, CueTableTest).
+ * Sounds and haptics as one service (docs/DESIGN_STICKER.md §14). Owner: WP10 (FeedbackGateTest, CueMapTest).
  * CONTRACT: [Feedback], [Cue], [Sound], [Haptic]. [AndroidFeedback] is the phone's implementation (AppContainer
  * builds it with [AndroidFeedback.create]); [NoOpFeedback] is for previews and screenshots; tests record cues
  * with FakeFeedback (test sources).

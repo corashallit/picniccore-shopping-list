@@ -57,6 +57,12 @@ class MotionGoldensTest(private val variant: ThemeVariant) {
         if (day) nextCard("nextcard_fs200", MotionFixture.pasta(), fontScale = 2f)
     }
 
+    /** Item 281 at font scale 1.3 (Day only): the long name and its chip whole. */
+    @Test
+    fun nextcardFs130() {
+        if (day) nextCard("nextcard_fs130", MotionFixture.pasta(), fontScale = 1.3f)
+    }
+
     /** Runs [state]'s last item to the celebration's start: returns the scene's t0. */
     private fun HarnessRig.toScene(last: String = "toothpaste"): Long {
         val t0 = tap(last)
@@ -136,6 +142,16 @@ class MotionGoldensTest(private val variant: ThemeVariant) {
         val s = rig.toScene()
         rig.advanceTo(s + 12600)
         rig.capture("celebration_summary_fs200")
+    }
+
+    /** Item 281: the summary at font scale 1.3 (Day only): nothing clips. */
+    @Test
+    fun celebrationSummaryFs130() {
+        if (!day) return
+        val rig = HarnessRig(compose, lastOne(), fontScale = 1.3f).start()
+        val s = rig.toScene()
+        rig.advanceTo(s + 12600)
+        rig.capture("celebration_summary_fs130")
     }
 
     /** Item 189: the shelf and the stamp card for 1, 8 and 20 stops (at the summary, top of the scene). */

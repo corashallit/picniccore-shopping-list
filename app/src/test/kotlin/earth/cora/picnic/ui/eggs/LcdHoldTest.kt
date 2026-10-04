@@ -2,16 +2,20 @@ package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.hatchPet
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.markFinaleShown
 import earth.cora.picnic.core.model.moveItemToAisle
 import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.platform.Cue
+import earth.cora.picnic.ui.add.ADD_FIELD_TAG
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
@@ -189,6 +193,48 @@ class LcdHoldTest {
         assertNotNull("the tear-off completed it: the receipt prints", r.eggs.receipt)
         assertEquals(23, r.eggs.receipt!!.receipt.stickers)
         assertEquals(1, r.feedback.count(Cue.PET_FED))
+    }
+
+    /**
+     * D21 (§13.2): the receipt belongs to the finished shop. Her Saturday shop is done and its finale has played; that
+     * afternoon she writes down the first things for next week in the add bar, which clears completedAt (the list has
+     * more to get). Holding the LCD still prints that shop's receipt, with the book's own stats and stops (the new
+     * things, one of them in a stop of its own, stay off it), and never hatches the pet.
+     */
+    @Test
+    fun receiptAfterLateAdd() {
+        val finale = PracticeFixture.TRIP_START + 42 * PracticeFixture.MIN
+        val r = EggRig(compose, fixture = completedFixture(41).markFinaleShown(listId, finale)).start()
+        r.advance(800)
+        // Five hours on, the same day (well inside the 12 h that start a new book).
+        r.clock.advance(5 * 3_600_000L)
+        val before = r.list.items.size
+        compose.onNodeWithTag(ADD_FIELD_TAG).performTextInput("tea, glitter glue")
+        r.frame()
+        compose.onNodeWithTag(ADD_FIELD_TAG).performImeAction()
+        var guard = 0
+        while (r.list.items.size < before + 2 && guard++ < 300) r.frame()
+        r.advance(1_500)
+        val list = r.list
+        assertEquals("both written down", before + 2, list.items.size)
+        assertEquals("the same book, not a new one", completedFixture(41).list(listId)!!.trip!!.id, list.trip!!.id)
+        assertNull("the late add re-opens the list", list.trip!!.completedAt)
+        assertNotNull("the finale has played", list.trip!!.finaleShownAt)
+        assertEquals("one of them in a stop the shop never had", 9, r.model.grouped().stops)
+        assertTrue("TalkBack's custom action follows", r.eggs.receiptReady)
+
+        r.hold()
+        val printed = r.eggs.receipt
+        assertNotNull("the hold prints the finished shop's receipt", printed)
+        assertEquals("the book's stickers", 24, printed!!.receipt.stickers)
+        assertEquals("the book's stops, not the list's", 8, printed.receipt.baskets)
+        assertEquals("the shop time frozen at its completion", 41, printed.receipt.minutes)
+        assertEquals(1, printed.receipt.shiny)
+        assertEquals(printed.receipt, r.list.trip!!.receipt)
+        assertEquals(1, r.feedback.count(Cue.RECEIPT_PRINT))
+        assertEquals("never the pet", 0, r.feedback.count(Cue.PET_FED))
+        assertFalse(r.eggs.pet)
+        assertFalse(r.list.trip!!.pet)
     }
 
     @Test

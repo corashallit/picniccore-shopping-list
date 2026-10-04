@@ -1126,12 +1126,12 @@ Core's own log messages (`LlmError.message`) are safe to log. The UI shows `frie
 
 The tool is **Roborazzi 1.76.0** with Robolectric 4.17, native graphics, Robolectric **SDK pinned to 36** (`app/src/test/resources/robolectric.properties`; SDK 37 crashes Espresso's input injection) and `--add-opens java.base/jdk.internal.access`. The skeleton runs `recordRoborazziDebug` successfully. Paparazzi 2.0.0-alpha also works, but it is alpha; don't mix the two.
 
-- **Art pass:** fixture goldens (the Appendix A "Saturday shop" fixture of DESIGN_STICKER) render at `w360dp-h760dp-xxhdpi` (the mockup's phone width, so the book has its 8 columns), with selected `w411dp-h891dp` variants named `…_w411`; names and the required set follow DESIGN_STICKER §20 and its Appendix C manifest (`GoldenCoverageTest`). Each package records only its own goldens.
+- **Art pass:** fixture goldens (the Appendix A "Saturday shop" fixture of DESIGN_STICKER) render at `w360dp-h760dp-xxhdpi` (the mockup's phone width, so the book has its 8 columns), with selected `w411dp-h891dp` variants named `…_w411`; names and the required set follow DESIGN_STICKER §20 and its Appendix C manifest (a reference: no test reads it). Each package records only its own goldens.
 - **Goldens** live in `app/src/test/screenshots/`. Previews (app-shell) are named `<Class>.<Function>.<Preview_name>.png`. Explicit screen tests (app-screens) are named `<screen>_<state>_<light|dark>.png`.
 - **Explicit screen tests.** Use `@RunWith(AndroidJUnit4::class)`, `@GraphicsMode(NATIVE)`, `@Config(qualifiers = "w411dp-h891dp-night-xxhdpi")` (or without `-night`) and `androidx.compose.ui.test.junit4.v2.createComposeRule`. Render the **stateless** `XxxScreen(state)`, then call `onRoot().captureRoboImage("src/test/screenshots/<name>.png")`.
 - **Qualifier order.** `night` comes before the density. The other order throws.
 - **States to cover:** List: empty; mixed sections with collapsed baskets (some items gotten; nothing gotten, an empty basket; a cleared aisle, a full basket), a drawing sparkle, a PENDING item and checked items; rows scrolled under a pinned band (`list_pinned`). Add sheet: write, thinking, preview with sources, failed with plain lines, and speak with a transcript. Edit sheet (with the icon grid). Aisles editor. Settings: no key, a key typed and shown, a saved key with a passing test, a failed test (a missing permission), and the "About your key" card scrolled into view.
-- **Commands.** Record locally with `recordRoborazziDebug`. CI runs `compareRoborazziDebug`, which doesn't fail, and uploads the diffs. Switch CI to `verifyRoborazziDebug` once the art settles.
+- **Commands.** Record locally with `recordRoborazziDebug`. CI runs `compareRoborazziDebug`, which doesn't fail, and uploads the diffs. It stays that way: moving CI to `verifyRoborazziDebug` (DESIGN_STICKER item 305) was retired on 4 October.
 
 ---
 

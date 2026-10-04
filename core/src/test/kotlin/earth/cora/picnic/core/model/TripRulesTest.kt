@@ -225,6 +225,29 @@ class TripRulesTest {
         assertFalse(TripRules.bookComplete(oops))
     }
 
+    /**
+     * D21 (§13.2): the receipt belongs to the finished shop. Holding the LCD prints it while the trip is complete or once
+     * its finale has played, so writing next week's items the same evening (which clears completedAt) never turns the
+     * hold back into the pet's. Before the finale an incomplete trip hatches the pet; without a trip nothing prints.
+     */
+    @Test
+    fun printsReceiptOnceTheShopIsFinished() {
+        val start = 1_000_000L
+        val base = AppState(lists = listOf(GroceryList("l1", "Groceries", 0, listOf(item("bread"), item("milk")))), currentListId = "l1")
+        assertFalse(TripRules.printsReceipt(base.list("l1")!!), "no trip")
+        val half = base.toggleChecked("l1", "bread", start)
+        assertFalse(TripRules.printsReceipt(half.list("l1")!!), "mid-shop: the pet")
+        val done = half.toggleChecked("l1", "milk", start + min)
+        assertTrue(TripRules.printsReceipt(done.list("l1")!!), "complete, finale not played yet")
+        val shown = done.markFinaleShown("l1", start + 2 * min)
+        val later = shown.addItems("l1", listOf(item("tea", addedAt = start + 5 * hour)), start + 5 * hour).first.list("l1")!!
+        assertNull(later.trip!!.completedAt, "the late add re-opens the list")
+        assertTrue(TripRules.printsReceipt(later), "the finished shop still prints its receipt")
+        // Before its finale a trip is finished only while it is complete: an un-check takes the receipt back to the pet.
+        val unchecked = done.toggleChecked("l1", "milk", start + 3 * min).list("l1")!!
+        assertFalse(TripRules.printsReceipt(unchecked), "un-checked before the finale: not finished")
+    }
+
     /** §0.4 Q9's add-side twin (item 315): the first add more than 12 h after the trip's last activity files the book. */
     @Test
     fun autoNewBookOnAdd() {

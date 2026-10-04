@@ -36,9 +36,9 @@ Working app name: **Kirakira Basket**. The launcher label is an open question (Q
 | Request | Answer | Section | Checklist |
 |---|---|---|---|
 | A per-trip **sticker book** at the top (like Firefly's charm bracelet): the sticker hops into the basket, then the same sticker appears by magic in the book. One book per trip. | The trip sticker book: a ring-bound mini album pinned under the app bar. Left page = the trip's stamp card, right page = one spot per item. Twin appears 320 ms after the landing. Filed into the album on "New trip". | §7 | 131–139, 141–165 |
-| **Every part of the spec works** (Cora could not print the LCD receipt) | Every interaction in §4 to §13 has a checklist item with an interaction test. The LCD hold is deterministic (trip complete = receipt, otherwise pet), and completion is an invariant of the state that every change recomputes, so a trip finished by a delete, a move or an undo still prints its receipt. A hidden **Surprise lab** lets anyone fire every egg on demand on a real phone, on a sandbox copy that never touches her lists. The mockup's generator and a real assertion suite move into the repo and gate sign-off, and the mockup stops offering anything that won't ship. | §7.1, §12, §13, §18.4 | 133, 154, 176, 228–229, 237–248, 250, 252–255, 257–258, 260, 265–270, 274, 310–312 |
+| **Every part of the spec works** (Cora could not print the LCD receipt) | Every interaction in §4 to §13 has a checklist item with an interaction test. The LCD hold is deterministic (shop finished = receipt, otherwise pet; D21), and completion is an invariant of the state that every change recomputes, so a trip finished by a delete, a move or an undo still prints its receipt. A hidden **Surprise lab** lets anyone fire every egg on demand on a real phone, on a sandbox copy that never touches her lists. The mockup's generator and a real assertion suite move into the repo and gate sign-off, and the mockup stops offering anything that won't ship. | §7.1, §12, §13, §18.4 | 133, 154, 176, 228–229, 237–248, 250, 252–255, 257–258, 260, 265–270, 274, 310–312 |
 | Full-screen animations are **too fast for their text** | One reading rule, `readHold(words) = max(floor, 1200 + 300 × words)` ms of stillness, measured from the moment the text is still (§9 defines "still"), on every text-bearing moment, with the words counted from the real text at run time. The Next card says only "NEXT" + the aisle tab and holds at least 2.6 s still (longer for long aisle names). The celebration shows one text beat at a time, each starting only after the previous one's hold; its length is computed (about 17 s for the fixture). Holds never shrink under reduced motion or Android's animation scales, and they respect Android's "Time to take action" setting. | §9, §10, §11 | 166–174, 180–188, 196 |
-| An **incredibly polished** app | No placeholder art or Material default survives; every state has a golden; motion is checked frame by frame. | all | 235, 303–310, 337, 338 |
+| An **incredibly polished** app | No placeholder art or Material default survives; every state has a golden; motion is checked frame by frame. | all | 235, 303, 306–308, 310, 337, 338 |
 
 ### 0.3 Contract decisions (resolving gap-analysis D1 to D25)
 
@@ -64,7 +64,7 @@ Working app name: **Kirakira Basket**. The launcher label is an open question (Q
 | D18 | Pull to refresh re-syncs **icons and aisles**: `icons.resumePending()` and `aisleSync.sortItems` for items still in "Everything else". There are no prices; the copy never mentions them. |
 | D19 | Snap and Speak run one after the other: after a Snap preview, Speak appends a second batch to the same preview (merged, de-duplicated). |
 | D20 | The app's label and wordmark come from `R.string.app_name` / `wordmark`; applicationId stays `earth.cora.picnic`. |
-| D21 | Holding the LCD: **trip complete → receipt (egg 18); otherwise → pet (egg 15).** The pet branch can never swallow the receipt, and because completion is a property of the state (§7.1), not of the gesture that finished the list, a trip completed by a delete, a move or an undo prints too. |
+| D21 | Holding the LCD: **shop finished → receipt (egg 18); otherwise → pet (egg 15).** The shop is finished while the trip is complete, and stays finished once its finale has played (`finaleShownAt != null`), even when she writes something down later (that clears `completedAt`, §7.1): the receipt belongs to the finished shop, never to the list's new items. The pet branch can never swallow the receipt, and because completion is a property of the state (§7.1), not of the gesture that finished the list, a trip completed by a delete, a move or an undo prints too. The receipt's stats and stops come from the trip's book (`TripRules.bookItems`: the stickers in the book; items written down after the finale stay off it) and its shop time is the one frozen at the first completion (§13.2). (Decided 4 October.) |
 | D22 | Egg 8's cat curls up in an aisle basket that is still empty when every other stop of the trip is done, or when a trip is closed with that basket empty. |
 | D23 | The stamp page holds one circle per **stop** (aisle with items this trip; "Everything else" is a stop while it has items, its capsule stamp first, §4.10); it adapts to 1–24 stops (§7.4). |
 | D24 | The written 1.2 s cap on the Next card is lifted (reading rule, §9). |
@@ -112,6 +112,7 @@ Smaller conflicts between the written spec, the mockup and the app, and how this
 | Copy: the Speak prompt | **"Anything the paper forgot? Say it." is cut** | It was filler. The prompt after a photo is now **"Anything else? Say it out loud."** That was feedback on one line, not a rule to enforce with a test (Cora, 4 October); §16 keeps a plain-copy guideline for whoever writes copy. Item 333 is retired. |
 | Pinned current aisle (bug in mockup r9) | **The lemon ring never breaks** | When the current aisle's tray is pinned while its rows scroll, the pinned plate carries the tray's 3 dp lemon ring (top and sides) and its offset shadow, so the yellow border runs unbroken from the plate down the tray. The plate's solid backing (R6) still hides the rows. This holds in Day, Glow and the other variants, and in the mockup too. |
 | Egg 1 trigger | **One tap on the sun** (Cora, 4 October: more likely to be found) | A single tap on the sun sticker beside the title (Day or Golden) turns the binder Dusk; the seven taps within 1.5 s of each other are gone. The rest of the egg stays (§12.2, §12.3): the 1.2 s sunset and moonrise, a tap on the moon to undo, the static Glow moon, the reduced-motion fade, nothing with Easter eggs off; another tap while the change plays does nothing. The About page hints "tap the sun?" and the lab's line reads "Tap the sun by the title." The Surprise lab's own unlock (7 taps on the version line, §6.9) is unchanged. Item 238. |
+| Tests and CI | **Only what is likely to find a problem in this release** (Cora, 4 October) | "CI time isn't the bottleneck, it's CI implementation time - your time is more valuable." Integration tests and CI work stay to what has a high probability of finding issues in the current release, and the effort goes into the app: no new CI gates, no polishing of test infrastructure for its own sake. Items 304 (`GoldenCoverageTest` and its manifest are removed), 305 (CI keeps `compareRoborazziDebug`, which uploads the diffs and does not fail on one) and 309 (no APK size check) are retired. Appendix C stays as the list of goldens, for recording and review. |
 
 ## 1. Concept
 
@@ -1304,10 +1305,10 @@ No flash, iris, shake, ride, confetti, curl or glints. At L + 1350 the **summary
 | 12 | **Golden hour** | Within 30 min before sunset at Toronto (43.65 N, 79.38 W; NOAA algorithm, local zone; 18:57 on 2026-10-03), Day variant only | The Golden variant: binder warms to apricot, every hard shadow lengthens to (+3, +4) dp in rosy `#E59A7A`, the sun sticker sinks 0.5 dp for each minute that passes; back to Day after sunset | — | `SunClockTest` (±3 min against a table), `EggGoldenTest`, golden `list_golden_day` |
 | 13 | **Gashapon jackpot** | A live-drawn sticker finishes for an item with no catalog fit (APPROXIMATE), **1 in 100** (injected `Random`) | While drawing, the row's capsule is **gold**; when the sticker arrives the capsule wobbles twice (300 ms each), pops ("pon!", CONFIRM) and a 60 dp **JACK / POT!** hanko slams beside it (holds 1.8 s); the new sticker is holo with a "jackpot!" chip, everywhere (and collected as a holo custom sticker, §7.2) | `rarity = JACKPOT` | `EggJackpotTest` |
 | 14 | **Perfect week** | Four trips in a row filed **complete** (every item checked), counted across all lists in filing order; a finished-but-incomplete trip resets the streak (definitions in §7.8) | The stamp page of every book is holo for 7 days (`perfectUntil`); the sakura picnic sheet unlocks in the album (Picnic tab) and the perfect-weeks card shows "week 4 of 4 · sakura sheet unlocked" with its PER-FECT! hanko. After **ten** finished trips in total (any trip filed with at least one sticker): a toast "Your album's back pocket opened! · Look" → the album opens to the back pocket with a page curl revealing "sticker sheet 2 of 2" (closing the loop the empty state's sheet 1 of 2 starts) | album `perfectStreak`, `perfectUntil`, `finishedTrips`, `sheets`, `backPocketOpen` | `PerfectWeekTest` |
-| 15 | **LCD pet** | Press and hold the LCD for the hold threshold (§4.3) while the trip is **not** complete. With **no trip** yet, the bee visits for 1.5 s with "FED" and leaves; nothing is persisted (it moves in for good only on a trip) | A pixel bee (9 × 7 px sprite, bobbing 2 steps per second) moves into the LCD for this trip; the LCD reads "FED" for 1.5 s, then the count (the star hides while the pet lives there). **Every landing feeds it**: a 2-frame chomp (520 ms). Finish the list and it dances 4 frames in the celebration. Holding again shows "FED" again. | `Trip.pet` | `LcdHoldTest.holdBeforeCompleteHatchesPet`, `LcdHoldTest.holdWithNoTripPersistsNothing` |
+| 15 | **LCD pet** | Press and hold the LCD for the hold threshold (§4.3) while the shop is **not** finished (the trip is not complete and its finale has not played, D21). With **no trip** yet, the bee visits for 1.5 s with "FED" and leaves; nothing is persisted (it moves in for good only on a trip) | A pixel bee (9 × 7 px sprite, bobbing 2 steps per second) moves into the LCD for this trip; the LCD reads "FED" for 1.5 s, then the count (the star hides while the pet lives there). **Every landing feeds it**: a 2-frame chomp (520 ms). Finish the list and it dances 4 frames in the celebration. Holding again shows "FED" again. | `Trip.pet` | `LcdHoldTest.holdBeforeCompleteHatchesPet`, `LcdHoldTest.holdWithNoTripPersistsNothing` |
 | 16 | **Rainy day** | Weather surprises on, and today's Environment Canada forecast for Toronto has rain or showers (probability ≥40 % or the words "rain" / "showers"); fetched at most every 3 h when the list opens, the cache surviving restarts; silent offline (§12.4) | A sakura umbrella sticker shelters the add bar's left end (magic appear); the raindrop washi replaces the tape; the toast says "Rain on the way · bring the tote!" once per day | DataStore `weather_fetched_at`, `weather_cache`, `rain_toast_day` | `EggRainTest` (fake `WeatherSource`) |
 | 17 | **Ant parade** | Once per app process, when the list holds ≥3 **unchecked** distinct keys tagged `picnic` (watermelon, lemonade, strawberry, sliced bread, baguette, deli meat, potato chips, cherries, grapes, picnic blanket, paper plates, paper cups, plastic cutlery, sparkling water, cookies, butter tarts); not while the IME is open | Five ants march along the add bar's perforation, right to left, the middle one (30 dp) carrying a strawberry, the others 22 dp, in 2-frame steps (21 steps over 4.2 s, 0.42 s apart); they never cross the text field and never walk on food | — | `EggAntsTest` |
-| 18 | **LCD receipt** | Press and hold the LCD for the hold threshold after the trip is **complete**, however it was completed (§7.1; D21: the pet branch never runs then) | The LCD prints the trip's receipt sticker: §13.2 | `Trip.receipt`, `receiptSaved`; album book `receipt` | `LcdHoldTest.holdAfterCompletePrintsReceipt`, `ReceiptTest`, goldens `receipt_printed_day`, `receipt_printed_glow` |
+| 18 | **LCD receipt** | Press and hold the LCD for the hold threshold once the shop is **finished**: the trip is complete, however it was completed (§7.1), or its finale has played, even if she has written more down since (D21: the pet branch never runs then) | The LCD prints the trip's receipt sticker: §13.2 | `Trip.receipt`, `receiptSaved`; album book `receipt` | `LcdHoldTest.holdAfterCompletePrintsReceipt`, `LcdHoldTest.receiptAfterLateAdd`, `ReceiptTest`, goldens `receipt_printed_day`, `receipt_printed_glow` |
 
 **Eggs hiding in the screens** (so they are found): the sun by the title (1), any folded basket (2), the maple tin in the fixture is a shiny pull (6), the season's tape (11), the album's perfect-weeks card (14), the LCD (15, 18). The About page hints "tap the sun?" in Hachi Maru, and the empty state's sheet art is captioned "sticker sheet 1 of 2" (egg 14's back pocket holds sheet 2 of 2); the empty state's doodle stays "♡ let's go shopping ♡".
 
@@ -1355,18 +1356,20 @@ Goldens are `egg_<n>_end_<variant>`, captured at the listed time on the test clo
 - **Modes** (`LcdMode`): `Count` ("10/24★"); `Pet` (bee + count); `Text` (FED 1.5 s, SNACK? 2.6 s, BONUS★, SYNC 1.5 s, PRINT★ 1.96 s: while the receipt prints, until it settles and its slot line goes, §13.2); `Ok` (OK, OK., OK.. ticking every 0.6 s); `Timer` ("0:12"); `Page` ("2/3").
 - The star becomes a moon in Dusk and Glow.
 - While a word stands in for the count (`Text` or `Pet` on the app bar: PRINT★, FED, SYNC), the chip is never narrower than the count it replaces and the word is centred, so the binder top's words beside it never re-flow.
-- TalkBack: `Count` → "10 of 24 in the basket"; while showing a word it keeps the count label (words are decorative); the long-press is exposed as a custom action only after the trip is complete and with Easter eggs on ("Print the trip receipt") — the pet stays a secret.
+- TalkBack: `Count` → "10 of 24 in the basket"; while showing a word it keeps the count label (words are decorative); the long-press is exposed as a custom action only once the hold prints the receipt (the shop is finished, D21) and with Easter eggs on ("Print the trip receipt") — the pet stays a secret.
 
 ### 13.2 The receipt (egg 18)
 
-**Content** (21 columns, dot leaders; values from the trip):
+**When it prints** (D21): holding the LCD prints the receipt whenever the current trip's shop is finished, that is while the trip is complete (`completedAt != null`) or once its finale has played (`finaleShownAt != null`). The second case is the evening after a Saturday shop: she writes down next week's first things, which clears `completedAt` (§7.1), but the hold still prints the receipt of the shop she finished, never the pet. Otherwise the hold hatches the pet (egg 15).
+
+**Content** (21 columns, dot leaders; values from the trip's book, `TripRules.bookItems`: the stickers in the book; items written down after the finale are not on it):
 
 ```
 KIRAKIRA ★ BASKET          ← app wordmark, uppercase (follows Q1)
 SAT 3 OCT · HILLCREST      ← the trip's date (§7.1) · the store word, fitted to 21 columns (below)
 ─────────────────────      ← dashed rule
-STICKERS ......... 24      ← checked items on the trip
-BASKETS ........... 8      ← stops
+STICKERS ......... 24      ← the stickers in the book (checked items)
+BASKETS ........... 8      ← the book's stops (a stop holding only items written down after the finale is not one)
 TIME ......... 41 MIN      ← shop time, frozen at the first completion (§7.1); "--" for a migrated trip
 SHINY ............. 1      ← shiny + jackpot stickers
 ─────────────────────
@@ -2273,8 +2276,8 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 262. **[WP4]** `LcdText` prints every string the app can produce (counts to 999/999, timers, words, receipt lines with any store name, months, weekdays) with no missing glyph; accents fold. — *Test:* `LcdGlyphsTest` (unit)
 263. **[WP4]** The LCD modes render, and the accessible label stays the count while a word shows. — *Test:* `LcdChipTest.modesAndLabels` (Robolectric), golden `lcd_modes`
 264. **[WP4]** The LCD ticks in 2 steps over 160 ms, the star blinks 3 % of every 4 s, and the star is a moon in Dusk and Glow. — *Test:* strip `lcd_tick`, golden `lcd_moon`
-265. **[WP9 · WORKS]** Holding the LCD for the hold threshold on a complete trip prints the receipt and never hatches or feeds the pet (D21), whatever completed the trip. — *Test:* `LcdHoldTest.holdAfterCompletePrintsReceipt` (Robolectric)
-266. **[WP9 · WORKS]** The receipt has the 9 lines at 21 columns with dot leaders and the trip's real stats (stickers, stops, frozen shop time, shiny), the wordmark header, the last session's date and the store word fitted to line 2 (weekday dropped first, then the word cut; stopwords skipped; the list title as fallback); its width follows the LCD pitch. — *Test:* `ReceiptTest.contentFromTrip`, `ReceiptTest.line2Fits` (2-digit days, long names, "My store"), `ReceiptTest.fontScale200` (unit)
+265. **[WP9 · WORKS]** Holding the LCD for the hold threshold on a finished shop prints the receipt and never hatches or feeds the pet (D21): on a complete trip, whatever completed it, and after the finale has played even once she has written more down (which clears `completedAt`), with the book's stats and stops. — *Test:* `LcdHoldTest.holdAfterCompletePrintsReceipt`, `LcdHoldTest.receiptAfterLateAdd` (Robolectric), `TripRulesTest.printsReceiptOnceTheShopIsFinished` (core unit)
+266. **[WP9 · WORKS]** The receipt has the 9 lines at 21 columns with dot leaders and the trip's real stats (stickers, stops, frozen shop time, shiny), the wordmark header, the last session's date and the store word fitted to line 2 (weekday dropped first, then the word cut; stopwords skipped; the list title as fallback); its width follows the LCD pitch. — *Test:* `ReceiptTest.contentFromTrip`, `ReceiptTest.contentFromBookItems` (items written after the finale stay off it), `ReceiptTest.line2Fits` (2-digit days, long names, "My store"), `ReceiptTest.fontScale200` (unit)
 267. **[WP9 · WORKS]** It prints from the slot in 14 frames over 1.7 s with jitter, tears at 1.7 s, settles at 1.96 s, shows PRINT★ on the LCD with its cues, and stays until tapped. — *Test:* `ReceiptTest.printSequence` (Robolectric, test clock), strip `receipt_print_strip`
 268. **[WP9 · WORKS]** A tap tucks it into the book (slip appears) and the album, shows the toast and persists; holding the LCD again prints the same receipt. — *Test:* `ReceiptTest.tapSavesToBookAndAlbum` (Robolectric)
 269. **[WP9 · WORKS]** A printed receipt that is never tapped is tucked into the book when she leaves the screen, switches lists or starts a New trip, and after process death. — *Test:* `ReceiptTest.autoTuck` (Robolectric)
@@ -2327,12 +2330,12 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 ### 20.20 Polish and release gates
 
 303. **[WP10 · POLISH]** All 52 legacy goldens are re-recorded and `PlaceholderArt.kt` is gone with no references. — *Test:* `NoPlaceholderTest` (source scan)
-304. **[WP10 · POLISH]** Every state named in §6 and §7.5 has a golden in each variant where it exists, at w360dp-h760dp plus the listed w411dp variants. — *Test:* `GoldenCoverageTest` (reads the Appendix C manifest)
-305. **[WP10 · POLISH]** CI runs `verifyRoborazziDebug` and is green. — *Test:* CI workflow
+304. **[Retired]** ~~**[WP10 · POLISH]** Every state named in §6 and §7.5 has a golden in each variant where it exists, at w360dp-h760dp plus the listed w411dp variants. — *Test:* `GoldenCoverageTest` (reads the Appendix C manifest)~~ Retired on 4 October: tests and CI only where they are likely to find a problem in this release (Cora, §0.4). Appendix C stays as the list of goldens.
+305. **[Retired]** ~~**[WP10 · POLISH]** CI runs `verifyRoborazziDebug` and is green. — *Test:* CI workflow~~ Retired on 4 October: tests and CI only where they are likely to find a problem in this release (Cora, §0.4). CI keeps `compareRoborazziDebug` and uploads the diffs.
 306. **[WP4 · POLISH]** Pinstripes and patterns are cached shaders, never redrawn stripe by stripe per frame. — *Test:* `ShaderCacheTest` (Robolectric, counts tile creations)
 307. **[WP10 · POLISH]** No `RenderEffect`, blur or live filter is used anywhere. — *Test:* `NoBlurLintTest` (source scan)
 308. **[WP10 · POLISH]** Scrolling the fixture list and the check-off chain hold 60 fps on a mid-range phone (P90 frame ≤16 ms, no frame over 32 ms). — *Test:* `ListScrollBenchmark`, `CheckOffBenchmark` (Macrobenchmark on device, results in the PR)
-309. **[WP10 · POLISH]** The sideload APK grows by at most 4 MB over `7be9b87`. — *Test:* `apkSizeCheck` (CI step)
+309. **[Retired]** ~~**[WP10 · POLISH]** The sideload APK grows by at most 4 MB over `7be9b87`. — *Test:* `apkSizeCheck` (CI step)~~ Retired on 4 October: tests and CI only where they are likely to find a problem in this release (Cora, §0.4).
 310. **[WP10 · POLISH · WORKS]** A recorded on-device walkthrough fires every egg from the Surprise lab and runs a full trip to the receipt. — *Test:* manual run, video attached to the PR
 311. **[Retired]** ~~**[WP10 · WORKS]** The mockup generator and its assertion suite live in `design/mockup/`; the suite asserts each egg's and flow's expected end state (§18.4: receipt `has-receipt` and its slip, reduced-motion Next card visible ≥2.6 s, one open aisle at a time, the celebration holds) with zero console errors, and gates CI and sign-off.~~ Retired on 2 October: the mockup is reference only (§0.4).
 312. **[Retired]** ~~**[WP10 · WORKS]** Every control the mockup offers exists in the app or is labelled "not in v1" on the page: no web-search switch, model pills or On sale chip; the pantry rows follow §4.17, My pantry is a phone on the page, and the Weather switch and the New trip sheet are there.~~ Retired on 2 October: the mockup is reference only (§0.4).
@@ -2381,7 +2384,7 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 
 **Shared-file rules.**
 - Strings: one file per package (`res/values/strings_<pkg>.xml`); nobody edits another package's file. Today's files are split by the lead in phase 0: the `theme_*` strings move from `strings.xml` to `strings_theme.xml` (WP4), `list_*` from `strings_screens.xml` to `strings_list.xml` (WP5) and `add_*` to `strings_add.xml` (WP7); `strings_screens.xml` keeps the rest (WP8) and `strings.xml` keeps `app_name` and `wordmark` (WP8).
-- The **lead** owns the wiring files every package touches: `AppContainer.kt`, `PicnicApp.kt`, `app/build.gradle.kts` (the `checkStickers`, `checkSounds` and `apkSizeCheck` tasks), `settings.gradle.kts` (the `benchmark` module) and `res/values*/colors.xml`. Packages send their hunks (a new service's construction, a Gradle task) to the lead, who merges them.
+- The **lead** owns the wiring files every package touches: `AppContainer.kt`, `PicnicApp.kt`, `app/build.gradle.kts` (the `checkStickers` and `checkSounds` tasks), `settings.gradle.kts` (the `benchmark` module) and `res/values*/colors.xml`. Packages send their hunks (a new service's construction, a Gradle task) to the lead, who merges them.
 - `gradle/libs.versions.toml` stays append-only (ARCHITECTURE §3.1).
 - `.github/workflows/android.yml` is owned by WP10; other packages send it their CI steps.
 - `core/…/assistant/GroceryAssistant.kt` and `OpenAiGroceryAssistant.kt` are split by hunk: WP1 owns `IconDrawRequest`, `DrawnIcon` and `drawIcon`; WP3 owns everything else.
@@ -2475,12 +2478,12 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Acceptance**: 16, 73, 237–248, 250, 252–261, 265–274, 316, 335
 
 #### WP10 · a11y-sound-haptics (and the release gates)
-*Feedback (sounds + haptics) and announcements as services, the accessibility audits, copy and IP scans, the CI workflow, the golden coverage and performance gates.*
+*Feedback (sounds + haptics) and announcements as services, the accessibility audits, copy and IP scans, the CI workflow, the performance benchmarks.*
 
-- **Owns**: `platform/Feedback.kt` (SoundPool, haptics, gating), `platform/Announcer.kt`, `platform/Timeouts.kt` (recommended timeouts, hold threshold), new `ui/a11y/**` (`spokenDetail`, semantics helpers, the `TextOverflowed` key), `.github/workflows/android.yml`, `res/values/strings_a11y.xml`; `design/mockup/**` (frozen reference, §18.4: only its README note); cross-cutting tests under `app/src/test/…/a11y/**` and `…/release/**` (TouchTargetAuditTest, FontFamilyBudgetTest, TalkBackCopyTest, ReducedMotionAuditTest, NoFlashTest, KeyboardNavTest, FocusTest, DecorSemanticsTest, TimeoutsTest, TextOnPatternTest, MinTextSizeTest, NoClippedTextTest, IpWordsTest, CopyRulesTest, NoBlurLintTest, NoPlaceholderTest, GoldenCoverageTest); the Macrobenchmark module `benchmark/`.
+- **Owns**: `platform/Feedback.kt` (SoundPool, haptics, gating), `platform/Announcer.kt`, `platform/Timeouts.kt` (recommended timeouts, hold threshold), new `ui/a11y/**` (`spokenDetail`, semantics helpers, the `TextOverflowed` key), `.github/workflows/android.yml`, `res/values/strings_a11y.xml`; `design/mockup/**` (frozen reference, §18.4: only its README note); cross-cutting tests under `app/src/test/…/a11y/**` and `…/release/**` (TouchTargetAuditTest, FontFamilyBudgetTest, TalkBackCopyTest, ReducedMotionAuditTest, NoFlashTest, KeyboardNavTest, FocusTest, DecorSemanticsTest, TimeoutsTest, TextOnPatternTest, MinTextSizeTest, NoClippedTextTest, IpWordsTest, CopyRulesTest, NoBlurLintTest, NoPlaceholderTest); the Macrobenchmark module `benchmark/`.
 - **Provides**: `Feedback`, `Cue`, `Announcer`, `Timeouts`, `FakeFeedback`, `FakeAnnouncer`, `FakeTimeouts`, the screen-fixture walker used by the audits.
 - **Consumes**: WP2 sounds; WP8 switches; every screen (for the audits, which run last).
-- **Acceptance**: 26, 197–198, 276–295, 303–305, 307–310, 317, 330, 332, 334
+- **Acceptance**: 26, 197–198, 276–295, 303, 307–308, 310, 317, 330, 332, 334 (304, 305 and 309 retired on 4 October, Cora's note in §0.4)
 
 ### 21.2 Dependency graph
 
@@ -2535,7 +2538,7 @@ Hard dependencies (cannot finish without) versus soft ones (can build against a 
 2. **Phase 1, parallel**: WP1 (authoring + v4), WP2, WP3, WP4, WP7 and WP8 (both against WP4's API), WP10 services.
 3. **Phase 2**: WP5 (needs WP3 + WP4), then WP6 on WP5's anchors (WP6 can build its engine and strips against a harness screen during phase 1).
 4. **Phase 3**: WP9 (needs the trip, the list hooks and the overlay host).
-5. **Phase 4, gates**: WP10 audits, all goldens re-recorded and reviewed by Cora, CI to `verifyRoborazziDebug`, the on-device walkthrough with the Surprise lab, sign-off. (The mockup is not re-checked, §18.4.)
+5. **Phase 4, gates**: WP10 audits, all goldens re-recorded and reviewed by Cora, the on-device walkthrough with the Surprise lab, sign-off. (The mockup is not re-checked, §18.4. CI stays on `compareRoborazziDebug`: item 305 is retired, §0.4.)
 
 ---
 
@@ -2605,16 +2608,17 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 
 ---
 
-## Appendix C. Golden manifest (`GoldenCoverageTest`)
+## Appendix C. Golden manifest
 
-`GoldenCoverageTest` reads `app/src/test/screenshots/manifest.txt`, generated from this appendix, and fails if a name is missing from the screenshots folder or a screenshot is not in the manifest. Expansion rules:
+The goldens the spec asks for, for recording and review. No test reads this appendix: `GoldenCoverageTest`, its generated manifest and a CI golden gate (items 304 and 305) were retired on 4 October (§0.4). Expansion rules:
 
-- A name with no variant suffix (`_day`, `_glow`, `_dusk`, `_golden`, `_rm`) is recorded twice, `<name>_day` and `<name>_glow`, unless its row says otherwise; `<variant>` expands to `day` and `glow`.
+- A name with no variant suffix (`_day`, `_glow`, `_dusk`, `_golden`, `_rm`) is recorded twice, `<name>_day` and `<name>_glow`, unless its row says **Day only** (each such name is then one Day golden, `<name>.png`); a name ending `_fs130`, `_fs200` or `_w411` is one Day golden too, unless it is written with its variants (`row_states_fs200_{day,glow}`); `<variant>` expands to `day` and `glow`, and a name written with its variants (`puffy_title_{day,glow}_long`) is taken as written.
 - `{a,b,c}` expands to one name per entry; `<density>` to `1x`, `2x`, `2_625x`, `3x`, `3_5x`, `4x`; `<category>` to the 20 catalog categories; `<n>` with `_end_<variant>` to each egg and the variants §12.3 lists for it.
 - `*_fs130` and `*_fs200` expand to `list`, `add`, `edit`, `mystore`, `settings`, `album`, `nextcard`, `celebration_summary` and `receipt`, each in Day only.
 - A trailing `_*` (e.g. `button_secondary_*`, `field_*`, `loaders_*`) expands to every state that component's §4 entry lists.
 - Frame strips (`strip`) are stored as one PNG per sampled frame, `<name>_<t>.png`, at the times their item lists (otherwise every 83 ms over the motion).
 - Every name renders at `w360dp-h760dp-xxhdpi`; a name ending `_w411` renders at `w411dp-h891dp`.
+- `<preview>` stands for the goldens Roborazzi's preview scanner records for every `@Preview` in `earth.cora.picnic` (`earth.cora.picnic.<file>Kt.<function>.<preview name>_W…dp_H…dp`).
 
 | Item | Goldens | Frame strips |
 |---|---|---|
@@ -2640,7 +2644,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 52 | `appbar_sun_day`, `appbar_moon_dusk`, `appbar_moon_glow` | — |
 | 54 | `checkbox_spot_<density>_<variant>`, `hanko_<density>_<variant>`, `ghost_<density>_<variant>`, `landing_spot_<density>_<variant>` | — |
 | 55 | `checkbox_hanko_angles` | — |
-| 57 | `row_states_fs200` | — |
+| 57 | `row_states_fs200_{day,glow}` | — |
 | 59 | `hanko_variants` | — |
 | 60 | `button_primary_{rest,pressed,disabled,focused}` | — |
 | 61 | `button_secondary_*`, `button_text_*`, `button_round_*`, `fab_*` | — |
@@ -2664,7 +2668,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 85 | `row_pressed_day`, `row_pressed_glow` | — |
 | 86 | `row_checked_day`, `row_checked_glow` | — |
 | 92 | `list_tray_open_day` | — |
-| 93 | `list_pinned_mid_scroll` | — |
+| 93 | `list_pinned_mid_scroll` (Day only) | — |
 | 94 | `list_tray_open_glow`, `list_tray_open_fs200` | — |
 | 96 | `list_pinned_under_book` | — |
 | 97 | `list_pinned_under_book_glow`, `list_pinned_under_book_dusk`, `list_pinned_under_book_golden` | — |
@@ -2684,12 +2688,12 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 125 | — | `hop_berry`, `hop_egg`, `hop_bread`, `hop_can`, `hop_frozen` |
 | 126 | — | `landing_strip` |
 | 127 | — | `uncheck_strip` |
-| 146 | `book_{new,midtrip,page2,full,perfect_receipt,glow,collapsed,stops14,stops20}` | — |
+| 146 | `book_{new,midtrip,page2,full,perfect_receipt,glow,collapsed,stops14,stops20}` (Day only: `book_glow` is the book in Glow) | — |
 | 148 | — | `book_magic_strip` |
 | 150 | — | `book_peel_strip` |
 | 160 | `book_fs200` | — |
-| 161 | `book_collapsed` | — |
-| 163 | `tripbook_sheet_current`, `tripbook_sheet_finished`, `tripbook_sheet_glow` | — |
+| 161 | `book_collapsed` (Day only) | — |
+| 163 | `tripbook_sheet_current`, `tripbook_sheet_finished`, `tripbook_sheet_glow` (Day only: `tripbook_sheet_glow` is the sheet in Glow) | — |
 | 165 | `album_tripbooks` | — |
 | 168 | `nextcard_day`, `nextcard_glow` | — |
 | 170 | `nextcard_long_name`, `nextcard_fs200` | — |
@@ -2701,7 +2705,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 189 | `celebration_shelf_1`, `celebration_shelf_8`, `celebration_shelf_20` | `celebration_ride_100_items` |
 | 200 | `addbar_waiting` | — |
 | 203 | `recipe_card_day`, `recipe_card_glow` | — |
-| 205 | — | `gashapon_fanout` |
+| 205 | `gashapon_fanout` (Day only: its frames side by side in one image) | — |
 | 206 | `add_tabs_{write,snap,speak}` | — |
 | 207 | `snap_reading`, `snap_lines`, `snap_popped` | — |
 | 210 | `speak_recording`, `speak_transcribing`, `speak_heard` | — |
@@ -2729,7 +2733,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 337 | `kit_large_text_{fs130,fs200}_{day,glow}`, `chip_focused_{day,glow}`, `button_round_disabled_{day,glow}`, `addbar_waiting_{day,glow}`, `field_multiline_{day,glow}`, `row_states_fs200_{day,glow}`, `row_jackpot_fs130_{day,glow}`, `row_shiny_fs200_{day,glow}` | — |
 | 338 | `puffy_title_ellipsized_{day,glow}`, `puffy_title_{day,glow}_long`, `nextcard_*` | — |
 
-**State goldens not named by a checklist item** (they complete the §6 and §7.5 state lists; item 304 covers them):
+**State goldens not named by a checklist item** (they complete the §6 and §7.5 state lists):
 
 | Screen | Goldens |
 |---|---|
@@ -2738,4 +2742,18 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | Edit, switcher, sheets (§6.3–§6.6) | `edit_renamed`, `newtrip_sheet`, `toast_new_book_undo` (the automatic new book, §0.4 Q9: no idle prompt exists), `deletelist_sheet_with_book` |
 | My store, Settings, About (§6.7–§6.9) | `mystore_text_focused`, `mystore_error`, `settings_save_error`, `surprise_lab`, `surprise_lab_practice_list` |
 | Album (§6.10, §6.12) | `album_early`, `album_full`, `album_holo_glint`, `album_face_blink`, `album_back_pocket`, `album_empty`, `album_tripbook_open` (a filed book's sheet), `album_receipt_full` (its receipt at full size), `album_pocket_lift` (§4.25 pocket interaction) |
-| Book (§7.5) | `book_dusk`, `book_golden`, `book_bonus_stage`, `book_empty_list_hidden` |
+| Book (§7.5) | `book_dusk`, `book_golden`, `book_bonus_stage`, `book_empty_list_hidden`, `book_seasonal`, `book_perfect_glow`, `book_page2_fs200` (Day only) |
+
+**Further goldens** (the states the §20 items after 312, the large-text audits and the egg tests record, and the preview scanner):
+
+| Area | Goldens | Frame strips |
+|---|---|---|
+| List (§6.1, §4.10, items 313, 314) | `list_after_finale`, `list_nudge_toast`, `list_tearoff_toast`, `overflow_menu`, `peek_note_more`, `row_focused`, `strip_focused`, `strip_done_fs130_{day,glow}`, `tray_current_pinned_{day,glow}`, `appbar_secondary`, `basket_lid_hanko`, `basket_badge_fs200`, `stamp_pictograms`, `checkbox_states`, `empty_state`, `itemicon_kit`, `wordmark_glow` | — |
+| Celebration (§11, item 314) | `celebration_summary_closing`, `celebration_summary_kept_day`, `celebration_pet_dance_day` | — |
+| Add at large text (§6.2, item 281) | `add_fs200_top`, `add_error_fs200_day`, `add_tabs_fs200_day`, `addbar_fs130_day`, `addbar_fs200_day`, `snap_reading_fs200_day`, `snap_popped_fs200_day`, `speak_heard_fs200_day` (Day only) | — |
+| Pantry and recipes (§6.13, items 323, 325–327, 329) | `pantry_{empty,few,full,text_focused,glow,fs200}`, `pantry_popcard`, `pantry_takeoff_toast` (Day only: `pantry_glow` is the pantry in Glow) | — |
+| Pantry rows and toggle (items 323, 329) | `recipe_card_pantry`, `edit_sheet_pantry_on` | — |
+| Settings, album, Trip book (§6.6, §6.8, §6.10) | `settings_typed_shown`, `album_back_pocket_reveal`, `about`, `tripbook_sheet_fs130`, `tripbook_sheet_fs200` | — |
+| Eggs on the real list (§12) | `eggs_on_list_ladybug_day`, `eggs_on_list_nap_day`, `eggs_on_list_rain_day`, `eggs_on_list_midnight` (Day only) | `egg_1_strip_day`, `egg_9_strip` |
+| Stickers in Dusk (§3, items 33, 34) | `stickers_contact_<category>_dusk`, `stickers_calibration_contact_dusk`, `stickers_ontario_contact_dusk` | — |
+| Previews (the kit's `@Preview`s) | `<preview>` | — |

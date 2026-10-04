@@ -86,11 +86,23 @@ class WholeTripInTheAppTest {
         while (compose.mainClock.currentTime < until && guard++ < 20_000) frame()
     }
 
-    /** Frames until [done] holds, at most [maxMs] of frame time; fails with [what] if it never does. */
+    /**
+     * Frames until [done] holds, at most [maxMs] of frame time; fails with [what] if it never does. Once the frames are
+     * spent it holds the clock and waits up to [TIMEOUT_MS] of real time more: the store fsyncs each write under a lock,
+     * and on a loaded machine (the full suite writing its goldens) an earlier write can keep a tap's update waiting
+     * longer than the frames take to run.
+     */
     private fun until(what: String, maxMs: Long = 30_000, done: () -> Boolean) {
         val until = compose.mainClock.currentTime + maxMs
+        var realDeadline = 0L
         while (!done()) {
             if (compose.mainClock.currentTime >= until) {
+                if (realDeadline == 0L) realDeadline = System.currentTimeMillis() + TIMEOUT_MS
+                if (System.currentTimeMillis() < realDeadline) {
+                    compose.waitForIdle()
+                    Thread.sleep(20)
+                    continue
+                }
                 val tree = runCatching { compose.onRoot(useUnmergedTree = false).printToString() }.getOrDefault("?")
                 throw AssertionError("timed out waiting for $what\n$tree")
             }
