@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1305,20 +1307,39 @@ private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScree
         MenuItem(stringResource(R.string.menu_album), PicnicGlyph.Album, actions.onOpenAlbum),
         MenuItem(stringResource(R.string.menu_settings), PicnicGlyph.Settings, actions.onOpenSettings),
     )
-    Box(Modifier.fillMaxSize()) {
+    val density = LocalDensity.current
+    val navBottom = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    val statusTop = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // It drops from the More button and stops 8 dp above the window's bottom (and the navigation bar); its rows
+        // scroll when they need more room. Where less than about three rows would fit under the button (landscape, a
+        // short pane), it rises instead so that it ends 8 dp above the bottom (§4.24, §15: every item reachable).
+        val top = with(density) { ((anchor?.bottom ?: 0f) - origin.y).toDp() }
+        val room = maxHeight - navBottom - MENU_MARGIN - top
+        val rises = room < MENU_MIN_ROOM
         OverflowMenu(
             items,
             onDismissRequest = close,
+            maxHeight = if (rises) (maxHeight - navBottom - statusTop - MENU_MARGIN * 2).coerceAtLeast(MENU_MIN_ROOM) else room,
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset {
-                    val top = ((anchor?.bottom ?: 0f) - origin.y).roundToInt()
-                    IntOffset(-8.dp.roundToPx(), top)
-                }
+                .align(if (rises) Alignment.BottomEnd else Alignment.TopEnd)
+                .then(
+                    if (rises) {
+                        Modifier.padding(end = 8.dp, bottom = navBottom + MENU_MARGIN)
+                    } else {
+                        Modifier.offset { IntOffset(-8.dp.roundToPx(), top.roundToPx()) }
+                    },
+                )
                 .testTag(LIST_MENU_TAG),
         )
     }
 }
+
+/** The overflow menu keeps this far from the window's bottom edge (and from the top when it rises). */
+private val MENU_MARGIN: Dp = 8.dp
+
+/** Under the More button the menu needs room for about three rows, else it rises to fit (§4.24). */
+private val MENU_MIN_ROOM: Dp = 156.dp
 
 /** The overflow menu's test tag. */
 const val LIST_MENU_TAG: String = "picnic_list_menu"

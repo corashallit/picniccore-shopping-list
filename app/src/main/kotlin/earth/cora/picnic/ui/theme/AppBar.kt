@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -58,6 +60,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
 import kotlinx.coroutines.delay
@@ -274,10 +277,18 @@ data class MenuItem(
 /**
  * The overflow menu's card (§4.24): a kiss-cut pad card (radius 10, hs2) that pops from 90 % (220 ms
  * `cubic-bezier(.3, 1.5, .5, 1)`) out of the More button's corner; a fade under reduced motion. Place it in the screen's
- * overlay at the More button's anchor; [onDismissRequest] closes it after an item.
+ * overlay at the More button's anchor; [onDismissRequest] closes it after an item. Given a [maxHeight] (the room left in
+ * the window: landscape, a short multi-window pane, large text), the card stops there and its rows scroll, so every
+ * item stays reachable (§15).
  */
 @Composable
-fun OverflowMenu(items: List<MenuItem>, onDismissRequest: () -> Unit, modifier: Modifier = Modifier, width: Dp = 224.dp) {
+fun OverflowMenu(
+    items: List<MenuItem>,
+    onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    width: Dp = 224.dp,
+    maxHeight: Dp = Dp.Unspecified,
+) {
     val reduced = LocalReducedMotion.current
     val pop = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -301,7 +312,12 @@ fun OverflowMenu(items: List<MenuItem>, onDismissRequest: () -> Unit, modifier: 
             },
         large = true,
     ) {
-        Column(Modifier.padding(vertical = 6.dp)) {
+        Column(
+            Modifier
+                .then(if (maxHeight.isSpecified) Modifier.heightIn(max = maxHeight) else Modifier)
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 6.dp),
+        ) {
             for (item in items) MenuRow(item, onDismissRequest)
         }
     }
