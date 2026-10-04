@@ -111,6 +111,8 @@ object BookTags {
     const val NAME_TAG: String = "picnic_book_name_tag"
     const val COLLAPSED: String = "picnic_book_collapsed"
     const val PAGE_LCD: String = "picnic_book_page_lcd"
+    /** The PER-FECT! hanko after the finale (decorative; the tag is for tests). */
+    const val PERFECT: String = "picnic_book_perfect"
     /** The saved receipt's slip at the fore-edge (§7.3, egg 18; decorative, the tag is for tests). */
     const val SLIP: String = "picnic_book_receipt_slip"
     fun twin(slot: Int): String = "picnic_book_twin_$slot"
@@ -237,7 +239,7 @@ fun StickerBook(
         val shape = shapes.bookOuter
         // The page shown (§7.4): the engine's, else the one she swiped to (for 6 s), else the page of the next free spot.
         val paging = remember { PagingState() }
-        val page = (presentation.fx.showPage ?: paging.userPage ?: layout.shownPage(state.takenSlots)).coerceIn(0, layout.pages - 1)
+        val page = (presentation.fx.showPage ?: paging.userPage ?: layout.shownPage(state.takenSlots, finished = state.perfect)).coerceIn(0, layout.pages - 1)
         shownSlot[0] = if (presentation.fx.showPage == null && paging.userPage == null) {
             (0 until state.total).firstOrNull { it !in state.takenSlots } ?: (page * layout.perPage)
         } else {
@@ -282,12 +284,20 @@ fun StickerBook(
                 )
             }
         }
-        // The page number (§7.3) clips onto the page's bottom edge at the right: inside the page it would sit on the
-        // last spot of a full page. It hangs into the 8 dp under the book and ends where the list's viewport begins.
+        // The page number (§7.3) sits inside the page at its bottom right, 6 dp from the bottom and from the fore-edge,
+        // in the cells a book of more than one page keeps for it (BookLayout.perPage): never over a sticker, never past
+        // the book's edge.
         if (layout.pages > 1 && showPages && pageNumber) {
             // The page LCD's digits are words too (the eggs' `text:` keep-out, §12.1).
             val pageLcdAnchor = if (anchors != null) with(anchors) { Modifier.anchor(BOOK_PAGE_LCD_TEXT) } else Modifier
-            PageLcd("${page + 1}/${layout.pages}", Modifier.align(Alignment.BottomEnd).offset(x = (-8).dp, y = PAGE_LCD_DROP).then(pageLcdAnchor).graphicsLayer { alpha = 1f - folded })
+            PageLcd(
+                "${page + 1}/${layout.pages}",
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = -(BOOK_BORDER + FORE_EDGE + PAGE_LCD_INSET), y = -(BOOK_BORDER + PAGE_LCD_INSET))
+                    .then(pageLcdAnchor)
+                    .graphicsLayer { alpha = 1f - folded },
+            )
         }
     }
 }
@@ -463,11 +473,20 @@ private fun BookPages(
                 }
             }
         }
-        // PERFECT (§7.3): the 40 dp PER-FECT! hanko pressed across the spine, its right edge 24 dp past the stamp page's,
-        // 6 dp from the top; drawn over the spine and the sticker page.
+        // PERFECT (§7.3): the PER-FECT! hanko pressed where it covers no sticker and no stamp (BookLayout.perfectSpot):
+        // 40 dp on the release paper a one-page book leaves free, else across the spine in the gutter between the pages.
         // PER-FECT! is words: the eggs keep clear of it (the receipt, the bursts; `text:perfect`, §12.1).
         val perfectAnchor = if (anchors != null) with(anchors) { Modifier.anchor(BOOK_PERFECT_TEXT) } else Modifier
-        if (perfect) HoloInks(true) { SpinePerfect(fx, clock, Modifier.offset(x = (layout.leftWidth + 24f - 40f).dp, y = 6.dp).then(perfectAnchor)) }
+        if (perfect) {
+            val spot = layout.perfectSpot(page)
+            HoloInks(true) {
+                SpinePerfect(
+                    fx, clock,
+                    Modifier.offset(x = spot.left.dp, y = spot.top.dp).testTag(BookTags.PERFECT).then(perfectAnchor),
+                    size = spot.size.dp,
+                )
+            }
+        }
     }
 }
 
@@ -1090,7 +1109,12 @@ fun BookDateCaption(label: String, modifier: Modifier = Modifier, season: Season
 private const val PAGE_TURN_MS: Long = 240
 
 /** How far the page number hangs below the book: the top stack's 8 dp gap above the list (§7.3). */
-private val PAGE_LCD_DROP = 8.dp
+/** The page LCD's inset inside the page, from its bottom and from the fore-edge (§7.3). */
+private val PAGE_LCD_INSET = 6.dp
+
+/** The book's white border and its fore-edge strip. */
+private val BOOK_BORDER = 3.dp
+private val FORE_EDGE = 5.dp
 
 /** The book's date as the eggs' keep-out (EggAnchors.TEXT_PREFIX + "date"). */
 private const val BOOK_DATE_TEXT: String = "text:date"

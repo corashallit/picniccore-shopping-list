@@ -112,7 +112,7 @@ internal fun TopStack(
             BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp), contentAlignment = Alignment.TopCenter) {
                 val width = BookLayout.widthFor(maxWidth.value + 24f).dp
                 val layout = remember(width, book.stamps.size, book.total) { BookLayout.of(width.value, book.stamps.size, book.total) }
-                val shown = layout.shownPage(book.takenSlots)
+                val shown = layout.shownPage(book.takenSlots, finished = book.perfect)
                 androidx.compose.runtime.SideEffect { engine.bookPaging = BookPaging(layout.perPage, shown) }
                 val dateOnPage = fontScale <= 1.3f
                 // Above font scale 1.3 the stamp name tag joins the date's caption row (§7.4, §7.7, item 157).

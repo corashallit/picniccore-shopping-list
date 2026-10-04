@@ -40,8 +40,19 @@ data class BookLayout(
     /** The "+n" circle's n above 24 stops, else 0. */
     val moreStops: Int,
 ) {
-    val perPage: Int get() = cols * rows
+    /** The cells in a page's grid of spots. */
+    val cells: Int get() = cols * rows
+
+    /**
+     * The spots a page holds: every cell, or, when the spots run to more than one page, all but the bottom-right
+     * [PAGE_NUMBER_CELLS] cells, where the page number sits inside the page (§7.3): never over a sticker, never past
+     * the book's edge.
+     */
+    val perPage: Int get() = if (spots > cells) cells - PAGE_NUMBER_CELLS else cells
     val pages: Int get() = max(1, ceil(spots.toDouble() / perPage).toInt())
+
+    /** The top of the right page's grid of spots (dp, inside the page). */
+    val spotsTop: Float get() = ((height - BORDERS - rows * SPOT_H) / 2f).coerceAtLeast(1f)
 
     /** 76 dp with two stamp rows, 102 dp with three (§2.9). */
     val height: Float get() = if (stampRows >= 3) HEIGHT_THREE_ROWS else HEIGHT
@@ -53,9 +64,34 @@ data class BookLayout(
      * The page the book shows (§7.4): the page of the lowest free spot, or the last page when every spot is taken.
      * [taken] are the book slots in use.
      */
-    fun shownPage(taken: Set<Int>): Int {
+    fun shownPage(taken: Set<Int>, finished: Boolean = false): Int {
+        // After the finale the keepsake shows its full first sheet, with PERFECT (§7.3).
+        if (finished) return 0
         val free = (0 until spots).firstOrNull { it !in taken } ?: return pages - 1
         return pageOf(free)
+    }
+
+    /**
+     * Where the PER-FECT! hanko is pressed after the finale (§7.3), in dp inside the pages (left, top, size): on the
+     * right page's release paper when [page] leaves a free 2 × 2 block of cells at its bottom right (a one-page book with
+     * spots to spare), 40 dp; else across the spine, in the gutter between the last stamp column and the first column of
+     * stickers, as large as the gutter allows and centred in the page's height. Never over a sticker or a stamp.
+     */
+    fun perfectSpot(page: Int): PerfectSpot {
+        val onPage = (min(spots, (page + 1) * perPage) - page * perPage).coerceAtLeast(0)
+        val rightStart = leftWidth + SPINE
+        if (pages == 1 && rows >= 2 && cols >= 2 && (rows - 2) * cols + (cols - 2) >= onPage) {
+            val cx = rightStart + SPOTS_LEFT + (cols - 1) * SPOT_W
+            val cy = spotsTop + (rows - 1) * SPOT_H
+            return PerfectSpot(cx - PERFECT / 2f, cy - PERFECT / 2f, PERFECT)
+        }
+        // The gutter: from the stamp page's last column (6 dp padding) to the first sticker's art (a 26 dp twin centred
+        // in its 23 dp cell), 1 dp clear of each.
+        val from = leftWidth - 6f
+        val to = rightStart + SPOTS_LEFT + (SPOT_W - TWIN) / 2f
+        val size = min(PERFECT, to - from - 2f)
+        val pageHeight = height - BORDERS
+        return PerfectSpot(from + (to - from - size) / 2f, (pageHeight - size) / 2f, size)
     }
 
     companion object {
@@ -70,6 +106,14 @@ data class BookLayout(
         const val STAMP_GAP: Float = 3f
         const val MAX_WIDTH: Float = 456f
         const val MAX_CIRCLES: Int = 24
+
+        /** The cells a page of a book with more than one page gives its page number (§7.3). */
+        const val PAGE_NUMBER_CELLS: Int = 2
+
+        /** The spots' left padding on the right page, a book twin's size and the PER-FECT! hanko's (dp). */
+        const val SPOTS_LEFT: Float = 7f
+        const val TWIN: Float = 26f
+        const val PERFECT: Float = 40f
 
         /** The newest twins the collapsed strip always keeps room for (§7.4: the magic appear lands there). */
         const val COLLAPSED_MIN_TWINS: Int = 3
@@ -104,6 +148,10 @@ data class BookLayout(
         }
     }
 }
+
+/** Where the PER-FECT! hanko goes on the book's pages (dp): its top-left and its size ([BookLayout.perfectSpot]). */
+@Immutable
+data class PerfectSpot(val left: Float, val top: Float, val size: Float)
 
 /**
  * The collapsed strip's stamps (§7.4), laid out in the room the newest twins and their "+n" pearl leave them: every stop

@@ -24,6 +24,7 @@ class BookLayoutTest {
     @Test
     fun thirtySpotsTurnAPage() {
         val l = BookLayout.of(336f, 8, 30)
+        assertEquals("the page number's two cells come off each page", 22, l.perPage)
         assertEquals(2, l.pages)
         assertEquals("the 25th spot is on page 2", 1, l.pageOf(24))
         assertEquals("shows the page of the lowest free spot", 1, l.shownPage((0 until 25).toSet()))
@@ -48,7 +49,9 @@ class BookLayoutTest {
         assertEquals(170f, l.leftWidth)
         assertEquals(148f, l.rightWidth)
         assertEquals(5, l.cols)
-        assertEquals(15, l.perPage)
+        assertEquals(15, l.cells)
+        assertEquals("24 spots run to two pages: each keeps its last two cells for the page number", 13, l.perPage)
+        assertEquals(2, l.pages)
         assertEquals(76f, l.height)
     }
 
@@ -61,7 +64,8 @@ class BookLayoutTest {
         assertEquals(102f, l.height)
         assertEquals(5, l.cols)
         assertEquals(4, l.rows)
-        assertEquals(20, l.perPage)
+        assertEquals(20, l.cells)
+        assertEquals(18, l.perPage)
     }
 
     @Test
@@ -79,6 +83,47 @@ class BookLayoutTest {
         assertEquals("23 circles + \"+7\"", 7, l.moreStops)
         assertEquals(8, l.stampCols)
     }
+
+    /**
+     * The trip review (§7.3, item 146): after the finale the book shows its full first sheet; PER-FECT! is pressed where
+     * it covers no sticker and no stamp (on spare release paper, else in the spine's gutter); the page number keeps its
+     * own cells inside the page.
+     */
+    @Test
+    fun afterTheFinaleTheFirstSheetAndAPerfectClearOfEverySticker() {
+        // 25 stickers: two pages, the first full.
+        val l = BookLayout.of(336f, 8, 25)
+        assertEquals(2, l.pages)
+        assertEquals("finished: the first sheet", 0, l.shownPage((0 until 25).toSet(), finished = true))
+        assertEquals("not yet: the last page", 1, l.shownPage((0 until 25).toSet()))
+        for ((book, page) in listOf(l to 0, l to 1, BookLayout.of(336f, 8, 24) to 0, BookLayout.of(336f, 8, 6) to 0, BookLayout.of(387f, 14, 30) to 0)) {
+            val p = book.perfectSpot(page)
+            val hanko = Rect(p.left, p.top, p.left + p.size, p.top + p.size)
+            val onPage = minOf(book.spots, (page + 1) * book.perPage) - page * book.perPage
+            for (i in 0 until onPage) {
+                val col = i % book.cols
+                val row = i / book.cols
+                // The twin as drawn: 26 dp, centred in its 23 x 22 dp cell.
+                val cx = book.leftWidth + BookLayout.SPINE + 7f + col * BookLayout.SPOT_W + BookLayout.SPOT_W / 2f
+                val cy = book.spotsTop + row * BookLayout.SPOT_H + BookLayout.SPOT_H / 2f
+                val twin = Rect(cx - 13f, cy - 13f, cx + 13f, cy + 13f)
+                assertTrue("${book.spots} spots, page $page: PERFECT $hanko clear of sticker $i $twin", !hanko.overlaps(twin))
+            }
+            val top = stampTop(true, book)
+            for (i in 0 until book.circles) {
+                val (x, y) = stampCentre(i, book, top)
+                val stamp = Rect(x - book.stampSize / 2f, y - book.stampSize / 2f, x + book.stampSize / 2f, y + book.stampSize / 2f)
+                assertTrue("${book.spots} spots: PERFECT $hanko clear of stamp $i $stamp", !hanko.overlaps(stamp))
+            }
+            assertTrue("inside the page (${p.top}, ${p.size})", p.top >= 0f && p.top + p.size <= book.height - BookLayout.BORDERS)
+            assertTrue("a readable size (${p.size} dp)", p.size >= 20f)
+        }
+        assertEquals("spare paper on a short one-page book: the full 40 dp", 40f, BookLayout.of(336f, 8, 6).perfectSpot(0).size, 0f)
+    }
+
+    private fun Rect.overlaps(o: Rect) = left < o.right && o.left < right && top < o.bottom && o.top < bottom
+
+    private data class Rect(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
     @Test
     fun widthIsCappedAndCentred() {

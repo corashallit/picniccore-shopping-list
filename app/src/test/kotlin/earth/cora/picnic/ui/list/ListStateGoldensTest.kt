@@ -12,6 +12,9 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import earth.cora.picnic.core.model.addItems
+import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.markFinaleShown
 import earth.cora.picnic.core.model.setOpenAisle
 import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.ui.common.PHONE_360
@@ -192,10 +195,53 @@ class ListStateGoldensTest {
 
     private fun nudgeToast(variant: ThemeVariant) {
         val rig = ListRig(now = ListFixture.NOW + 13 * ListFixture.HOUR).inSeason()
-        compose.recordScreen("list_nudge_toast_${variant.name.lowercase()}", variant, settleMillis = 0, before = {
-            mainClock.autoAdvance = false
+        compose.recordScreen("list_nudge_toast_${variant.name.lowercase()}", variant, settleMillis = 0, frozen = true, before = {
             assertTrue("the nudge dropped in", framesUntil(3000) { exists(TOAST_TAG) })
             advanceMs(220 + 600)
+        }) { rig.Content() }
+    }
+
+    /**
+     * §7.3 (item 146) and the trip review: after the finale of a 25-sticker trip the book shows its full first sheet,
+     * PER-FECT! pressed clear of every sticker and stamp, and the page number "1/2" inside the page, 6 dp from its bottom
+     * and its fore-edge.
+     */
+    @Test
+    fun afterFinaleDay() = afterFinale(ThemeVariant.Day)
+
+    @Test
+    fun afterFinaleGlow() = afterFinale(ThemeVariant.Glow)
+
+    private fun afterFinale(variant: ThemeVariant) {
+        var s = ListFixture.state()
+        val towels = earth.cora.picnic.core.model.GroceryItem(
+            id = "paper-towels", name = "Paper towels", quantity = "6 rolls", aisleId = "household", icon = "paper_towels",
+            iconFit = earth.cora.picnic.core.model.IconFit.EXACT, addedAt = ListFixture.TRIP_START + ListFixture.MIN,
+        )
+        s = s.addItems(ListFixture.LIST_ID, listOf(towels), ListFixture.TRIP_START + ListFixture.MIN).first
+        s.list(ListFixture.LIST_ID)!!.items.filter { !it.checked }.forEachIndexed { i, item ->
+            s = s.toggleChecked(ListFixture.LIST_ID, item.id, ListFixture.TRIP_START + (20 + i) * ListFixture.MIN)
+        }
+        s = s.markFinaleShown(ListFixture.LIST_ID, ListFixture.TRIP_START + 42 * ListFixture.MIN).setOpenAisle(ListFixture.LIST_ID, "")
+        val rig = ListRig(s, now = ListFixture.TRIP_START + 44 * ListFixture.MIN).inSeason()
+        compose.recordScreen("list_after_finale_${variant.name.lowercase()}", variant, before = {
+            waitForIdle()
+            val dp = density.density
+            val book = boundsOf(earth.cora.picnic.ui.theme.BookTags.BOOK)
+            val perfect = boundsOf(earth.cora.picnic.ui.theme.BookTags.PERFECT, unmerged = true)
+            // The first sheet: its 22 twins (the page number keeps two cells), none under PER-FECT!.
+            val twins = (0 until 22).map { boundsOf(earth.cora.picnic.ui.theme.BookTags.twin(it), unmerged = true) }
+            twins.forEachIndexed { i, t ->
+                val art = t.deflate(2 * dp)
+                assertTrue("PERFECT $perfect clear of sticker $i $art", !(perfect.left < art.right && art.left < perfect.right && perfect.top < art.bottom && art.top < perfect.bottom))
+            }
+            assertTrue("the first sheet shows", !exists(earth.cora.picnic.ui.theme.BookTags.twin(24), unmerged = true))
+            val lcd = boundsOf(earth.cora.picnic.ui.theme.BookTags.PAGE_LCD, unmerged = true)
+            assertTrue("the page number inside the book ($lcd in $book)", lcd.bottom <= book.bottom - 6 * dp && lcd.right <= book.right - 6 * dp)
+            twins.forEachIndexed { i, t ->
+                val art = t.deflate(2 * dp)
+                assertTrue("the page number $lcd clear of sticker $i $art", !(lcd.left < art.right && art.left < lcd.right && lcd.top < art.bottom && art.top < lcd.bottom))
+            }
         }) { rig.Content() }
     }
 

@@ -957,9 +957,9 @@ interface AlbumStore { val album: Flow<Album>; suspend fun current(): Album; sus
 | Spine | 12 dp periwinkle cloth tape, three binder rings 22 × 8 dp at 9, 31 and 53 dp |
 | Right page | release paper with dots and a sheen band; spots 13 dp dashed in a 23 × 22 dp grid, 7 dp left padding; the next free spot is **holo** (1.5 dp white border + 1.2 dp spot ring) |
 | Stickers | 26 dp, centred on their spot, each tilted by `ROTS[slot % 12]` = −6, 4, −2, 7, −5, 3, 6, −4, 2, −7, 5, −3 degrees (hand-stuck); shiny ones stay holo |
-| Page number | an LCD chip "2/3" (vector, pitch 1.2 dp) at the bottom-right when there is more than one page |
+| Page number | an LCD chip "2/3" (vector, pitch 1.2 dp) when there is more than one page, inside the right page at its bottom-right, 6 dp from the bottom and from the fore-edge, in the two cells each page then keeps for it (§7.4): never over a sticker, never past the book's edge |
 | Fore-edge | a 5 dp strip on the right edge, plain periwinkle mid until the book is full or PERFECT, then holo (§2.6, §2.11) |
-| PERFECT | after the finale: the stamp page turns holo and a 40 dp PER-FECT! hanko is pressed across the spine (right −24, top 6 dp) |
+| PERFECT | after the finale: the book shows its first sheet, the stamp page turns holo and the PER-FECT! hanko is pressed where it covers no sticker and no stamp (`BookLayout.perfectSpot`): 40 dp on the release paper when a one-page book leaves a free 2 × 2 block of cells at its bottom right, else across the spine, in the gutter between the last stamp column and the first sticker column, as large as the gutter allows (about 22 dp on a phone), centred in the page's height |
 | Receipt slip | once saved (egg 18): a 26 × 32 dp cream slip with three ink lines pokes out of the fore-edge behind the page, rotated −7° |
 | Glow | navy page, violet release paper with glow specks (§2.6); stickers and the white edge unchanged |
 
@@ -975,12 +975,13 @@ leftW     = 12 + stampCols * stampSize + (stampCols - 1) * 3
 rightW    = W - 6 - leftW - 12                           // 6 = borders, 12 = spine
 cols      = max(4, floor((rightW - 12) / 23))            // 12 = page padding + fore-edge
 rows      = stampRows + 1                                // 3 rows, or 4 with three stamp rows
-perPage   = cols * rows
+cells     = cols * rows
+perPage   = if (N > cells) cells - 2 else cells               // more than one page: 2 cells per page for the page number
 pages     = max(1, ceil(N / perPage))
-shownPage = page of the lowest free spot, or the last page when full
+shownPage = after the finale the first page; else the page of the lowest free spot, or the last page when full
 ```
 
-Examples (asserted in `BookLayoutTest`; each rechecked against the formula): W 336, S 8, N 24 → 24 dp stamps, 4 stamp columns, stamp page 117 dp, rightW 201, 8 × 3 = 24 per page, 1 page (the mockup); W 336, S 8, N 30 → 2 pages; W 387 (411 dp phone), S 8 → rightW 252, 10 columns, 30 per page; W 336, S 14 → 20 dp stamps, 7 stamp columns, stamp page 170 dp, rightW 148, **5 × 3 = 15 per page**; W 336, S 20 → three stamp rows, 7 stamp columns, stamp page 170 dp, book 102 dp, 5 × 4 = 20 per page; W 336, S 1 → 4 stamp columns (the minimum), stamp page 117 dp, 24 per page.
+Examples (asserted in `BookLayoutTest`; each rechecked against the formula): W 336, S 8, N 24 → 24 dp stamps, 4 stamp columns, stamp page 117 dp, rightW 201, 8 × 3 = 24 per page, 1 page (the mockup); W 336, S 8, N 30 → 2 pages of 22; W 387 (411 dp phone), S 8 → rightW 252, 10 columns, 30 per page; W 336, S 14 → 20 dp stamps, 7 stamp columns, stamp page 170 dp, rightW 148, **5 × 3 = 15 cells** (24 spots run to two pages: 13 per page); W 336, S 20 → three stamp rows, 7 stamp columns, stamp page 170 dp, book 102 dp, 5 × 4 = 20 cells (18 per page with 24 spots); W 336, S 1 → 4 stamp columns (the minimum), stamp page 117 dp, 24 per page.
 
 - **N = 0** (an empty list): no book; the empty state takes the screen (§4.21). Every item belongs to a stop ("Everything else" included), so S = 0 only when N = 0 and needs no layout.
 
@@ -996,7 +997,7 @@ Examples (asserted in `BookLayoutTest`; each rechecked against the formula): W 3
 | Mid-trip | twins in their spots, crooked; stamped stops show pictograms; the next free spot holo |
 | Page 2+ | the page LCD "2/2"; earlier pages reachable by swipe |
 | Full (every item checked) | the release paper turns holo; one holo glint across it (12 steps, 1.2 s) |
-| PERFECT (after the finale) | the stamp page holo, the PER-FECT! hanko across the spine |
+| PERFECT (after the finale) | the first sheet, the stamp page holo, the PER-FECT! hanko clear of every sticker and stamp (§7.3) |
 | Receipt saved | the cream slip on the fore-edge |
 | Bonus stage (egg 10) | every sticker drawn as a pixel sprite |
 | Collapsed | §7.4 |
@@ -1013,7 +1014,7 @@ Examples (asserted in `BookLayoutTest`; each rechecked against the formula): W 3
 | Book becomes full | +360 ms after the last twin | the fore-edge turns holo; one holo glint across the release paper (12 steps, 1.2 s) |
 | **Peel off** (un-check) | at once (t = 0) | corner lifts (−1, −2 dp, −12°, skewX −8°) at +64 → rises to 1.12 (−16°) at +144 → shrinks to .55 with 6 sparks running **inward** at +224 → gone at +320; the spot becomes free (holo if it is now the lowest) |
 | Stamp thunk | aisle landing + 500 ms | §8.4 |
-| PERFECT | celebration close + 450 ms | stamp page turns holo; PER-FECT! slams across the spine (2.2 → 1.25 → 1, −30° → −12°, 3 steps, 260 ms) + 8-sticker burst + "thunk" + CONFIRM; one holo glint |
+| PERFECT | celebration close + 450 ms | stamp page turns holo; PER-FECT! slams onto its spot (§7.3) (2.2 → 1.25 → 1, −30° → −12°, 3 steps, 260 ms) + 8-sticker burst + "thunk" + CONFIRM; one holo glint |
 | Receipt tucked in | tap on the printed receipt + 420 ms | the receipt poofs (1.08 then 0, turning 10°, 4 steps, 400 ms) with a 40 dp kira; the slip magic-appears on the fore-edge (same 4 poses, 320 ms) with a 26 dp kira |
 | New trip | on confirm | the page turns (3 frames) to a fresh page; date and stamps reset |
 | Reduced motion | — | no bloom, no sparks, no lift, no turn: at the same beat time (940 ms after the tap, §8.8) the twin fades in (or out) in place over 120 ms |
