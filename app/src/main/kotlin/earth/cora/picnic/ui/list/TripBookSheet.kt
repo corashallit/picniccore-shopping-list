@@ -123,6 +123,44 @@ internal fun widestWordPx(text: String, style: androidx.compose.ui.text.TextStyl
     text.split(' ').filter { it.isNotEmpty() }.maxOfOrNull { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width } ?: 0
 
 /**
+ * A stamp's name as laid out under it: "&" is held to the word after it (a no-break space), so a name that wraps reads
+ * "Deli / & meat" and "Dairy / & eggs" alike, never leaving "&" at a line's end.
+ */
+internal fun stampName(aisleName: String): String = aisleName.replace(" & ", " &\u00A0")
+
+/**
+ * Facts joined with " · " ("24 of 24 stickers · 8 of 8 aisles stamped · 41 min"; "Saturday shop · Hillcrest Market"),
+ * a line breaking only between two facts, after the dot: a fact that fits a line is never split. Only a fact longer than
+ * a whole line wraps inside, between its words.
+ */
+@Composable
+private fun Facts(facts: List<String>, style: androidx.compose.ui.text.TextStyle) {
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val width = constraints.maxWidth
+        val text = remember(facts, style, width, measurer) { factLines(facts, width) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width } }
+        Text(text, style = style)
+    }
+}
+
+/** [facts] joined with " · ", a new line wherever the next fact would not fit the [width] the line's [measure] allows. */
+internal fun factLines(facts: List<String>, width: Int, measure: (String) -> Int): String {
+    val out = StringBuilder()
+    var line = ""
+    for (fact in facts) {
+        when {
+            line.isEmpty() -> line = fact
+            measure("$line · $fact") <= width -> line = "$line · $fact"
+            else -> {
+                out.append(line).append(if (measure("$line ·") <= width) " ·\n" else "\n")
+                line = fact
+            }
+        }
+    }
+    return out.append(line).toString()
+}
+
+/**
  * The read-only sheet of [book] (null = closed). [dateLabel] is the trip's date ("Sat 3 Oct"); [date] prints on the
  * receipt. Same call shape as the album's former FiledBookSheet, so the album swaps one for the other. The sticker pages
  * open on the page holding [initialSlot] (from the list, the spot its book shows; from the album, the first page).
@@ -153,13 +191,14 @@ fun TripBookSheet(
                 add(pluralStringResource(R.plurals.book_sheet_stickers_of, book.total, book.stickers.size, book.total))
                 add(pluralStringResource(R.plurals.book_sheet_aisles_of, book.stamps.size, stamped, book.stamps.size))
                 if (book.completedAt != null && book.minutes != null) add(TripStats.formatMinutes(book.minutes))
-            }.joinToString(" · ")
+            }
             Box(Modifier.fillMaxWidth()) {
                 Column(Modifier.fillMaxWidth().padding(end = if (book.perfect) 52.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(dateLabel, style = t.cardTitle.copy(color = c.ink), modifier = Modifier.semantics { heading() })
-                    val where = listOf(book.listTitle, book.storeName).filter { it.isNotBlank() }.joinToString(" · ")
-                    if (where.isNotEmpty()) Text(where, style = t.caption.copy(color = c.inkSoft))
-                    Text(stats, style = t.body.copy(color = c.ink))
+                    // Lines break between facts, never inside one that fits a line ("8 of 8 aisles stamped").
+                    val where = listOf(book.listTitle, book.storeName).filter { it.isNotBlank() }
+                    if (where.isNotEmpty()) Facts(where, t.caption.copy(color = c.inkSoft))
+                    Facts(stats, t.body.copy(color = c.ink))
                 }
                 if (book.perfect) {
                     HankoStamp(HankoText.PerFect, Modifier.align(Alignment.TopEnd).rotate(-12f).clearAndSetSemantics { }, size = 44.dp)
@@ -194,7 +233,7 @@ fun TripBookSheet(
                         // takes fewer stamps a row instead of breaking; the row's cells then share the page's width.
                         val gap = 4.dp
                         val cell = with(LocalDensity.current) {
-                            val widest = book.stamps.maxOf { s -> widestWordPx(s.aisleName, nameStyle, measurer) }
+                            val widest = book.stamps.maxOf { s -> widestWordPx(stampName(s.aisleName), nameStyle, measurer) }
                             val least = maxOf(64.dp.roundToPx(), widest + 2.dp.roundToPx())
                             val room = constraints.maxWidth
                             val gapPx = gap.roundToPx()
@@ -221,7 +260,7 @@ fun TripBookSheet(
                                         }
                                     }
                                     Text(
-                                        name,
+                                        stampName(name),
                                         style = nameStyle,
                                         onTextLayout = { probe?.text(TripBookTags.stampName(index), it) },
                                         modifier = Modifier.fillMaxWidth().probe(probe, TripBookTags.stampName(index)).clearAndSetSemantics { },

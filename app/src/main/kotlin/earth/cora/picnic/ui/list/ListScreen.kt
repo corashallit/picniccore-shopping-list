@@ -3,6 +3,7 @@ package earth.cora.picnic.ui.list
 import android.content.res.Resources
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -58,6 +59,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
@@ -89,6 +91,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -1136,6 +1139,20 @@ private fun AisleList(
     // The current aisle wears the lemon ring, the bee and the ladybug (§4.10, D2). While a chain holds a finished aisle
     // open (the engine's override), it keeps them until it folds; a finished aisle she reopens herself is not current.
     val currentId = if (openId != null && openId != state.openSectionId) openId else state.nowSectionId
+    // The next stop opening behind the Next card (§8.5, §10) unfolds by height: its rows and cap grow from nothing to
+    // their height over the fold's 240 ms while everything below moves with them in the same frames, so no strip ever
+    // slides under the new tray. Timed on the engine's clock from the frame it opened (the hand-off's chain runs it).
+    val openedAt = remember { HashMap<String, Long>() }
+    val lastOpen = remember { arrayOfNulls<String>(1) }
+    if (openId != lastOpen[0]) {
+        if (openId != null) openedAt[openId] = Snapshot.withoutReadObservation { clock.now }
+        lastOpen[0] = openId
+    }
+    val handOff = p.scroll?.takeIf { it.itemId == null && it.sectionId == openId }
+    val unfoldT0 = if (reduced || handOff == null) null else openedAt[handOff.sectionId]?.takeIf { it >= handOff.t0 - UNFOLD_SLACK_MS }
+    val unfoldId = if (unfoldT0 != null) openId else null
+    // While it unfolds every item keeps step with the layout (no placement slide lagging behind it).
+    val snapping = screen.layoutSnaps > 0 || (unfoldT0 != null && Snapshot.withoutReadObservation { clock.now } < unfoldT0 + UNFOLD_MS + UNFOLD_SETTLE_MS)
     // WP6's check-off chains have played out (no hop in flight, no burst, no celebration): egg 8's cat may curl up.
     val chainsDone = p.flights.isEmpty() && p.bursts.isEmpty() && p.celebration == null
     val ladybugStrip = LocalListEggs.current.ladybug?.sectionId
@@ -1576,7 +1593,7 @@ private fun AisleList(
                             ambient = beat,
                             ambientClock = ambient.clock,
                             modifier = Modifier
-                                .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis)
+                                .itemMotion(this, reduced, snapping, placementMs = PicnicMotion.layout.durationMillis)
                                 .keyFocusIn(screen, e.key, s.id)
                                 // A peeked basket, or egg 2's ladybug walking under this strip, draws over the strip below
                                 // (and over the open tray's band beside it).
@@ -1629,7 +1646,8 @@ private fun AisleList(
                             ambientClock = ambient.clock,
                             current = e.s.id == currentId,
                             modifier = Modifier
-                                .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = SLOT_CLOSE_MS)
+                                .itemMotion(this, reduced, snapping, placementMs = SLOT_CLOSE_MS)
+                                .unfoldHeight(unfoldT0.takeIf { unfoldId == e.s.id }, clock)
                                 .keyFocusIn(screen, e.key, e.s.id)
                                 .focusRequester(screen.rowFocus(e.row.id))
                                 // The open tray draws over the folded strips that slide past it as it opens (the strip
@@ -1653,7 +1671,8 @@ private fun AisleList(
                             e.s,
                             current = e.s.id == currentId,
                             modifier = Modifier
-                                .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = SLOT_CLOSE_MS)
+                                .itemMotion(this, reduced, snapping, placementMs = SLOT_CLOSE_MS)
+                                .unfoldHeight(unfoldT0.takeIf { unfoldId == e.s.id }, clock)
                                 .zIndex(Z_TRAY)
                                 .unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced),
                         )
@@ -1664,10 +1683,10 @@ private fun AisleList(
                         Spacer(Modifier.fillMaxWidth().height(with(LocalDensity.current) { 1.toDp() }))
                     }
                     is Entry.Gap -> item(key = e.key, contentType = "gap") {
-                        Spacer(Modifier.itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis).fillMaxWidth().height(7.dp))
+                        Spacer(Modifier.itemMotion(this, reduced, snapping, placementMs = PicnicMotion.layout.durationMillis).fillMaxWidth().height(7.dp))
                     }
                     Entry.Note -> item(key = e.key, contentType = "note") {
-                        EndNote(state.total, Modifier.itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis), anchors = anchors)
+                        EndNote(state.total, Modifier.itemMotion(this, reduced, snapping, placementMs = PicnicMotion.layout.durationMillis), anchors = anchors)
                     }
                 }
             }
@@ -1717,14 +1736,44 @@ private const val OPEN_WAIT_FRAMES: Int = 90
 private const val OPEN_ROWS_IN_VIEW: Int = 3
 private const val SLOT_CLOSE_MS: Int = 380
 
-/** Placement only: rows and strips move smoothly when the layout changes; reduced motion swaps at once. */
-private fun Modifier.itemMotion(scope: LazyItemScope, reduced: Boolean, placementMs: Int): Modifier = with(scope) {
-    if (reduced) {
-        this@itemMotion.animateItem(fadeInSpec = null, placementSpec = null, fadeOutSpec = null)
-    } else {
-        this@itemMotion.animateItem(fadeInSpec = null, placementSpec = tween(placementMs, easing = PicnicMotion.layout.easing), fadeOutSpec = null)
+/**
+ * Placement only: rows and strips move smoothly when the layout changes; reduced motion swaps at once. While [snapping]
+ * (a programmatic scroll, the list keeping its place, a tray unfolding) they keep step with the layout: a placement spec
+ * that lands at once, never none, so the list keeps following each item and none slides in from a viewport edge when
+ * sliding resumes.
+ */
+private fun Modifier.itemMotion(scope: LazyItemScope, reduced: Boolean, snapping: Boolean, placementMs: Int): Modifier = with(scope) {
+    when {
+        reduced -> this@itemMotion.animateItem(fadeInSpec = null, placementSpec = null, fadeOutSpec = null)
+        snapping -> this@itemMotion.animateItem(fadeInSpec = null, placementSpec = snap(), fadeOutSpec = null)
+        else -> this@itemMotion.animateItem(fadeInSpec = null, placementSpec = tween(placementMs, easing = PicnicMotion.layout.easing), fadeOutSpec = null)
     }
 }
+
+/**
+ * An opening tray's row or cap unfolding by height (§8.5): laid out whole, it takes [PicnicMotion.layout]'s share of its
+ * height from [t0] on the engine's [clock] (at least a pixel, so the list never drops it), clipped from the top down.
+ */
+private fun Modifier.unfoldHeight(t0: Long?, clock: earth.cora.picnic.ui.list.motion.MotionClock): Modifier =
+    if (t0 == null) {
+        this
+    } else {
+        this
+            .clipToBounds()
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val t = ((clock.now - t0).toFloat() / UNFOLD_MS).coerceIn(0f, 1f)
+                val h = if (t >= 1f) placeable.height else (placeable.height * PicnicMotion.layout.easing.transform(t)).roundToInt().coerceAtLeast(1)
+                layout(placeable.width, h) { placeable.place(0, 0) }
+            }
+    }
+
+/** The opening tray's unfold (§8.5: 240 ms `layout`), and the frames the list keeps step after it. */
+private val UNFOLD_MS: Int = PicnicMotion.layout.durationMillis
+private const val UNFOLD_SETTLE_MS: Int = 48
+
+/** The hand-off's tray opens with its scroll request, within a frame or two of it. */
+private const val UNFOLD_SLACK_MS: Long = 50
 
 /**
  * The sticker bunting (§6.1): hearts and stars on a dashed 1.6 dp cord that sags as she pulls (−34 → +10 dp).

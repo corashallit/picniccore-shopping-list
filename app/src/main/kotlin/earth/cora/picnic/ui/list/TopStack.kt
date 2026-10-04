@@ -28,6 +28,7 @@ import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -35,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
@@ -62,6 +64,7 @@ import earth.cora.picnic.ui.theme.NAME_TAG_PAD_Y
 import earth.cora.picnic.ui.theme.NAME_TAG_RIM
 import earth.cora.picnic.ui.theme.NameTag
 import earth.cora.picnic.ui.theme.PadPatch
+import earth.cora.picnic.ui.theme.PetPose
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicIconButton
 import earth.cora.picnic.ui.theme.PicnicMotion
@@ -105,22 +108,35 @@ internal fun TopStack(
     modifier: Modifier = Modifier,
 ) {
     val fontScale = LocalDensity.current.fontScale
+    val book = state.book
+    val dateOnPage = fontScale <= 1.3f
+    // Large text (§4.2): when the LCD would take a line of its own under the subtitle, it sits at the right end of the
+    // book's date-caption row instead, which has the room. The bar decides (it knows whether the title or the subtitle
+    // leaves room beside them) and the LCD follows; its size is kept so the bar can decide while it sits below.
+    val spot = remember { LcdSpot() }
+    val captionRow = fontScale >= LARGE_TEXT && !dateOnPage && book != null && !state.loading
+    val lcdBelow = captionRow && spot.inCaption
+    val petPose = rememberPetPose(LocalListEggs.current)
+    val lcd: @Composable () -> Unit = {
+        Box(Modifier.testTag(ListTags.LCD_SLOT).onSizeChanged { spot.size = it }) {
+            TopLcd(state, presentation, engine.anchors, ui, actions, petPose)
+        }
+    }
     Column(modifier.fillMaxWidth().statusBarsPadding().testTag(ListTags.TOP_STACK)) {
-        AppBar(state, presentation, engine.anchors, ui, actions, onMore, onMoreBounds)
-        val book = state.book
+        AppBar(state, presentation, engine.anchors, ui, actions, onMore, onMoreBounds, lcd = if (lcdBelow) null else lcd, spot = if (captionRow) spot else null)
         if (book != null && !state.loading) {
             BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp), contentAlignment = Alignment.TopCenter) {
                 val width = BookLayout.widthFor(maxWidth.value + 24f).dp
                 val layout = remember(width, book.stamps.size, book.total) { BookLayout.of(width.value, book.stamps.size, book.total) }
                 val shown = layout.shownPage(book.takenSlots, finished = book.perfect)
                 androidx.compose.runtime.SideEffect { engine.bookPaging = BookPaging(layout.perPage, shown) }
-                val dateOnPage = fontScale <= 1.3f
                 // Above font scale 1.3 the stamp name tag joins the date's caption row (§7.4, §7.7, item 157).
                 var captionTag by remember { mutableStateOf<String?>(null) }
                 BookWithCaption(
                     // The caption's date is words: the eggs keep clear of it (the receipt, the bursts; `text:date`, §12.1).
                     caption = if (dateOnPage) null else { { BookDateCaption(book.dateLabel, season = book.season, modifier = with(engine.anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "date") }) } },
                     tag = captionTag,
+                    lcd = if (lcdBelow) lcd else null,
                     book = {
                         StickerBook(
                             state = book,
@@ -150,15 +166,20 @@ internal fun TopStack(
  * the date, growing down over the book's right side as far as the book goes, never past it (so never over the list).
  * When the column after the date cannot hold every word, the tag widens leftwards over the caption, up to the book's
  * width, rather than lose one. The tag lies over the caption and the book; it moves nothing.
+ *
+ * The app bar's [lcd] may sit at the right end of the caption row (§4.2), on the caption's centre line; the row is as
+ * tall as the taller of the two, and the tag keeps clear of the LCD. When the date and the LCD cannot share the row,
+ * the LCD takes a line of its own at the right, above the date.
  */
 @Composable
-private fun BookWithCaption(caption: (@Composable () -> Unit)?, tag: String?, book: @Composable () -> Unit) {
+private fun BookWithCaption(caption: (@Composable () -> Unit)?, tag: String?, book: @Composable () -> Unit, lcd: (@Composable () -> Unit)? = null) {
     val measurer = rememberTextMeasurer()
     val tagStyle = nameTagStyle()
     Layout(
         content = {
             if (caption != null) Box(Modifier.layoutId("caption")) { caption() }
             Box(Modifier.layoutId("book")) { book() }
+            if (lcd != null) Box(Modifier.layoutId("lcd")) { lcd() }
             if (tag != null) Box(Modifier.layoutId("tag")) { NameTag(tag) }
         },
     ) { measurables, constraints ->
@@ -166,29 +187,54 @@ private fun BookWithCaption(caption: (@Composable () -> Unit)?, tag: String?, bo
         val gap = 6.dp.roundToPx()
         val captionP = measurables.firstOrNull { it.layoutId == "caption" }?.measure(loose)
         val bookP = measurables.first { it.layoutId == "book" }.measure(loose)
-        val bookY = captionP?.let { it.height + gap } ?: 0
+        val lcdP = measurables.firstOrNull { it.layoutId == "lcd" }?.measure(loose)?.takeIf { it.width > 0 }
         val width = maxOf(bookP.width, captionP?.width ?: 0)
-        val height = bookY + bookP.height
+        val captionH = captionP?.height ?: 0
+        val lcdW = lcdP?.width ?: 0
+        val lcdH = lcdP?.height ?: 0
         val afterDate = captionP?.let { it.width + 8.dp.roundToPx() } ?: 0
+        // The LCD shares the caption row when the date leaves it room; else it takes a line of its own above the date.
+        val shared = lcdP != null && afterDate + lcdW <= width
+        val lcdLine = if (lcdP != null && !shared) lcdH + gap else 0
+        val rowH = if (shared) maxOf(captionH, lcdH) else captionH
+        val captionY = lcdLine + (rowH - captionH) / 2
+        val bookY = lcdLine + if (captionP != null || shared) rowH + gap else 0
+        val height = bookY + bookP.height
+        // The tag's room: from the caption row's top (under an LCD line of its own) to the book's bottom, after the date
+        // and short of an LCD sharing the row.
+        val tagTop = lcdLine
+        val tagEnd = if (shared) width - lcdW - 8.dp.roundToPx() else width
+        val tagRoomH = height - tagTop
         // Does every word fit in the column after the date, within the height the tag may take? (The text's own height:
         // the round face's first and last lines stand taller than its line height.)
         val frameX = 2 * (NAME_TAG_RIM + NAME_TAG_PAD_X).roundToPx()
         val frameY = 2 * (NAME_TAG_RIM + NAME_TAG_PAD_Y).roundToPx()
         val fitsAfterDate = tag == null || run {
-            val column = (width - afterDate - frameX).coerceAtLeast(1)
-            measurer.measure(tag, tagStyle, constraints = Constraints(maxWidth = column)).size.height <= height - frameY
+            val column = (tagEnd - afterDate - frameX).coerceAtLeast(1)
+            measurer.measure(tag, tagStyle, constraints = Constraints(maxWidth = column)).size.height <= tagRoomH - frameY
         }
-        val tagWidth = if (fitsAfterDate) width - afterDate else width
+        val tagWidth = if (fitsAfterDate) tagEnd - afterDate else tagEnd
         val tagP = measurables.firstOrNull { it.layoutId == "tag" }?.measure(
-            Constraints(maxWidth = tagWidth.coerceAtLeast(0), maxHeight = height.coerceAtLeast(0)),
+            Constraints(maxWidth = tagWidth.coerceAtLeast(0), maxHeight = tagRoomH.coerceAtLeast(0)),
         )
-        val tagX = if (fitsAfterDate) afterDate else width - (tagP?.width ?: 0)
+        val tagX = if (fitsAfterDate) afterDate else tagEnd - (tagP?.width ?: 0)
         layout(width, height) {
-            captionP?.place(0, 0)
+            captionP?.place(0, captionY)
             bookP.place(0, bookY)
-            tagP?.place(tagX, 0, zIndex = 1f)
+            lcdP?.place(width - lcdW, if (shared) (rowH - lcdH) / 2 else 0)
+            tagP?.place(tagX, tagTop, zIndex = 1f)
         }
     }
+}
+
+/** Where the app bar's LCD sits under large text (§4.2), decided by the bar's layout. */
+@androidx.compose.runtime.Stable
+private class LcdSpot {
+    /** At the right end of the book's date-caption row, where it would otherwise take a line of its own. */
+    var inCaption by mutableStateOf(true)
+
+    /** The LCD's size as last laid out, wherever it sat: the bar decides with it while the LCD sits below. */
+    var size by mutableStateOf(IntSize.Zero)
 }
 
 /**
@@ -206,16 +252,19 @@ private fun AppBar(
     actions: ListActions,
     onMore: () -> Unit,
     onMoreBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
+    /** The LCD ([TopLcd]); null while it sits in the book's caption row ([spot]). */
+    lcd: (@Composable () -> Unit)?,
+    /** Under large text with the book's date caption showing: where the LCD sits, which this bar decides. */
+    spot: LcdSpot?,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val reduced = LocalReducedMotion.current
     val collapsed = ui.barCollapsed
     // The eggs on the binder top (§12.2): egg 7's holo title, egg 1's sun (hidden while the Dusk change draws its own), egg
-    // 12's sinking sun, and the LCD's words and pet (eggs 5, 10, 15, 18).
+    // 12's sinking sun; the LCD's words and pet (eggs 5, 10, 15, 18) are TopLcd's.
     val eggs = LocalListEggs.current
     val titleBrush = rememberKirakiraBrush(eggs)
-    val petPose = rememberPetPose(eggs)
     // One animation drives every height change of the bar (§4.2, §6.1, item 161): 1 = expanded, 0 = collapsed. The bar's
     // height, the subtitle's height and alpha and the title's size all follow it (`standard`, 200 ms, on the fixed motion
     // scale like the book below it; at once under reduced motion), so nothing snaps in one frame and the list never jumps.
@@ -298,39 +347,6 @@ private fun AppBar(
             }
         }
     }
-    val lcdChip: @Composable () -> Unit = {
-        // An empty list has nothing to count: the LCD comes with the first item (§4.21).
-        if (!state.loading && state.total > 0) {
-            val lcd = when {
-                // SYNC stands in for the count (and for the bee while it lives here: the chip keeps their room, §13.1).
-                ui.syncing -> state.lcd.copy(mode = LcdMode.Text, text = SYNC, petLives = state.lcd.mode == LcdMode.Pet)
-                else -> {
-                    val shown = presentation.lcdCount(state.checked)
-                    val base = state.lcd.copy(count = shown, mode = presentation.lcd?.mode ?: state.lcd.mode)
-                    // The chain's own LCD (WP6) wins while it plays; otherwise the eggs' word, pet and receipt (§13.1). With
-                    // Easter eggs off the list's own state already shows the plain count (§2.5).
-                    if (presentation.lcd != null || !eggs.enabled) base else eggs.lcd(base, petPose)
-                }
-            }
-            // Egg 18: a printed receipt hangs from the LCD wherever it is (snapshot state, so a waiting one follows it).
-            val room = LocalListRoom.current
-            if (room != null) androidx.compose.runtime.DisposableEffect(room) { onDispose { room.lcd = null } }
-            with(anchors) {
-                LcdChip(
-                    lcd,
-                    // The LCD's digits are words too: the bursts are cut clear of them.
-                    Modifier
-                        .padding(horizontal = 2.dp)
-                        .anchor(AnchorRegistry.LCD)
-                        .anchor(EggAnchors.TEXT_PREFIX + "lcd")
-                        .then(if (room != null) Modifier.onGloballyPositioned { room.lcd = it.boundsInWindow() } else Modifier),
-                    onHold = if (state.eggs) actions.onLcdHold else null,
-                    // One width whatever it shows: SYNC, and the eggs' words while they are on (§13.1, item 259).
-                    words = if (state.eggs || eggs.enabled) LCD_WORDS_EGGS else LCD_WORDS,
-                )
-            }
-        }
-    }
     val more: @Composable () -> Unit = {
         Box(
             Modifier
@@ -345,7 +361,8 @@ private fun AppBar(
     if (large) {
         // Large text (§4.2, §15): the bar grows to two rows, and the subtitle keeps the whole width, wrapping only when it
         // must. The LCD sits on the title row before More when the title fits there at full size beside it; else beside
-        // the subtitle when the two fit side by side; else on a line of its own at the right, under the subtitle.
+        // the subtitle when the two fit side by side; else at the right end of the book's date-caption row ([spot]), or,
+        // with no caption below, on a line of its own at the right, under the subtitle.
         val titleMeasurer = rememberTextMeasurer(cacheSize = 2)
         val titleNeed = with(LocalDensity.current) {
             remember(title, titleStyle, this) {
@@ -356,7 +373,7 @@ private fun AppBar(
             content = {
                 Box(Modifier.layoutId("title")) { titleRow(Modifier) }
                 Box(Modifier.layoutId("more")) { more() }
-                Box(Modifier.layoutId("lcd").testTag(ListTags.LCD_SLOT)) { lcdChip() }
+                Box(Modifier.layoutId("lcd")) { lcd?.invoke() }
                 Box(Modifier.layoutId("subtitle")) { subtitleRow(Modifier) }
             },
             modifier = Modifier
@@ -369,16 +386,23 @@ private fun AppBar(
             val loose = Constraints(maxWidth = w)
             val moreP = measurables.first { it.layoutId == "more" }.measure(loose)
             val lcdP = measurables.first { it.layoutId == "lcd" }.measure(loose)
-            val lcdW = if (lcdP.width > 0) lcdP.width else 0
+            val here = lcdP.width > 0
+            // While the LCD sits in the caption row the bar decides with its last size.
+            val lcdW = if (here) lcdP.width else if (lcd == null && spot != null) spot.size.width else 0
             val lcdOnTitle = lcdW > 0 && titleNeed + lcdW + moreP.width <= w
-            val titleMax = (w - moreP.width - if (lcdOnTitle) lcdW else 0).coerceAtLeast(0)
+            val titleMax = (w - moreP.width - if (lcdOnTitle && here) lcdW else 0).coerceAtLeast(0)
             val titleP = measurables.first { it.layoutId == "title" }.measure(Constraints(maxWidth = titleMax))
             val subtitleP = measurables.first { it.layoutId == "subtitle" }.measure(loose)
-            val row1 = maxOf(titleP.height, moreP.height, if (lcdOnTitle) lcdP.height else 0)
-            val row2Top = row1 + gap
             val beside = !lcdOnTitle && lcdW > 0 && subtitleP.width + lcdW <= w
-            val ownLine = !lcdOnTitle && lcdW > 0 && !beside
-            val row2 = if (beside) maxOf(subtitleP.height, lcdP.height) else subtitleP.height
+            // Decided with the subtitle in view (collapsed it is hidden, and the LCD stays where it was).
+            if (spot != null && lcdW > 0 && (subtitleP.width > 0 || subtitle == null)) {
+                val below = !lcdOnTitle && !beside
+                if (spot.inCaption != below) spot.inCaption = below
+            }
+            val row1 = maxOf(titleP.height, moreP.height, if (lcdOnTitle && here) lcdP.height else 0)
+            val row2Top = row1 + gap
+            val ownLine = here && !lcdOnTitle && !beside
+            val row2 = if (beside && here) maxOf(subtitleP.height, lcdP.height) else subtitleP.height
             val lcdTop = when {
                 lcdOnTitle -> (row1 - lcdP.height) / 2
                 beside -> row2Top
@@ -406,8 +430,55 @@ private fun AppBar(
                 titleRow(Modifier)
                 subtitleRow(Modifier)
             }
-            lcdChip()
+            lcd?.invoke()
             more()
+        }
+    }
+}
+
+/**
+ * The app bar's LCD (§4.2, §13.1): the count, SYNC while the list re-syncs, the eggs' words and pet. It sits in the bar,
+ * or under large text at the right end of the book's date-caption row (TopStack).
+ */
+@Composable
+private fun TopLcd(
+    state: ListUiState,
+    presentation: ListPresentation,
+    anchors: AnchorRegistry,
+    ui: TopStackUi,
+    actions: ListActions,
+    petPose: PetPose,
+) {
+    val eggs = LocalListEggs.current
+    // An empty list has nothing to count: the LCD comes with the first item (§4.21).
+    if (!state.loading && state.total > 0) {
+        val lcd = when {
+            // SYNC stands in for the count (and for the bee while it lives here: the chip keeps their room, §13.1).
+            ui.syncing -> state.lcd.copy(mode = LcdMode.Text, text = SYNC, petLives = state.lcd.mode == LcdMode.Pet)
+            else -> {
+                val shown = presentation.lcdCount(state.checked)
+                val base = state.lcd.copy(count = shown, mode = presentation.lcd?.mode ?: state.lcd.mode)
+                // The chain's own LCD (WP6) wins while it plays; otherwise the eggs' word, pet and receipt (§13.1). With
+                // Easter eggs off the list's own state already shows the plain count (§2.5).
+                if (presentation.lcd != null || !eggs.enabled) base else eggs.lcd(base, petPose)
+            }
+        }
+        // Egg 18: a printed receipt hangs from the LCD wherever it is (snapshot state, so a waiting one follows it).
+        val room = LocalListRoom.current
+        if (room != null) androidx.compose.runtime.DisposableEffect(room) { onDispose { room.lcd = null } }
+        with(anchors) {
+            LcdChip(
+                lcd,
+                // The LCD's digits are words too: the bursts are cut clear of them.
+                Modifier
+                    .padding(horizontal = 2.dp)
+                    .anchor(AnchorRegistry.LCD)
+                    .anchor(EggAnchors.TEXT_PREFIX + "lcd")
+                    .then(if (room != null) Modifier.onGloballyPositioned { room.lcd = it.boundsInWindow() } else Modifier),
+                onHold = if (state.eggs) actions.onLcdHold else null,
+                // One width whatever it shows: SYNC, and the eggs' words while they are on (§13.1, item 259).
+                words = if (state.eggs || eggs.enabled) LCD_WORDS_EGGS else LCD_WORDS,
+            )
         }
     }
 }

@@ -105,6 +105,15 @@ class TripBookSheetTest {
         }
     }
 
+    /** §6.6: the sheet's facts break only between facts, after the dot; a fact that fits a line is never split. */
+    @Test
+    fun factsBreakBetweenFacts() {
+        val facts = listOf("24 of 24 stickers", "8 of 8 aisles stamped", "41 min")
+        assertEquals("24 of 24 stickers · 8 of 8 aisles stamped · 41 min", factLines(facts, 60) { it.length })
+        assertEquals("24 of 24 stickers ·\n8 of 8 aisles stamped · 41 min", factLines(facts, 30) { it.length })
+        assertEquals("24 of 24 stickers ·\n8 of 8 aisles stamped ·\n41 min", factLines(facts, 23) { it.length })
+    }
+
     private var content by androidx.compose.runtime.mutableStateOf<(@androidx.compose.runtime.Composable () -> Unit)?>(null)
 
     private fun stampNamesWhole(ui: ListUiState, scale: Float) {
@@ -131,11 +140,13 @@ class TripBookSheetTest {
         stamps.forEachIndexed { i, s ->
             val layout = probe.texts[TripBookTags.stampName(i)] ?: error("no name laid out under stamp $i (${s.aisleName}) at $scale")
             val text = layout.layoutInput.text.text
-            assertEquals(s.aisleName, text)
+            assertEquals(stampName(s.aisleName), text)
             assertFalse("\"$text\" is cut at font scale $scale", layout.isCut())
             for (line in 0 until layout.lineCount - 1) {
                 val end = layout.getLineEnd(line)
                 val last = text[end - 1]
+                // "&" goes with the word after it: "Deli / & meat", like "Dairy / & eggs".
+                assertFalse("\"$text\" leaves \"&\" at a line's end at font scale $scale", text.substring(layout.getLineStart(line), end).trimEnd().endsWith("&"))
                 assertTrue(
                     "\"$text\" breaks inside a word at font scale $scale: \"${text.substring(layout.getLineStart(line), end)}\" / \"${text.substring(end)}\"",
                     last.isWhitespace() || last == '-',

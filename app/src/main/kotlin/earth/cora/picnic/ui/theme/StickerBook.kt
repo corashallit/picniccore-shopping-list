@@ -47,6 +47,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -782,15 +783,19 @@ private fun ReleasePaper(state: BookUi, fx: BookFx, clock: MotionClock) {
             }
             y += step
         }
-        // One white sheen band at 115°.
+        // One white sheen band at 115°: a faint sheen on the pink paper, fainter still on Glow's dark violet, where a
+        // brighter one would read as glare.
         val band = 8.dp.toPx()
         val cx = size.width * 0.62f
         rotate(25f, Offset(cx, size.height / 2f)) {
-            drawRect(Color.White.copy(alpha = 0.35f), Offset(cx - band / 2f, -size.height), Size(band, size.height * 3f))
+            drawRect(Color.White.copy(alpha = book.sheenAlpha()), Offset(cx - band / 2f, -size.height), Size(band, size.height * 3f))
         }
         drawBookGlint(fx, clock.now)
     }
 }
+
+/** The release paper's sheen band (§2.6): 35 % white on the light (Day) paper, 7 % on the dark (Glow) paper. */
+internal fun BookColors.sheenAlpha(): Float = if (releasePaper.luminance() < 0.5f) 0.07f else 0.35f
 
 /** The spots of [page] and the twins in them (§7.3, §7.6). */
 @Composable
@@ -858,7 +863,10 @@ private fun Spots(state: BookUi, presentation: BookPresentation, clock: MotionCl
 private fun PageLcd(text: String, modifier: Modifier) {
     val c = PicnicTheme.colors
     val shape = RoundedCornerShape(5.dp)
-    val pitch = PAGE_LCD_PITCH * pageLcdScale(LocalDensity.current.fontScale)
+    // LcdText grows its pitch with the font itself (to 1.6×): the pitch handed to it is divided by that, so the face
+    // grows once, by pageLcdScale (§7.4), not twice.
+    val fontScale = LocalDensity.current.fontScale
+    val pitch = PAGE_LCD_PITCH * pageLcdScale(fontScale) / fontScale.coerceIn(1f, 1.6f)
     Box(
         modifier
             .probe(LocalPieceProbe.current, "pageLcd:$text")

@@ -255,7 +255,8 @@ class AlbumTest {
         compose.onNodeWithText("21 of 22 stickers", substring = true).assertExists()
 
         compose.onNodeWithText("Sat 26 Sep", substring = true).performClick()
-        compose.onNodeWithText("19 of 19 stickers · 8 of 8 aisles stamped · 41 min").assertExists()
+        // The facts break only between facts (a line of its own each where they do not share one).
+        compose.onNode(SemanticsMatcher("the trip's facts") { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.replace("\n", " ") == "19 of 19 stickers · 8 of 8 aisles stamped · 41 min" } }).assertExists()
         compose.onNodeWithContentDescription("Produce: stamped").assertExists()
         compose.onNodeWithText("Receipt").assertExists()
         compose.onAllNodesWithText("Hillcrest Market", substring = true).fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }

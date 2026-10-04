@@ -222,9 +222,9 @@ fun CelebrationScene(
                 Rays(sc)
                 BurstStar(sc)
                 Confetti(sc, w, h)
-                SceneContent(sc, content, copy, anchors, onSummaryCard)
+                SceneContent(sc, content, copy, anchors, onSummaryCard, onDone)
                 AlbumCorner(sc, content.bonus, anchors)
-                BottomBand(sc, copy, anchors, onDone)
+                BottomBand(sc, copy, anchors)
             }
             if (probe != null) ProbeReports(sc, content, probe, anchors, origin, sceneSize)
         }
@@ -472,7 +472,14 @@ private fun Modifier.plate(anchors: SceneAnchors, tag: String): Modifier =
     testTag(tag).onGloballyPositioned { anchors.plates[tag] = anchors.unshaken(it) }
 
 @Composable
-private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: CelebrationCopy, anchors: SceneAnchors, onSummaryCard: (Rect) -> Unit) {
+private fun SceneContent(
+    sc: SceneClock,
+    content: CelebrationContent,
+    copy: CelebrationCopy,
+    anchors: SceneAnchors,
+    onSummaryCard: (Rect) -> Unit,
+    onDone: () -> Unit,
+) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     Box(
@@ -533,7 +540,7 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
             Spacer(Modifier.height(10.dp))
             Shelf(sc, content, anchors)
             Spacer(Modifier.height(6.dp))
-            SummaryCard(sc, copy, anchors, onSummaryCard) {
+            SummaryCard(sc, copy, anchors, onSummaryCard, onDone) {
                 StampCard(sc, content, anchors)
                 Spacer(Modifier.height(8.dp))
                 Banner(sc, content, copy, anchors)
@@ -552,7 +559,7 @@ private fun SceneContent(sc: SceneClock, content: CelebrationContent, copy: Cele
  * [CURL_GAP] above the scene's bottom (a short screen, many stops, a large font scale) the whole column is scaled down
  * about its top centre, never up, just enough that it does: the album corner then always peels back beside the bonus
  * card, at least [CURL_FLOOR] deep, without covering text (AlbumCorner measures its leg from the plates). What hangs
- * below the bonus card (the blanket, 42 dp at most) then still ends above "tap to skip" and Done in the bottom band. The
+ * below the bonus card (the blanket, 42 dp at most) then still ends above "tap to skip" in the bottom band. The
  * fixture is never scaled at 360 × 640 or taller. The bonus card's place is read back from the first layout (it lies
  * inside the picnic spread); the scene opens under its white flash, so that one frame never shows.
  */
@@ -580,9 +587,10 @@ private fun FitColumn(anchors: SceneAnchors, modifier: Modifier, content: @Compo
  * The summary card (§0.4 Q7): the trip's results, the stamp card with PER-FECT! and the ribbon banner, on a ruled pad
  * card (white kiss-cut, hs2) that fades in behind them as the summary starts, with the washi progress bar along its
  * bottom edge, labelled "Closing… tap to keep it". A tap on this card keeps the scene open (the bar goes, and a Done
- * button shows in the bottom band, where "tap to skip" was); a tap on the rays, the shelf, the picnic or the album
- * corner closes it, as "tap to skip" taught. Its last row is laid out from the start and keeps its place once kept, so
- * nothing moves when the bar comes or goes; under TalkBack (no countdown) it has none.
+ * button shows centred in the card's bottom band, where the bar was); a tap on the rays, the shelf, the picnic or the
+ * album corner closes it, as "tap to skip" taught. Its last row is laid out from the start, as tall as the bar or Done
+ * needs, and keeps its place once kept, so nothing moves when the bar comes or goes; under TalkBack (no countdown) it
+ * has none.
  */
 @Composable
 private fun SummaryCard(
@@ -590,6 +598,7 @@ private fun SummaryCard(
     copy: CelebrationCopy,
     anchors: SceneAnchors,
     onSummaryCard: (Rect) -> Unit,
+    onDone: () -> Unit,
     results: @Composable () -> Unit,
 ) {
     val c = PicnicTheme.colors
@@ -629,7 +638,7 @@ private fun SummaryCard(
             results()
             if (bar) {
                 Spacer(Modifier.height(2.dp))
-                SummaryBarRow(sc, copy, anchors, onSummaryCard)
+                SummaryBarRow(sc, copy, anchors, onSummaryCard, onDone)
             } else {
                 Spacer(Modifier.height(10.dp))
             }
@@ -647,35 +656,61 @@ private fun summaryCardAlpha(sc: SceneClock): Float {
 }
 
 /**
- * The card's last row: the washi progress bar and its label while the summary waits to close. Once kept, the bar goes
- * and the row keeps its place empty (the Done button is in the bottom band), so nothing on the card or below it moves.
+ * The card's last row: the washi progress bar and its label while the summary waits to close, along the card's bottom
+ * edge. Once kept, the bar goes and the Done button shows centred in the card's bottom band, on the card it closes. The
+ * row is as tall as either needs from the start (Done is laid out unseen while the bar runs), so nothing on the card or
+ * below it moves.
  */
 @Composable
-private fun SummaryBarRow(sc: SceneClock, copy: CelebrationCopy, anchors: SceneAnchors, onSummaryCard: (Rect) -> Unit) {
+private fun SummaryBarRow(sc: SceneClock, copy: CelebrationCopy, anchors: SceneAnchors, onSummaryCard: (Rect) -> Unit, onDone: () -> Unit) {
     val cele = sc.cele
     val summaryAt = sc.at(BeatName.Summary).let { if (sc.reduced) 0L else it }
-    if (cele.keptAt != null) {
-        // The bar's footprint, drawn as nothing.
-        ClosingBar(sc, copy, summaryAt, anchors, Modifier.fillMaxWidth().padding(horizontal = 14.dp), placeholder = true)
-    } else {
-        DisposableEffect(Unit) {
-            onDispose {
-                anchors.closing = null
-                anchors.card()?.let(onSummaryCard)
+    val kept = cele.keptAt != null
+    androidx.compose.ui.layout.Layout(
+        content = {
+            if (kept) {
+                // The bar's footprint, drawn as nothing.
+                ClosingBar(sc, copy, summaryAt, anchors, Modifier.fillMaxWidth().padding(horizontal = 14.dp), placeholder = true)
+            } else {
+                DisposableEffect(Unit) {
+                    onDispose {
+                        anchors.closing = null
+                        anchors.card()?.let(onSummaryCard)
+                    }
+                }
+                ClosingBar(
+                    sc, copy, summaryAt, anchors,
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp)
+                        .onGloballyPositioned {
+                            anchors.closing = it.boundsInRoot()
+                            anchors.card()?.let(onSummaryCard)
+                        },
+                )
             }
+            // Kept open (§0.4 Q7): Done closes it. Unseen, untouchable and silent until then.
+            Box(if (kept) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { }) {
+                PicnicButton(copy.done, onDone, if (kept) Modifier.testTag(CelebrationTags.DONE) else Modifier, enabled = kept)
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) { measurables, constraints ->
+        val bar = measurables[0].measure(constraints.copy(minHeight = 0))
+        val done = measurables[1].measure(androidx.compose.ui.unit.Constraints(maxWidth = constraints.maxWidth))
+        // The card ends halfway down the washi strip; Done sits inside it, DONE_ROOM clear above and below.
+        val inside = (STRIP / 2).roundToPx()
+        val room = DONE_ROOM.roundToPx()
+        val h = maxOf(bar.height, done.height + 2 * room + inside)
+        layout(constraints.maxWidth, h) {
+            bar.place(0, h - bar.height)
+            done.place((constraints.maxWidth - done.width) / 2, (h - inside - done.height) / 2)
         }
-        ClosingBar(
-            sc, copy, summaryAt, anchors,
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp)
-                .onGloballyPositioned {
-                    anchors.closing = it.boundsInRoot()
-                    anchors.card()?.let(onSummaryCard)
-                },
-        )
     }
 }
+
+/** Done's room above and below it inside the summary card's bottom band. */
+private val DONE_ROOM: Dp = 6.dp
 
 /**
  * A white chip sticker on the scene (the list name, "tap to skip"): 32 dp tall at least, and taller when the font scale
@@ -727,7 +762,7 @@ private fun SceneChip(text: String, style: androidx.compose.ui.text.TextStyle, m
 @Composable
 private fun chipLines(): Int = if (LocalDensity.current.fontScale >= 1.15f) 3 else 2
 
-/** The bottom band's height (the "tap to skip" chip, the progress bar or Done; the album corner beside it). */
+/** The bottom band's height (the "tap to skip" chip; the album corner beside it). */
 private val BAND: Dp = 74.dp
 
 /** The title drops in from −80 dp, .6 → 1.06 → 1, 600 ms (cubic-bezier(.3, 1.4, .5, 1)). */
@@ -1550,15 +1585,14 @@ private fun pocketRects(w: Float, h: Float, density: androidx.compose.ui.unit.De
 
 /* ------------------------------------------------------------------------------------------------
  * The bottom band: "tap to skip" (until the curl). The summary's washi progress bar "Closing… tap to keep it" runs
- * along the summary card's bottom edge (SummaryCard), or its Done button once kept. No countdown under TalkBack.
+ * along the summary card's bottom edge (SummaryCard), and its Done button shows there once kept. No countdown under
+ * TalkBack.
  * ------------------------------------------------------------------------------------------------ */
 
 @Composable
-private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, anchors: SceneAnchors, onDone: () -> Unit) {
+private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, anchors: SceneAnchors) {
     val c = PicnicTheme.colors
     Box(Modifier.fillMaxSize().padding(start = 12.dp, bottom = 14.dp), contentAlignment = Alignment.BottomStart) {
-        // Kept open (§0.4 Q7): Done closes it.
-        if (sc.cele.keptAt != null) PicnicButton(copy.done, onDone, Modifier.testTag(CelebrationTags.DONE))
         if (!sc.reduced) {
             Box(
                 Modifier

@@ -675,6 +675,11 @@ class CelebrationTest {
         assertTrue("P2", compose.onAllNodesWithTag(CelebrationTags.CLOSING, useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
         // Done sits on the card where the bar was: nothing below it moved.
         assertEquals(card, rig.bounds(CelebrationTags.SUMMARY_CARD))
+        // On the card it closes, centred in its bottom band, under the banner.
+        val done = rig.bounds(CelebrationTags.DONE)
+        val banner = rig.bounds(CelebrationTags.BANNER)
+        assertTrue("Done $done inside the card $card, under the banner $banner", done.left >= card.left && done.right <= card.right && done.top >= banner.bottom && done.bottom <= card.bottom)
+        assertEquals("Done centred on the card", ((card.left + card.right) / 2).value, ((done.left + done.right) / 2).value, 1f)
         compose.onNodeWithTag(CelebrationTags.DONE, useUnmergedTree = true).performClick()
         rig.advance(250)
         assertNull("#10 at ${rig.now - s}: ${rig.p.celebration?.let { c -> "t0=${c.t0 - s} closing=${c.closingT0?.minus(s)} kept=${c.keptAt?.minus(s)}" }}", rig.p.celebration)

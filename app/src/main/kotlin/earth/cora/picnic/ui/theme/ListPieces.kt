@@ -131,6 +131,16 @@ fun fitTabName(measurer: TextMeasurer, name: String, style: TextStyle, maxWidthP
 fun tabNameFloorSp(density: androidx.compose.ui.unit.Density): Float = with(density) { 16.dp.toSp().value }.coerceAtMost(16f)
 
 /**
+ * The size (sp) a tab name shrinks to before it is cut, as fitted (§4.10): 14 sp at font scale 1.0 (strips, tray headers
+ * and the pinned plate: a long default aisle name such as "Meat & seafood" stays whole; §2.7's floor is 13 sp); under a
+ * large font, [tabNameFloorSp].
+ */
+fun tabFitFloorSp(density: androidx.compose.ui.unit.Density): Float = if (density.fontScale <= 1.001f) TAB_NAME_FLOOR_1X else tabNameFloorSp(density)
+
+/** The tab name's floor at font scale 1.0 (sp). */
+const val TAB_NAME_FLOOR_1X: Float = 14f
+
+/**
  * A test hook for the list's layout rules (items 76, 79, 92): when provided, list pieces report where they were laid
  * out (in the root) under a key, with the tab's fitted size. Null in the app, where it costs nothing.
  */
@@ -178,8 +188,9 @@ enum class TabSize(val height: Dp, val circle: Dp) {
 
 /**
  * An aisle's index tab (§4.10): the aisle pastel, a 3 dp white border, radius 12 / 4, hs; the number circle (the
- * walking [position]; the capsule for "Everything else") and the [displayName] (DynaPuff 700, fitted 20 → 16 sp, then
- * ellipsized), the pattern on the right 26 dp only, never under the name. [ballpoint]: the open tray's and the pinned
+ * walking [position]; the capsule for "Everything else") and the [displayName] (DynaPuff 700, fitted 20 → 14 sp at font
+ * scale 1.0, then the pattern end narrows to 12 dp, then the name is cut), the pattern on the right 26 dp only, never
+ * under the name. [ballpoint]: the open tray's and the pinned
  * plate's label (the strongest text on the list); otherwise the aisle trace. The tab is at most [maxWidth] wide.
  * Decorative: its strip or tray carries the full name for TalkBack.
  */
@@ -232,17 +243,22 @@ private fun TabFace(
     // What the name may take: the tab's width less its border, padding, circle and gap.
     val fixed = tabChrome(look, circle)
     val room = if (maxWidth == Dp.Infinity) Int.MAX_VALUE else with(density) { (maxWidth - fixed).roundToPx().coerceAtLeast(1) }
-    val floor = tabNameFloorSp(density)
-    val fit = remember(displayName, base, room, floor) { fitTabName(measurer, displayName, base, room, toSp = floor) }
-    // Too long even at 16 sp: cut at a word boundary, never leaving a dangling "&" (§4.10: "Deli…", not "Deli & …").
-    val shown = remember(displayName, base, room, fit) {
+    val floor = tabFitFloorSp(density)
+    val fullFit = remember(displayName, base, room, floor) { fitTabName(measurer, displayName, base, room, toSp = floor) }
+    // Still cut at the floor: the pattern end narrows from 26 dp to 12 dp before a letter goes, giving the name 14 dp.
+    val narrow = fullFit.ellipsized && look.pattern != TabPattern.Plain && room != Int.MAX_VALUE
+    val nameRoom = if (narrow) room + with(density) { (PATTERN_END - PATTERN_END_NARROW).roundToPx() } else room
+    val fit = if (narrow) remember(displayName, base, nameRoom, floor) { fitTabName(measurer, displayName, base, nameRoom, toSp = floor) } else fullFit
+    // Too long even at the floor: cut at a word boundary, never leaving a dangling "&" (§4.10: "Deli…", not "Deli & …").
+    val shown = remember(displayName, base, nameRoom, fit) {
         if (!fit.ellipsized) {
             displayName
         } else {
             val style = base.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp)
-            tabEllipsis(displayName) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width <= room }
+            tabEllipsis(displayName) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width <= nameRoom }
         }
     }
+    val patternWidth = if (narrow) PATTERN_END_NARROW else PATTERN_END
     Row(
         Modifier
             .probe(probe, probeKey, fit.fontSizeSp)
@@ -258,9 +274,9 @@ private fun TabFace(
             .padding(3.dp)
             .clip(shapes.tab)
             .background(look.family.pastel)
-            .tabPattern(look, width = 26.dp, alpha = 0.5f)
+            .tabPattern(look, width = patternWidth, alpha = 0.5f)
             .heightIn(min = size.height - 6.dp)
-            .padding(start = 6.dp, end = tabEnd(look), top = 1.dp, bottom = 1.dp),
+            .padding(start = 6.dp, end = tabEnd(look) - (PATTERN_END - patternWidth), top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -285,7 +301,7 @@ private fun tabChrome(look: AisleLook, circle: Dp): Dp = 3.dp * 2 + 6.dp + circl
 
 /**
  * The narrowest an [IndexTab] for [position] can be and still show its whole [displayName] (at its smallest fitted
- * size, 16 sp), its number circle as drawn here (it grows with a large font): for a row that gives way to the name
+ * size, 14 sp at 1.0), its number circle as drawn here (it grows with a large font): for a row that gives way to the name
  * before the name is cut (the tray header's store chip, §4.10).
  */
 @Composable
@@ -296,21 +312,40 @@ fun indexTabLeastWidth(position: Int, displayName: String, look: AisleLook, size
 }
 
 /**
- * The room [displayName] needs whole on one line at its smallest fitted size (16 sp) here, two px over its width, so
- * the tab's own fit (name width <= its room, rounded to px) takes it whole.
+ * The narrowest an [IndexTab] for [position] can be and still show the first word of [displayName] with its "…" (at
+ * the floor): a row that keeps something beside the tab while the name is cut leaves it at least this (the tray
+ * header's store chip, §4.10).
+ */
+@Composable
+fun indexTabFirstWordWidth(position: Int, displayName: String, look: AisleLook, size: TabSize): Dp {
+    val density = LocalDensity.current
+    val circle = rememberNumberCircleSize(position.takeIf { it > 0 }, look, size.circle)
+    val first = displayName.trim().substringBefore(' ')
+    val word = if (first.length < displayName.trim().length) first.trimEnd { it in DANGLING } + ELLIPSIS else first
+    return rememberTabNameLeast(word, density) + tabChrome(look, circle) - (PATTERN_END - PATTERN_END_NARROW)
+}
+
+/**
+ * The room [displayName] needs whole on one line at its smallest fitted size (14 sp at font scale 1.0, else 16 sp) here,
+ * two px over its width, so the tab's own fit (name width <= its room, rounded to px) takes it whole.
  */
 @Composable
 private fun rememberTabNameLeast(displayName: String, density: androidx.compose.ui.unit.Density): Dp {
     val measurer = rememberTextMeasurer(cacheSize = 2)
     val base = PicnicTheme.type.aisleTab
     return remember(displayName, base, density) {
-        val name = measurer.measure(displayName, base.copy(fontSize = 16.sp, lineHeight = (16f * 1.2f).sp), softWrap = false, maxLines = 1).size.width
+        val sp = if (density.fontScale <= 1.001f) TAB_NAME_FLOOR_1X else 16f
+        val name = measurer.measure(displayName, base.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp), softWrap = false, maxLines = 1).size.width
         with(density) { (name + 2).toDp() }
     }
 }
 
+/** The tab's pattern end (§4.10): 26 dp, narrowed to 12 dp when the name would otherwise be cut. */
+private val PATTERN_END: Dp = 26.dp
+private val PATTERN_END_NARROW: Dp = 12.dp
+
 /** The tab's right padding: the 26 dp pattern strip plus 6 dp; a plain tab ("Everything else") closes at 12 dp. */
-private fun tabEnd(look: AisleLook): Dp = if (look.pattern == TabPattern.Plain) 12.dp else 32.dp
+private fun tabEnd(look: AisleLook): Dp = if (look.pattern == TabPattern.Plain) 12.dp else PATTERN_END + 6.dp
 
 /**
  * The tab's number circle (§2.7): the kit's [NumberCircle] at [TabSize.circle] (24 dp white, a 2 dp trace ring, DynaPuff
