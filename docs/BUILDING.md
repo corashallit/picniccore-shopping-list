@@ -111,8 +111,8 @@ can be reviewed without an emulator. Goldens are committed in `app/src/test/scre
 - `<screen>_<state>_<light|dark>.png`: explicit screen tests (see ARCHITECTURE §14).
 
 After an intentional visual change, run `recordRoborazziDebug` and commit the new PNGs. CI runs
-`compareRoborazziDebug` and uploads the diff images with the reports; switch CI to
-`verifyRoborazziDebug` once the art settles.
+`compareRoborazziDebug` and uploads the diff images with the reports; it does not fail on a diff
+(moving CI to `verifyRoborazziDebug`, DESIGN_STICKER item 305, was retired on 4 October).
 
 Gotchas (already configured in `app/build.gradle.kts` and `app/src/test/resources/robolectric.properties`):
 

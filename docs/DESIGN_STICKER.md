@@ -38,7 +38,7 @@ Working app name: **Kirakira Basket**. The launcher label is an open question (Q
 | A per-trip **sticker book** at the top (like Firefly's charm bracelet): the sticker hops into the basket, then the same sticker appears by magic in the book. One book per trip. | The trip sticker book: a ring-bound mini album pinned under the app bar. Left page = the trip's stamp card, right page = one spot per item. Twin appears 320 ms after the landing. Filed into the album on "New trip". | §7 | 131–139, 141–165 |
 | **Every part of the spec works** (Cora could not print the LCD receipt) | Every interaction in §4 to §13 has a checklist item with an interaction test. The LCD hold is deterministic (shop finished = receipt, otherwise pet; D21), and completion is an invariant of the state that every change recomputes, so a trip finished by a delete, a move or an undo still prints its receipt. A hidden **Surprise lab** lets anyone fire every egg on demand on a real phone, on a sandbox copy that never touches her lists. The mockup's generator and a real assertion suite move into the repo and gate sign-off, and the mockup stops offering anything that won't ship. | §7.1, §12, §13, §18.4 | 133, 154, 176, 228–229, 237–248, 250, 252–255, 257–258, 260, 265–270, 274, 310–312 |
 | Full-screen animations are **too fast for their text** | One reading rule, `readHold(words) = max(floor, 1200 + 300 × words)` ms of stillness, measured from the moment the text is still (§9 defines "still"), on every text-bearing moment, with the words counted from the real text at run time. The Next card says only "NEXT" + the aisle tab and holds at least 2.6 s still (longer for long aisle names). The celebration shows one text beat at a time, each starting only after the previous one's hold; its length is computed (about 17 s for the fixture). Holds never shrink under reduced motion or Android's animation scales, and they respect Android's "Time to take action" setting. | §9, §10, §11 | 166–174, 180–188, 196 |
-| An **incredibly polished** app | No placeholder art or Material default survives; every state has a golden; motion is checked frame by frame. | all | 235, 303–310, 337, 338 |
+| An **incredibly polished** app | No placeholder art or Material default survives; every state has a golden; motion is checked frame by frame. | all | 235, 303, 306–308, 310, 337, 338 |
 
 ### 0.3 Contract decisions (resolving gap-analysis D1 to D25)
 
@@ -112,6 +112,7 @@ Smaller conflicts between the written spec, the mockup and the app, and how this
 | Copy: the Speak prompt | **"Anything the paper forgot? Say it." is cut** | It was filler. The prompt after a photo is now **"Anything else? Say it out loud."** That was feedback on one line, not a rule to enforce with a test (Cora, 4 October); §16 keeps a plain-copy guideline for whoever writes copy. Item 333 is retired. |
 | Pinned current aisle (bug in mockup r9) | **The lemon ring never breaks** | When the current aisle's tray is pinned while its rows scroll, the pinned plate carries the tray's 3 dp lemon ring (top and sides) and its offset shadow, so the yellow border runs unbroken from the plate down the tray. The plate's solid backing (R6) still hides the rows. This holds in Day, Glow and the other variants, and in the mockup too. |
 | Egg 1 trigger | **One tap on the sun** (Cora, 4 October: more likely to be found) | A single tap on the sun sticker beside the title (Day or Golden) turns the binder Dusk; the seven taps within 1.5 s of each other are gone. The rest of the egg stays (§12.2, §12.3): the 1.2 s sunset and moonrise, a tap on the moon to undo, the static Glow moon, the reduced-motion fade, nothing with Easter eggs off; another tap while the change plays does nothing. The About page hints "tap the sun?" and the lab's line reads "Tap the sun by the title." The Surprise lab's own unlock (7 taps on the version line, §6.9) is unchanged. Item 238. |
+| Tests and CI | **Only what is likely to find a problem in this release** (Cora, 4 October) | "CI time isn't the bottleneck, it's CI implementation time - your time is more valuable." Integration tests and CI work stay to what has a high probability of finding issues in the current release, and the effort goes into the app: no new CI gates, no polishing of test infrastructure for its own sake. Items 304 (`GoldenCoverageTest` and its manifest are removed), 305 (CI keeps `compareRoborazziDebug`, which uploads the diffs and does not fail on one) and 309 (no APK size check) are retired. Appendix C stays as the list of goldens, for recording and review. |
 
 ## 1. Concept
 
@@ -2329,12 +2330,12 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 ### 20.20 Polish and release gates
 
 303. **[WP10 · POLISH]** All 52 legacy goldens are re-recorded and `PlaceholderArt.kt` is gone with no references. — *Test:* `NoPlaceholderTest` (source scan)
-304. **[WP10 · POLISH]** Every state named in §6 and §7.5 has a golden in each variant where it exists, at w360dp-h760dp plus the listed w411dp variants. — *Test:* `GoldenCoverageTest` (reads the Appendix C manifest)
-305. **[WP10 · POLISH]** CI runs `verifyRoborazziDebug` and is green. — *Test:* CI workflow
+304. **[Retired]** ~~**[WP10 · POLISH]** Every state named in §6 and §7.5 has a golden in each variant where it exists, at w360dp-h760dp plus the listed w411dp variants. — *Test:* `GoldenCoverageTest` (reads the Appendix C manifest)~~ Retired on 4 October: tests and CI only where they are likely to find a problem in this release (Cora, §0.4). Appendix C stays as the list of goldens.
+305. **[Retired]** ~~**[WP10 · POLISH]** CI runs `verifyRoborazziDebug` and is green. — *Test:* CI workflow~~ Retired on 4 October: tests and CI only where they are likely to find a problem in this release (Cora, §0.4). CI keeps `compareRoborazziDebug` and uploads the diffs.
 306. **[WP4 · POLISH]** Pinstripes and patterns are cached shaders, never redrawn stripe by stripe per frame. — *Test:* `ShaderCacheTest` (Robolectric, counts tile creations)
 307. **[WP10 · POLISH]** No `RenderEffect`, blur or live filter is used anywhere. — *Test:* `NoBlurLintTest` (source scan)
 308. **[WP10 · POLISH]** Scrolling the fixture list and the check-off chain hold 60 fps on a mid-range phone (P90 frame ≤16 ms, no frame over 32 ms). — *Test:* `ListScrollBenchmark`, `CheckOffBenchmark` (Macrobenchmark on device, results in the PR)
-309. **[WP10 · POLISH]** The sideload APK grows by at most 4 MB over `7be9b87`. — *Test:* `apkSizeCheck` (CI step)
+309. **[Retired]** ~~**[WP10 · POLISH]** The sideload APK grows by at most 4 MB over `7be9b87`. — *Test:* `apkSizeCheck` (CI step)~~ Retired on 4 October: tests and CI only where they are likely to find a problem in this release (Cora, §0.4).
 310. **[WP10 · POLISH · WORKS]** A recorded on-device walkthrough fires every egg from the Surprise lab and runs a full trip to the receipt. — *Test:* manual run, video attached to the PR
 311. **[Retired]** ~~**[WP10 · WORKS]** The mockup generator and its assertion suite live in `design/mockup/`; the suite asserts each egg's and flow's expected end state (§18.4: receipt `has-receipt` and its slip, reduced-motion Next card visible ≥2.6 s, one open aisle at a time, the celebration holds) with zero console errors, and gates CI and sign-off.~~ Retired on 2 October: the mockup is reference only (§0.4).
 312. **[Retired]** ~~**[WP10 · WORKS]** Every control the mockup offers exists in the app or is labelled "not in v1" on the page: no web-search switch, model pills or On sale chip; the pantry rows follow §4.17, My pantry is a phone on the page, and the Weather switch and the New trip sheet are there.~~ Retired on 2 October: the mockup is reference only (§0.4).
@@ -2383,7 +2384,7 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 
 **Shared-file rules.**
 - Strings: one file per package (`res/values/strings_<pkg>.xml`); nobody edits another package's file. Today's files are split by the lead in phase 0: the `theme_*` strings move from `strings.xml` to `strings_theme.xml` (WP4), `list_*` from `strings_screens.xml` to `strings_list.xml` (WP5) and `add_*` to `strings_add.xml` (WP7); `strings_screens.xml` keeps the rest (WP8) and `strings.xml` keeps `app_name` and `wordmark` (WP8).
-- The **lead** owns the wiring files every package touches: `AppContainer.kt`, `PicnicApp.kt`, `app/build.gradle.kts` (the `checkStickers`, `checkSounds` and `apkSizeCheck` tasks), `settings.gradle.kts` (the `benchmark` module) and `res/values*/colors.xml`. Packages send their hunks (a new service's construction, a Gradle task) to the lead, who merges them.
+- The **lead** owns the wiring files every package touches: `AppContainer.kt`, `PicnicApp.kt`, `app/build.gradle.kts` (the `checkStickers` and `checkSounds` tasks), `settings.gradle.kts` (the `benchmark` module) and `res/values*/colors.xml`. Packages send their hunks (a new service's construction, a Gradle task) to the lead, who merges them.
 - `gradle/libs.versions.toml` stays append-only (ARCHITECTURE §3.1).
 - `.github/workflows/android.yml` is owned by WP10; other packages send it their CI steps.
 - `core/…/assistant/GroceryAssistant.kt` and `OpenAiGroceryAssistant.kt` are split by hunk: WP1 owns `IconDrawRequest`, `DrawnIcon` and `drawIcon`; WP3 owns everything else.
@@ -2477,12 +2478,12 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Acceptance**: 16, 73, 237–248, 250, 252–261, 265–274, 316, 335
 
 #### WP10 · a11y-sound-haptics (and the release gates)
-*Feedback (sounds + haptics) and announcements as services, the accessibility audits, copy and IP scans, the CI workflow, the golden coverage and performance gates.*
+*Feedback (sounds + haptics) and announcements as services, the accessibility audits, copy and IP scans, the CI workflow, the performance benchmarks.*
 
-- **Owns**: `platform/Feedback.kt` (SoundPool, haptics, gating), `platform/Announcer.kt`, `platform/Timeouts.kt` (recommended timeouts, hold threshold), new `ui/a11y/**` (`spokenDetail`, semantics helpers, the `TextOverflowed` key), `.github/workflows/android.yml`, `res/values/strings_a11y.xml`; `design/mockup/**` (frozen reference, §18.4: only its README note); cross-cutting tests under `app/src/test/…/a11y/**` and `…/release/**` (TouchTargetAuditTest, FontFamilyBudgetTest, TalkBackCopyTest, ReducedMotionAuditTest, NoFlashTest, KeyboardNavTest, FocusTest, DecorSemanticsTest, TimeoutsTest, TextOnPatternTest, MinTextSizeTest, NoClippedTextTest, IpWordsTest, CopyRulesTest, NoBlurLintTest, NoPlaceholderTest, GoldenCoverageTest); the Macrobenchmark module `benchmark/`.
+- **Owns**: `platform/Feedback.kt` (SoundPool, haptics, gating), `platform/Announcer.kt`, `platform/Timeouts.kt` (recommended timeouts, hold threshold), new `ui/a11y/**` (`spokenDetail`, semantics helpers, the `TextOverflowed` key), `.github/workflows/android.yml`, `res/values/strings_a11y.xml`; `design/mockup/**` (frozen reference, §18.4: only its README note); cross-cutting tests under `app/src/test/…/a11y/**` and `…/release/**` (TouchTargetAuditTest, FontFamilyBudgetTest, TalkBackCopyTest, ReducedMotionAuditTest, NoFlashTest, KeyboardNavTest, FocusTest, DecorSemanticsTest, TimeoutsTest, TextOnPatternTest, MinTextSizeTest, NoClippedTextTest, IpWordsTest, CopyRulesTest, NoBlurLintTest, NoPlaceholderTest); the Macrobenchmark module `benchmark/`.
 - **Provides**: `Feedback`, `Cue`, `Announcer`, `Timeouts`, `FakeFeedback`, `FakeAnnouncer`, `FakeTimeouts`, the screen-fixture walker used by the audits.
 - **Consumes**: WP2 sounds; WP8 switches; every screen (for the audits, which run last).
-- **Acceptance**: 26, 197–198, 276–295, 303–305, 307–310, 317, 330, 332, 334
+- **Acceptance**: 26, 197–198, 276–295, 303, 307–308, 310, 317, 330, 332, 334 (304, 305 and 309 retired on 4 October, Cora's note in §0.4)
 
 ### 21.2 Dependency graph
 
@@ -2537,7 +2538,7 @@ Hard dependencies (cannot finish without) versus soft ones (can build against a 
 2. **Phase 1, parallel**: WP1 (authoring + v4), WP2, WP3, WP4, WP7 and WP8 (both against WP4's API), WP10 services.
 3. **Phase 2**: WP5 (needs WP3 + WP4), then WP6 on WP5's anchors (WP6 can build its engine and strips against a harness screen during phase 1).
 4. **Phase 3**: WP9 (needs the trip, the list hooks and the overlay host).
-5. **Phase 4, gates**: WP10 audits, all goldens re-recorded and reviewed by Cora, CI to `verifyRoborazziDebug`, the on-device walkthrough with the Surprise lab, sign-off. (The mockup is not re-checked, §18.4.)
+5. **Phase 4, gates**: WP10 audits, all goldens re-recorded and reviewed by Cora, the on-device walkthrough with the Surprise lab, sign-off. (The mockup is not re-checked, §18.4. CI stays on `compareRoborazziDebug`: item 305 is retired, §0.4.)
 
 ---
 
@@ -2607,9 +2608,9 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 
 ---
 
-## Appendix C. Golden manifest (`GoldenCoverageTest`)
+## Appendix C. Golden manifest
 
-`GoldenCoverageTest` reads `app/src/test/screenshots/manifest.txt`, generated from this appendix (the test writes it again with `GOLDEN_MANIFEST_WRITE=1` in the environment and fails while it differs), and fails if a name is missing from the screenshots folder or a screenshot is not in the manifest; it also checks that every golden a §20 item names exists. CI's golden gate (item 305) fails a full run in which a golden in the folder is not compared by any test: no golden is an orphan. Expansion rules:
+The goldens the spec asks for, for recording and review. No test reads this appendix: `GoldenCoverageTest`, its generated manifest and a CI golden gate (items 304 and 305) were retired on 4 October (§0.4). Expansion rules:
 
 - A name with no variant suffix (`_day`, `_glow`, `_dusk`, `_golden`, `_rm`) is recorded twice, `<name>_day` and `<name>_glow`, unless its row says **Day only** (each such name is then one Day golden, `<name>.png`); a name ending `_fs130`, `_fs200` or `_w411` is one Day golden too, unless it is written with its variants (`row_states_fs200_{day,glow}`); `<variant>` expands to `day` and `glow`, and a name written with its variants (`puffy_title_{day,glow}_long`) is taken as written.
 - `{a,b,c}` expands to one name per entry; `<density>` to `1x`, `2x`, `2_625x`, `3x`, `3_5x`, `4x`; `<category>` to the 20 catalog categories; `<n>` with `_end_<variant>` to each egg and the variants §12.3 lists for it.
@@ -2732,7 +2733,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 337 | `kit_large_text_{fs130,fs200}_{day,glow}`, `chip_focused_{day,glow}`, `button_round_disabled_{day,glow}`, `addbar_waiting_{day,glow}`, `field_multiline_{day,glow}`, `row_states_fs200_{day,glow}`, `row_jackpot_fs130_{day,glow}`, `row_shiny_fs200_{day,glow}` | — |
 | 338 | `puffy_title_ellipsized_{day,glow}`, `puffy_title_{day,glow}_long`, `nextcard_*` | — |
 
-**State goldens not named by a checklist item** (they complete the §6 and §7.5 state lists; item 304 covers them):
+**State goldens not named by a checklist item** (they complete the §6 and §7.5 state lists):
 
 | Screen | Goldens |
 |---|---|
@@ -2743,7 +2744,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | Album (§6.10, §6.12) | `album_early`, `album_full`, `album_holo_glint`, `album_face_blink`, `album_back_pocket`, `album_empty`, `album_tripbook_open` (a filed book's sheet), `album_receipt_full` (its receipt at full size), `album_pocket_lift` (§4.25 pocket interaction) |
 | Book (§7.5) | `book_dusk`, `book_golden`, `book_bonus_stage`, `book_empty_list_hidden`, `book_seasonal`, `book_perfect_glow`, `book_page2_fs200` (Day only) |
 
-**Further goldens** (the states the §20 items after 312, the large-text audits and the egg tests record, and the preview scanner; item 304 covers them):
+**Further goldens** (the states the §20 items after 312, the large-text audits and the egg tests record, and the preview scanner):
 
 | Area | Goldens | Frame strips |
 |---|---|---|

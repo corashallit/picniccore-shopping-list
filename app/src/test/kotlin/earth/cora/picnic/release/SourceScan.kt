@@ -260,9 +260,6 @@ object Catalog {
 
     /** Every catalog key (a sticker's DSL name). */
     val keys: List<String> by lazy { json.getValue("icons").jsonArray.map { it.jsonObject.str("key") } }
-
-    /** Every category key (a contact sheet's name in the goldens). */
-    val categories: List<String> by lazy { json.getValue("categories").jsonArray.map { it.jsonObject.str("key") } }
 }
 
 /** The test sources whose data renders into the goldens and the screens' samples (§17: generic names only). */

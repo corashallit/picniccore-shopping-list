@@ -128,8 +128,8 @@ class MotionStripsTest(private val variant: ThemeVariant) {
 
 /**
  * The WP6 goldens recorded on the [MotionHarness] stand-in rather than WP5's real list (Appendix C names that must show
- * the real list): provisional until part 3 re-records them on ListScreen. GoldenCoverageTest and the lead's review can
- * read this list; the celebration strip's frames before the scene covers the list (0.1 s) show the harness list too.
+ * the real list): provisional until part 3 re-records them on ListScreen. The lead's review can read this list; the
+ * celebration strip's frames before the scene covers the list (0.1 s) show the harness list too.
  */
 object ProvisionalGoldens {
     val prefixes: List<String> = listOf(

@@ -39,7 +39,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Goldens Appendix C names that no package recorded (item 304's gaps), in Day and Glow:
+ * Goldens Appendix C names that no package recorded, in Day and Glow:
  * - `glyphs_all` (item 48, §3.4): every toolbar glyph at its 24 dp size and at 48 dp, ballpoint 2u lines with round caps,
  *   no border and no gloss;
  * - `row_states_greyscale` (item 288, §15): the row states (to get, got, drawing, shiny, new) with the colour taken out,
