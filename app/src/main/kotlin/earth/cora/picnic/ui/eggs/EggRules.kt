@@ -267,10 +267,13 @@ object EggRules {
 
     // ---- Egg 18 and 15 ----
 
-    /** The LCD's words (§9 table): FED 1.5 s, SNACK? 2.6 s, PRINT★ 1.7 s; BONUS★ while the stage lasts. */
+    /**
+     * The LCD's words (§9 table): FED 1.5 s, SNACK? 2.6 s, BONUS★ while the stage lasts, and PRINT★ for as long as the
+     * receipt prints, up to its settle at 1.96 s, when the slot line goes and the LCD returns to the count (§13.1, §13.2).
+     */
     const val FED_MS: Long = 1500
     const val SNACK_MS: Long = 2600
-    const val PRINT_MS: Long = 1700
+    const val PRINT_MS: Long = ReceiptMotion.SETTLE_AT
     const val FED: String = "FED"
     const val SNACK: String = "SNACK?"
     const val PRINT: String = "PRINT★"

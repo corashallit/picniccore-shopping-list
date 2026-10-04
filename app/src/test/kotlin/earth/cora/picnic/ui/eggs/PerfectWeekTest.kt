@@ -187,7 +187,7 @@ class PerfectWeekTest {
         val r = EggRig(compose)
         r.start {
             Column(Modifier.fillMaxSize()) {
-                Box(Modifier.weight(1f)) { PracticeList(r.model, feedback = r.feedback) }
+                Box(Modifier.weight(1f)) { PracticeListScreen(r.sandbox) }
                 val album by r.sandbox.album.album.collectAsState(initial = null)
                 album?.let { a ->
                     PerfectWeeksCard(a.perfectStreak, earned = a.perfectStreak >= EggRules.PERFECT_WEEK_TRIPS, holo = (a.perfectUntil ?: 0L) > r.clock.now())

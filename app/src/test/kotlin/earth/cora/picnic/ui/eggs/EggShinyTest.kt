@@ -11,6 +11,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -85,14 +86,23 @@ class EggShinyTest {
         assertEquals(kiraBefore + 1, r.feedback.count(Cue.MAGIC_APPEAR))
         r.advanceTo(t0 + 1_000)
         assertTrue("the shiny! chip shows on its row", r.anchors.isLaidOut(EggAnchors.TEXT_PREFIX + "chip:" + maple.id))
+        // One lemon star on its sticker (§4.11): a shiny pull is always new too, and the two are the same star.
+        assertTrue("the maple syrup is new on the list", r.list.items.single { it.id == maple.id }.addedAt > (earth.cora.picnic.core.model.TripRules.newAnchor(r.list) ?: Long.MAX_VALUE))
+        assertEquals("one star flag on the shiny row", 1, starFlags(r, maple.id))
+        // Its row is in the list's room, above the bar and clear of the note that says "shiny!" (it rests over the list).
+        val line = r.anchor(EggAnchors.line(maple.id))
+        val note = compose.onNodeWithTag(earth.cora.picnic.ui.theme.TOAST_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("the shiny row ($line) above the note ($note)", line.bottom <= note.top + 1f)
+        assertTrue("the shiny row below the binder top", line.top >= r.anchor(EggAnchors.LIST).top - 1f)
         r.advanceTo(t0 + 2_000)
         assertTrue("the burst has played out", r.eggs.shinyBursts.isEmpty())
 
         // Checked: it hops into its basket holo, its twin in the book is holo, and the album pockets it holo.
         r.act { r.model.toggle(maple.id) }
         r.advance(2_000)
-        val breakfast = r.model.grouped().sections.single { it.id == "breakfast" }
-        val mini = minis(breakfast, pixel = false).single { it.itemId == maple.id }
+        // The basket as the real list maps it (buildListUiState: the minis WP5's basket draws).
+        val ui = earth.cora.picnic.ui.list.buildListUiState(r.state, emptySet(), false, null, IconCatalog.default, now = r.clock.now())
+        val mini = ui.sections.single { it.id == "breakfast" }.gotten.single { it.itemId == maple.id }
         assertTrue("holo in its basket", mini.holo)
         val checked = r.list.items.single { it.id == maple.id }
         assertTrue(checked.checked)

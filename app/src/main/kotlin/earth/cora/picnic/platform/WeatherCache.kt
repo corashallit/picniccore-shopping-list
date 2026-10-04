@@ -40,6 +40,11 @@ data class WeatherMemo(
     val rainToastDay: LocalDate? = null,
     /** The first snow day of this snow season (from 1 October); the first-snow tape shows for 7 days from it. */
     val firstSnowDate: LocalDate? = null,
+    /**
+     * The forecast city the last answer was for (its Environment Canada site code, Place.cityCode; §0.4 Q6): when the
+     * area moves to another city, the forecast is asked again at once, whatever its age.
+     */
+    val city: String? = null,
 )
 
 interface WeatherCache {
@@ -66,6 +71,7 @@ class DataStoreWeatherCache(private val store: DataStore<Preferences>) : Weather
             day = cache?.getOrNull(0)?.let(::date),
             rain = cache?.getOrNull(1) == "rain",
             snow = cache?.getOrNull(2) == "snow",
+            city = cache?.getOrNull(3)?.takeIf { it.isNotEmpty() },
             rainToastDay = p[RAIN_TOAST_DAY]?.let(::date),
             firstSnowDate = p[FIRST_SNOW_DATE]?.let(::date),
         )
@@ -78,7 +84,7 @@ class DataStoreWeatherCache(private val store: DataStore<Preferences>) : Weather
             store.edit { p ->
                 memo.fetchedAt?.let { p[FETCHED_AT] = it } ?: p.remove(FETCHED_AT)
                 val day = memo.day
-                if (day == null) p.remove(CACHE) else p[CACHE] = "$day|${if (memo.rain) "rain" else "dry"}|${if (memo.snow) "snow" else "none"}"
+                if (day == null) p.remove(CACHE) else p[CACHE] = "$day|${if (memo.rain) "rain" else "dry"}|${if (memo.snow) "snow" else "none"}|${memo.city.orEmpty()}"
                 memo.rainToastDay?.let { p[RAIN_TOAST_DAY] = it.toString() } ?: p.remove(RAIN_TOAST_DAY)
                 memo.firstSnowDate?.let { p[FIRST_SNOW_DATE] = it.toString() } ?: p.remove(FIRST_SNOW_DATE)
             }
@@ -106,13 +112,17 @@ data class EggWeather(val rain: Boolean, val firstSnowDate: LocalDate?, val rain
 
 /**
  * When to ask the forecast (§12.4): [check] runs when the list opens; with Weather surprises off it requests nothing
- * and returns no weather; with it on it asks [source] when the last ask is 3 h old or more, keeps the answer (an unanswered ask keeps the old one), and keeps the first-snow date of this season.
+ * and returns no weather; with it on it asks [source] when the last ask is 3 h old or more, or was for another forecast
+ * city than [city] names now ("Use my area" turned on or off, or her area moved to another city, §0.4 Q6), keeps the
+ * answer (an unanswered ask keeps the old one), and keeps the first-snow date of this season.
  */
 class WeatherService(
     private val source: WeatherSource,
     private val cache: WeatherCache,
     private val clock: () -> Long,
     private val zone: ZoneId = ZoneId.of("America/Toronto"),
+    /** The forecast city the source asks for now (PlaceSource's Place.cityCode; Toronto's by default). */
+    private val city: suspend () -> String = { earth.cora.picnic.core.calendar.Place.TORONTO.cityCode },
 ) {
     private val mutex = Mutex()
 
@@ -127,7 +137,8 @@ class WeatherService(
             val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
             var memo = cache.read()
             if (!weatherOn) return@withLock null
-            val stale = memo.fetchedAt == null || now - memo.fetchedAt!! !in 0 until REFETCH_MS
+            val here = city()
+            val stale = memo.fetchedAt == null || now - memo.fetchedAt!! !in 0 until REFETCH_MS || memo.city != here
             if (stale) {
                 requests++
                 val answer: WeatherToday? = source.today()
@@ -138,7 +149,11 @@ class WeatherService(
                         rain = answer.rain,
                         snow = answer.snow,
                         firstSnowDate = EggRules.firstSnowDate(memo.firstSnowDate, answer.date, answer.snow),
+                        city = here,
                     )
+                } else if (memo.city != here) {
+                    // No answer for the new city: the old city's rain is not hers.
+                    memo.copy(fetchedAt = now, day = null, rain = false, snow = false, city = here)
                 } else {
                     memo.copy(fetchedAt = now)
                 }

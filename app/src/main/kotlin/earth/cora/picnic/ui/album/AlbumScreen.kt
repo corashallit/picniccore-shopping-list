@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
@@ -79,6 +80,8 @@ fun AlbumRoute(
     onOpenMyStore: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenPantry: () -> Unit = {},
+    /** Where it opens (egg 14's "Look": the back pocket). */
+    openAt: earth.cora.picnic.ui.nav.AlbumTarget = earth.cora.picnic.ui.nav.AlbumTarget.Top,
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val actions = remember(vm) {
@@ -93,7 +96,7 @@ fun AlbumRoute(
             onOpenSettings = onOpenSettings,
         )
     }
-    AlbumScreen(state, actions)
+    AlbumScreen(state, actions, openAt = openAt)
 }
 
 /** One slice of the vinyl page: a group title, a row of four pockets, or a seasonal card. */
@@ -130,6 +133,8 @@ fun AlbumScreen(
     initialBook: String? = null,
     initialBlink: String? = null,
     initialFullReceipt: Boolean = false,
+    /** Egg 14's "Look" (§12.2): the album opens at the back pocket, which reveals sheet 2 of 2. */
+    openAt: earth.cora.picnic.ui.nav.AlbumTarget = earth.cora.picnic.ui.nav.AlbumTarget.Top,
 ) {
     var lifted by rememberSaveable { mutableStateOf(initialLifted) }
     var openBook by rememberSaveable { mutableStateOf(initialBook) }
@@ -161,6 +166,19 @@ fun AlbumScreen(
             // "64/216" (§6.10): the count without the trip LCD's star.
             LcdChip(LcdState(mode = LcdMode.Text, text = "${state.collected}/${state.collectible}"), pitch = 1.6.dp)
         }
+    }
+
+    // Egg 14's "Look": once the album has loaded, it goes to the back pocket (at once under reduced motion), and the
+    // pocket reveals itself as it arrives. Once: a rotation keeps her where she is.
+    val toBackPocket = openAt == earth.cora.picnic.ui.nav.AlbumTarget.BackPocket && state.backPocketOpen
+    var wentToPocket by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(toBackPocket, state.loading, slices.size) {
+        if (!toBackPocket || state.loading || state.empty || wentToPocket) return@LaunchedEffect
+        wentToPocket = true
+        // The back pocket's lazy index: the books link, the tabs, the page's slices, the books, Perfect weeks.
+        val books = if (state.books.isNotEmpty()) 1 else 0
+        val index = books + 1 + slices.size + books + 1
+        if (reduced) listState.scrollToItem(index) else listState.animateScrollToItem(index)
     }
 
     SecondaryScreen(
@@ -277,7 +295,7 @@ fun AlbumScreen(
                 PerfectWeeksCard(state.perfectStreak, state.perfectEarned, state.perfectHolo, Modifier.padding(top = 26.dp))
             }
             if (state.backPocketOpen) {
-                item("back") { BackPocketCard(Modifier.padding(top = 18.dp)) }
+                item("back") { BackPocketCard(Modifier.padding(top = 18.dp), reveal = toBackPocket) }
             }
             item("bottom") {
                 Spacer(Modifier.height(8.dp).windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)))

@@ -21,6 +21,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -32,6 +33,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -102,6 +105,13 @@ class ToastHostState {
      * scene it sat under unseen). A toast already lifting off finishes. The host that draws the cover sets it.
      */
     var paused: Boolean by mutableStateOf(false)
+
+    /**
+     * The window y of the current toast's top where it rests (its drop and lift aside), or null with no toast: what it
+     * covers above the bar, so a scene brought into the list's room lands clear of it (WP9's EggListHost).
+     */
+    var restingTop: Float? by mutableStateOf(null)
+        internal set
 
     private val waiting = mutableStateListOf<ToastMessage>()
 
@@ -180,6 +190,7 @@ fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset:
             state.finished(m.id)
         }
     }
+    if (message == null) SideEffect { state.restingTop = null }
     Box(modifier.fillMaxSize()) {
         if (message != null) {
             val e = drop.value
@@ -198,6 +209,8 @@ fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset:
                     .align(Alignment.BottomStart)
                     .padding(start = 14.dp, bottom = bottomInset + bottomGap)
                     .testTag(TOAST_TAG)
+                    // Where it rests: read outside its drop's layer.
+                    .onGloballyPositioned { state.restingTop = it.positionInWindow().y }
                     .pointerInput(message.id) {
                         var dx = 0f
                         detectHorizontalDragGestures(onDragEnd = {

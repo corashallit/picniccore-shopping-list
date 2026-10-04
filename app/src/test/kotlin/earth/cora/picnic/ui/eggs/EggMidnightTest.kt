@@ -104,7 +104,7 @@ class EggMidnightTest {
             androidx.compose.runtime.SideEffect {
                 fits = { text, sp -> measurer.measure(text, style.copy(fontSize = androidx.compose.ui.unit.TextUnit(sp, androidx.compose.ui.unit.TextUnitType.Sp)), maxLines = 1, softWrap = false).size.width }
             }
-            EggListUnderTest.Practice.content(r)
+            EggListUnderTest.Real.content(r)
         }
         // By day: bring Frozen into view, and read the room its name has.
         r.act { r.model.focus("frozen") }
@@ -115,7 +115,7 @@ class EggMidnightTest {
         r.advance(1_200)
         val night = r.anchor(EggAnchors.TEXT_PREFIX + "tab:frozen").width
         assertEquals("fs $scale: the tab's name keeps its room", day, night, 1f)
-        val need = fits!!("Frozen", TAB_MIN_SP)
+        val need = fits!!("Frozen", 16f)
         assertTrue("fs $scale: the full \"Frozen\" fits at 16 sp or more ($need px in $night px)", need.toFloat() <= night + 1f)
         assertSnackBesideTheWords(r)
         r.sandbox.close()

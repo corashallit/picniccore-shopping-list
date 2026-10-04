@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.eggs.EggAnchors
+import earth.cora.picnic.ui.eggs.eggTwinkle
 import earth.cora.picnic.ui.eggs.eggTitleSticker
 import earth.cora.picnic.ui.eggs.lcd
 import earth.cora.picnic.ui.eggs.rememberKirakiraBrush
@@ -115,7 +116,8 @@ internal fun TopStack(
                 // Above font scale 1.3 the stamp name tag joins the date's caption row (§7.4, §7.7, item 157).
                 var captionTag by remember { mutableStateOf<String?>(null) }
                 BookWithCaption(
-                    caption = if (dateOnPage) null else { { BookDateCaption(book.dateLabel, season = book.season) } },
+                    // The caption's date is words: the eggs keep clear of it (the receipt, the bursts; `text:date`, §12.1).
+                    caption = if (dateOnPage) null else { { BookDateCaption(book.dateLabel, season = book.season, modifier = with(engine.anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "date") }) } },
                     tag = captionTag,
                     book = {
                         StickerBook(
@@ -131,6 +133,8 @@ internal fun TopStack(
                             onStampTap = actions.onStampTap,
                             pageNumber = LocalListEggs.current.rolling == null,
                             onNameTag = if (dateOnPage) null else { text -> captionTag = text },
+                            // Egg 7: the book's twins twinkle once with the rows' stickers (§12.2).
+                            twinkle = LocalListEggs.current.let { eggs -> { slot -> Modifier.eggTwinkle(eggs, slot) } },
                         )
                     },
                 )
@@ -319,7 +323,9 @@ private fun AppBar(
         Box(
             Modifier
                 .testTag(ListTags.MORE)
-                .onGloballyPositioned { onMoreBounds(it.boundsInWindow()) },
+                .onGloballyPositioned { onMoreBounds(it.boundsInWindow()) }
+                // Egg 1's sparkle burst keeps clear of it (§12.2).
+                .then(with(anchors) { Modifier.anchor(EggAnchors.MORE) }),
         ) {
             PicnicIconButton(PicnicGlyph.More, stringResource(R.string.theme_more_options), onMore)
         }

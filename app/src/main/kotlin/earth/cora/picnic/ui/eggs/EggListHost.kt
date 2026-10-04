@@ -125,7 +125,8 @@ class EggListScope internal constructor(
  *   (egg 5), the top while a printed receipt needs room (egg 18). [indexOfSection] gives a section's first lazy index;
  *   an aisle scrolled to sits [peek] under the list's top.
  * The overlay ([EggListScope.overlays]) shows the eggs' toasts in [toasts], forwards [motion]'s events (the pet chomps)
- * and plays [feedback]'s cues; [onOpenAlbum] is the back pocket toast's "Look". [listPlacesDecor] false draws the nap
+ * and plays [feedback]'s cues; [onOpenAlbum] is the back pocket toast's "Look" (the album at its back pocket, §12.2).
+ * [listPlacesDecor] false draws the nap
  * cat and the snack doodle in the overlay instead of the list's content.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -164,6 +165,8 @@ fun EggListHost(
     val index by rememberUpdatedState(indexOfSection)
     val peekPx = with(density) { peek.roundToPx() }
     val gapPx = with(density) { ROOM_GAP.toPx() }
+    // A toast resting above the bar covers the list's room too: a scene lands clear of it.
+    val toastTop: () -> Float? = { toasts?.takeIf { it.current != null }?.restingTop }
     // Egg 3: the list scrolls to the rolling item's aisle (§12.2), then brings its row (or its folded strip) wholly above
     // the bar.
     val rolling = eggs.rolling
@@ -171,7 +174,7 @@ fun EggListHost(
         val r = rolling ?: return@LaunchedEffect
         val i = index(r.sectionId)
         if (i < 0) return@LaunchedEffect
-        bringIntoRoom(listState, anchors, i, peekPx, gapPx, plateIndex = i, scrollFirst = { true }) {
+        bringIntoRoom(listState, anchors, i, peekPx, gapPx, plateIndex = i, scrollFirst = { true }, cover = toastTop) {
             anchors.bounds(EggAnchors.line(r.itemId))?.let { it to true } ?: anchors.bounds(EggAnchors.strip(r.sectionId))?.let { it to false }
         }
     }
@@ -181,7 +184,7 @@ fun EggListHost(
         val nap = eggs.napSectionId ?: return@LaunchedEffect
         val i = index(nap)
         if (i < 0) return@LaunchedEffect
-        bringIntoRoom(listState, anchors, (i - CONTEXT_STRIPS).coerceAtLeast(0), if (i >= CONTEXT_STRIPS) peekPx else 0, gapPx, plateIndex = -1) {
+        bringIntoRoom(listState, anchors, (i - CONTEXT_STRIPS).coerceAtLeast(0), if (i >= CONTEXT_STRIPS) peekPx else 0, gapPx, plateIndex = -1, cover = toastTop) {
             (anchors.bounds(EggAnchors.strip(nap)) ?: anchors.bounds(AnchorRegistry.basketKey(nap)))?.let { it to false }
         }
     }
@@ -190,12 +193,24 @@ fun EggListHost(
         val snack = eggs.snackSectionId ?: return@LaunchedEffect
         val i = index(snack)
         if (i < 0) return@LaunchedEffect
-        bringIntoRoom(listState, anchors, (i - CONTEXT_STRIPS).coerceAtLeast(0), if (i >= CONTEXT_STRIPS) peekPx else 0, gapPx, plateIndex = -1) {
+        bringIntoRoom(listState, anchors, (i - CONTEXT_STRIPS).coerceAtLeast(0), if (i >= CONTEXT_STRIPS) peekPx else 0, gapPx, plateIndex = -1, cover = toastTop) {
             (anchors.bounds(EggAnchors.strip(snack)) ?: anchors.bounds(EggAnchors.tab(snack)))?.let { it to false }
         }
     }
     // Egg 18 at large text: the list makes room under a printed receipt that would lie over its words, from its top.
     LaunchedEffect(scope.room.receiptShift > 0f) { if (scope.room.receiptShift > 0f) listState.animateScrollToItem(0) }
+    // The Surprise lab's scenes on a row (the cake's check-off, the shiny pull, the jackpot): its row, wholly above the
+    // add bar, its aisle first when the row is not on screen (§6.9, at any font scale).
+    val focus = LocalSceneFocus.current()
+    LaunchedEffect(focus) {
+        val f = focus ?: return@LaunchedEffect
+        val i = index(f.sectionId)
+        if (i < 0) return@LaunchedEffect
+        bringIntoRoom(listState, anchors, i, peekPx, gapPx, plateIndex = i, cover = toastTop) {
+            f.itemId?.let { id -> anchors.bounds(EggAnchors.line(id))?.let { it to true } }
+                ?: anchors.bounds(EggAnchors.strip(f.sectionId))?.let { it to false }
+        }
+    }
 
     CompositionLocalProvider(LocalRollHome provides scope.rollHome, LocalLadybugHome provides scope.ladybugHome, LocalListRoom provides scope.room) {
         scope.content()
@@ -228,12 +243,14 @@ internal suspend fun bringIntoRoom(
     plateIndex: Int,
     /** True (read after layout): scroll to [scrollTo] first even when the target is already in the room. */
     scrollFirst: () -> Boolean = { false },
+    /** The window y of what covers the list above the bar (a toast resting there), or null. */
+    cover: () -> Float? = { null },
     target: () -> Pair<Rect, Boolean>?,
 ) {
     fun room(underPlate: Boolean): Rect? {
         val list = anchors.bounds(EggAnchors.LIST) ?: return null
         val bar = anchors.bounds(AnchorRegistry.ADD_BAR)
-        val bottom = minOf(list.bottom, bar?.top ?: list.bottom) - gapPx
+        val bottom = minOf(list.bottom, bar?.top ?: list.bottom, cover() ?: list.bottom) - gapPx
         val info = listState.layoutInfo
         val plate = if (underPlate) info.visibleItemsInfo.firstOrNull { it.index == plateIndex } else null
         val top = if (plate == null) list.top else maxOf(list.top, list.top + info.beforeContentPadding + plate.offset + plate.size)

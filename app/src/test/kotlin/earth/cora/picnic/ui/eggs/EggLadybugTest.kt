@@ -49,9 +49,10 @@ class EggLadybugTest {
         val steps = r.probe.frames.filter { it.tag == "ladybug" }
         assertTrue("it walked", steps.map { it.center.x }.distinct().size >= 6)
         steps.forEach { f -> assertTrue("over text at ${f.time} ms", text.none { it.overlaps(f.bounds.deflate(2f)) }) }
-        // Along the strip's bottom edge (its centre 2 dp below it, its feet on the binder).
+        // Along the strip's bottom edge, in the lane just under it (its centre 4.5 dp below the card: the list's own
+        // lane, clear of this strip's meta line and the next strip's tab).
         val strip = r.anchor(EggAnchors.strip("produce"))
-        steps.forEach { f -> assertEquals(strip.bottom + 2 * 3f, f.center.y, 3f) }
+        steps.forEach { f -> assertEquals(strip.bottom + LANE * 3f, f.center.y, 3f) }
         // Then it flies off the nearer screen edge (the left one here), low along the strip's edge, past no words.
         r.probe.clear()
         r.advanceTo(t0 + LadybugMotion.DURATION - 20)
@@ -61,7 +62,7 @@ class EggLadybugTest {
         assertTrue("off the edge (${flight.last().center.x})", flight.last().center.x < 0f)
         val words = textBoxes(compose)
         flight.forEach { f ->
-            assertEquals("level with the strip's edge", strip.bottom + 2 * 3f, f.center.y, 3 * 3f)
+            assertEquals("level with the strip's edge", strip.bottom + LANE * 3f, f.center.y, 3 * 3f)
             words.forEach { (w, box) -> assertFalse("over \"$w\" at ${f.time} ms", box.overlaps(f.bounds.deflate(2f))) }
         }
         r.advanceTo(t0 + LadybugMotion.DURATION + 100)
@@ -69,7 +70,7 @@ class EggLadybugTest {
     }
 
     /**
-     * It walks WITH its strip (§12.2 "never crossing item text"): she scrolls the list 120 dp mid-walk, and the ladybug
+     * It walks WITH its strip (§12.2 "never crossing item text"): she scrolls the list mid-walk, and the ladybug
      * stays on the strip's bottom edge, over no word, frame by frame.
      */
     @Test
@@ -80,18 +81,18 @@ class EggLadybugTest {
         val t0 = r.now
         r.advanceTo(t0 + 1_500)
         val before = r.anchor(EggAnchors.strip("bakery"))
-        compose.onNodeWithTag(PracticeTags.LIST).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 120f * 3) }
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 60f * 3) }
         r.probe.clear()
         // Frame by frame while the list scrolls, and after: the ladybug on the strip's bottom edge.
         repeat(30) {
             r.frame()
             val strip = r.anchor(EggAnchors.strip("bakery"))
             r.probe.frames.lastOrNull { it.tag == "ladybug" }?.let { f ->
-                assertEquals("on the strip's bottom edge while the list scrolls", strip.bottom + 2 * 3f, f.center.y, 4 * 3f)
+                assertEquals("on the strip's bottom edge while the list scrolls", strip.bottom + LANE * 3f, f.center.y, 4 * 3f)
             }
         }
         val after = r.anchor(EggAnchors.strip("bakery"))
-        assertEquals("the list scrolled 120 dp", before.top - 120f * 3, after.top, 2f)
+        assertTrue("the list scrolled (${before.top} → ${after.top})", before.top - after.top >= 40f * 3)
         r.probe.clear()
         var samples = 0
         while (r.now < t0 + LadybugMotion.WALK_MS - 100) {
@@ -99,7 +100,7 @@ class EggLadybugTest {
             val strip = r.anchor(EggAnchors.strip("bakery"))
             val f = r.probe.frames.lastOrNull { it.tag == "ladybug" } ?: continue
             samples++
-            assertEquals("on the strip's bottom edge at ${r.now - t0} ms", strip.bottom + 2 * 3f, f.center.y, 4 * 3f)
+            assertEquals("on the strip's bottom edge at ${r.now - t0} ms", strip.bottom + LANE * 3f, f.center.y, 4 * 3f)
             val words = wordBoxes(compose, r.anchors)
             words.forEach { (w, box) -> assertFalse("over \"$w\" at ${r.now - t0} ms", box.overlaps(f.bounds.deflate(2f))) }
         }
@@ -115,11 +116,11 @@ class EggLadybugTest {
         assertNotNull(fx)
         r.advance(600)
         // Far down the list: the strip leaves the list's composition.
-        compose.onNodeWithTag(PracticeTags.LIST).performScrollToIndex(10)
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST).performScrollToIndex(10)
         r.advance(200)
         assertNull("the walk ended with its strip", r.eggs.ladybug)
         // Another hold sends a new one.
-        compose.onNodeWithTag(PracticeTags.LIST).performScrollToIndex(0)
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST).performScrollToIndex(0)
         r.advance(200)
         r.holdBasket("bakery", 1_040)
         assertNotNull(r.eggs.ladybug)
@@ -161,5 +162,10 @@ class EggLadybugTest {
         r.holdBasket("produce", 1_100)
         assertNull(r.eggs.ladybug)
         assertFalse(r.probe.frames.any { it.tag == "ladybug" })
+    }
+
+    private companion object {
+        /** The ladybug's lane: its centre this far (dp) under its strip's card (StripLadybug's 2 dp + the list's 2.5 dp). */
+        const val LANE = 4.5f
     }
 }

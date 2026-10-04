@@ -176,7 +176,7 @@ class EggRollingTest {
             }
             r.probe.frames.filter { it.tag == "rollhome" }.forEach { f ->
                 home++
-                val line = compose.onNodeWithTag(PracticeTags.row(row.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                val line = compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.row(row.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
                 assertTrue("at ${f.time} ms it rolls home on its own line", line.inflate(1f).contains(f.bounds.center))
             }
             r.probe.clear()

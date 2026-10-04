@@ -7,11 +7,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -340,6 +342,17 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
         }
     }
     val starAlpha = if (dim) PicnicMotion.lcdBlinkAlpha else 1f
+    // A word standing in for the count (an egg's PRINT★ or FED, a refresh's SYNC) never makes the chip narrower than the
+    // count it replaces, so the words beside the chip never re-flow while it shows (§4.3, item 259); it is centred.
+    val density = LocalDensity.current
+    val standIn = if (state.mode != LcdMode.Count && state.total > 0) {
+        // The count's own LcdText width, to the pixel (LcdText: ceil(columns × pitch × scale)).
+        val scale = min(density.fontScale, 1.6f).coerceAtLeast(1f)
+        val columns = lcdColumns(lcdCells("${state.count}/${state.total}★"))
+        with(density) { ceil(columns * pitch.toPx() * scale).toInt().toDp() }
+    } else {
+        0.dp
+    }
 
     Box(
         modifier
@@ -376,7 +389,13 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
                 .drawBehind { drawLcdGrid(c.lcdGrid) }
                 .padding(horizontal = 8.dp, vertical = 7.dp),
         ) {
-            Row(Modifier.offset { IntOffset(0, tickDy.dp.roundToPx()) }, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier
+                    .offset { IntOffset(0, tickDy.dp.roundToPx()) }
+                    .widthIn(min = standIn),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (state.mode == LcdMode.Pet) {
                     LcdPetSprite(state.petPose, Modifier.padding(end = pitch * 1.5f), pitch = pitch)
                 }

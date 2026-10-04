@@ -24,6 +24,8 @@ class AppNav(
     val openSurpriseLab: () -> Unit = {},
     val back: () -> Unit = {},
     val backToList: () -> Unit = {},
+    /** The album at [AlbumTarget]: egg 14's "Look" opens it at the back pocket (§12.2). */
+    val openAlbumAt: (AlbumTarget) -> Unit = { openAlbum() },
 ) {
     /** The recipe card's "Edit my pantry" (§4.17): the same route as the overflow menu's "My pantry". */
     val onEditPantry: () -> Unit get() = openPantry
@@ -32,6 +34,9 @@ class AppNav(
         val None: AppNav = AppNav()
     }
 }
+
+/** Where the album opens: at its top (the menus), or at the back pocket (egg 14's toast, §12.2). */
+enum class AlbumTarget { Top, BackPocket }
 
 /** The app's navigation (see [AppNav]); [AppNav.None] outside PicnicAppRoot. */
 val LocalAppNav = staticCompositionLocalOf { AppNav.None }

@@ -341,7 +341,9 @@ internal fun buildListUiState(
         val isBusy = normalizeName(item.name) in busy
         val detail = item.detailLine()
         val flags = buildSet {
-            if (newAnchor != null && item.addedAt > newAnchor) add(StickerFlag.New)
+            // A shiny or jackpot pull wears ONE lemon star (§4.11, §12.2 eggs 6 and 13): it is always new too, and the
+            // New flag is the same lemon star, so the shiny one stands for both.
+            if (newAnchor != null && item.addedAt > newAnchor && item.rarity == Rarity.NONE) add(StickerFlag.New)
             if (normalizeName(item.name) in state.favourites) add(StickerFlag.Favourite)
             if (item.rarity != Rarity.NONE) add(StickerFlag.Shiny)
         }

@@ -34,8 +34,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Item 258 (and the goldens items 238, 242, 246, 247, 250 and 273 name): every egg in each theme variant §12.3 lists
- * for it, captured at its end frame on the test clock (`egg_<n>_end_<variant>`), on the Surprise lab's practice list,
- * fired by the lab's own action (§12.3's last column). Recorded with
+ * for it, captured at its end frame on the test clock (`egg_<n>_end_<variant>`), on the Surprise lab's practice list
+ * (WP5's real ListScreen over the sandbox, §6.9), fired by the lab's own action (§12.3's last column). Recorded with
  * `./gradlew :app:recordRoborazziDebug --tests '*EggGoldensTest*'`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -228,7 +228,7 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         r.advanceTo(t0 + 500)
         assertTrue(r.eggs.bonusStage)
         assertTrue(r.eggs.pixelStickers)
-        val strawberries = compose.onNodeWithTag(PracticeTags.row("strawberries"), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val strawberries = compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.row("strawberries"), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val bar = r.anchor(AnchorRegistry.ADD_BAR)
         assertTrue("a live row on screen ($strawberries)", strawberries.top >= 0f && strawberries.bottom <= bar.top)
         r.capture("egg_10_end_${r.v}")
@@ -265,7 +265,7 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         val r = EggRig(compose, variant = variant)
         r.start {
             Column(Modifier.fillMaxSize()) {
-                Box(Modifier.weight(1f)) { PracticeList(r.model, feedback = r.feedback) }
+                Box(Modifier.weight(1f)) { PracticeListScreen(r.sandbox) }
                 val album by r.sandbox.album.album.collectAsState(initial = null)
                 PicnicBackground(Modifier.fillMaxWidth()) {
                     album?.let { a ->

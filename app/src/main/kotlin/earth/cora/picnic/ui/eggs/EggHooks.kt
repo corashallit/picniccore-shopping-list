@@ -435,7 +435,8 @@ fun TrayBee(modifier: Modifier = Modifier) {
 /**
  * The list's standing ladybug on the open tray's end cap (§4.1, §4.27): 14 dp, waddling ±5° every 250 ms (still under
  * reduced motion). It steps off while the nap cat and the umbrella both show ([SurpriseState.ladybugStepsOff]), so the
- * screen never holds more than 3 page stickers. A page sticker.
+ * screen never holds more than 3 page stickers, and while egg 2's ladybug strolls along a strip: there is one ladybug
+ * on the list, and it is the one out for a walk (§12.2 "a ladybug appears"). A page sticker.
  */
 @Composable
 fun EndCapLadybug(state: SurpriseState, modifier: Modifier = Modifier) {

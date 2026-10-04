@@ -31,7 +31,8 @@ import earth.cora.picnic.ui.theme.ThemeVariant
 
 /*
  * WP9 test support: the Surprise lab's sandbox (the Appendix A fixture in memory, its own SurpriseEngine with a seeded
- * Random and its own clock) rendered as the practice list, on the Compose test clock (autoAdvance off). The sandbox's
+ * Random and its own clock) rendered by WP5's real List screen as the lab shows it (PracticeListScreen), on the Compose
+ * test clock (autoAdvance off). The sandbox's
  * clock runs with the test clock (as it runs with real time on the phone), so the eggs' wall-clock rules (1.5 s between
  * sun taps, the 6 s bonus limit, the 5.2 s petal cooldown) and the overlays' frame-clock beats run on one time line.
  */
@@ -75,10 +76,10 @@ class EggRig(
      */
     val ime: androidx.compose.runtime.MutableState<Boolean?> = androidx.compose.runtime.mutableStateOf(null)
 
-    /** Shows [list] (the practice list by default) drawing this rig's sandbox. */
+    /** Shows [list] (the real List screen) drawing this rig's sandbox. */
     fun start(list: EggListUnderTest): EggRig = start { list.content(this) }
 
-    fun start(content: @Composable () -> Unit = { EggListUnderTest.Practice.content(this) }): EggRig {
+    fun start(content: @Composable () -> Unit = { EggListUnderTest.Real.content(this) }): EggRig {
         compose.mainClock.autoAdvance = false
         sandbox.onSystemDark(variant == ThemeVariant.Glow)
         compose.setContent {
@@ -168,28 +169,22 @@ class EggRig(
 
 /**
  * A list screen the egg tests run on (§19.2 hand-off, SurpriseEngine.kt's checklist): it draws [EggRig]'s sandbox (its
- * store, engine and anchors: `model.anchors`) with the eggs mounted through EggListHost. EggOverlayBoundsTest and
- * DecorBudgetTest take it as a parameter: the practice list today; WP5's ListScreen joins [all] when it is merged.
+ * store, engine and anchors: `model.anchors`) with the eggs mounted through EggListHost.
  */
 class EggListUnderTest(private val name: String, val content: @Composable (EggRig) -> Unit) {
     override fun toString(): String = name
 
     companion object {
-        /** The Surprise lab's practice list. */
-        val Practice: EggListUnderTest = EggListUnderTest("practice") { r ->
-            PracticeList(r.model, feedback = r.feedback, talkBack = r.talkBack, imeVisible = r.ime.value)
-        }
-
         /**
-         * WP5's real List screen (ListScreen) drawing the same sandbox: its state built from the sandbox's store by the
-         * list's own mapping (buildListUiState, with the eggs' hankos, pixel stickers, holo stamps and seasonal sheet),
-         * WP6's chains from the sandbox's choreographer (the practice model hands it the check-offs, as the lab does) and
-         * WP9's engine through the screen's own EggListHost (integration of part 3).
+         * WP5's real List screen (ListScreen) drawing the sandbox, exactly as the Surprise lab shows it
+         * (PracticeListScreen): its state built from the sandbox's store by the list's own mapping (buildListUiState,
+         * with the eggs' hankos, pixel stickers, holo stamps and seasonal sheet), WP6's chains from the sandbox's
+         * choreographer, WP7's add flows over the sandbox, and WP9's engine through the screen's own EggListHost.
          */
         val Real: EggListUnderTest = EggListUnderTest("list") { r -> RealListUnderTest(r) }
 
         /** Every list the list-agnostic egg tests run on. */
-        val all: List<EggListUnderTest> get() = listOf(Practice, Real)
+        val all: List<EggListUnderTest> get() = listOf(Real)
     }
 }
 
@@ -204,8 +199,8 @@ fun completedFixture(minutes: Long = 41): AppState {
         .foldIndexed(s) { i, acc, item -> acc.toggleChecked(PracticeFixture.LIST_ID, item.id, at - (13 - i).coerceAtLeast(0) * 1_000L) }
 }
 
-/** The docked add bar's test tags (the practice list's, and WP7's own on every AddBar). */
-private val ADD_BAR_TAGS = setOf(PracticeTags.ADD_BAR, earth.cora.picnic.ui.add.ADD_BAR_TAG)
+/** The docked add bar's test tag (WP7's own on every AddBar). */
+private val ADD_BAR_TAGS = setOf(earth.cora.picnic.ui.add.ADD_BAR_TAG)
 
 /**
  * Every text node on screen (unmerged), in root px: the visible part of each, since the list scrolls under the opaque
@@ -236,8 +231,8 @@ fun textBoxes(compose: ComposeContentTestRule): List<Pair<String, Rect>> {
 }
 
 /**
- * Every word on screen: the text nodes ([textBoxes]) and the practice list's `text:` keep-outs (the strips and the book
- * speak as one node each, so their tab names, metas and date are not text nodes of their own), the list's words cut
+ * Every word on screen: the text nodes ([textBoxes]) and the list's `text:` keep-outs (the strips and the book speak as
+ * one node each, so their tab names, metas and date are not text nodes of their own), the list's words cut
  * at the add bar's top as the text nodes are. The add bar's keep-out is its whole bar, so its words come from its text
  * nodes only.
  */
@@ -252,50 +247,8 @@ fun wordBoxes(compose: ComposeContentTestRule, anchors: AnchorRegistry): List<Pa
     return textBoxes(compose) + keepOuts
 }
 
-/** [EggListUnderTest.Real]: WP5's ListScreen over [r]'s sandbox (no add flows: the sandbox adds what the eggs need). */
+/** [EggListUnderTest.Real]: the Surprise lab's practice list, WP5's ListScreen over [r]'s sandbox (PracticeListScreen). */
 @Composable
 private fun RealListUnderTest(r: EggRig) {
-    val app by r.sandbox.store.states.collectAsState()
-    val eggs by r.engine.state.collectAsState()
-    val catalog = r.model.catalog
-    // The Next card's and TalkBack's name for "Everything else" (the practice list sets it the same way).
-    val everythingElse = androidx.compose.ui.res.stringResource(earth.cora.picnic.R.string.egg_practice_everything_else)
-    androidx.compose.runtime.SideEffect { r.model.everythingElse = everythingElse }
-    val ui = androidx.compose.runtime.remember(app, eggs) {
-        earth.cora.picnic.ui.list.buildListUiState(
-            state = app,
-            busy = emptySet(),
-            hasToken = false,
-            editingId = null,
-            catalog = catalog,
-            now = r.clock.now(),
-            eggs = eggs.enabled,
-            season = eggs.season.takeIf { eggs.enabled },
-            bonusStage = eggs.pixelStickers,
-            perfectWeek = eggs.enabled && eggs.perfectWeek,
-            hankoFor = { eggs.hankoFor(it, catalog) },
-        )
-    }
-    val actions = androidx.compose.runtime.remember(r) {
-        earth.cora.picnic.ui.list.ListActions(
-            onToggle = { id -> r.model.toggle(id) },
-            onOpenSection = { id -> r.model.open(id) },
-            onFoldAll = { r.model.open("") },
-            onSunTap = r.engine::onSunTap,
-            onMoonTap = r.engine::onMoonTap,
-            onStampTap = r.engine::onStampTap,
-            onLcdHold = r.engine::onLcdHold,
-            onBasketHold = r.engine::onBasketHold,
-        )
-    }
-    earth.cora.picnic.ui.list.ListScreen(
-        state = ui,
-        actions = actions,
-        engine = r.model.motion,
-        toasts = r.model.toasts,
-        surprises = r.engine,
-        feedback = r.feedback,
-        imeVisible = r.ime.value,
-        talkBackOverride = r.talkBack,
-    )
+    PracticeListScreen(r.sandbox, talkBack = r.talkBack, imeVisible = r.ime.value)
 }

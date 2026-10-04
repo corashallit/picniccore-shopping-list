@@ -176,7 +176,7 @@ class EggGoldenTest {
         var shadows: PicnicShadows? = null
         val r = EggRig(compose)
         r.start {
-            PracticeList(r.model, feedback = r.feedback)
+            PracticeListScreen(r.sandbox)
             ReadShadows { shadows = it }
         }
         r.fire(12)

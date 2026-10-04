@@ -13,6 +13,7 @@ import earth.cora.picnic.core.model.TripRules
 import earth.cora.picnic.core.model.AddOutcome
 import earth.cora.picnic.core.model.addItems
 import earth.cora.picnic.core.model.removeItem
+import earth.cora.picnic.core.model.restoreItem
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.iconRef
 import earth.cora.picnic.core.model.list
@@ -48,9 +49,10 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /*
  * The Surprise lab's practice list (docs/DESIGN_STICKER.md §6.9): its store, its chains and its eggs, all in memory.
- * A small stand-in for WP5's ListViewModel over the sandbox: a check-off goes through the same StateOps and hands WP6's
- * engine the ToggleEvent the real list builds (§8.3, §19.2), so the hanko, the hop, the book magic, the aisle-done chain,
- * the Next card and the celebration all play on the practice copy. Owner: WP9.
+ * A small stand-in for WP5's ListViewModel over the sandbox, behind WP5's real ListScreen (PracticeListScreen): a
+ * check-off goes through the same StateOps and hands WP6's engine the ToggleEvent the real list builds (§8.3, §19.2),
+ * a tear-off the ListChange, so the hanko, the hop, the book magic, the aisle-done chain, the Next card and the
+ * celebration all play on the practice copy. Owner: WP9.
  */
 
 /** An in-memory StateStore that can also be read and written at once (the practice list's ops run on the main thread). */
@@ -151,8 +153,37 @@ class PracticeModel(
 
     /** Sets the practice copy up without telling anyone (a lab action preparing a scene). */
     fun set(transform: (AppState) -> AppState) {
-        store.apply(transform)
-        motion.setSections(sections(store.value, everythingElse))
+        seen(store.apply(transform))
+    }
+
+    /** The last state this model made or heard of (a change made elsewhere, the add bar's commit, is told apart). */
+    private var lastSeen: AppState = store.value
+
+    private fun seen(s: AppState): AppState {
+        lastSeen = s
+        motion.setSections(sections(s, everythingElse))
+        return s
+    }
+
+    /**
+     * A state that reached the store from elsewhere (the add flows' commit, the eggs' own saves): the engine's sections
+     * follow it, and an aisle or the trip it re-opened plays its in-place form, as on her list (§8.4, item 176). A new
+     * book or a cleared trip plays nothing (a bulk change).
+     */
+    fun observe(s: AppState) {
+        if (s === lastSeen) return
+        val before = lastSeen
+        seen(s)
+        val bl = before.list(listId) ?: return
+        val al = s.list(listId) ?: return
+        if (bl.trip?.id != al.trip?.id) return
+        val bg = grouped(before)
+        val ag = grouped(s)
+        val reopened = bg.sections.filter { b -> b.complete && ag.sections.firstOrNull { it.id == b.id }?.complete == false }.map { it.id }.toSet()
+        val tripReopened = TripRules.isComplete(bl) && !TripRules.isComplete(al)
+        if (reopened.isNotEmpty() || tripReopened) {
+            motion.onChange(ListChange(emptySet(), reopened, false, tripReopened, null, ChangeCause.ADD, openSectionId = bg.openSectionId))
+        }
     }
 
     /** She taps [sectionId]'s strip: it opens and the others fold (§6.1). */
@@ -168,9 +199,8 @@ class PracticeModel(
     fun toggle(itemId: String, now: Long = clock()) {
         val before = store.value
         val bg = grouped(before)
-        val after = store.apply { it.toggleChecked(listId, itemId, now) }
+        val after = seen(store.apply { it.toggleChecked(listId, itemId, now) })
         val ag = grouped(after)
-        motion.setSections(sections(after, everythingElse))
         val item = list(after).items.firstOrNull { it.id == itemId } ?: return
         val section = ag.sections.firstOrNull { s -> s.rows.any { it.id == itemId } } ?: return
         val beforeSection = bg.sections.firstOrNull { it.id == section.id }
@@ -195,10 +225,52 @@ class PracticeModel(
             aisleWasOpen = bg.openSectionId == section.id,
             finaleShown = bl.trip?.finaleShownAt != null,
         )
-        if (next != null) store.apply { it.setOpenAisle(listId, next) }
-        if (tripChanged && checked) store.apply { it.setOpenAisle(listId, "") }
-        if (!checked && aisleChanged) store.apply { it.setOpenAisle(listId, section.id) }
+        if (next != null) seen(store.apply { it.setOpenAisle(listId, next) })
+        if (tripChanged && checked) seen(store.apply { it.setOpenAisle(listId, "") })
+        if (!checked && aisleChanged) seen(store.apply { it.setOpenAisle(listId, section.id) })
         motion.onToggle(event)
+    }
+
+    /**
+     * A tear-off (swipe left, §8.6) or a Delete: the row goes, and an aisle or the trip it finishes plays its in-place
+     * form (§8.4, item 176: a trip finished by a tear-off still prints its receipt). Returns what the sticky note needs
+     * for its Undo ([restore]), or null when there was no such row.
+     */
+    fun delete(itemId: String, now: Long = clock()): earth.cora.picnic.ui.list.ListEvent.Deleted? {
+        val before = store.value
+        val bl = list(before)
+        val index = bl.items.indexOfFirst { it.id == itemId }
+        if (index < 0) return null
+        val item = bl.items[index]
+        val bg = grouped(before)
+        val after = seen(store.apply { it.removeItem(listId, itemId, now) })
+        val ag = grouped(after)
+        val al = list(after)
+        val completed = ag.sections.filter { s -> s.complete && bg.sections.firstOrNull { it.id == s.id }?.complete != true }.map { it.id }.toSet()
+        val tripDone = TripRules.isComplete(al) && !TripRules.isComplete(bl)
+        if (completed.isNotEmpty() || tripDone) {
+            val next = if (tripDone) null else completed.firstOrNull()?.let { nextStop(ag, it) }
+            motion.onChange(
+                ListChange(
+                    aisleCompleted = completed,
+                    aisleReopened = emptySet(),
+                    tripCompleted = tripDone,
+                    tripReopened = false,
+                    nextSectionId = next,
+                    cause = ChangeCause.DELETE,
+                    openSectionId = bg.openSectionId,
+                    finaleShown = al.trip?.finaleShownAt != null,
+                ),
+            )
+            if (next != null) seen(store.apply { it.setOpenAisle(listId, next) })
+            if (tripDone) seen(store.apply { it.setOpenAisle(listId, "") })
+        }
+        return earth.cora.picnic.ui.list.ListEvent.Deleted(item, index, listId)
+    }
+
+    /** The tear-off note's Undo: the row comes back exactly as it was, where it was. */
+    fun restore(item: GroceryItem, index: Int, now: Long = clock()) {
+        set { it.restoreItem(listId, item, index, now) }
     }
 
     /**
@@ -209,17 +281,18 @@ class PracticeModel(
         val before = store.value
         val bg = grouped(before)
         var outcome = AddOutcome.NONE
-        val after = store.apply { s ->
-            val (next, o) = s.addItems(listId, items, now)
-            outcome = o
-            o.added.fold(next) { acc, id ->
-                val rarity = engine.rollRarity()
-                if (rarity == Rarity.NONE) acc else acc.setRarity(listId, id, rarity)
-            }
-        }
+        val after = seen(
+            store.apply { s ->
+                val (next, o) = s.addItems(listId, items, now)
+                outcome = o
+                o.added.fold(next) { acc, id ->
+                    val rarity = engine.rollRarity()
+                    if (rarity == Rarity.NONE) acc else acc.setRarity(listId, id, rarity)
+                }
+            },
+        )
         val added = outcome.added
         val ag = grouped(after)
-        motion.setSections(sections(after, everythingElse))
         val reopened = bg.sections.filter { s -> s.complete && ag.sections.firstOrNull { it.id == s.id }?.complete == false }.map { it.id }.toSet()
         val tripReopened = TripRules.isComplete(list(before)) && !TripRules.isComplete(list(after))
         if (reopened.isNotEmpty() || tripReopened) {

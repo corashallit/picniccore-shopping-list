@@ -22,9 +22,9 @@ data object AislesRoute
 @Serializable
 data object SettingsRoute
 
-/** The sticker album (§6.10). */
+/** The sticker album (§6.10); [backPocket]: it opens at the back pocket, which reveals itself (egg 14's "Look"). */
 @Serializable
-data object AlbumRoute
+data class AlbumRoute(val backPocket: Boolean = false)
 
 /** My pantry (§6.13): from the overflow menu, the recipe card's "Edit my pantry" and the Edit sheet. */
 @Serializable

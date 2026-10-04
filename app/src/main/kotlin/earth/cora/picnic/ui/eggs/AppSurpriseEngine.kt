@@ -153,8 +153,12 @@ class AppSurpriseEngine(
                     // A cold start straight into the list: the list said it was showing before the switches had loaded,
                     // when no egg could know it was on. Its checks run now (SNACK?, the forecast, the ants).
                     before == null && listShown && eggsOn -> listShownChecks(snackDue = true)
-                    // "Use my area" on or off: golden hour follows the new place at once, not tomorrow.
-                    before != null && before.useMyArea != s.useMyArea -> refresh()
+                    // "Use my area" on or off: golden hour and the forecast follow the new place at once, not tomorrow
+                    // (the forecast is asked again when its city changed, WeatherService).
+                    before != null && before.useMyArea != s.useMyArea -> {
+                        refresh()
+                        if (listShown) checkWeather()
+                    }
                 }
             }
         }

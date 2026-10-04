@@ -37,6 +37,45 @@ class SurpriseEngineTest {
         }
     }
 
+    /**
+     * Item 237's LCD wiggle (WP6's beat, §2.5 and §13.1: the "ready" hint for egg 18): with Easter eggs off, finishing
+     * the trip presses the book's PERFECT but never wiggles the LCD; with them on, it wiggles at that beat.
+     */
+    @Test
+    fun theLcdWiggleNeedsEggs() {
+        fun wiggle(eggs: Boolean): Pair<Long?, Long?> {
+            val engine = earth.cora.picnic.ui.list.motion.MotionChoreographer()
+            // The celebration switched off: PERFECT is pressed on the book as the trip completes, with no scene to close.
+            engine.settings = earth.cora.picnic.ui.list.motion.MotionSettings(eggs = eggs, celebration = false)
+            engine.listId = PracticeFixture.LIST_ID
+            var t = 1_000L
+            engine.tick(t)
+            engine.onToggle(
+                earth.cora.picnic.ui.list.motion.ToggleEvent(
+                    itemId = "toothpaste", sectionId = "household", checked = true, slot = 23,
+                    aisleCompleted = true, tripCompleted = true, nextSectionId = null,
+                    personality = earth.cora.picnic.core.catalog.Personality.entries.first(),
+                ),
+            )
+            var perfect: Long? = null
+            var wiggled: Long? = null
+            while (t < 12_000L) {
+                t += 16
+                engine.tick(t)
+                val p = engine.current.value
+                if (perfect == null) perfect = p.bookFx.perfectT0
+                if (wiggled == null) wiggled = p.lcdWiggleT0
+            }
+            return perfect to wiggled
+        }
+        val (offPerfect, offWiggle) = wiggle(eggs = false)
+        assertNotNull("eggs off: PERFECT is still pressed", offPerfect)
+        assertNull("eggs off: the LCD never wiggles", offWiggle)
+        val (onPerfect, onWiggle) = wiggle(eggs = true)
+        assertNotNull(onPerfect)
+        assertEquals("eggs on: the LCD wiggles with PERFECT", onPerfect, onWiggle)
+    }
+
     @Test
     fun gating() {
         // Persisted egg state: the Dusk binder saved, a pet on the trip, a shiny row, a cake checked, sheets collected.

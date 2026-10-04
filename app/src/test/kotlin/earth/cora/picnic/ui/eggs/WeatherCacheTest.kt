@@ -79,6 +79,35 @@ class WeatherCacheTest {
         assertEquals(2, source.requests)
     }
 
+    /**
+     * Item 316, the forecast half (§0.4 Q6): the forecast belongs to a city. Asked for Toronto, then "Use my area" names
+     * Ottawa within the 3 h: asked again at once (one request), and the rain follows Ottawa's forecast; the cache keeps
+     * the city across a restart, so Ottawa's answer is not asked for again.
+     */
+    @Test
+    fun anotherCityIsAskedAgainAtOnce() = runBlocking {
+        val now = ms(day, LocalTime.of(9, 0))
+        var city = earth.cora.picnic.core.calendar.Place.TORONTO.cityCode
+        val ottawa = "s0000430"
+        // Toronto: dry today. Ottawa: rain.
+        val source = CountingWeather { WeatherToday(it, rain = city == ottawa, snow = false) }
+        val service = WeatherService(source, cache(), { now }, zone, city = { city })
+        assertFalse("Toronto is dry", service.check(weatherOn = true)!!.rain)
+        assertEquals(1, source.requests)
+        city = ottawa
+        assertTrue("rain follows Ottawa at once", service.check(weatherOn = true)!!.rain)
+        assertEquals("one new request for the new city", 2, source.requests)
+        assertTrue(service.check(weatherOn = true)!!.rain)
+        assertEquals("then from the cache", 2, source.requests)
+        val restarted = WeatherService(source, cache(), { now + 60_000L }, zone, city = { city })
+        assertTrue("Ottawa's rain, from DataStore", restarted.check(weatherOn = true)!!.rain)
+        assertEquals(2, source.requests)
+        // Back to Toronto (the switch turned off): Toronto's forecast again, asked at once.
+        city = earth.cora.picnic.core.calendar.Place.TORONTO.cityCode
+        assertFalse(restarted.check(weatherOn = true)!!.rain)
+        assertEquals(3, source.requests)
+    }
+
     @Test
     fun switchedOffNothingIsAsked() = runBlocking {
         val source = CountingWeather { WeatherToday(it, rain = true, snow = false) }

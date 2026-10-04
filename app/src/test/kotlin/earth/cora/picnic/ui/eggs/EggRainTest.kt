@@ -186,7 +186,7 @@ class EggRainTest {
     @Test
     fun largeTextKeepsTheToastAndTheListClearOfTheBar() {
         val r = EggRig(compose, fontScale = 2f).start()
-        val list = compose.onNodeWithTag(PracticeTags.LIST)
+        val list = compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST)
         fun lastStripClearOfTheBar(what: String) {
             list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
             r.advance(100)

@@ -38,8 +38,8 @@ import kotlinx.coroutines.flow.emptyFlow
  *   neither counts toward Dusk nor undoes it, whichever hook the list calls (onSunTap or onMoonTap).
  *
  * ---------------------------------------------------------------------------------------------------------------------
- * THE LIST SCREEN'S CHECKLIST (WP5's ListScreen; the Surprise lab's PracticeList does every item, so the lab runs the
- * code her list runs). Wrap the screen in [EggListHost] (EggListHost.kt): it calls onListShown / onListHidden (screen,
+ * THE LIST SCREEN'S CHECKLIST (WP5's ListScreen, which the Surprise lab's PracticeListScreen hosts too, so the lab runs
+ * the code her list runs). Wrap the screen in [EggListHost] (EggListHost.kt): it calls onListShown / onListHidden (screen,
  * list switch, app stop and start), runs the shake detector and the keyboard observer (onImeVisible), provides
  * LocalRollHome and LocalListRoom, and scrolls each scene into the list's room above the add bar (the rolling item's
  * aisle and row, the nap cat's strip, the frozen aisle's tab, the top under a printed receipt). Its [EggListScope] hands
@@ -262,9 +262,10 @@ data class SurpriseState(
 
     /**
      * §4.1: at most 3 page stickers; the list's standing pair is the bee and the ladybug, so when two egg stickers
-     * show at once (the nap cat and the umbrella) the ladybug steps off.
+     * show at once (the nap cat and the umbrella) the end cap's ladybug steps off. It also steps off while egg 2's
+     * ladybug strolls along a strip (§12.2 "a ladybug appears"): there is one ladybug on the list, the one out walking.
      */
-    val ladybugStepsOff: Boolean get() = napSectionId != null && umbrella
+    val ladybugStepsOff: Boolean get() = (napSectionId != null && umbrella) || (enabled && ladybug != null)
 
     /** Egg 3: the row's own sticker hides while its rolling twin travels (it settles on its line at the end). */
     fun hidesRowSticker(itemId: String): Boolean = rolling?.itemId == itemId

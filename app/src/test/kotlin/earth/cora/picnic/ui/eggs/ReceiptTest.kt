@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -56,8 +57,9 @@ import java.time.LocalDate
 /**
  * Items 266–272 (egg 18, §13.2): the receipt's 9 lines at 21 columns from the trip's real stats; line 2 fitted; its width
  * following the LCD pitch up to 1.6×; the print sequence (14 frames over 1.7 s with jitter, the tear at 1.7 s, settled
- * at 1.96 s, PRINT★ and its cues, no timeout) and its strip `receipt_print_strip_{day,glow}_<t>`; the slot line and the
- * paper never over words (item 259) at font scales 1.0, 1.3 and 2.0; the tap that tucks it into the book and the album;
+ * at 1.96 s, PRINT★ until then and its cues, no timeout) and its strip `receipt_print_strip_{day,glow}_<t>`; the slot
+ * line under the LCD and the paper hanging from it, never over words (item 259), at font scales 1.0, 1.3 and 2.0, on
+ * WP5's real List screen as the Surprise lab shows it; the tap that tucks it into the book and the album;
  * the auto-tuck; reduced motion; TalkBack.
  */
 @RunWith(AndroidJUnit4::class)
@@ -163,6 +165,47 @@ class ReceiptTest {
         assertTrue("no line clips at 2.0", overflowed.isEmpty())
     }
 
+    /**
+     * Item 259 (§13.1): while PRINT★ (or FED, SYNC) stands in for the count, the app bar's LCD chip is exactly as wide
+     * as with the count, at font scales 1.0, 1.3 and 2.0, so the words beside it (the subtitle at large text) never
+     * re-flow while the receipt prints. A word wider than the count still grows it.
+     */
+    @Test
+    fun theLcdKeepsTheCountsWidthWhileAWordShows() {
+        var scale by mutableStateOf(1f)
+        compose.setContent {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, scale)) {
+                PicnicTheme(variant = ThemeVariant.Day, reducedMotion = false) {
+                    androidx.compose.foundation.layout.Column {
+                        val count = earth.cora.picnic.ui.theme.LcdState(count = 24, total = 24, receiptReady = true)
+                        earth.cora.picnic.ui.theme.LcdChip(count, Modifier.testTag("count"))
+                        for (word in listOf(EggRules.PRINT, EggRules.FED, "SYNC")) {
+                            earth.cora.picnic.ui.theme.LcdChip(
+                                count.copy(mode = earth.cora.picnic.ui.theme.LcdMode.Text, text = word),
+                                Modifier.testTag(word),
+                            )
+                        }
+                        earth.cora.picnic.ui.theme.LcdChip(
+                            earth.cora.picnic.ui.theme.LcdState(mode = earth.cora.picnic.ui.theme.LcdMode.Text, text = "HAPPY B-DAY!", count = 2, total = 9),
+                            Modifier.testTag("wide"),
+                        )
+                        earth.cora.picnic.ui.theme.LcdChip(earth.cora.picnic.ui.theme.LcdState(count = 2, total = 9), Modifier.testTag("wideCount"))
+                    }
+                }
+            }
+        }
+        for (s in listOf(1f, 1.3f, 2f)) {
+            scale = s
+            compose.waitForIdle()
+            fun width(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().size.width
+            for (word in listOf(EggRules.PRINT, EggRules.FED, "SYNC")) {
+                assertEquals("fs $s: $word as wide as 24/24★", width("count"), width(word))
+            }
+            assertTrue("fs $s: a wider word grows the chip", width("wide") > width("wideCount"))
+        }
+    }
+
     // ---- 267: the print sequence and its strip ----
 
     /** Appendix C: a strip frame every 83 ms over the motion, from 0 to the settle at 1.96 s. */
@@ -209,7 +252,7 @@ class ReceiptTest {
         assertTrue(ReceiptMotion.slotVisible(ReceiptMotion.SETTLE_AT - 1))
         assertFalse(ReceiptMotion.slotVisible(ReceiptMotion.SETTLE_AT))
         // On the frame clock: the paper feeds out (more of it shows, frame by frame), the tear's "tk" at 1.7 s, PRINT★
-        // for 1.7 s, then the count.
+        // until the settle at 1.96 s, then the count.
         var shown = 0f
         var grew = 0
         r.probe.clear()
@@ -220,11 +263,13 @@ class ReceiptTest {
             shown = maxOf(shown, h)
         }
         assertTrue("the paper feeds out in steps ($grew)", grew >= ReceiptMotion.FRAMES - 3)
-        r.advanceTo(t0 + ReceiptMotion.SETTLE_AT)
+        // PRINT★ shows while it prints, until the settle (the slot line goes with it), then the count.
+        r.advanceTo(t0 + ReceiptMotion.SETTLE_AT - 40)
+        assertEquals("PRINT★ while the slot shows", EggRules.PRINT, r.eggs.lcdWord?.text)
         val tear = r.feedback.times(Cue.RECEIPT_TEAR)
         assertEquals(1, tear.size)
         assertEquals((t0 + ReceiptMotion.FEED_MS).toDouble(), tear.single().toDouble(), 20.0)
-        r.advanceTo(t0 + ReceiptMotion.FEED_MS + 120)
+        r.advanceTo(t0 + ReceiptMotion.SETTLE_AT + 60)
         assertNull("the LCD back to the count", r.eggs.lcdWord)
         // It stays until tapped: no timeout.
         r.advance(12_000)
@@ -256,13 +301,24 @@ class ReceiptTest {
     fun neverOverWords200() = neverOverWords(2f)
 
     /**
-     * Item 259 (§4.1, §13.2) at font scale [scale]: the slot line is the LCD's width, centred under it, and neither it
-     * nor the paper lies over any word on screen (the text nodes and the list's word keep-outs: the title, the
-     * subtitle, the LCD, the book's date, the tabs, the metas, the rows), on every frame from the hold to well after
-     * the settle; where the paper would cover the list, the list makes room below it.
+     * Item 259 (§4.1, §13.2) on the real List screen at font scale [scale], on every frame from the hold to well after
+     * the settle: the slot line is 4 dp, its top within 4 dp of the LCD's bottom, as wide as the paper and centred on
+     * it; while the paper feeds, its top edge comes out of the slot and it hangs from it; the binder top's and the book's
+     * words (the title, the subtitle, the book's date, PER-FECT!) lie over the slot and the paper, untouched pixel for
+     * pixel; the paper and the slot lie over no other word (the tabs, the metas, the rows, the text nodes) and never
+     * over the LCD; the settled paper is clear of every word, and where it would cover the list, the list makes room.
      */
     private fun neverOverWords(scale: Float) {
         val r = EggRig(compose, fontScale = scale, fixture = completedFixture(41)).start()
+        r.advance(300)
+        // She is at the top of her list (the receipt brings it there anyway), the binder top settled.
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST).performScrollToIndex(0)
+        r.advance(900)
+        val headerKeys = listOf("title", "subtitle", "date", "perfect", "pagelcd")
+        val header = headerKeys.mapNotNull { k -> r.anchors.bounds(EggAnchors.TEXT_PREFIX + k)?.let { k to it } }
+        assertTrue("fs $scale: the book's date is a keep-out", header.any { it.first == "date" })
+        val before = r.grab()
+        val headerPixels = header.associate { (k, b) -> k to pixels(before, b.deflate(px)) }
         r.probe.clear()
         r.holdLcd(r.timeouts.holdThresholdMs + 20)
         val t0 = r.now
@@ -270,23 +326,42 @@ class ReceiptTest {
         val wrong = LinkedHashSet<String>()
         var slots = 0
         var papers = 0
+        var settled: Rect? = null
         while (r.now < t0 + ReceiptMotion.SETTLE_AT + 600) {
             r.advance(32)
-            val words = wordBoxes(compose, r.anchors)
+            val t = r.now - t0
+            val now = r.grab()
+            val lcd = r.anchor(AnchorRegistry.LCD)
+            val under = headerKeys.mapNotNull { r.anchors.bounds(EggAnchors.TEXT_PREFIX + it) } + lcd
+            // The words the paper may pass under are cut out of it: they must be untouched.
+            for ((k, b) in header) {
+                val at = r.anchors.bounds(EggAnchors.TEXT_PREFIX + k)
+                if (at != b) wrong += "the $k moved from $b to $at at $t ms"
+                else if (!pixels(now, b.deflate(px)).contentEquals(headerPixels.getValue(k))) wrong += "the $k changed at $t ms"
+            }
+            val words = wordBoxes(compose, r.anchors).filterNot { (_, box) -> under.any { it.inflate(1f).contains(box.topLeft) && it.inflate(1f).contains(box.bottomRight) } }
             val frames = r.probe.frames.groupBy { it.tag }.mapValues { it.value.last() }
             r.probe.clear()
-            frames["slot"]?.let { slot ->
+            val slot = frames["slot"]?.bounds
+            val paper = frames["receipt"]?.bounds
+            if (slot != null) {
                 slots++
-                val lcd = r.anchor(AnchorRegistry.LCD)
-                assertEquals("the slot line is the LCD's width", lcd.width, slot.bounds.width, 1f)
-                assertEquals("centred under the LCD", lcd.center.x, slot.bounds.center.x, 1f)
-                assertTrue("under the LCD", slot.bounds.top >= lcd.bottom - 1f)
-                assertEquals("4 dp", 4 * px, slot.bounds.height, 1f)
+                assertTrue("fs $scale: the slot's top within 4 dp of the LCD's bottom (${slot.top} vs ${lcd.bottom})", slot.top - lcd.bottom in 0f..4 * px + 1f)
+                assertEquals("fs $scale: 4 dp", 4 * px, slot.height, 1f)
+                if (paper != null && t < ReceiptMotion.FEED_MS) {
+                    assertTrue("fs $scale, $t ms: the paper's top edge comes out of the slot (${paper.top} in ${slot.top}..${slot.bottom})", paper.top in slot.top..slot.bottom)
+                    assertTrue("fs $scale, $t ms: it hangs from the slot ($paper under $slot)", paper.left >= slot.left - 1f && paper.right <= slot.right + 1f)
+                    assertEquals("fs $scale: the slot is as wide as the paper, centred on it", paper.center.x, slot.center.x, 2f)
+                }
+                if (slot.overlaps(lcd)) wrong += "the slot over the LCD at $t ms"
             }
-            for (tag in listOf("receipt", "slot")) {
-                val f = frames[tag] ?: continue
-                if (tag == "receipt") papers++
-                val piece = f.bounds.deflate(2f)
+            if (paper != null) {
+                papers++
+                if (paper.deflate(2f).overlaps(lcd)) wrong += "the paper over the LCD at $t ms"
+                if (t >= ReceiptMotion.SETTLE_AT) settled = paper
+            }
+            for ((tag, f) in listOf("receipt" to paper, "slot" to slot)) {
+                val piece = f?.deflate(2f) ?: continue
                 if (piece.width <= 0f || piece.height <= 0f) continue
                 words.filter { (_, box) -> box.overlaps(piece) }.forEach { (w, _) -> wrong += "$tag over \"$w\"" }
             }
@@ -294,10 +369,20 @@ class ReceiptTest {
         assertTrue("the slot line showed ($slots frames)", slots > 10)
         assertTrue("the paper showed ($papers frames)", papers > 10)
         assertEquals("font scale $scale", emptyList<String>(), wrong.toList())
+        // Settled, it is clear of every word (it passes under none of them any more).
+        val rest = settled!!.deflate(2f)
+        header.forEach { (k, b) -> assertFalse("fs $scale: the settled paper over the $k ($rest, $b)", rest.overlaps(b)) }
         // Still a working list: its first strip is on screen below the receipt.
-        val paper = r.probe.frames.lastOrNull { it.tag == "receipt" }?.bounds ?: compose.onNodeWithTag(EggTags.RECEIPT).fetchSemanticsNode().boundsInRoot
         val tabs = wordBoxes(compose, r.anchors).filter { it.first.startsWith(EggAnchors.TEXT_PREFIX + "tab:") }.map { it.second }
-        assertTrue("a tab shows on screen", tabs.any { it.top >= paper.bottom - 1f && it.bottom <= compose.onRoot().fetchSemanticsNode().boundsInRoot.bottom })
+        assertTrue("a tab shows on screen", tabs.any { it.top >= rest.bottom - 1f && it.bottom <= compose.onRoot().fetchSemanticsNode().boundsInRoot.bottom })
+    }
+
+    private fun pixels(b: android.graphics.Bitmap, box: Rect): IntArray {
+        val x = box.left.toInt().coerceAtLeast(0)
+        val y = box.top.toInt().coerceAtLeast(0)
+        val w = box.width.toInt().coerceAtMost(b.width - x).coerceAtLeast(1)
+        val h = box.height.toInt().coerceAtMost(b.height - y).coerceAtLeast(1)
+        return IntArray(w * h).also { b.getPixels(it, 0, w, x, y, w, h) }
     }
 
     // ---- 268: the tap ----
@@ -316,7 +401,7 @@ class ReceiptTest {
         assertEquals("Receipt saved to your sticker book ♡", r.model.toasts.current?.text)
         // The slip appears at the book's fore-edge (its magic appear, 420 ms on).
         r.advance(900)
-        compose.onNodeWithTag(PracticeTags.SLIP, useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag(earth.cora.picnic.ui.theme.BookTags.SLIP, useUnmergedTree = true).assertExists()
         // Holding the LCD again prints the same receipt.
         r.holdLcd(r.timeouts.holdThresholdMs + 20)
         assertEquals(printed, r.eggs.receipt?.receipt)

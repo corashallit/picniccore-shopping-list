@@ -57,6 +57,7 @@ import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
@@ -173,6 +174,8 @@ class ListActions(
     val onOpenAisles: () -> Unit = {},
     val onOpenPantry: () -> Unit = {},
     val onOpenAlbum: () -> Unit = {},
+    /** Egg 14's toast "Look" (§12.2): the album at its back pocket. */
+    val onOpenBackPocket: () -> Unit = onOpenAlbum,
     val onOpenSettings: () -> Unit = {},
     val onOpenLists: () -> Unit = {},
     val onCloseEdit: () -> Unit = {},
@@ -376,6 +379,7 @@ fun ListRoute(
             onOpenAisles = onOpenAisles,
             onOpenPantry = nav.openPantry,
             onOpenAlbum = nav.openAlbum,
+            onOpenBackPocket = { nav.openAlbumAt(earth.cora.picnic.ui.nav.AlbumTarget.BackPocket) },
             onOpenSettings = onOpenSettings,
             onOpenLists = { showLists = true },
             onCloseEdit = vm::closeEdit,
@@ -563,10 +567,10 @@ fun ListScreen(
     if (imeVisible != null) {
         EggListHost(
             surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback,
-            onOpenAlbum = actions.onOpenAlbum, imeVisible = imeVisible, content = host,
+            onOpenAlbum = actions.onOpenBackPocket, imeVisible = imeVisible, content = host,
         )
     } else {
-        EggListHost(surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback, onOpenAlbum = actions.onOpenAlbum, content = host)
+        EggListHost(surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback, onOpenAlbum = actions.onOpenBackPocket, content = host)
     }
 }
 
@@ -941,6 +945,9 @@ private fun AisleList(
             .fillMaxSize()
             .padding(bottom = umbrellaBand ?: 0.dp)
             .clipToBounds()
+            // Egg 16: where the viewport ends above the umbrella's band, the list fades out into the binder as it does
+            // into the add bar's pad (§6.1), never a hard cut across a strip.
+            .then(if (umbrella) Modifier.fadeOutAtBottom(UMBRELLA_FADE) else Modifier)
             .onGloballyPositioned { screen.listBounds = it.boundsInWindow() }
             .pointerInput(connection) {
                 // Watches (never consumes) whether a finger is down, for the pull to refresh.
@@ -1077,6 +1084,28 @@ private val UMBRELLA_BAND: Dp = 44.dp
 
 /** While it rains the viewport already ends above the umbrella's canopy: the list's end keeps this small gap (§6.1). */
 private val UMBRELLA_END_GAP: Dp = 12.dp
+
+/** How far up from the viewport's end above the umbrella's band the list fades out (egg 16). */
+private val UMBRELLA_FADE: Dp = 20.dp
+
+/** The content fades from opaque to clear over the last [fade] at the bottom (alpha mask: the binder shows through). */
+private fun Modifier.fadeOutAtBottom(fade: Dp): Modifier = this
+    .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val f = fade.toPx().coerceAtMost(size.height)
+        drawRect(
+            androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to androidx.compose.ui.graphics.Color.Black,
+                1f to androidx.compose.ui.graphics.Color.Transparent,
+                startY = size.height - f,
+                endY = size.height,
+            ),
+            topLeft = Offset(0f, size.height - f),
+            size = androidx.compose.ui.geometry.Size(size.width, f),
+            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+        )
+    }
 
 /** Whether a finger is on the list (the pull to refresh follows only her own drags). */
 private interface PullGate {

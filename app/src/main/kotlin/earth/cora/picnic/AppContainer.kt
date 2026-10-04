@@ -161,7 +161,7 @@ class AppContainer(private val app: Application) {
      * fetched at most every 3 h while Surprises → Weather is on, cached in DataStore.
      */
     val weather: WeatherService by lazy {
-        WeatherService(EnvironmentCanadaWeather(place = { places.place() }), DataStoreWeatherCache.create(app), clock)
+        WeatherService(EnvironmentCanadaWeather(place = { places.place() }), DataStoreWeatherCache.create(app), clock, city = { places.place().cityCode })
     }
 
     /** Every Easter-egg trigger (§12, WP9). */
