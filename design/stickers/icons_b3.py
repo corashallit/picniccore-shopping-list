@@ -117,15 +117,15 @@ add('muffins', 'Blueberry muffins', [
     F(('path', 'M10.6 26.6H37.4L34.8 39.6Q34.4 42 31.8 42H16.2Q13.6 42 13.2 39.6Z'), 'periwinkle', 'p', band=.24, det=['M17 29V39.6', 'M21.4 29V40', 'M26.6 29V40', 'M31 29V39.6'], det_t='m', det_w=1.6),
 ], gloss=[G('M12.4 20Q13.6 15.4 18 13.4'), DOT(21.8, 12.6)], qty='6 pack', aisle='bakery')
 
-# tortillas: a short stack of thin flour tortillas (front view, 1:4 ellipses) and, lying across it, one folded into a flat
-# half-moon wrap, tilted, its two layers showing at the round edge; toasted spots on both: a wrap, never pancakes or a bun
-TORT = 'translate(25 28.4) rotate(-10)'
+# tortillas: a short stack of thin flour tortillas, its top open and spotted, and in front of it one folded in four, a
+# soft wedge standing on the base with its layers showing along the round edge: thin wraps, never pancakes or a bun
 add('tortillas', 'Flour tortillas', [
-    *[F(('ellipse', 24, y, 17, 4.2), 'cocoa', 'p', band=.42, band_t='m') for y in (37.8, 33.6)],
-    F(('ellipse', 24, 29.4, 17, 4.2), 'cocoa', 'p', tex=['M11.4 29.4h.1M15.6 31.4h.1'], tex_t='m', tex_w=2.2),
-    F(('path', 'M-15.2 0C-15.2 -6.2 -8.4 -10.2 0 -10.2C8.4 -10.2 15.2 -6.2 15.2 0Z'), 'cocoa', 'p', tf=TORT,
-      tex=['M-9.4 -3.2h.1M-3.6 -7.2h.1M3.8 -6.6h.1M9.4 -2.8h.1M.6 -2.4h.1M-5.4 -.8h.1'], tex_t='m', tex_w=2.4,
-      det=['M-12.6 0C-12.6 -4.6 -7.4 -7.6 0 -7.8'], det_t='m', det_w=1.4),
+    *[F(('ellipse', 28.4, y, 13.4, 6.4), 'cocoa', 'p', band=.42, band_t='m') for y in (29.4, 26.8, 24.2)],
+    F(('ellipse', 28.4, 21.6, 13.4, 6.4), 'cocoa', 'p',
+      tex=['M21.4 20.6h.1M27.4 17.8h.1M34.6 18.8h.1M37.4 22.6h.1M30.6 23.4h.1'], tex_t='m', tex_w=2.4),
+    F(('path', 'M7.4 42V20.4C19.4 20.4 29 30 29 42Z'), 'cocoa', 'p',
+      tex=['M11.2 26.6h.1M11.8 35.6h.1M17.2 31h.1M22.4 38.2h.1M16.2 39.4h.1'], tex_t='m', tex_w=2.6,
+      det=['M7.4 23.4C17.6 23.6 25.8 31.6 26 42'], det_t='m', det_w=1.5),
 ], qty='10 pack', aisle='bakery')
 
 # doughnuts: two ring donuts, sakura icing with sprinkles
