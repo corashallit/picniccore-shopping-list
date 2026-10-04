@@ -68,6 +68,12 @@ data class RollingPath(
     val density: Float,
     /** Its line is a folded strip (no row shows): after the bump it settles into the strip at its basket. */
     val intoStrip: Boolean = false,
+    /**
+     * The way up out of the add bar would cross words (the end of the list's note, a strip's words): it sets off from its
+     * own slot instead, along its line beneath the row's words (drawn by its row) to its checkbox column, and climbs that
+     * column to the basket's lane (§12.2, item 259).
+     */
+    val fromRow: Boolean = false,
 )
 
 object RollingMotion {
@@ -117,14 +123,25 @@ object RollingMotion {
      * of the row's sticker nearest the column, so the turn it has made when it reaches its spot is a whole number of
      * turns: it lands upright.
      */
-    fun path(row: Offset, columnX: Float, mouth: Offset, addBar: androidx.compose.ui.geometry.Rect, density: Float, hop: Boolean, intoStrip: Boolean = false): RollingPath {
+    fun path(row: Offset, columnX: Float, mouth: Offset, addBar: androidx.compose.ui.geometry.Rect, density: Float, hop: Boolean, intoStrip: Boolean = false, fromRow: Boolean = false): RollingPath {
         val r = RADIUS_DP * density
+        if (fromRow && !intoStrip) {
+            // From its own slot: the turn counts from there, so it is upright again when it gets back.
+            return RollingPath(row, columnX, mouth.y - r * 0.6f, mouth.x, row, r, hop, density, intoStrip = false, fromRow = true)
+        }
         val turn = (2 * PI * r).toFloat()
         var k = ((columnX - row.x) / turn).roundToInt().coerceAtLeast(1)
         while (k > 1 && row.x + k * turn > addBar.right - r) k--
         val launch = Offset(row.x + k * turn, addBar.top + r + 6 * density)
         return RollingPath(launch, columnX, mouth.y - r * 0.6f, mouth.x, row, r, hop, density, intoStrip)
     }
+
+    /**
+     * The way up out of the add bar ([addBar]) to the basket's lane ([laneY]) along [columnX] for a sticker of radius
+     * [r]: the box it sweeps. Where it meets a word, the sticker sets off from its own slot instead ([RollingPath.fromRow]).
+     */
+    fun riseCorridor(columnX: Float, laneY: Float, addBar: androidx.compose.ui.geometry.Rect, r: Float): androidx.compose.ui.geometry.Rect =
+        androidx.compose.ui.geometry.Rect(columnX - r, laneY - r, columnX + r, addBar.top)
 
     /** The pose at [elapsed] ms (stepped at 12 fps); null once settled (or, into a strip, once it has gone in). */
     fun at(p: RollingPath, elapsed: Long): EggPose? {
@@ -140,10 +157,17 @@ object RollingMotion {
     /** From here its row draws it, beneath the row's words (the roll home along its own line). */
     fun home(p: RollingPath, elapsed: Long): Boolean = !p.intoStrip && stepped(elapsed, POSE_MS) >= DROP_END
 
+    /** Its row draws it now: the roll home, and, setting off from its slot, the way out along its line. */
+    fun byRow(p: RollingPath, elapsed: Long): Boolean = home(p, elapsed) || (p.fromRow && stepped(elapsed, POSE_MS) < RISE_END)
+
+    /** While it travels, its row shows a ghost outline in its slot (it is coming back there). */
+    fun away(p: RollingPath, elapsed: Long): Boolean = elapsed < SETTLE_END
+
     /** θ (degrees) for a centre at x: the turn its sideways travel from the launch point makes, without slipping. */
     fun theta(p: RollingPath, x: Float): Float = ((x - p.launch.x) / p.radius * 180.0 / PI).toFloat()
 
     private fun rollAt(p: RollingPath, t: Long): EggPose = when {
+        p.fromRow && t < ROLL_END -> rollOut(p, t)
         t < HIDDEN_END -> {
             // Inside the bar, out of sight: along to its column.
             val c = Offset(lerp(p.launch.x, p.columnX, t.toFloat() / HIDDEN_END), p.launch.y)
@@ -205,9 +229,46 @@ object RollingMotion {
      * bump, one arc back to the column, the drop, and three small skips home along their line (5 dp: they stay in their
      * row, under its words).
      */
+    /**
+     * Setting off from its slot ([RollingPath.fromRow]): it pops up in its slot (0.2 → 1), rolls along its line to its
+     * checkbox column (beneath the row's words), climbs the column to the basket's lane, then rolls (or hops) along the
+     * lane to the basket.
+     */
+    private fun rollOut(p: RollingPath, t: Long): EggPose = when {
+        t < HIDDEN_END -> {
+            val f = t.toFloat() / HIDDEN_END
+            EggPose(p.row, 0f, lerp(0.2f, 1f, f), lerp(0.2f, 1f, f))
+        }
+        t < RISE_END -> {
+            val f = easeOut((t - HIDDEN_END).toFloat() / (RISE_END - HIDDEN_END))
+            val c = Offset(lerp(p.row.x, p.columnX, f), p.row.y)
+            EggPose(c, if (p.hop) 0f else theta(p, c.x))
+        }
+        else -> {
+            val f = (t - RISE_END).toFloat() / (ROLL_END - RISE_END)
+            val climb = CLIMB_SHARE
+            if (f < climb) {
+                // Up its checkbox column (no words), turning nowhere.
+                EggPose(Offset(p.columnX, lerp(p.row.y, p.laneY, easeOut(f / climb))), if (p.hop) 0f else theta(p, p.columnX))
+            } else {
+                val g = (f - climb) / (1f - climb)
+                if (p.hop) {
+                    arcs(p.columnX, p.basketX, p.laneY, g, floatArrayOf(18f, 14f), floatArrayOf(-8f, 6f), p.density)
+                } else {
+                    val c = Offset(lerp(p.columnX, p.basketX, g), p.laneY)
+                    EggPose(c, theta(p, c.x))
+                }
+            }
+        }
+    }
+
+    /** Of the way to the basket from its slot, the share spent climbing its column. */
+    private const val CLIMB_SHARE: Float = 0.45f
+
     private fun hopAt(p: RollingPath, t: Long): EggPose {
         val d = p.density
         return when {
+            p.fromRow && t < ROLL_END -> rollOut(p, t)
             t < HIDDEN_END -> EggPose(Offset(lerp(p.launch.x, p.columnX, t.toFloat() / HIDDEN_END), p.launch.y))
             t < RISE_END -> {
                 val f = easeOut((t - HIDDEN_END).toFloat() / (RISE_END - HIDDEN_END))

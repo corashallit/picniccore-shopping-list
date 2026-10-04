@@ -3,6 +3,9 @@ package earth.cora.picnic.ui.eggs
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.removeItem
+import androidx.compose.ui.geometry.Offset
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.core.model.setOpenAisle
 import earth.cora.picnic.platform.Cue
 import org.junit.Assert.assertEquals
@@ -183,6 +186,64 @@ class EggRollingTest {
         }
         assertTrue(overlay > 10)
         assertTrue("its row drew the roll home", home > 5)
+    }
+
+    /**
+     * The trip review (item 259, §12.2 egg 3): on a short list the end of the list's note lies between the add bar and
+     * the new row, right across the way up out of the bar. The sticker then sets off from its own slot instead: along
+     * its line beneath its row's words, up its checkbox column, along the basket's lane and back, never over a word
+     * (sampled every 100 ms, against every text node and the list's word keep-outs); its slot shows a ghost outline
+     * while it travels; and it settles exactly on its slot.
+     */
+    @Test
+    fun onAShortListItSetsOffFromItsSlot() {
+        var small = PracticeFixture.unchecked()
+        val keep = setOf("strawberries", "milk")
+        for (id in small.list(PracticeFixture.LIST_ID)!!.items.map { it.id }) {
+            if (id !in keep) small = small.removeItem(PracticeFixture.LIST_ID, id, PracticeFixture.WRITTEN + 100)
+        }
+        val r = EggRig(compose, fixture = small).start()
+        r.advance(600)
+        r.probe.clear()
+        val t0 = r.addProduce("Lemons")
+        val row = r.list.items.single { it.name == "Lemons" }
+        r.advance(200)
+        val note = r.anchors.bounds(EggAnchors.TEXT_PREFIX + "endnote")
+        val bar = r.anchor(AnchorRegistry.ADD_BAR)
+        val slot = r.anchor(AnchorRegistry.rowKey(row.id))
+        assertNotNull("the end of the list's note shows", note)
+        assertTrue("it lies between the new row and the bar ($note, row $slot, bar $bar)", note!!.top > slot.bottom && note.bottom <= bar.top)
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.rollGhost(row.id), useUnmergedTree = true).assertExists()
+        var overlay = 0
+        var fromSlot = 0
+        var last: Offset? = null
+        while (r.now < t0 + RollingMotion.DURATION + 100) {
+            r.advance(100)
+            val words = wordBoxes(compose, r.anchors)
+            val line = r.anchors.bounds(EggAnchors.line(row.id))
+            for (f in r.probe.frames) {
+                val piece = f.bounds.deflate(2f)
+                if (f.tag == "roller") {
+                    overlay++
+                    words.filter { (_, box) -> box.overlaps(piece) }.forEach { (w, _) -> fail("at ${f.time} ms the sticker crosses \"$w\"") }
+                    last = f.bounds.center
+                } else if (f.tag == "rollhome") {
+                    if (f.time < RollingMotion.RISE_END) fromSlot++
+                    // Beneath its own row's words only.
+                    words.filter { (_, box) -> box.overlaps(piece) && !(line != null && line.inflate(1f).contains(box.topLeft) && line.inflate(1f).contains(box.bottomRight)) }
+                        .forEach { (w, _) -> fail("at ${f.time} ms the roll along its line crosses \"$w\"") }
+                    last = f.bounds.center
+                }
+            }
+            r.probe.clear()
+        }
+        assertTrue("it travelled ($overlay overlay frames)", overlay > 5)
+        assertTrue("it set off from its slot, along its own line ($fromSlot)", fromSlot > 0)
+        val home = r.anchor(AnchorRegistry.rowKey(row.id)).center
+        assertEquals("it settles on its slot (x)", home.x, last!!.x, 2 * 3f)
+        assertEquals("it settles on its slot (y)", home.y, last!!.y, 2 * 3f)
+        assertNull("done", r.eggs.rolling)
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.rollGhost(row.id), useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

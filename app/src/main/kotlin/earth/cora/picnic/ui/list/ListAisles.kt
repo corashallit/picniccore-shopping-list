@@ -112,6 +112,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 /** Test tags. */
 object ListTags {
     const val LIST: String = "picnic_list"
+
+    /** Egg 3: the ghost outline a row keeps in its slot while its rolling twin travels. */
+    fun rollGhost(id: String): String = "picnic_row_roll_ghost_$id"
     const val END_NOTE: String = "picnic_list_end_note"
     const val TOP_STACK: String = "picnic_top_stack"
     const val MORE: String = "picnic_list_more"

@@ -809,7 +809,14 @@ private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rec
                     val intoStrip = key != AnchorRegistry.rowKey(fx.itemId)
                     // Its column: the row's checkbox column (no words), or the folded strip's chevron edge.
                     val column = if (intoStrip) local(row).right - 30 * d else anchors.bounds(AnchorRegistry.checkKey(fx.itemId))?.let { local(it).center.x } ?: (local(row).right + 220 * d)
-                    path.value = RollingMotion.path(local(row).center, column, mouth - o, local(bar), d, fx.hop, intoStrip)
+                    // The way up out of the bar must meet no word (§12.1, item 259): else it sets off from its own slot.
+                    val r = RollingMotion.RADIUS_DP * d
+                    val corridor = RollingMotion.riseCorridor(column, (mouth - o).y - r * 0.6f, local(bar), r)
+                    val words = anchors.keys()
+                        .filter { it.startsWith(EggAnchors.TEXT_PREFIX) && it != EggAnchors.TEXT_PREFIX + "addbar" }
+                        .mapNotNull { anchors.bounds(it)?.let(local) }
+                    val fromRow = !intoStrip && words.any { it.overlaps(corridor) }
+                    path.value = RollingMotion.path(local(row).center, column, mouth - o, local(bar), d, fx.hop, intoStrip, fromRow)
                 } else if (frames >= RollingMotion.GIVE_UP_FRAMES) {
                     engine.effectDone(fx.id)
                     break
@@ -836,7 +843,7 @@ private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rec
         SideEffect { home.show(fx, p.copy(launch = p.launch + o, row = p.row + o, columnX = p.columnX + o.x, basketX = p.basketX + o.x, laneY = p.laneY + o.y), time) }
         DisposableEffect(fx.id) { onDispose { home.clear(fx.id) } }
     }
-    if (rowDraws && RollingMotion.home(p, t)) return
+    if (rowDraws && RollingMotion.byRow(p, t)) return
     val pose = RollingMotion.at(p, t) ?: return
     val size = RollingMotion.SIZE_DP.dp
     val half = RollingMotion.SIZE_DP * d / 2f

@@ -659,6 +659,10 @@ internal fun RowContent(
                     },
             ) {
                 val ghostAlpha = RowMotion.ghostAlpha(row.checked, phase, start, clock.now, reduced)
+                if (rolling) {
+                    // Egg 3: while its twin travels, the slot keeps its place with a ghost outline (it is coming back).
+                    ItemIcon(row.icon, null, Modifier.testTag(ListTags.rollGhost(row.id)), ghost = true, aisleIndex = row.aisleIndex)
+                }
                 if (ghostAlpha > 0f && !rolling) {
                     ItemIcon(
                         row.icon, null,

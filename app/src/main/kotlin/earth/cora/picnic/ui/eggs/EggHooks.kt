@@ -467,7 +467,7 @@ fun BoxScope.RowRoller(itemId: String) {
     val fx = home.fx?.takeIf { it.itemId == itemId } ?: return
     val path = home.path ?: return
     val t = home.time?.value ?: return
-    if (!RollingMotion.home(path, t)) return
+    if (!RollingMotion.byRow(path, t)) return
     val pose = RollingMotion.at(path, t) ?: return
     var origin by remember { mutableStateOf<Offset?>(null) }
     val d = LocalDensity.current.density
