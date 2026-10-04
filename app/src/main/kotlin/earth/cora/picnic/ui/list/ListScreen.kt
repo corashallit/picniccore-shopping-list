@@ -562,8 +562,6 @@ fun ListRoute(
                     // Egg 16: the umbrella stands at the bar's left end; the washi moves along after the doodle.
                     tapeAfterDoodle = surprises.umbrella,
                     modifier = bar,
-                    // Folded, the FAB takes the keyboard from the list's last item, as the bar does (§15).
-                    fabModifier = Modifier.focusRequester(screen.dockFocus),
                 )
             },
             surprises = vm.surpriseEngine,
@@ -879,8 +877,13 @@ private fun EggListScope.ListScreenContent(
                     }
                 }
             }
-            // The eggs follow the docked bar (egg 16's umbrella stands on it, and steps off while it is folded into the FAB).
-            dock(dockAnchors(engine.anchors).eggAddBar(folded = collapse?.collapsed == true).focusRequester(screen.dockFocus))
+            // The dock (the bar, or the FAB it folds into) is one focus group: the list hands the keyboard on to it after
+            // its last item (§15).
+            Box(Modifier.matchParentSize().focusRequester(screen.dockFocus).focusGroup()) {
+                // The eggs follow the docked bar (egg 16's umbrella stands on it, and steps off while it is folded into the
+                // FAB).
+                dock(dockAnchors(engine.anchors).eggAddBar(folded = collapse?.collapsed == true))
+            }
             // The toasts sit 20 dp above the bar's top (above the umbrella's canopy while it rains); the eggs' overlays ride
             // in the overlay's `eggs` slot (§12, §19.2).
             MotionOverlay(engine, p, toasts, bottomInset = overlayInset(dockHeight), eggs = overlays)

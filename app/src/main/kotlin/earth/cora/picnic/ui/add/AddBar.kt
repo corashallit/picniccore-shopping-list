@@ -562,8 +562,9 @@ internal fun Modifier.longPressShortcut(enabled: Boolean, timeoutMillis: Long, o
 /**
  * When the add bar folds into the FAB (§6.1): scrolling down ≥ 70 dp accumulated past 140 dp from the top folds it;
  * scrolling up 40 dp, reaching the top or tapping the FAB brings it back. Programmatic scrolls (the auto-open of the next
- * aisle) are ignored for 1.2 s ([ignoreProgrammaticScroll]). It never folds while the field is focused or a sheet is
- * open. Put [nestedScrollConnection] on the list's parent; [atTop] reports the list at its top.
+ * aisle) are ignored for 1.2 s ([ignoreProgrammaticScroll]). It never folds while the field (or, from the keyboard, any
+ * of its buttons) is focused or a sheet is open. Put [nestedScrollConnection] on the list's parent; [atTop] reports the
+ * list at its top.
  */
 @Stable
 class AddBarCollapseState(private val density: Float, private val clock: () -> Long = SystemClock::uptimeMillis) {
@@ -575,6 +576,12 @@ class AddBarCollapseState(private val density: Float, private val clock: () -> L
 
     /** A sheet is open (it never folds then). */
     var sheetOpen by mutableStateOf(false)
+
+    /**
+     * The keyboard's focus is on one of the bar's buttons (it never folds then, §15: folding would take the focused
+     * button away and throw her focus back to the top of the screen).
+     */
+    var barFocused by mutableStateOf(false)
 
     private var fromTop by mutableFloatStateOf(0f)
     private var downRun = 0f
@@ -622,7 +629,7 @@ class AddBarCollapseState(private val density: Float, private val clock: () -> L
         upRun = 0f
     }
 
-    private fun canFold(): Boolean = !fieldFocused && !sheetOpen
+    private fun canFold(): Boolean = !fieldFocused && !barFocused && !sheetOpen
 
     val nestedScrollConnection: NestedScrollConnection = object : NestedScrollConnection {
         override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
@@ -714,8 +721,6 @@ fun BoxScope.AddDock(
     tapeAfterDoodle: Boolean = false,
     /** False where there is no camera or microphone to offer (the Surprise lab's practice list): Snap and Speak are off. */
     captureEnabled: Boolean = true,
-    /** On the FAB (the bar folded): the list hands the keyboard to it after its last item (§15), as to the bar. */
-    fabModifier: Modifier = Modifier,
 ) {
     val collapse = flows.collapse
     val reduced = LocalReducedMotion.current
@@ -744,6 +749,7 @@ fun BoxScope.AddDock(
                 .fillMaxWidth()
                 // The layout height (the slide is only drawn): the bar as laid out plus the inset under it.
                 .onSizeChanged { flows.barHeight = with(density) { it.height.toDp() } }
+                .onFocusChanged { collapse.barFocused = it.hasFocus }
                 .graphicsLayer { translationY = slide.value * size.height * 1.02f },
         ) {
             AddBar(
@@ -777,7 +783,6 @@ fun BoxScope.AddDock(
             // The FAB's room from the bottom: the inset, its 12 dp margin and the 64 dp sticker.
             .onSizeChanged { flows.fabHeight = with(density) { it.height.toDp() } }
             .windowInsetsPadding(bottomInsets.only(WindowInsetsSides.Bottom))
-            .padding(end = 6.dp, bottom = 12.dp)
-            .then(fabModifier),
+            .padding(end = 6.dp, bottom = 12.dp),
     )
 }

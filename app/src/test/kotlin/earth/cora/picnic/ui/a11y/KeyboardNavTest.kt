@@ -52,8 +52,8 @@ class KeyboardNavTest {
             // holds focus), then Shift+Tab back from where it started.
             toStart()
             val walk = tabWalk { f -> FocusStop(KeyRules.key(f), KeyRules.key(KeyRules.controlAt(f)), KeyRules.inFront(this, f, front()), f.spoken()) }
-            println("WALK $where: " + walk.joinToString(" > ") { it.key.take(24) })
             stops += walk.size
+            val before = problems.size
             for (n in walk) if (!n.inFront) problems += "$where: Tab landed behind the layer in front, on ${n.said}"
             val got = walk.map { it.control }.toSet()
             // What there is to reach: the controls on screen as the walk began, and those in its scrolling lists and
@@ -67,6 +67,8 @@ class KeyboardNavTest {
                 }
             }
             for ((key, said) in expected) if (key !in got) problems += "$where: not reached by Tab: $said"
+            // The walk as it went, to read a failure by.
+            if (problems.size > before) problems += "$where: the Tab stops were " + walk.joinToString(" > ") { it.key.take(32) }
         }
         assertTrue("focus stops: $stops", stops > 300)
         assertTrue("keyboard problems:\n" + problems.joinToString("\n"), problems.isEmpty())

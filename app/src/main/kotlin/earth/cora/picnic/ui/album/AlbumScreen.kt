@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
+import earth.cora.picnic.ui.a11y.keyboardScrollsOn
 import earth.cora.picnic.ui.common.MoreMenuButton
 import earth.cora.picnic.ui.common.ScreenGutter
 import earth.cora.picnic.ui.common.SecondaryScreen
@@ -215,6 +216,8 @@ fun AlbumScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag(AlbumTags.LIST)
+                // Tab reaches the pockets and books past the long runs of empty pockets (§15).
+                .keyboardScrollsOn(listState)
                 .pointerInput(Unit) {
                     // A tap that no pocket took (anywhere else on the page) drops the lifted sticker.
                     awaitEachGesture {
