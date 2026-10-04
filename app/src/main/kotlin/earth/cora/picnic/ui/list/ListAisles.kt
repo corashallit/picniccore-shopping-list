@@ -80,6 +80,8 @@ import earth.cora.picnic.ui.theme.StoreAisleChip
 import earth.cora.picnic.ui.theme.TabSize
 import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
+import earth.cora.picnic.ui.theme.chipFloorScale
+import earth.cora.picnic.ui.theme.indexTabLeastWidth
 import earth.cora.picnic.ui.theme.drawDashedCircle
 import earth.cora.picnic.ui.theme.groundBacking
 import earth.cora.picnic.ui.theme.probe
@@ -418,6 +420,8 @@ internal fun TrayHeader(
     val heading = trayHeading(section)
     val fold by rememberUpdatedState(onFold)
     val badgeGap = basketGap(section, 4.dp)
+    // The narrowest tab that still shows the whole name: the store chip gives way to it (below).
+    val tabLeast = indexTabLeastWidth(section.displayName, section.look, TabSize.Tray)
     Layout(
         modifier = modifier
             .fillMaxWidth()
@@ -508,7 +512,15 @@ internal fun TrayHeader(
         val chevronX = w - px(TrayMetrics.border) - px(2.dp) - chevron.width
         val basketX = chevronX - px(badgeGap) - basketM.width
         val start = px(TrayMetrics.border) + px(6.dp)
-        val chip = measurables.firstOrNull { it.layoutId == "chip" }?.measure(Constraints())
+        // The name is what she reads (§4.10): under a large font the store chip gives way before the name is cut. It is
+        // drawn smaller (StoreAisleChip: down to its 1.0 size, never under 13 sp) to leave the tab its whole name at
+        // 16 sp; at 1.0, or with room to spare, it keeps its natural width.
+        val chip = measurables.firstOrNull { it.layoutId == "chip" }?.let { m ->
+            val natural = m.maxIntrinsicWidth(Constraints.Infinity)
+            val least = kotlin.math.ceil(natural * chipFloorScale()).toInt()
+            val room = basketX - px(CHIP_TO_BASKET) - px(CHIP_GAP) - start - tabLeast.roundToPx()
+            m.measure(Constraints(maxWidth = room.coerceIn(least, natural)))
+        }
         // The tab ends 8 dp before the store chip (or the basket, §4.10); a chip may run on to 2 dp from the basket's box
         // (its art has its own margin), so a short name keeps its letters at large text ("Baking" at 1.3).
         val tabEnd = if (chip != null) basketX - px(CHIP_TO_BASKET) - chip.width - px(CHIP_GAP) else basketX - px(8.dp)

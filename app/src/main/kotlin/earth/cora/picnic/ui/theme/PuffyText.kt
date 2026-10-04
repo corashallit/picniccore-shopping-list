@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.BlendMode
@@ -87,10 +86,6 @@ import kotlin.math.min
 /** The fitted font size (sp) a PuffyText chose (tests: AppBarTest, PuffyTextBoundsTest). */
 val PuffyFontSize: SemanticsPropertyKey<Float> = SemanticsPropertyKey("PuffyFontSize")
 internal var SemanticsPropertyReceiver.puffyFontSize: Float by PuffyFontSize
-
-/** The drawn ink bounds (stroke and shadow included), in the node's own px (PuffyTextBoundsTest). */
-val PuffyInkBounds: SemanticsPropertyKey<Rect> = SemanticsPropertyKey("PuffyInkBounds")
-internal var SemanticsPropertyReceiver.puffyInkBounds: Rect by PuffyInkBounds
 
 /**
  * Where a PuffyText works out its pinhole patch (§2.7, item 338). [Inline]: in composition, so the first frame already
@@ -190,7 +185,6 @@ fun PuffyText(
                 .semantics {
                     this.text = text
                     puffyFontSize = fit.fontSize
-                    puffyInkBounds = fit.ink
                     if (fit.overflowed) textOverflowed = true
                     if (heading) this.heading()
                 }
@@ -305,7 +299,6 @@ internal class PuffyFit(
     val overflowed: Boolean,
     val width: Int,
     val height: Int,
-    val ink: Rect,
 )
 
 /**
@@ -396,7 +389,7 @@ internal fun fitPuffy(
     val inkW = max(inkRight(layout), layout.size.width.toFloat())
     val w = ceil(inkW + room).toInt()
     val h = ceil(layout.size.height + half * 2 + sy).toInt()
-    return PuffyFit(layout, outline, shadowLayout, mask, half, sx, sy, size, overflowed, w, h, Rect(0f, 0f, inkW + room, layout.size.height + half * 2 + sy))
+    return PuffyFit(layout, outline, shadowLayout, mask, half, sx, sy, size, overflowed, w, h)
 }
 
 /**

@@ -244,6 +244,56 @@ class ButtonGlossTest {
     }
 
     /**
+     * §2.4, §4.6, item 337: in Glow a disabled button recedes into the navy page instead of lighting up. For More, each
+     * add-bar button and the candy and secondary pills, the drawn sticker (face, border and label or glyph, read off the
+     * pixels on the Glow binder) is darker on average, disabled than enabled, and nothing on the disabled face is
+     * brighter than the soft ink of its label.
+     */
+    @Test
+    fun disabledGlowButtonsRecede() {
+        val glow = colorsFor(ThemeVariant.Glow)
+        val binder = glow.binder
+        fun lum(argb: Int): Float {
+            fun ch(v: Int): Float = (v / 255f).let { if (it <= 0.04045f) it / 12.92f else Math.pow(((it + 0.055f) / 1.055f).toDouble(), 2.4).toFloat() }
+            return 0.2126f * ch((argb shr 16) and 0xFF) + 0.7152f * ch((argb shr 8) and 0xFF) + 0.0722f * ch(argb and 0xFF)
+        }
+        val cases: List<Pair<String, @Composable (Boolean) -> Unit>> = listOf(
+            "More" to { on -> PicnicIconButton(PicnicGlyph.More, "More", {}, enabled = on) },
+            "Snap" to { on -> AddBarButton(AddBarButtonKind.Snap, "Snap", {}, enabled = on) },
+            "Speak" to { on -> AddBarButton(AddBarButtonKind.Speak, "Speak", {}, enabled = on) },
+            "Send" to { on -> AddBarButton(AddBarButtonKind.Send, "Send", {}, enabled = on) },
+            "candy" to { on -> PicnicButton("Stick all 5", {}, enabled = on) },
+            "secondary" to { on -> PicnicButton("Try again", {}, style = PicnicButtonStyle.Secondary, enabled = on) },
+        )
+        for ((name, button) in cases) {
+            val mean = mutableMapOf<Boolean, Float>()
+            var brightest = 0f
+            for (on in listOf(true, false)) {
+                screen.show {
+                    PicnicTheme(variant = ThemeVariant.Glow) {
+                        androidx.compose.foundation.layout.Box(Modifier.background(binder).padding(12.dp).testTag("frame")) { button(on) }
+                    }
+                }
+                val img = compose.onNodeWithTag("frame").captureToImage().asAndroidBitmap()
+                val frame = compose.onNodeWithTag("frame").fetchSemanticsNode().boundsInRoot
+                // The face with its 3 dp border round it.
+                val face = faceRects().single().translate(-frame.left, -frame.top).inflate(3f * 3f)
+                var sum = 0f
+                var n = 0
+                for (y in face.top.toInt() until face.bottom.toInt()) for (x in face.left.toInt() until face.right.toInt()) {
+                    val l = lum(img.getPixel(x, y))
+                    sum += l
+                    n++
+                    if (!on) brightest = maxOf(brightest, l)
+                }
+                mean[on] = sum / n
+            }
+            assertTrue("$name: disabled (${"%.3f".format(mean[false])}) is darker than enabled (${"%.3f".format(mean[true])}) in Glow", mean.getValue(false) < mean.getValue(true))
+            assertTrue("$name: a disabled pixel (${"%.3f".format(brightest)}) is brighter than the soft ink", brightest <= lum(glow.onDisabledFace.toArgb()) + 0.02f)
+        }
+    }
+
+    /**
      * R3 with a wrapped label (§4.6, item 337): at font scale 2.0 in a 328 dp column the long New trip label takes two
      * lines; the face keeps its one-line caps, the label starts past the dot, and the gloss stays in the left cap, inside
      * the face and ≥ 4 dp from the whole label block.

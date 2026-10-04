@@ -129,7 +129,8 @@ fun NextStopCard(
     BoxWithConstraints(modifier) {
         val room = 8.dp
         val widest = if (constraints.hasBoundedWidth) (maxWidth - 32.dp).coerceAtLeast(NextCardWidth.coerceAtMost(maxWidth)) else NextCardWidth * 1.4f
-        val chip = if (storeAisle != null) with(density) { measurer.measure("A$storeAisle", t.label.copy(fontSize = 13.sp)).size.width.toDp() } + CHIP_CHROME + 6.dp else 0.dp
+        // The store chip as the kit lays it out (its glyph scales with its label), and the 6 dp before it.
+        val chip = if (storeAisle != null) storeAisleChipWidth(storeAisle) + 6.dp else 0.dp
         val circle = nextCircleSize(density)
         val around = 4.dp * 2 + 12.dp * 2 + tabFixed(circle, look)
         val needed = remember(displayName, nameStyle, density) { with(density) { nameNeed(measurer, displayName, nameStyle).toDp() } }
@@ -205,9 +206,6 @@ fun nextNumeralSp(fontScale: Float): Float = minOf(NUMERAL_SP * fontScale, NUMER
 /** The number circle: 30 dp at every font scale (see [NUMERAL_MAX_DP]). */
 @Suppress("UNUSED_PARAMETER")
 private fun nextCircleSize(density: androidx.compose.ui.unit.Density): Dp = 30.dp
-
-/** The store chip round its text: border 2 + 2, padding 7 + 7, the 13 dp basket glyph and its 5 dp gap. */
-private val CHIP_CHROME: Dp = 2.dp * 2 + 7.dp * 2 + 13.dp + 5.dp
 
 /** The narrowest room (px) in which [name] sits on at most two lines at 18 sp with no word broken. */
 private fun nameNeed(measurer: TextMeasurer, name: String, style: TextStyle): Int {

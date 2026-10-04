@@ -535,7 +535,8 @@
         {"match": ["cat food"], "aisle": ["household"], "icons": ["cat_food"], "detail": "salmon"},
         {"match": ["naan"], "aisle": ["bakery", "pasta"], "icons": ["pita"]}
       ],
-      "forbidden": ["miso paste", "re:^miso$"]
+      "forbidden": ["miso paste", "re:^miso$"],
+      "message": {"mustNot": ["re:\\balready (have|got)\\b"]}
     },
     {
       "id": "aisle-edit-discount-store",

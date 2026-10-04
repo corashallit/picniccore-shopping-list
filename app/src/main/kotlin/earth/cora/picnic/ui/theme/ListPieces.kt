@@ -175,9 +175,8 @@ private fun TabFace(
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 8)
     val base = PicnicTheme.type.aisleTab.copy(color = if (ballpoint) c.ballpoint else look.family.trace)
-    val end = tabEnd(look)
     // What the name may take: the tab's width less its border, padding, circle and gap.
-    val fixed = 3.dp * 2 + 6.dp + size.circle + 6.dp + end
+    val fixed = tabChrome(look, size)
     val room = if (maxWidth == Dp.Infinity) Int.MAX_VALUE else with(density) { (maxWidth - fixed).roundToPx().coerceAtLeast(1) }
     val fit = remember(displayName, base, room) { fitTabName(measurer, displayName, base, room) }
     Row(
@@ -197,7 +196,7 @@ private fun TabFace(
             .background(look.family.pastel)
             .tabPattern(look, width = 26.dp, alpha = 0.5f)
             .heightIn(min = size.height - 6.dp)
-            .padding(start = 6.dp, end = end, top = 1.dp, bottom = 1.dp),
+            .padding(start = 6.dp, end = tabEnd(look), top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -210,6 +209,25 @@ private fun TabFace(
             overflow = TextOverflow.Ellipsis,
             modifier = nameModifier,
         )
+    }
+}
+
+/** An index tab's width round its name: border 3 + 3, start 6, the number circle, the 6 dp gap and [tabEnd]. */
+private fun tabChrome(look: AisleLook, size: TabSize): Dp = 3.dp * 2 + 6.dp + size.circle + 6.dp + tabEnd(look)
+
+/**
+ * The narrowest an [IndexTab] can be and still show its whole [displayName] (at its smallest fitted size, 16 sp): for a
+ * row that gives way to the name before the name is cut (the tray header's store chip, §4.10).
+ */
+@Composable
+fun indexTabLeastWidth(displayName: String, look: AisleLook, size: TabSize): Dp {
+    val measurer = rememberTextMeasurer(cacheSize = 2)
+    val density = LocalDensity.current
+    val base = PicnicTheme.type.aisleTab
+    return remember(displayName, look, size, base, density) {
+        val name = measurer.measure(displayName, base.copy(fontSize = 16.sp, lineHeight = (16f * 1.2f).sp), softWrap = false, maxLines = 1).size.width
+        // Two px over the name, so the tab's own fit (name width <= its room, rounded to px) takes it whole at 16 sp.
+        with(density) { (name + 2).toDp() } + tabChrome(look, size)
     }
 }
 
