@@ -77,6 +77,7 @@ import earth.cora.picnic.R
 import earth.cora.picnic.core.calendar.Season
 import earth.cora.picnic.ui.theme.gen.DecorManifest
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.a11y.decorativeNumeral
 import earth.cora.picnic.ui.list.BookStickerUi
 import earth.cora.picnic.ui.list.BookUi
 import earth.cora.picnic.ui.list.StampUi
@@ -389,7 +390,17 @@ private fun BookPages(
                 if (dateOnPage) {
                     // The date is words too: the eggs' bursts keep clear of it (`text:` anchor, §12.1).
                     val dateAnchor = if (anchors != null) with(anchors) { Modifier.anchor(BOOK_DATE_TEXT) } else Modifier
-                    DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = DATE_TAG_Y.dp).probe(LocalPieceProbe.current, "dateTag").then(dateAnchor), onPage = true, season = state.season)
+                    val drawn = LocalBookDrawnScale.current
+                    val keepSize = if (drawn < 1f) {
+                        Modifier.graphicsLayer {
+                            scaleX = 1f / drawn
+                            scaleY = 1f / drawn
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
+                        }
+                    } else {
+                        Modifier
+                    }
+                    DateTag(state.dateLabel, Modifier.padding(start = 5.dp).offset(y = DATE_TAG_Y.dp).then(keepSize).probe(LocalPieceProbe.current, "dateTag").then(dateAnchor), onPage = true, season = state.season)
                 }
                 // On the holo stamp page (PERFECT) the stamps keep their Day inks in every variant: the Glow ones fade
                 // into the light foil (§2.4, §7.3; the lid stamps make the same choice, §5.3).
@@ -549,6 +560,13 @@ const val DATE_TAG_ON_PAGE: Float = 16f
 
 /** How far down the on-page date tag draws (dp): its top, its height, the −2° turn at its left end and its hs shadow. */
 const val DATE_TAG_REACH: Float = 19f
+
+/**
+ * The scale a book is drawn at by whoever shows it smaller than it lays out (the New trip sheet's closing book, §6.5).
+ * Its date tag keeps its own size, drawn round its left end at the inverse scale, so the date's words never fall under
+ * the 13 sp floor (§2.7, MinTextSizeTest); the stamps and stickers, art and repeated numerals, are drawn small.
+ */
+val LocalBookDrawnScale = androidx.compose.runtime.staticCompositionLocalOf { 1f }
 private const val PAGE_IDLE_MS: Long = 6000
 private const val SWIPE_PX: Float = 40f
 private const val BOING_MS: Long = 166
@@ -606,7 +624,7 @@ private fun MoreCircle(n: Int, size: Dp, modifier: Modifier) {
     val probe = LocalPieceProbe.current
     val fontScale = LocalDensity.current.fontScale
     val sp = minOf(MORE_NUMERAL_SP * fontScale, size.value * 0.55f) / fontScale
-    Box(modifier.size(size).decorative(), contentAlignment = Alignment.Center) {
+    Box(modifier.size(size).decorativeNumeral(), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {
             drawDashedCircle(c.ballpointSoft, center, this.size.minDimension / 2f - 1.dp.toPx(), 2.dp.toPx(), 3.4.dp.toPx(), 2.6.dp.toPx())
         }
@@ -1033,7 +1051,7 @@ private fun MoreDot(n: Int, modifier: Modifier = Modifier) {
         modifier
             .heightIn(min = 12.dp)
             .widthIn(min = 18.dp)
-            .decorative()
+            .decorativeNumeral()
             .drawBehind {
                 val sw = 1.2.dp.toPx()
                 drawRoundRect(
@@ -1057,9 +1075,14 @@ private fun MoreDot(n: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** The collapsed book's "+n" (§4.12): a white pill with a periwinkle inner ring, DynaPuff 13 sp. Decorative. */
+/**
+ * The collapsed book's "+n" (§4.12): a white pill with a periwinkle inner ring, DynaPuff 13 sp. Decorative. Art on the
+ * collapsed page, like the "+n" circle: its numeral keeps its 1.0 size under a large font (the 20 dp pill holds no
+ * more), so it is never cut and never drawn under 13 sp.
+ */
 @Composable
 private fun MorePearl(n: Int, modifier: Modifier = Modifier) {
+    val (numeralSize, numeralLine) = with(LocalDensity.current) { 13.dp.toSp() to 14.dp.toSp() }
     Box(
         modifier
             .height(20.dp)
@@ -1081,7 +1104,7 @@ private fun MorePearl(n: Int, modifier: Modifier = Modifier) {
             .decorative(),
         contentAlignment = Alignment.Center,
     ) {
-        Text("+$n", style = PicnicTheme.type.counter.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 14.sp), maxLines = 1)
+        Text("+$n", style = PicnicTheme.type.counter.copy(color = PicnicTheme.colors.ballpoint, fontSize = numeralSize, lineHeight = numeralLine), maxLines = 1)
     }
 }
 

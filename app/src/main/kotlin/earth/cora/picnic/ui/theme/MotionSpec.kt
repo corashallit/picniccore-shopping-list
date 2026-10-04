@@ -82,6 +82,9 @@ object PicnicMotion {
     val lcdBlinkOn: Long = 120
     val lcdBlinkAlpha: Float = 0.12f
 
+    /** The REC dot is on for the first half of every 1.2 s (0.83 Hz, §4.20); steady under reduced motion. */
+    val recBlinkPeriod: Long = 1200
+
     /** The hanko slams 1.4 → 1.15 → 1.0 in 2 steps (160 ms, §8.3). */
     val hankoSlam: MotionToken = MotionToken(160, Stepped(2))
     val hankoSlamScales: List<Float> = listOf(1.4f, 1.15f, 1f)

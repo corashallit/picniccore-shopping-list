@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.platform.testTag
+import earth.cora.picnic.ui.theme.PadPatch
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -281,11 +282,16 @@ internal fun Modifier.vinylSlice(top: Boolean, bottom: Boolean): Modifier {
 /** A group's title on the vinyl ("Produce", "Drawn for you", "Picnic sheet"): Zen Maru 700 13.5 sp, ballpoint. */
 @Composable
 internal fun VinylTitle(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint),
-        modifier = modifier.padding(start = 6.dp, top = 6.dp, bottom = 2.dp).semantics { heading() },
-    )
+    // On a pad patch, never straight on the vinyl's pinstripes (§4.1).
+    Box(modifier.padding(start = 6.dp, top = 6.dp, bottom = 4.dp)) {
+        PadPatch {
+            Text(
+                text,
+                style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.onPad),
+                modifier = Modifier.semantics { heading() },
+            )
+        }
+    }
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -630,6 +636,8 @@ internal fun BooksJump(count: Int, onClick: () -> Unit, modifier: Modifier = Mod
             onClick = onClick,
             style = PicnicButtonStyle.Text,
             glyph = PicnicGlyph.Expand,
+            // On the binder over the vinyl: on its pad patch, never straight on the pinstripes (§4.1).
+            padPatch = true,
         )
     }
 }

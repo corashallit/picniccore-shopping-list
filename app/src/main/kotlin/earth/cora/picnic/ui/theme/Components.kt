@@ -443,6 +443,8 @@ enum class PicnicButtonStyle { Primary, Secondary, Text }
  * - Secondary: 48 dp white pill, 3 dp white border, an inset 2 dp periwinkle-trace outline, hs; DynaPuff 16 ballpoint,
  *   optional 18 dp [glyph]. Pressed (+1.6, +2.2), flat.
  * - Text: no face; Zen Maru 700 15 sp with a wavy 2 dp sakura underline; pressed = a highlighter band behind the label.
+ *   [padPatch]: on the binder or the album's vinyl the label and its underline sit on a pad patch (§4.1: information
+ *   text never sits straight on a pattern), the 48 dp target round it.
  * Focus: a 2 dp ballpoint ring 3 dp outside.
  *
  * A label too long for one line (a large font, a narrow slot) never loses words: the candy pill's shrinks to 15 sp,
@@ -461,11 +463,12 @@ fun PicnicButton(
     leadingStar: Boolean = false,
     busy: Boolean = false,
     interactionSource: MutableInteractionSource? = null,
+    padPatch: Boolean = false,
 ) {
     when (style) {
         PicnicButtonStyle.Primary, PicnicButtonStyle.Secondary ->
             PillButton(text, onClick, modifier, style == PicnicButtonStyle.Primary, enabled, glyph, leadingStar, busy, interactionSource)
-        PicnicButtonStyle.Text -> TextButton(text, onClick, modifier, enabled, glyph, interactionSource)
+        PicnicButtonStyle.Text -> TextButton(text, onClick, modifier, enabled, glyph, interactionSource, padPatch)
     }
 }
 
@@ -753,12 +756,27 @@ private fun TextButton(
     enabled: Boolean,
     glyph: PicnicGlyph?,
     interactionSource: MutableInteractionSource?,
+    padPatch: Boolean = false,
 ) {
     val c = PicnicTheme.colors
     val interaction = interactionSource ?: remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val focused by interaction.collectIsFocusedAsState()
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+    val shape = if (padPatch) PicnicTheme.shapes.patch else androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+    val ink = if (padPatch) c.onPad else c.ink
+    // The pad patch (§4.1) round the label and its underline (which draws 1.25 to 5 dp under the text box).
+    val patch = if (padPatch) {
+        Modifier
+            .hardShadow(shape, PicnicTheme.shadows)
+            .clip(shape)
+            .background(c.stickerWhite)
+            .padding(2.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(7.dp))
+            .background(c.patch)
+            .padding(start = 6.dp, end = 6.dp, top = 2.dp, bottom = 6.dp)
+    } else {
+        Modifier
+    }
     Box(
         modifier
             .defaultMinSize(minHeight = 48.dp)
@@ -769,6 +787,7 @@ private fun TextButton(
         Row(
             Modifier
                 .focusRing(shape, c.ink, focused)
+                .then(patch)
                 .drawBehind {
                     if (pressed) {
                         drawRoundRect(c.pressedBand, Offset(-4.dp.toPx(), -2.dp.toPx()), Size(size.width + 6.dp.toPx(), size.height + 4.dp.toPx()), CornerRadius(4.dp.toPx()))
@@ -778,10 +797,10 @@ private fun TextButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (glyph != null) Glyph(glyph, null, tint = c.ink, size = 18.dp)
+            if (glyph != null) Glyph(glyph, null, tint = ink, size = 18.dp)
             Text(
                 text,
-                style = PicnicTheme.type.textButton.copy(color = c.ink),
+                style = PicnicTheme.type.textButton.copy(color = ink),
                 modifier = Modifier.wavyUnderline(Families.sakura.mid),
             )
         }
@@ -1235,7 +1254,8 @@ fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, s
                 CapsuleMark(look.family, Modifier.size(size * 0.6f))
             }
         },
-        modifier = modifier.clearAndSetSemantics { },
+        // The chip's 11 sp numeral repeats its label's number (§2.7's exemption from the 13 sp floor; MinTextSizeTest).
+        modifier = modifier.clearAndSetSemantics { if (number != null && size <= 20.dp) this[earth.cora.picnic.ui.a11y.RepeatedNumeral] = Unit },
     ) { measurables, constraints ->
         val mark = measurables[1].measure(androidx.compose.ui.unit.Constraints())
         val d = fitted?.diameter ?: numberCircleDiameter(size.roundToPx(), mark.width, mark.height, ink, ring.toPx(), NUMBER_RING_CLEARANCE.toPx())

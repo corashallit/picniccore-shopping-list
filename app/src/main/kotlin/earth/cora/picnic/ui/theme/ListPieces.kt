@@ -107,17 +107,28 @@ val TabNameFontSize: SemanticsPropertyKey<Float> = SemanticsPropertyKey("TabName
 
 /**
  * Fits [name] on one line in [maxWidthPx] (§4.10): the style's 20 sp if it fits, else 1 sp smaller each step down to
- * 16 sp, else 16 sp ellipsized. Sizes are the style's sp, scaled by the font scale like every other text.
+ * [toSp] (16 sp; under a large font, the name's 1.0 size, [tabNameFloorSp]), else [toSp] ellipsized. Sizes are the
+ * style's sp, scaled by the font scale like every other text.
  */
 fun fitTabName(measurer: TextMeasurer, name: String, style: TextStyle, maxWidthPx: Int, fromSp: Float = 20f, toSp: Float = 16f): TabFit {
+    fun fits(sp: Float) = measurer.measure(name, style.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp), softWrap = false, maxLines = 1).size.width <= maxWidthPx
     var sp = fromSp
     while (sp >= toSp - 0.01f) {
-        val layout = measurer.measure(name, style.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp), softWrap = false, maxLines = 1)
-        if (layout.size.width <= maxWidthPx) return TabFit(sp, false)
+        if (fits(sp)) return TabFit(sp, false)
         sp -= 1f
     }
+    // A floor between the steps (a large font's 1.0 size) is tried as it is.
+    if (sp + 1f > toSp + 0.01f && fits(toSp)) return TabFit(toSp, false)
     return TabFit(toSp, true)
 }
+
+/**
+ * The size (sp) a tab name shrinks to before it is cut (§4.10): 16 sp; under a large font, on down to the size that
+ * draws 16 sp at 1.0 (16 dp), so a name whole at 1.0 is whole at 1.3 and 2.0 too (item 281: the List loses no word under
+ * a large font), and no name is ever drawn under its 1.0 size (§2.7, as the store-aisle chip, item 337). Only a name cut
+ * at 1.0 is cut under a large font, at the same size.
+ */
+fun tabNameFloorSp(density: androidx.compose.ui.unit.Density): Float = with(density) { 16.dp.toSp().value }.coerceAtMost(16f)
 
 /**
  * A test hook for the list's layout rules (items 76, 79, 92): when provided, list pieces report where they were laid
@@ -221,7 +232,8 @@ private fun TabFace(
     // What the name may take: the tab's width less its border, padding, circle and gap.
     val fixed = tabChrome(look, circle)
     val room = if (maxWidth == Dp.Infinity) Int.MAX_VALUE else with(density) { (maxWidth - fixed).roundToPx().coerceAtLeast(1) }
-    val fit = remember(displayName, base, room) { fitTabName(measurer, displayName, base, room) }
+    val floor = tabNameFloorSp(density)
+    val fit = remember(displayName, base, room, floor) { fitTabName(measurer, displayName, base, room, toSp = floor) }
     // Too long even at 16 sp: cut at a word boundary, never leaving a dangling "&" (§4.10: "Deli…", not "Deli & …").
     val shown = remember(displayName, base, room, fit) {
         if (!fit.ellipsized) {

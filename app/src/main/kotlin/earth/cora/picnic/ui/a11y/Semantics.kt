@@ -27,6 +27,19 @@ val TextOverflowed: SemanticsPropertyKey<Boolean> = SemanticsPropertyKey("TextOv
 var SemanticsPropertyReceiver.textOverflowed: Boolean by TextOverflowed
 
 /**
+ * Marks a numeral §2.7 lets go under the 13 sp floor because it repeats a number shown at 13 sp or more elsewhere: the
+ * aisle chip's number circle and the book's "+n" stop counters (11 sp). MinTextSizeTest finds the words drawn inside
+ * such a node; not reported to accessibility services.
+ */
+val RepeatedNumeral: SemanticsPropertyKey<Unit> = SemanticsPropertyKey("RepeatedNumeral")
+
+/** [decorative], for a decorative numeral §2.7 sets at 11 sp ([RepeatedNumeral]: the book's "+n" stop counters). */
+fun Modifier.decorativeNumeral(): Modifier = clearAndSetSemantics {
+    this[Decorative] = Unit
+    this[RepeatedNumeral] = Unit
+}
+
+/**
  * Marks a decorative node (§15 "Decor": page stickers, doodles, sparkles, washi, baskets' art, book twins,
  * critters, confetti). Set by [decorative]; DecorSemanticsTest checks that such nodes carry nothing TalkBack reads.
  */

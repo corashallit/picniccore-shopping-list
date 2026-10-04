@@ -285,6 +285,8 @@ fun DoneButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Bool
         modifier = modifier.padding(end = 6.dp).widthIn(min = 48.dp),
         style = PicnicButtonStyle.Text,
         enabled = enabled,
+        // On the binder beside the title: on its pad patch, never straight on the pinstripes (§4.1).
+        padPatch = true,
     )
 }
 
