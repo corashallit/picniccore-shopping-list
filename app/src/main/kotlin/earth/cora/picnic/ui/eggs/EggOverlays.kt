@@ -128,6 +128,9 @@ val LocalEggProbe = staticCompositionLocalOf<EggProbe?> { null }
 /** Test tags of the interactive egg pieces. */
 object EggTags {
     const val RECEIPT: String = "egg_receipt"
+
+    /** The tapped receipt as it poofs into the book. */
+    const val RECEIPT_POOF: String = "egg_receipt_poof"
     const val NAP_CAT: String = "egg_nap_cat"
     const val UMBRELLA: String = "egg_umbrella"
     const val OVERLAY: String = "egg_overlays"
@@ -170,6 +173,8 @@ fun BoxScope.EggOverlays(
     LaunchedEffect(engine, toasts) {
         val host = toasts ?: return@LaunchedEffect
         engine.events.collect { toast ->
+            // "Receipt saved…" when the slip lands in the book, 420 ms after her tap (§13.2, §7.6), not over the paper.
+            if (toast == EggToast.ReceiptSaved) withContext(FixedMotionScale) { holdOnFrameClock(ReceiptMotion.SLIP_AT) }
             host.show(
                 when (toast) {
                     EggToast.RainToday -> ToastMessage(resources.getString(R.string.egg_toast_rain), kind = "egg-rain")
@@ -248,6 +253,9 @@ fun BoxScope.EggOverlays(
         state.jackpot?.let { Jackpot(it, anchors, local, engine, feedback) }
         state.receipt?.let { ReceiptPrint(it, anchors, local, engine, feedback) }
         state.receiptTuckId?.let { ReceiptPoof(it, engine) }
+        // No receipt waiting and none poofing (tucked in silently, or the poof is over): the list's room goes.
+        val room = LocalListRoom.current
+        if (room != null && state.receipt == null && state.receiptTuckId == null) SideEffect { room.receiptShift = 0f }
       }
     }
 }

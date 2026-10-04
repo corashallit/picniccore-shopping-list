@@ -228,7 +228,9 @@ fun EggListHost(
             if (reduced || scope.room.shownAnim.value == target) {
                 scope.room.shownAnim.snapTo(target)
             } else {
-                withContext(FixedMotionScale) { scope.room.shownAnim.animateTo(target, tween(ROOM_EASE_MS, easing = PicnicMotion.standard.easing)) }
+                // In step with the feed as the paper prints; back over 220 ms once the poof is over (§13.2).
+                val ms = if (target < scope.room.shownAnim.value) ROOM_RELEASE_MS else ROOM_EASE_MS
+                withContext(FixedMotionScale) { scope.room.shownAnim.animateTo(target, tween(ms, easing = PicnicMotion.standard.easing)) }
             }
         }
     }
@@ -307,6 +309,9 @@ private class EggBarNode(private var scope: EggListScope, private var folded: Bo
 
 /** The receipt's room eases in and out over this long (ms). */
 private const val ROOM_EASE_MS = 200
+
+/** The list takes back the receipt's room over 220 ms once the poof is over. */
+private const val ROOM_RELEASE_MS = 220
 
 /** A strip scene (the nap, the snack) keeps this many entries before it in view when the list scrolls to it. */
 private const val CONTEXT_STRIPS = 2
