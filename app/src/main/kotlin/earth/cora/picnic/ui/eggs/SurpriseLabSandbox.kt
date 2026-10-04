@@ -61,9 +61,9 @@ import kotlin.random.Random
 /**
  * The sandbox's clock (§6.9), epoch ms: the fixture's Saturday 10:24 when the sandbox opens, then running with real time
  * ([ticker]: elapsed ms, `SystemClock.elapsedRealtime` on the phone, the test clock in tests), so the eggs' time rules
- * (1.5 s between sun taps, the 6 s bonus limit, the 5.2 s petal cooldown) expire on the practice list as they do on her
- * list. A simulated condition (23:30, 20 min before sunset, a season's window) only moves the clock's offset ([nowMs],
- * [advance]); time keeps running from there. A [ticker] that never moves gives a clock that moves only by hand.
+ * (the 6 s bonus limit, the 5.2 s petal cooldown) expire on the practice list as they do on her list. A simulated
+ * condition (23:30, 20 min before sunset, a season's window) only moves the clock's offset ([nowMs], [advance]); time
+ * keeps running from there. A [ticker] that never moves gives a clock that moves only by hand.
  */
 class SandboxClock(private val start: Long, private val ticker: () -> Long) {
     private val tick0 = ticker()
@@ -316,15 +316,12 @@ class SurpriseLabSandbox(
 
     private fun moveClock(time: LocalTime) = setClock(today(), time)
 
-    /** Egg 1: forces Day (mid-morning, no Dusk, light even in dark mode), then taps the sun 7 times, 300 ms apart. */
+    /** Egg 1: forces Day (mid-morning, no Dusk, light even in dark mode), then taps the sun once. */
     private fun dusk() {
         forceDay()
         scope.launch { settings.setDuskBinder(false) }
         setClock(today(), LocalTime.of(10, 24))
-        repeat(EggRules.SUN_TAPS) {
-            clock.advance(300)
-            engine.onSunTap()
-        }
+        engine.onSunTap()
     }
 
     /** Egg 2: holds the first folded basket for the hold threshold + 560 ms. */

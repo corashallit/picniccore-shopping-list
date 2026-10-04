@@ -29,13 +29,8 @@ fun EggRig.holdAt(at: Offset, ms: Long) {
     frame()
 }
 
-/** Taps the sun sticker [n] times, [gapMs] apart. */
-fun EggRig.tapSun(n: Int, gapMs: Long) {
-    repeat(n) {
-        tapAt(anchor(AnchorRegistry.SUN).center)
-        if (it < n - 1) advance(gapMs)
-    }
-}
+/** Taps the sticker by the title once (the sun, or the moon in Dusk and Glow). */
+fun EggRig.tapSun() = tapAt(anchor(AnchorRegistry.SUN).center)
 
 /** Taps the stamp of section [sectionId]. */
 fun EggRig.tapStamp(sectionId: String) = tapAt(anchor(AnchorRegistry.stampKey(sectionId)).center)

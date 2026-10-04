@@ -357,7 +357,7 @@ fun Modifier.eggTitleSticker(state: SurpriseState, variant: ThemeVariant): Modif
 }
 
 /**
- * Egg 1: a tap on the sticker by the title in [variant]. The sun (Day, Golden) counts toward Dusk; the Dusk moon undoes
+ * Egg 1: a tap on the sticker by the title in [variant]. The sun (Day, Golden) turns on Dusk; the Dusk moon undoes
  * it; the Glow moon (system dark, midnight) is static. Nothing with Easter eggs off. WP5's BinderTopBar `onSunTap`.
  */
 fun SurpriseEngine.onTitleStickerTap(state: SurpriseState, variant: ThemeVariant) {

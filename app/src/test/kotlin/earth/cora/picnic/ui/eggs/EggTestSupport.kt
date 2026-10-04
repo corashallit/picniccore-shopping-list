@@ -33,8 +33,8 @@ import earth.cora.picnic.ui.theme.ThemeVariant
  * WP9 test support: the Surprise lab's sandbox (the Appendix A fixture in memory, its own SurpriseEngine with a seeded
  * Random and its own clock) rendered by WP5's real List screen as the lab shows it (PracticeListScreen), on the Compose
  * test clock (autoAdvance off). The sandbox's
- * clock runs with the test clock (as it runs with real time on the phone), so the eggs' wall-clock rules (1.5 s between
- * sun taps, the 6 s bonus limit, the 5.2 s petal cooldown) and the overlays' frame-clock beats run on one time line.
+ * clock runs with the test clock (as it runs with real time on the phone), so the eggs' wall-clock rules (the 6 s bonus
+ * limit, the 5.2 s petal cooldown) and the overlays' frame-clock beats run on one time line.
  */
 
 /** Where goldens go (Roborazzi's outputDir). */

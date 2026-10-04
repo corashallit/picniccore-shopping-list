@@ -30,12 +30,8 @@ import kotlin.random.Random
  */
 @RunWith(AndroidJUnit4::class)
 class SurpriseEngineTest {
-    private val sevenTaps: EngineRig.() -> Unit = {
-        repeat(EggRules.SUN_TAPS) {
-            clock.advance(300)
-            engine.onSunTap()
-        }
-    }
+    /** Egg 1's trigger: one tap on the sun. */
+    private val oneTap: EngineRig.() -> Unit = { engine.onSunTap() }
 
     /**
      * Item 237's LCD wiggle (WP6's beat, §2.5 and §13.1: the "ready" hint for egg 18): with Easter eggs off, finishing
@@ -94,7 +90,7 @@ class SurpriseEngineTest {
             // Nothing fires.
             assertFalse("the magic word is just text", e.interceptText("kirakira"))
             assertTrue("no shiny rolls", (1..2_000).all { e.rollRarity() == Rarity.NONE })
-            rig.sevenTaps()
+            rig.oneTap()
             e.onLcdHold()
             e.onShake()
             e.onBasketHold("produce", 5_000)
@@ -190,7 +186,7 @@ class SurpriseEngineTest {
             e.onListShown(rig.listId)
             assertTrue(e.interceptText("kirakira"))
             assertNotNull(rig.eggs.kirakiraId)
-            rig.sevenTaps()
+            rig.oneTap()
             assertNotNull("the sandbox's sun still sets", rig.eggs.duskFx)
             e.forceShinyNext = true
             assertEquals(Rarity.SHINY, e.rollRarity())
@@ -207,7 +203,7 @@ class SurpriseEngineTest {
             e.onListShown(rig.listId)
             assertTrue(e.interceptText("Kira Kira!"))
             assertFalse(e.interceptText("kiwi"))
-            rig.sevenTaps()
+            rig.oneTap()
             assertNotNull(rig.eggs.duskFx)
             assertNull("only one transition at a time", rig.eggs.ladybug)
             assertEquals(rig.list.items.size, rig.store.value.list(rig.listId)!!.items.size)

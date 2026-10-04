@@ -178,7 +178,7 @@ class SurpriseLabTest {
 
     /**
      * §12.3: on a phone in dark mode, Try it for Dusk binder and Golden hour forces Day on the practice copy, so the sun
-     * (not the static Glow moon) takes the seven taps and the binder turns Dusk, and golden hour shows; any other egg
+     * (not the static Glow moon) takes the tap and the binder turns Dusk, and golden hour shows; any other egg
      * plays in Glow, as her list is in dark mode.
      */
     @Test

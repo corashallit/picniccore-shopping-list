@@ -20,9 +20,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Item 238 (egg 1): seven taps on the sun, each within 1.5 s of the last, turn on Dusk over 1.2 s (the sun sets in
- * 600 ms, then the Dusk palette and the moon); a tap on the moon undoes it; it persists across restarts. Real taps on the
- * real List screen's sun (as the Surprise lab shows it) on the test clock; the binder top's words stay whole on every
+ * Item 238 (egg 1): one tap on the sun turns on Dusk over 1.2 s (the sun sets in 600 ms, then the Dusk palette and the
+ * moon); another tap while it plays does nothing; a tap on the moon undoes it; it persists across restarts. Real taps on
+ * the real List screen's sun (as the Surprise lab shows it) on the test clock; the binder top's words stay whole on every
  * frame of the change and of its undo (§2.7 item 334, §4.1, item 259).
  */
 @RunWith(AndroidJUnit4::class)
@@ -36,28 +36,27 @@ class EggDuskTest {
     private fun EggRig.duskSaved(): Boolean = runBlocking { sandbox.settings.current().duskBinder }
 
     @Test
-    fun sevenTapsTurnOnDusk() {
+    fun oneTapTurnsOnDusk() {
         val r = EggRig(compose).start()
-        r.tapSun(6, 1400)
-        assertNull("six taps are not enough", r.eggs.duskFx)
-        r.advance(1400)
-        r.tapSun(1, 0)
-        val t7 = r.now
+        assertNull(r.eggs.duskFx)
+        assertFalse(r.duskSaved())
+        r.tapSun()
+        val t0 = r.now
         val fx = r.eggs.duskFx
-        assertNotNull(fx)
+        assertNotNull("one tap is enough", fx)
         assertTrue(fx!!.toDusk)
         assertTrue("saved at once", r.duskSaved())
         // The sun sets behind the title first (600 ms): still Day.
-        r.advanceTo(t7 + 400)
+        r.advanceTo(t0 + 400)
         assertEquals(ThemeVariant.Day, r.resolved)
         val probe = groundProbe(r)
         val day = r.grab().getPixel(probe.first, probe.second)
         // Then the Dusk palette washes in over the moon's rise, the moon rises; done by 1.2 s.
-        r.advanceTo(t7 + EggRules.DUSK_SINK_MS + 50)
+        r.advanceTo(t0 + EggRules.DUSK_SINK_MS + 50)
         assertEquals(ThemeVariant.Dusk, r.resolved)
-        r.advanceTo(t7 + EggRules.DUSK_SINK_MS + 300)
+        r.advanceTo(t0 + EggRules.DUSK_SINK_MS + 300)
         val mid = r.grab().getPixel(probe.first, probe.second)
-        r.advanceTo(t7 + EggRules.DUSK_TRANSITION_MS + 100)
+        r.advanceTo(t0 + EggRules.DUSK_TRANSITION_MS + 100)
         val dusk = r.grab().getPixel(probe.first, probe.second)
         assertBetween("the ground mid-way through the wash", day, mid, dusk)
         assertNull("the transition has played out", r.eggs.duskFx)
@@ -91,27 +90,25 @@ class EggDuskTest {
     fun theBinderTopStaysWholeFrameByFrameAt200() = binderTopStaysWhole(2f)
 
     /**
-     * The change as she sees it on the real List screen, `egg_1_strip_day_<t>` ms after the seventh tap: the sun sinks
-     * under the horizon behind the title (0 to 600 ms), the Dusk palette washes in as the moon rises and its six sparkles
-     * burst on the moon's free side (600 to 1200 ms), settled at 1400 ms. Each frame is also checked whole above.
+     * The change as she sees it on the real List screen, `egg_1_strip_day_<t>` ms after the tap: the sun sinks under the
+     * horizon behind the title (0 to 600 ms), the Dusk palette washes in as the moon rises and its six sparkles burst on
+     * the moon's free side (600 to 1200 ms), settled at 1400 ms. Each frame is also checked whole above.
      */
     @Test
     fun theDuskStrip() {
         val r = EggRig(compose).start()
         r.advance(300)
-        r.tapSun(6, 300)
-        r.advance(300)
-        r.tapSun(1, 0)
-        val t7 = r.now
+        r.tapSun()
+        val t0 = r.now
         for (t in listOf(0L, 300L, 600L, 800L, 1_000L, 1_400L)) {
-            r.advanceTo(t7 + t)
+            r.advanceTo(t0 + t)
             r.capture("egg_1_strip_day_$t")
         }
         assertEquals(ThemeVariant.Dusk, r.resolved)
     }
 
     /**
-     * Every frame from the seventh tap to 1.4 s after it, and of the moon tap's undo: the title's ink (its fill and its
+     * Every frame from the tap to 1.4 s after it, and of the moon tap's undo: the title's ink (its fill and its
      * white stroke) is exactly where and what it was before the taps, its ink box the same; the LCD's face (its left part:
      * the star becoming the moon is the LCD's own change) and the subtitle's patch are untouched; the sun, the moon and
      * the six sparkles never lie over a word, the LCD or More, and the six sparkles are whole on screen.
@@ -145,17 +142,15 @@ class EggDuskTest {
                 assertTrue("fs $scale, $label: ${f.tag} on screen", f.bounds.left >= 0f && f.bounds.top >= 0f && f.bounds.right <= now.width)
             }
         }
-        // Seven taps (the change starts on the seventh), then every frame of the change.
-        r.tapSun(6, 300)
-        r.advance(300)
+        // One tap starts the change, then every frame of it.
         r.probe.clear()
-        r.tapSun(1, 0)
-        val t7 = r.now
+        r.tapSun()
+        val t0 = r.now
         assertNotNull(r.eggs.duskFx)
         var stars = 0
-        while (r.now < t7 + 1_400) {
+        while (r.now < t0 + 1_400) {
             r.frame()
-            check("${r.now - t7} ms")
+            check("${r.now - t0} ms")
             stars = maxOf(stars, r.probe.frames.filter { it.tag.matches(Regex("dusk\\d")) }.map { it.tag }.distinct().size)
             r.probe.clear()
         }
@@ -163,7 +158,7 @@ class EggDuskTest {
         assertEquals(ThemeVariant.Dusk, r.resolved)
         // The moon tapped: every frame of the undo.
         r.advance(300)
-        r.tapSun(1, 0)
+        r.tapSun()
         val u = r.now
         assertNotNull(r.eggs.duskFx)
         while (r.now < u + 900) {
@@ -212,26 +207,46 @@ class EggDuskTest {
         return IntArray(w * h).also { b.getPixels(it, 0, w, x, y, w, h) }
     }
 
+    /**
+     * One tap starts the change; another while it plays (as the sun sets, and as the moon rises, when the sticker by the
+     * title is already the moon) neither starts a second change nor undoes this one: the moon rises once, and Dusk stays.
+     */
     @Test
-    fun tapsTooFarApartDoNothing() {
+    fun aSecondTapDuringTheChangeDoesNothing() {
         val r = EggRig(compose).start()
-        r.tapSun(7, EggRules.SUN_TAP_GAP_MS + 100)
-        r.advance(1500)
-        assertNull(r.eggs.duskFx)
-        assertEquals(ThemeVariant.Day, r.resolved)
-        assertFalse(r.duskSaved())
+        r.tapSun()
+        val t0 = r.now
+        val fx = r.eggs.duskFx
+        assertNotNull("one tap starts the change", fx)
+        assertTrue(fx!!.toDusk)
+        // As the sun sets.
+        r.advanceTo(t0 + 300)
+        r.tapSun()
+        assertEquals("the same change plays on", fx, r.eggs.duskFx)
+        // As the moon rises: Dusk is on, so the tap goes to the moon, and still does nothing.
+        r.advanceTo(t0 + EggRules.DUSK_SINK_MS + 300)
+        assertTrue(r.eggs.dusk)
+        r.tapSun()
+        r.act { r.engine.onMoonTap() }
+        assertEquals("no undo while the moon rises", fx, r.eggs.duskFx)
+        r.advanceTo(t0 + EggRules.DUSK_TRANSITION_MS + 300)
+        assertNull("the one change has played out", r.eggs.duskFx)
+        assertTrue(r.eggs.dusk)
+        assertTrue("Dusk stays saved", r.duskSaved())
+        assertEquals(ThemeVariant.Dusk, r.resolved)
+        assertEquals("one sparkle burst", 1, r.feedback.log.count { it.second == Cue.MAGIC_APPEAR })
     }
 
     @Test
     fun moonTapUndoesIt() {
         val r = EggRig(compose).start()
-        r.tapSun(7, 300)
+        r.tapSun()
         r.advance(1500)
         assertEquals(ThemeVariant.Dusk, r.resolved)
         // The sticker by the title is the moon now: one tap undoes Dusk.
         val probe = groundProbe(r)
         val dusk = r.grab().getPixel(probe.first, probe.second)
-        r.tapSun(1, 0)
+        r.tapSun()
         val fx = r.eggs.duskFx
         assertNotNull(fx)
         assertFalse(fx!!.toDusk)
@@ -251,29 +266,29 @@ class EggDuskTest {
         r.fire(12)
         r.advance(300)
         assertEquals(ThemeVariant.Golden, r.resolved)
-        r.tapSun(7, 300)
+        r.tapSun()
         r.advance(1500)
         assertEquals(ThemeVariant.Dusk, r.resolved)
     }
 
     /**
      * The Glow moon is static (§12.2 egg 1), whoever passes the tap on: the practice list's sticker, or a list that calls
-     * the engine's onSunTap / onMoonTap straight away (WP5's ListViewModel). With the phone in dark mode, seven taps save
-     * nothing and start nothing; at midnight with Dusk saved, a tap on the midnight moon keeps Dusk.
+     * the engine's onSunTap / onMoonTap straight away (WP5's ListViewModel). With the phone in dark mode, a tap saves
+     * nothing and starts nothing; at midnight with Dusk saved, a tap on the midnight moon keeps Dusk.
      */
     @Test
     fun glowMoonIsStatic() {
         val r = EggRig(compose, variant = ThemeVariant.Glow).start()
         assertEquals(ThemeVariant.Glow, r.resolved)
-        // Her taps on the sticker by the title.
-        r.tapSun(7, 300)
+        // Her tap on the sticker by the title.
+        r.tapSun()
         r.advance(1500)
         assertNull(r.eggs.duskFx)
         assertFalse(r.duskSaved())
         // The engine's own hooks, as a list that does not know the variant calls them.
-        r.act { repeat(EggRules.SUN_TAPS) { r.clock.advance(300); r.engine.onSunTap() } }
+        r.act { r.engine.onSunTap() }
         r.advance(1500)
-        assertNull("seven taps on the Glow moon start nothing", r.eggs.duskFx)
+        assertNull("a tap on the Glow moon starts nothing", r.eggs.duskFx)
         assertFalse("and save nothing", r.duskSaved())
         assertEquals(ThemeVariant.Glow, r.resolved)
         // The phone goes light again: still Day, no Dusk waiting.
@@ -285,7 +300,7 @@ class EggDuskTest {
     @Test
     fun midnightMoonKeepsDusk() {
         val r = EggRig(compose).start()
-        r.tapSun(7, 300)
+        r.tapSun()
         r.advance(1500)
         assertEquals(ThemeVariant.Dusk, r.resolved)
         // 23:30: midnight forces Glow, with its static moon by the title.
@@ -295,7 +310,7 @@ class EggDuskTest {
         assertTrue(r.eggs.midnight)
         r.act { r.engine.onSunTap() }
         r.act { r.engine.onMoonTap() }
-        r.tapSun(1, 0)
+        r.tapSun()
         r.advance(1500)
         assertNull("a tap on the midnight moon plays nothing", r.eggs.duskFx)
         assertTrue("Dusk stays saved", r.duskSaved())
@@ -308,9 +323,9 @@ class EggDuskTest {
         val r = EggRig(compose, variant = ThemeVariant.Glow).start()
         val probe = groundProbe(r)
         val before = r.grab().getPixel(probe.first, probe.second)
-        // A transition already under way when the phone turned dark (the engine's own taps in Day, then dark mode).
+        // A transition already under way when the phone turned dark (the engine's own tap in Day, then dark mode).
         r.act { r.sandbox.onSystemDark(false) }
-        r.act { repeat(EggRules.SUN_TAPS) { r.clock.advance(300); r.engine.onSunTap() } }
+        r.act { r.engine.onSunTap() }
         assertNotNull(r.eggs.duskFx)
         r.act { r.sandbox.onSystemDark(true) }
         r.advance(300)
@@ -325,10 +340,7 @@ class EggDuskTest {
         // The first run saves the binder; a fresh engine and variant source over the same settings start in Dusk.
         val first = EngineRig()
         first.engine.onListShown(first.listId)
-        repeat(EggRules.SUN_TAPS) {
-            first.clock.advance(300)
-            first.engine.onSunTap()
-        }
+        first.engine.onSunTap()
         val saved = runBlocking { first.settings.current() }
         first.close()
         assertTrue(saved.duskBinder)
@@ -346,7 +358,7 @@ class EggDuskTest {
     @Test
     fun reducedMotionSwapsAtOnce() {
         val r = EggRig(compose, reduced = true).start()
-        r.tapSun(7, 300)
+        r.tapSun()
         val fx = r.eggs.duskFx
         assertNotNull(fx)
         assertTrue("a 120 ms fade, no sunset", fx!!.reduced)
