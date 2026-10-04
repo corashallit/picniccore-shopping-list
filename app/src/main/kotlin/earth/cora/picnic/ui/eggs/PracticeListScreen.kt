@@ -97,7 +97,7 @@ fun PracticeListScreen(
             toasts.show(commit.toast(resources) { model.undo(commit) })
         }
     }
-    val tears = remember(model, resources) { TearToasts(resources) { item, index, _ -> model.restore(item, index) } }
+    val tears = remember(model, resources) { TearToasts(resources) { all -> all.asReversed().forEach { model.restore(it.item, it.index) } } }
     val notHere = stringResource(R.string.egg_lab_not_here)
     val ui = remember(app, eggs, settings) {
         buildListUiState(

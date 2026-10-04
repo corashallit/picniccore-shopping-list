@@ -26,14 +26,14 @@ object BookSlots {
      * Makes every spot valid after the item set changed (a delete, a restore, a revive, a migration).
      * CONTRACT:
      * - Unchecked items have bookSlot = null.
-     * - A checked item keeps its spot when the spot is in 0 until items.size and no earlier item (in list
-     *   order) holds it.
+     * - A checked item keeps its spot when the spot is in 0 until [spots] and no earlier item (in list order) holds it.
+     *   [spots] is the book's spot count: every item on the list, or fewer when rows written down after a finished
+     *   shop's finale stay out of its book (TripRules.bookItems).
      * - Every other checked item (spot too high after a delete, a clash, or none at all) moves into the lowest
      *   holes, in order of its old spot (none last), then check-off time, then list order (stable).
      * - Returns [items] itself when nothing changed.
      */
-    fun compact(items: List<GroceryItem>): List<GroceryItem> {
-        val spots = items.size
+    fun compact(items: List<GroceryItem>, spots: Int = items.size): List<GroceryItem> {
         val taken = HashSet<Int>()
         val displaced = ArrayList<Int>() // indices into items
         for ((index, item) in items.withIndex()) {

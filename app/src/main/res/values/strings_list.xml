@@ -55,8 +55,8 @@
         <item quantity="other">%1$d of %2$d aisles stamped</item>
     </plurals>
     <string name="list_book_open">Open trip book</string>
-    <string name="list_book_added_spoken">%1$s added to today\'s sticker book</string>
-    <string name="list_book_peeled_spoken">%1$s peeled out of today\'s sticker book</string>
+    <string name="list_book_added_spoken">%1$s added to today’s sticker book</string>
+    <string name="list_book_peeled_spoken">%1$s peeled out of today’s sticker book</string>
     <!-- The stamp name tag (§7.7): "4 · Baking · 1 left" / "3 · Deli & meat · stamped". -->
     <string name="list_stamp_tag_name">%1$d · %2$s</string>
     <string name="list_stamp_tag_left">%1$s · %2$d left</string>
@@ -77,7 +77,7 @@
 
     <!-- The New trip sheet (§6.5, §16). -->
     <string name="list_new_trip_title">Start a new trip?</string>
-    <string name="list_new_trip_body">Today\'s sticker book goes into your album.</string>
+    <string name="list_new_trip_body">This sticker book goes into your album.</string>
     <string name="list_new_trip_clear">Clear what I got</string>
     <string name="list_new_trip_keep">Keep everything, uncheck it all</string>
     <string name="list_new_trip_not_yet">Not yet</string>
@@ -103,6 +103,12 @@
          next check-off, so this one names no day. -->
     <string name="list_toast_new_book_add">Fresh sticker book ✦ your last shop is in the album</string>
     <string name="list_toast_new_trip">New trip · a fresh sticker book ♡</string>
+    <!-- The list switcher (§6.4): the delete confirm sheet says what goes with the list; the note once it has gone. -->
+    <plurals name="list_delete_items">
+        <item quantity="one">Its %1$d item goes with it.</item>
+        <item quantity="other">Its %1$d items go with it.</item>
+    </plurals>
+    <string name="list_toast_list_deleted">%1$s deleted</string>
     <string name="list_toast_nudge">New shop? Start a fresh sticker book</string>
     <string name="list_toast_nudge_action">New trip</string>
     <plurals name="list_toast_sorted">

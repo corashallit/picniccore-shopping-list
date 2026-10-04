@@ -167,7 +167,7 @@ class EggRainTest {
         val r = EggRig(compose).start()
         val t0 = r.fire(16)
         assertTrue(r.eggs.umbrella)
-        assertEquals("Rain on the way · bring the tote!", r.model.toasts.current?.text)
+        assertEquals("Rain on the way · bring\u00A0the\u00A0tote!", r.model.toasts.current?.text)
         r.advanceTo(t0 + 600)
         val umbrella = r.probe.frames.last { it.tag == "umbrella" }
         val bar = r.anchor(earth.cora.picnic.ui.list.motion.AnchorRegistry.ADD_BAR)

@@ -332,9 +332,11 @@ class TripOpsTest {
         assertEquals("t-l1-${TripRules.IDLE_MILLIS + 1}", later.trip()!!.id, "the item lands in a fresh book")
         assertNull(later.findItem("a"), "what was got last time is cleared")
         assertEquals(0, later.item("b").bookSlot)
-        val (unchecking, noBook) = later.toggleCheckedStartingNewBook("l1", "b", 3 * TripRules.IDLE_MILLIS)
-        assertNull(noBook, "an un-check never starts a book")
+        // An un-check on an idle trip files that book first too, with the sticker still in it (§7.1).
+        val (unchecking, filed) = later.toggleCheckedStartingNewBook("l1", "b", 3 * TripRules.IDLE_MILLIS)
+        assertEquals(1, assertNotNull(filed).book.stickers.size)
         assertNull(unchecking.trip())
+        assertFalse(unchecking.item("b").checked)
     }
 
     @Test

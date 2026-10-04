@@ -11,6 +11,7 @@ import earth.cora.picnic.core.model.deleteList
 import earth.cora.picnic.core.model.list
 import earth.cora.picnic.core.model.newBookStands
 import earth.cora.picnic.core.model.newTrip
+import earth.cora.picnic.core.model.removeItemStartingNewBook
 import earth.cora.picnic.core.model.toggleCheckedStartingNewBook
 import earth.cora.picnic.core.model.undoNewBook
 import kotlinx.coroutines.CoroutineScope
@@ -102,6 +103,44 @@ object TripFiling {
         val item = list?.items?.firstOrNull { it.id == itemId }
         if (trip != null && item != null && item.checked) album.update { it.collect(item, trip.id, catalog, now) }
         return Toggle(result, if (result != null) before else null)
+    }
+
+    /** What a tear-off did: the row and its index before it went ([removed], null when it was gone), and [newBook]. */
+    data class Tear(val removed: IndexedValue<GroceryItem>?, val newBook: Toggle?)
+
+    /**
+     * A tear-off (§8.6): tearing off a got row of a shop that is over files that shop's book first
+     * (removeItemStartingNewBook, §7.1), so the book keeps the sticker and "Clear what I got" takes the row; any other
+     * tear-off is a plain removeItem. Keep a non-null [Tear.newBook] for the new-book toast's Undo ([undoNewBook]),
+     * which puts the book and the row back; otherwise [Tear.removed] is what the tear-off's own Undo restores.
+     */
+    suspend fun removeItem(store: StateStore, album: AlbumStore, listId: String, itemId: String, now: Long): Tear {
+        val (_, preview) = store.current().removeItemStartingNewBook(listId, itemId, now)
+        var before: Album? = null
+        if (preview != null) {
+            album.update { a ->
+                before = a
+                a.file(preview.book)
+            }
+            album.flush()
+        }
+        var auto: AutoNewBook? = null
+        var removed: IndexedValue<GroceryItem>? = null
+        store.update { s ->
+            removed = s.list(listId)?.items?.withIndex()?.firstOrNull { it.value.id == itemId }
+            val (next, a) = s.removeItemStartingNewBook(listId, itemId, now)
+            auto = a
+            next
+        }
+        val result = auto
+        if (result != null && result.book != preview?.book) {
+            album.update { a ->
+                if (before == null) before = a
+                a.file(result.book)
+            }
+            album.flush()
+        }
+        return Tear(removed, result?.let { Toggle(it, before) })
     }
 
     /** What an add did: the committed [state], what became of each item, and [newBook] when it started one (§0.4 Q9). */

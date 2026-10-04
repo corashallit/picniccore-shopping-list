@@ -48,7 +48,7 @@ class NewTripTest {
         compose.waitForIdle()
         compose.onNodeWithTag(NewTripTags.SHEET).assertExists()
         compose.onNodeWithText("Start a new trip?").assertExists()
-        compose.onNodeWithText("Today's sticker book goes into your album.").assertExists()
+        compose.onNodeWithText("This sticker book goes into your album.").assertExists()
     }
 
     private fun summary(): String? = compose.onNodeWithTag(BookTags.BOOK).fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)?.single()

@@ -57,7 +57,8 @@ class ListSwitcherTest {
     fun listsWithCountsAndSwitch() {
         launch()
         compose.onNodeWithText("Saturday shop", substring = true).assertIsSelected()
-        compose.onNodeWithText("9 to get", substring = true).assertExists()
+        // The count is said once: the LCD while something is left, "All picked up" in its place when nothing is.
+        compose.onNodeWithText("9 to get", substring = true).assertDoesNotExist()
         compose.onNodeWithText("All picked up", substring = true).assertExists()
         compose.onNodeWithText("Big shop", substring = true).performClick()
         assertEquals(listOf("switch:big"), calls)
@@ -98,12 +99,12 @@ class ListSwitcherTest {
         launch(lists)
         compose.onNodeWithContentDescription("Delete Saturday shop").performClick()
         compose.onNodeWithText("Delete Saturday shop?").assertExists()
-        compose.onNodeWithText("Its sticker book goes into your album.").assertExists()
+        compose.onNodeWithText("Its 24 items go with it. Its sticker book goes into your album.").assertExists()
         compose.onNodeWithText("Delete").performClick()
         assertEquals(listOf("delete:${SaturdayShop.LIST_ID}"), calls)
     }
 
-    /** A list with no trip (nothing checked since its last New trip) has no book: the sheet says nothing of one. */
+    /** A list with no trip (nothing checked since its last New trip) has no book: the sheet says only what goes with it. */
     @Test
     fun deleteWithoutBookSaysNothingOfIt() {
         val lists = SwitcherSamples.fromState()
@@ -111,7 +112,8 @@ class ListSwitcherTest {
         launch(lists)
         compose.onNodeWithContentDescription("Delete Big shop").performClick()
         compose.onNodeWithText("Delete Big shop?").assertExists()
-        compose.onNodeWithText("Its sticker book goes into your album.").assertDoesNotExist()
+        compose.onNodeWithText("Its 2 items go with it.").assertExists()
+        compose.onNodeWithText("Its sticker book goes into your album.", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Not yet").performClick()
         assertEquals(emptyList<String>(), calls)
     }

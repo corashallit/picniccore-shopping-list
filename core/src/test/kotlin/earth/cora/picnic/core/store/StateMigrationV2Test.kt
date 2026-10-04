@@ -77,7 +77,7 @@ class StateMigrationV2Test {
         assertEquals(1_759_330_100_000L, trip.startedAt, "the earliest check-off")
         assertEquals("t-sat-1759330100000", trip.id)
         assertEquals("Hillcrest Market", trip.storeName)
-        assertEquals(now, trip.lastActivityAt)
+        assertEquals(1_759_330_300_000L, trip.lastActivityAt, "its own latest check-off, so a shop after the upgrade files these as their own book")
         assertNull(trip.completedAt, "Milk is still to get")
         assertNull(trip.finaleShownAt, "the finale still plays when she finishes")
         assertNull(trip.shopMinutes)
@@ -90,7 +90,7 @@ class StateMigrationV2Test {
         val s = load("v1_all_checked.json")
         val list = s.list("done")!!
         val trip = assertNotNull(list.trip)
-        assertEquals(Trip("t-done-1759330400000", 1_759_330_400_000L, "My store", now, completedAt = now, finaleShownAt = now), trip)
+        assertEquals(Trip("t-done-1759330400000", 1_759_330_400_000L, "My store", 1_759_330_500_000L, completedAt = now, finaleShownAt = now), trip)
         assertTrue(TripRules.isComplete(list), "so the LCD hold prints its receipt (D21)")
         assertFalse(TripRules.finaleOwed(list), "no surprise finale on her first open")
         assertEquals(listOf("y" to 0, "x" to 1), list.items.sortedBy { it.bookSlot }.map { it.id to it.bookSlot })

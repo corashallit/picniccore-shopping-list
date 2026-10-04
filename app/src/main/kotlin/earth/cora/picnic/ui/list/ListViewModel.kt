@@ -25,7 +25,6 @@ import earth.cora.picnic.core.model.list
 import earth.cora.picnic.core.model.moveItemToAisle
 import earth.cora.picnic.core.model.newList
 import earth.cora.picnic.core.model.normalizeName
-import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.core.model.renameList
 import earth.cora.picnic.core.model.restoreItem
 import earth.cora.picnic.core.model.setItemIcon
@@ -324,6 +323,8 @@ class ListViewModel(
 
         val newBook = before.trip != null && list.trip != null && tripReplaced
         val tripClosed = before.trip != null && list.trip == null
+        // The book was filed (New trip, or an un-check on a finished shop, §7.1): the book turns a page instead.
+        val filed = tripClosed && list.lastClosedAt != before.lastClosedAt
         val flips = list.items.filter { a -> beforeById[a.id]?.let { it.checked != a.checked } == true }
         val taps = flips.filter { pending[it.id] == it.checked }
         taps.forEach { pending.remove(it.id) }
@@ -332,7 +333,11 @@ class ListViewModel(
         val others = flips - taps.toSet()
         // A bulk change (New trip, "Keep everything, uncheck it all", a big revive) plays no row chains.
         val bulk = (tripClosed && taps.isEmpty()) || (newBook && taps.isEmpty()) || others.size > MAX_ROW_CHAINS
-        val toggled = if (bulk) taps else taps + others
+        val toggled = when {
+            filed -> emptyList()
+            bulk -> taps
+            else -> taps + others
+        }
 
         val handledAisles = HashSet<String>()
         var tripHandled = false
@@ -483,9 +488,14 @@ class ListViewModel(
             var result: TripFiling.Toggle? = null
             val ok = save { result = TripFiling.toggle(store, album, catalog, listId, itemId, now) }
             val toggle = result
-            if (ok && toggle?.autoNewBook != null) {
+            val auto = toggle?.autoNewBook
+            if (ok && toggle != null && auto != null) {
                 lastToggle = toggle
-                _events.send(ListEvent.NewBook(listId) { undoNewBook(toggle) })
+                // An un-check on a finished shop (§7.1) filed the book with the sticker still in it: a fresh page, and the
+                // add's wording, since nothing went into the new book.
+                val fresh = auto.undo.tookSticker
+                if (fresh) bookTurn.value = bookTurn.value + 1
+                _events.send(ListEvent.NewBook(listId, byAdd = fresh) { undoNewBook(toggle) })
             }
         }
     }
@@ -523,29 +533,46 @@ class ListViewModel(
         viewModelScope.launch { _events.send(ListEvent.NewBook(listId, byAdd = true) { undoNewBook(toggle) }) }
     }
 
-    /** A tear-off or Delete (§8.6): emits [ListEvent.Deleted] so the screen can offer Undo. */
+    /**
+     * A tear-off or Delete (§8.6): emits [ListEvent.Deleted] so the screen can offer Undo. Tearing off a got row of a shop
+     * that is over files that shop's book first (TripFiling.removeItem, §7.1): the book turns a page and only the new
+     * book's note shows, its Undo putting the book and the row back.
+     */
     fun delete(itemId: String) {
         if (editingId.value == itemId) editingId.value = null
         val now = clock()
         appScope.launch {
-            var removed: ListEvent.Deleted? = null
-            val ok = save {
-                store.update { s ->
-                    val listId = s.listIdOf(itemId) ?: return@update s
-                    val items = s.list(listId)?.items.orEmpty()
-                    val index = items.indexOfFirst { it.id == itemId }
-                    removed = ListEvent.Deleted(items[index], index, listId)
-                    s.removeItem(listId, itemId, now)
-                }
+            val listId = store.current().listIdOf(itemId) ?: return@launch
+            var tear: TripFiling.Tear? = null
+            val ok = save { tear = TripFiling.removeItem(store, album, listId, itemId, now) }
+            val t = tear
+            if (!ok || t == null) return@launch
+            val book = t.newBook
+            if (book != null) {
+                lastToggle = book
+                bookTurn.value = bookTurn.value + 1
+                _events.send(ListEvent.NewBook(listId, byAdd = true) { undoNewBook(book) })
+            } else {
+                t.removed?.let { _events.send(ListEvent.Deleted(it.value, it.index, listId)) }
             }
-            if (ok) removed?.let { _events.send(it) }
         }
     }
 
     /** Undo of a tear-off: the row comes back exactly as it was (checked state, book spot, icon). */
-    fun undoDelete(item: GroceryItem, index: Int, listId: String? = null) {
+    fun undoDelete(item: GroceryItem, index: Int, listId: String? = null) = undoDeletes(listOf(ListEvent.Deleted(item, index, listId.orEmpty())))
+
+    /**
+     * Undo of merged tear-offs ("2 items torn out"): every row comes back in ONE write, newest first, so each goes back at
+     * the index it had when it was torn out.
+     */
+    fun undoDeletes(events: List<ListEvent.Deleted>) {
+        if (events.isEmpty()) return
         val now = clock()
-        mutate { s -> s.restoreItem(listId?.takeIf { s.list(it) != null } ?: s.currentList().id, item, index, now) }
+        mutate { s ->
+            events.asReversed().fold(s) { acc, e ->
+                acc.restoreItem(e.listId.takeIf { acc.list(it) != null } ?: acc.currentList().id, e.item, e.index, now)
+            }
+        }
     }
 
     /** Her tap on a folded strip: it opens and the others fold (D2); her choice wins over any chain at once. */
@@ -659,7 +686,15 @@ class ListViewModel(
      */
     fun deleteList(id: String) {
         val now = clock()
-        appScope.launch { save { TripFiling.deleteList(store, album, id, now) } }
+        appScope.launch {
+            val title = store.current().list(id)?.title ?: return@launch
+            var gone = false
+            val ok = save {
+                TripFiling.deleteList(store, album, id, now)
+                gone = store.current().list(id) == null
+            }
+            if (ok && gone) _events.send(ListEvent.ListDeleted(title))
+        }
     }
 
     fun openEdit(itemId: String) {
@@ -791,8 +826,8 @@ internal fun AppState.listIdOf(itemId: String): String? = lists.firstOrNull { l 
 
 /** What TalkBack hears for the book (§7.7, §15); [ListStrings.from] reads strings_list.xml. */
 data class ListStrings(
-    val addedToBook: (String) -> String = { "$it added to today's sticker book" },
-    val peeledFromBook: (String) -> String = { "$it peeled out of today's sticker book" },
+    val addedToBook: (String) -> String = { "$it added to today’s sticker book" },
+    val peeledFromBook: (String) -> String = { "$it peeled out of today’s sticker book" },
 ) {
     companion object {
         val English: ListStrings = ListStrings()

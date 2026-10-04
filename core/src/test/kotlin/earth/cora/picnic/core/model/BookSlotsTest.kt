@@ -84,6 +84,18 @@ class BookSlotsTest {
         assertEquals(mapOf("a" to 0, "c" to 1), after.slots(), "2 spots: spot 2 moves into the hole spot 1 left")
     }
 
+    /** Rows written down after the finale add no spots: a sticker torn out of the finished book leaves no spot past its end. */
+    @Test
+    fun tearOffAfterTheFinale() {
+        val ids = (0 until 10).map { "s$it" }
+        val shop = ids.fold(state(*ids.toTypedArray())) { s, id -> s.toggleChecked("l", id, 1) }.markFinaleShown("l", 2)
+        val more = shop.addItems("l", listOf("x", "y", "z").map { GroceryItem(id = it, name = it, icon = "apple", addedAt = 3) }, 3).first
+        val after = more.removeItem("l", "s1", 4)
+        val list = after.list("l")!!
+        assertEquals(9, TripRules.bookItems(list).size)
+        assertEquals((0 until 9).toSet(), list.items.mapNotNullTo(HashSet()) { it.bookSlot }, "the highest sticker moves into the hole")
+    }
+
     @Test
     fun compactContract() {
         val clean = listOf(item("a", true, 0), item("b"), item("c", true, 2))

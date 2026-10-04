@@ -1,5 +1,6 @@
 package earth.cora.picnic.core.model
 
+import earth.cora.picnic.core.SaturdayShop
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -293,6 +294,52 @@ class TripRulesTest {
         assertEquals(old.id, undone.trip!!.id)
         assertEquals(old.lastActivityAt, undone.trip!!.lastActivityAt)
         assertTrue(TripRules.bookComplete(undone))
+    }
+
+    /**
+     * §7.1: what she does after a finished shop never costs that shop's book. Un-checking a got row days later (she needs
+     * it again) files the book first, PERFECT with all 24 stickers, and the item waits unchecked on the fresh list; a
+     * revive by name or a tear-off more than 30 min after the finale does the same. Within 30 min an un-check still
+     * corrects the shop in the store.
+     */
+    @Test
+    fun uncheckAfterTheShopFilesTheBook() {
+        val id = SaturdayShop.LIST_ID
+        val shop = SaturdayShop.state()
+        val done = shop.list(id)!!.items.filterNot { it.checked }
+            .foldIndexed(shop) { i, s, it -> s.toggleChecked(id, it.id, SaturdayShop.NOW + i * min) }
+            .markFinaleShown(id, SaturdayShop.NOW + 15 * min)
+        val old = done.list(id)!!.trip!!
+        val later = SaturdayShop.NOW + 4 * 24 * hour
+        val (after, auto) = done.toggleCheckedStartingNewBook(id, "milk", later)
+        assertNotNull(auto)
+        assertTrue(auto.book.perfect)
+        assertEquals(24, auto.book.stickers.size)
+        val fresh = after.list(id)!!
+        assertEquals(listOf("milk"), fresh.items.map { it.id })
+        assertFalse(fresh.items.single().checked)
+        assertNull(fresh.trip)
+        // Undo puts the book back as it was (milk in its spot) without restarting the idle clock.
+        val undone = after.undoNewBook(auto.undo, later + min).list(id)!!
+        assertEquals(done.list(id)!!.items, undone.items)
+        assertEquals(old, undone.trip)
+
+        val (oops, none) = done.toggleCheckedStartingNewBook(id, "milk", SaturdayShop.NOW + 40 * min)
+        assertNull(none, "25 min after the finale: a correction in the store")
+        assertFalse(TripRules.bookComplete(oops.list(id)!!))
+
+        val evening = SaturdayShop.NOW + 6 * hour
+        val again = SaturdayShop.item("strawberries").copy(id = "strawberries-2", addedAt = evening)
+        val (revived, _, byName) = done.addItemsStartingNewBook(id, listOf(again), evening)
+        assertNotNull(byName)
+        assertTrue(byName.book.perfect)
+        assertEquals(24, byName.book.total)
+        assertEquals(listOf("strawberries-2"), revived.list(id)!!.items.map { it.id }, "a fresh row")
+        val (torn, tear) = done.removeItemStartingNewBook(id, "milk", evening)
+        assertNotNull(tear)
+        assertEquals(24, tear.book.stickers.size)
+        assertTrue(torn.list(id)!!.items.isEmpty())
+        assertEquals(done.list(id)!!.items, torn.undoNewBook(tear.undo, evening + min).list(id)!!.items)
     }
 
     /**

@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.StrokeCap
@@ -87,6 +88,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
@@ -1624,6 +1626,72 @@ fun PicnicTextField(
     textStyle: TextStyle? = null,
     example: String? = null,
     interactionSource: MutableInteractionSource? = null,
+) = RuledField(
+    isEmpty = value.isEmpty(), modifier = modifier, placeholder = placeholder, label = label, singleLine = singleLine,
+    minLines = minLines, maxLines = maxLines, isError = isError, supportingText = supportingText, enabled = enabled,
+    trailing = trailing, textStyle = textStyle, example = example, interactionSource = interactionSource,
+) { fieldModifier, style, cursor, interaction, decoration ->
+    BasicTextField(
+        value = value, onValueChange = onValueChange, enabled = enabled, singleLine = singleLine, minLines = minLines,
+        maxLines = maxLines, textStyle = style, cursorBrush = cursor, keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions, visualTransformation = visualTransformation, interactionSource = interaction,
+        modifier = fieldModifier, decorationBox = decoration,
+    )
+}
+
+/**
+ * The ruled text field (§4.8) over a [TextFieldValue], for an edit that sets the selection: a rename starts with the
+ * whole old name selected, so typing replaces it.
+ */
+@Composable
+fun PicnicTextField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    label: String? = null,
+    singleLine: Boolean = false,
+    enabled: Boolean = true,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    textStyle: TextStyle? = null,
+    interactionSource: MutableInteractionSource? = null,
+) = RuledField(
+    isEmpty = value.text.isEmpty(), modifier = modifier, placeholder = placeholder, label = label, singleLine = singleLine,
+    minLines = 1, maxLines = if (singleLine) 1 else Int.MAX_VALUE, isError = false, supportingText = null, enabled = enabled,
+    trailing = null, textStyle = textStyle, example = null, interactionSource = interactionSource,
+) { fieldModifier, style, cursor, interaction, decoration ->
+    BasicTextField(
+        value = value, onValueChange = onValueChange, enabled = enabled, singleLine = singleLine,
+        maxLines = if (singleLine) 1 else Int.MAX_VALUE, textStyle = style, cursorBrush = cursor, keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions, interactionSource = interaction, modifier = fieldModifier, decorationBox = decoration,
+    )
+}
+
+/** The ruled field's frame (label, rules, underline, helper text) round [field], the BasicTextField of either overload. */
+@Composable
+private fun RuledField(
+    isEmpty: Boolean,
+    modifier: Modifier,
+    placeholder: String?,
+    label: String?,
+    singleLine: Boolean,
+    minLines: Int,
+    maxLines: Int,
+    isError: Boolean,
+    supportingText: String?,
+    enabled: Boolean,
+    trailing: (@Composable () -> Unit)?,
+    textStyle: TextStyle?,
+    example: String?,
+    interactionSource: MutableInteractionSource?,
+    field: @Composable (
+        modifier: Modifier,
+        style: TextStyle,
+        cursor: Brush,
+        interaction: MutableInteractionSource,
+        decoration: @Composable (@Composable () -> Unit) -> Unit,
+    ) -> Unit,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
@@ -1639,48 +1707,38 @@ fun PicnicTextField(
         if (label != null) {
             Text(label, style = t.fieldLabel.copy(color = c.inkSoft), modifier = Modifier.clearAndSetSemantics { })
         }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            enabled = enabled,
-            singleLine = singleLine,
-            minLines = minLines,
-            maxLines = maxLines,
-            textStyle = if (multi) valueStyle.copy(lineHeight = pitchSp) else valueStyle,
-            cursorBrush = SolidColor(c.ink),
-            keyboardOptions = keyboardOptions,
-            keyboardActions = keyboardActions,
-            visualTransformation = visualTransformation,
-            interactionSource = interaction,
-            modifier = Modifier
+        field(
+            Modifier
                 .fillMaxWidth()
                 // Tab leaves the field, a ruled note of many lines too (§15 Keyboard / switch access).
                 .tabLeavesField()
                 .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier),
-            decorationBox = { inner ->
-                Column {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = if (multi) pitch * minLines else 36.dp)
-                            .then(if (multi) Modifier.ruledLines(pitch, c.rule) else Modifier),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.weight(1f).padding(vertical = if (multi) 0.dp else 4.dp)) {
-                            if (value.isEmpty() && placeholder != null) {
-                                Column {
-                                    Text(placeholder, style = (textStyle ?: t.body).copy(color = c.inkSoft), maxLines = if (multi) Int.MAX_VALUE else 1)
-                                    if (example != null) Text(example, style = t.itemDetail.copy(color = c.inkSoft))
-                                }
+            if (multi) valueStyle.copy(lineHeight = pitchSp) else valueStyle,
+            SolidColor(c.ink),
+            interaction,
+        ) { inner ->
+            Column {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = if (multi) pitch * minLines else 36.dp)
+                        .then(if (multi) Modifier.ruledLines(pitch, c.rule) else Modifier),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f).padding(vertical = if (multi) 0.dp else 4.dp)) {
+                        if (isEmpty && placeholder != null) {
+                            Column {
+                                Text(placeholder, style = (textStyle ?: t.body).copy(color = c.inkSoft), maxLines = if (multi) Int.MAX_VALUE else 1)
+                                if (example != null) Text(example, style = t.itemDetail.copy(color = c.inkSoft))
                             }
-                            inner()
                         }
-                        trailing?.invoke()
+                        inner()
                     }
-                    FieldUnderline(focused = focused && enabled, error = isError, enabled = enabled)
+                    trailing?.invoke()
                 }
-            },
-        )
+                FieldUnderline(focused = focused && enabled, error = isError, enabled = enabled)
+            }
+        }
         if (supportingText != null) {
             Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (isError) Glyph(PicnicGlyph.TornPaper, contentDescription = null, tint = c.hanko, size = 16.dp)

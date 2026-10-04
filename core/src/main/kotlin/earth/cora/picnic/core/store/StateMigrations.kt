@@ -116,7 +116,9 @@ object StateMigrations {
             put("id", TripRules.tripId(listId, startedAt))
             put("startedAt", startedAt)
             put("storeName", storeName)
-            put("lastActivityAt", now)
+            // Its own latest check-off, not the upgrade: v1 kept got items until "Clear checked", so they can be weeks
+            // old, and the first check-off or add after the upgrade then files them as their own book (§7.2).
+            put("lastActivityAt", checked.maxOf { it.second })
             if (complete) {
                 put("completedAt", now)
                 put("finaleShownAt", now)

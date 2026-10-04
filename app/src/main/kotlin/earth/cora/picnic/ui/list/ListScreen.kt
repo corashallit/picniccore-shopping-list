@@ -428,7 +428,7 @@ fun ListRoute(
     val screen = rememberListScreenState()
     var showLists by rememberSaveable { mutableStateOf(false) }
     val addFlows = rememberAddFlows(addVm)
-    val tears = remember(resources) { TearToasts(resources, vm::undoDelete) }
+    val tears = remember(resources) { TearToasts(resources, vm::undoDeletes) }
     SideEffect {
         vm.strings = ListStrings(
             addedToBook = { resources.getString(R.string.list_book_added_spoken, it) },
@@ -479,6 +479,7 @@ fun ListRoute(
                         minHoldMs = NUDGE_FLOOR,
                     ),
                 )
+                is ListEvent.ListDeleted -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_list_deleted, event.title), kind = "list"))
                 is ListEvent.Refreshed -> refreshedToast(resources, event)?.let { toasts.show(it) }
                 is ListEvent.Message -> toasts.show(ToastMessage(event.text, kind = "save"))
             }
@@ -612,7 +613,7 @@ internal fun refreshedText(resources: Resources, e: ListEvent.Refreshed): String
  * The tear-off's sticky notes (§8.6, §4.15): "Oat cereal torn out" with Undo; a second tear-off during its hold merges
  * into "2 items torn out", whose Undo restores both.
  */
-internal class TearToasts(private val resources: Resources, private val undo: (GroceryItem, Int, String?) -> Unit) {
+internal class TearToasts(private val resources: Resources, private val undoAll: (List<ListEvent.Deleted>) -> Unit) {
     private val torn = HashMap<Long, List<ListEvent.Deleted>>()
 
     fun toast(e: ListEvent.Deleted): ToastMessage {
@@ -631,8 +632,8 @@ internal class TearToasts(private val resources: Resources, private val undo: (G
             text = text,
             kind = TEAR_KIND,
             actionLabel = resources.getString(R.string.list_undo),
-            // Restore newest first, so each goes back at the index it had when it was torn out.
-            onAction = { all.asReversed().forEach { undo(it.item, it.index, it.listId) } },
+            // All in one write, newest first, so each goes back at the index it had when it was torn out.
+            onAction = { undoAll(all) },
             merge = ::merge,
         )
         return if (id == null) base else base.copy(id = id)
