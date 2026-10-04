@@ -92,6 +92,10 @@ class PlaceSourceTest {
         locator.fix = null
         assertEquals("no fix and nothing stored: Toronto", Place.TORONTO, source.place())
         locator.fix = LatLon(43.26, -79.87)
+        now += AreaPlaceSource.MISS_MILLIS - 60_000
+        assertEquals("a miss is not asked again for 30 min (the minute tick)", Place.TORONTO, source.place())
+        assertEquals(1, locator.calls)
+        now += 60_000
         val hamilton = source.place()
         assertEquals("s0000549", hamilton.cityCode)
         now += AreaPlaceSource.REFRESH_MILLIS

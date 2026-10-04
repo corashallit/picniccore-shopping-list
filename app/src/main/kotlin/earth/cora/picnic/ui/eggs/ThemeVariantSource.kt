@@ -30,7 +30,9 @@ import java.time.ZoneId
  *    switched, and the sunset is computed again for a new day or a new place;
  * 5. otherwise Day.
  * MainActivity feeds the system dark mode in ([onSystemDark]) and sets the bar styles from [variant] (WP4). [start]
- * collects the settings and ticks once a minute in a scope (AppContainer passes the app scope; tests a TestScope).
+ * collects the settings and ticks once a minute in a scope (AppContainer passes the app scope; tests a TestScope); the
+ * minute ticks run only while the app is in front (MainActivity's onStart [resume] / onStop [pause]), and with Easter
+ * eggs off nothing reads the place (golden hour is an egg, §2.5).
  * [duskShown] (the SurpriseEngine's `state.dusk`) holds egg 1's Dusk back until the sun has set in its transition;
  * without it the saved flag applies at once. Owner: WP9 (ThemeVariantTest).
  */
@@ -57,6 +59,10 @@ class ThemeVariantSource(
 
     @Volatile private var sunset: Sunset? = null
     private var job: Job? = null
+    private var ticker: Job? = null
+    private var scope: CoroutineScope? = null
+    private var everyMinute = false
+    private var paused = false
 
     /** The system's dark mode (Configuration.uiMode), on start and on every change. */
     fun onSystemDark(dark: Boolean) {
@@ -70,27 +76,54 @@ class ThemeVariantSource(
      */
     fun start(scope: CoroutineScope, everyMinute: Boolean = true) {
         if (job != null) return
+        this.scope = scope
+        this.everyMinute = everyMinute
         job = scope.launch {
             launch {
                 settings.settings.collect {
                     val before = current
                     current = it
-                    // "Use my area" switched: the sunset follows the new place now, not tomorrow.
-                    if (before != null && before.useMyArea != it.useMyArea) refreshSunset()
+                    // The first settings, "Use my area" switched (the sunset follows the new place now, not tomorrow) or
+                    // Easter eggs turned on: the sunset is worked out again.
+                    if (before == null || before.useMyArea != it.useMyArea || (!before.eggs && it.eggs)) refreshSunset()
                     resolve()
                 }
             }
             duskShown?.let { flow -> launch { flow.collect { dusk = it; resolve() } } }
             refreshSunset()
             resolve()
-            while (everyMinute) {
-                val now = clock()
-                delay(MINUTE - Math.floorMod(now, MINUTE) + 1)
-                refreshSunset()
-                resolve()
-                onTick?.invoke()
-            }
         }
+        if (everyMinute && !paused) ticker = launchTicker(scope, tickFirst = false)
+    }
+
+    /** The app went to the background (MainActivity.onStop): the minute ticks stop, so nothing asks for the place. */
+    fun pause() {
+        paused = true
+        ticker?.cancel()
+        ticker = null
+    }
+
+    /** The app is in front again (MainActivity.onStart): ticks at once, then once a minute, on the minute. */
+    fun resume() {
+        paused = false
+        val s = scope ?: return
+        if (!everyMinute || ticker?.isActive == true) return
+        ticker = launchTicker(s, tickFirst = true)
+    }
+
+    private fun launchTicker(scope: CoroutineScope, tickFirst: Boolean): Job = scope.launch {
+        if (tickFirst) tickOnce()
+        while (true) {
+            val now = clock()
+            delay(MINUTE - Math.floorMod(now, MINUTE) + 1)
+            tickOnce()
+        }
+    }
+
+    private suspend fun tickOnce() {
+        refreshSunset()
+        resolve()
+        onTick?.invoke()
     }
 
     /** Re-reads the clock now (a resume, a moved test clock): the sunset of a new day too. */
@@ -116,8 +149,12 @@ class ThemeVariantSource(
         resolved.value = resolveNow()
     }
 
-    /** Reads the place (AreaPlaceSource answers from its 6 h store) and computes the sunset for a new day or place. */
+    /**
+     * Reads the place (AreaPlaceSource answers from its 6 h store) and computes the sunset for a new day or place. With
+     * Easter eggs off (or the settings not read yet) nothing can use it, so the place is not asked for.
+     */
     private suspend fun refreshSunset() {
+        if (current?.eggs != true) return
         val date = Instant.ofEpochMilli(clock()).atZone(zone).toLocalDate()
         val place = try {
             places.place()

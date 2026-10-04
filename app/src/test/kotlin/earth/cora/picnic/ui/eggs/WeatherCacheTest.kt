@@ -108,6 +108,20 @@ class WeatherCacheTest {
         assertEquals(3, source.requests)
     }
 
+    /** "Use my area" off (§0.4 Q6, PRIVACY.md): the forecast city worked out from her area is not kept, Weather on or off. */
+    @Test
+    fun turningTheAreaOffForgetsItsCity() = runBlocking {
+        val ottawa = "s0000430"
+        val source = CountingWeather { WeatherToday(it, rain = true, snow = false) }
+        val service = WeatherService(source, cache(), { ms(day, LocalTime.of(9, 0)) }, zone, city = { ottawa })
+        service.check(weatherOn = true)
+        service.forgetCity()
+        val memo = cache().read()
+        assertNull(memo.city)
+        assertNull(memo.day)
+        assertFalse(memo.rain)
+    }
+
     @Test
     fun switchedOffNothingIsAsked() = runBlocking {
         val source = CountingWeather { WeatherToday(it, rain = true, snow = false) }

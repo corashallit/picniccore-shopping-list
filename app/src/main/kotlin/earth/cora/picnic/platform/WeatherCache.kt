@@ -175,6 +175,17 @@ class WeatherService(
         cache.write(cache.read().copy(rainToastDay = today))
     }
 
+    /**
+     * "Use my area" is off or was refused (§0.4 Q6, PRIVACY.md): the forecast city worked out from her area is forgotten,
+     * with what its forecast said, so only the place store ever keeps her area (and it is deleted with the switch).
+     * Toronto's own city is not hers and stays. The next check with Weather surprises on asks Toronto's forecast.
+     */
+    suspend fun forgetCity() = mutex.withLock {
+        val memo = cache.read()
+        if (memo.city == null || memo.city == earth.cora.picnic.core.calendar.Place.TORONTO.cityCode) return@withLock
+        cache.write(memo.copy(city = null, day = null, rain = false, snow = false))
+    }
+
     /** The first-snow date kept, whatever the switch (the tape keeps its 7 days). */
     suspend fun firstSnowDate(): LocalDate? = mutex.withLock { cache.read().firstSnowDate }
 

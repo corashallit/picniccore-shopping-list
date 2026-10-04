@@ -236,7 +236,8 @@ class EggJackpotTest {
         r.advanceTo(arrived + JackpotMotion.WOBBLE_MS + 100)
         assertTrue(r.feedback.times(Cue.CAPSULE_POP).any { it in arrived + JackpotMotion.WOBBLE_MS - 40..arrived + JackpotMotion.WOBBLE_MS + 60 })
         // JACK / POT! holds 1.8 s beside it (over its check column, never over its name), then fades.
-        r.advanceTo(arrived + JackpotMotion.SLAM_AT + JackpotMotion.SLAM_MS + JackpotMotion.HOLD_MS - 50)
+        // (The reveal starts once its row has been in the list's room for two frames, §12.2 egg 13.)
+        r.advanceTo(arrived + JackpotMotion.SLAM_AT + JackpotMotion.SLAM_MS + JackpotMotion.HOLD_MS + 80)
         val held = r.probe.frames.filter { it.tag == "jackpot" && it.time in JackpotMotion.SLAM_AT + JackpotMotion.SLAM_MS until JackpotMotion.SLAM_AT + JackpotMotion.SLAM_MS + JackpotMotion.HOLD_MS }
         assertTrue("held for 1.8 s", held.maxOf { it.time } - held.minOf { it.time } >= JackpotMotion.HOLD_MS - 100)
         val name = r.anchor(EggAnchors.TEXT_PREFIX + "name:" + row)

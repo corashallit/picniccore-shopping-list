@@ -1,12 +1,9 @@
 package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.theme.ThemeVariant
@@ -23,8 +20,8 @@ import org.robolectric.annotation.GraphicsMode
  * The eggs on WP5's real List screen (integration of part 3; §12, §19.2 hand-off): the pieces the list itself places
  * through EggListHost are there and where the spec puts them — the nap cat curled in the empty basket (egg 8), the snack
  * star and doodle by the frozen aisle's tab, clear of its words (egg 5), the ladybug walking along a folded strip's bottom
- * edge (egg 2), the sun turning into the moon after one tap (egg 1), and the umbrella's band above the bar that no
- * row lies in while it rains (egg 16). The list-agnostic bounds and decor tests run on it too (EggListUnderTest.Real).
+ * edge (egg 2), the sun turning into the moon after one tap (egg 1), and the umbrella on the bar's edge that leaves the
+ * list's viewport whole while it rains (egg 16). The list-agnostic bounds and decor tests run on it too (EggListUnderTest.Real).
  * Goldens `eggs_on_list_{nap,ladybug,rain}_day` and `eggs_on_list_midnight` (midnight is Glow by its own rule).
  */
 @RunWith(AndroidJUnit4::class)
@@ -100,25 +97,22 @@ class EggsOnTheRealListTest {
         assertTrue("the moon by the title", compose.onAllNodesWithContentDescription("Moon sticker").fetchSemanticsNodes().isNotEmpty())
     }
 
+    /**
+     * Egg 16 keeps the list whole (§12.2): the viewport still reaches the bar, so no strip turns to haze above it, and the
+     * umbrella's canopy rises at most about 16 dp above the bar's top, into the band where the list fades into the bar.
+     */
     @Test
-    fun noRowLiesUnderTheUmbrella() {
+    fun theUmbrellaKeepsToTheBarsEdge() {
         val r = EggRig(compose).start(EggListUnderTest.Real)
         r.fire(16)
         r.advance(600)
         assertTrue(r.eggs.umbrella)
         val bar = r.anchors.bounds(AnchorRegistry.ADD_BAR)!!
         val list = r.anchors.bounds(EggAnchors.LIST)!!
-        val umbrella = bounds(EggTags.UMBRELLA).single()
-        assertTrue("the list ends above the canopy (${list.bottom} ≤ ${umbrella.top})", list.bottom <= umbrella.top + 1f)
-        assertTrue("and the bar's top below it", bar.top > list.bottom)
-        val rows = ArrayList<Rect>()
-        fun walk(n: androidx.compose.ui.semantics.SemanticsNode) {
-            if (n.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("picnic_row_slot_") == true) rows += n.boundsInRoot
-            n.children.forEach(::walk)
-        }
-        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
-        assertTrue("the open tray's rows are on screen", rows.isNotEmpty())
-        rows.forEach { assertTrue("no row under the umbrella ($it)", !it.overlaps(umbrella.deflate(2f))) }
+        val umbrella = r.probe.frames.last { it.tag == "umbrella" }.bounds
+        val dp = 3f
+        assertTrue("the list keeps its whole viewport (${list.bottom} ≥ ${bar.top})", list.bottom >= bar.top)
+        assertTrue("the canopy rises at most 16 dp above the bar (${(bar.top - umbrella.top) / dp} dp)", bar.top - umbrella.top <= 16.5f * dp)
         r.capture("eggs_on_list_rain_day")
     }
 }

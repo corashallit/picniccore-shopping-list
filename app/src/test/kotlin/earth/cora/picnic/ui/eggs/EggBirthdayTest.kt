@@ -40,17 +40,21 @@ class EggBirthdayTest {
     fun whatCountsAsABirthday() {
         val yes = listOf(
             item("Birthday cake", "cake"),
-            item("Carrot cake", "cake"),
-            item("Candles", "candle"),
+            item("Cake", "cake"),
+            item("B-day candles", "candle"),
             item("Birthday balloons"),
             item("BIRTHDAY card"),
             item("Gâteau d'anniversaire"),
             item("gateau d’anniversaire"),
-            item("Bougies"),
             item("bougies d'anniversaire"),
         )
         yes.forEach { assertTrue("${it.name} (${it.icon}) is a birthday item", EggRules.isBirthday(it, catalog)) }
-        val no = listOf(item("Carrots"), item("Butter", "butter"), item("Cupcake liners", "paper_bag"), item("Gâteau aux carottes", "paper_bag"))
+        // Everyday cakes and candles are not a birthday (patio tealights never rain confetti or stamp HAPPY / B-DAY!).
+        val no = listOf(
+            item("Carrots"), item("Butter", "butter"), item("Cupcake liners", "paper_bag"), item("Gâteau aux carottes", "paper_bag"),
+            item("Carrot cake", "cake"), item("Cheesecake", "cake"), item("Tealights", "candle"), item("Citronella candle", "candle"),
+            item("Bougies", "candle"),
+        )
         no.forEach { assertFalse("${it.name} is not", EggRules.isBirthday(it, catalog)) }
         // The hanko follows: HAPPY / B-DAY! for a birthday item, GOT IT! for anything else, Easter eggs on.
         val on = SurpriseState()

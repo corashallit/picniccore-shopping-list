@@ -80,8 +80,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        // The theme's minute ticks (golden hour, midnight, the eggs' clock) run only while the app is in front, so the
+        // background never asks for her area (§0.4 Q6).
+        (application as PicnicApp).container.themeVariants.resume()
+    }
+
     override fun onResume() {
         super.onResume()
         reducedMotion.value = readReducedMotion(contentResolver)
+    }
+
+    override fun onStop() {
+        (application as PicnicApp).container.themeVariants.pause()
+        super.onStop()
     }
 }

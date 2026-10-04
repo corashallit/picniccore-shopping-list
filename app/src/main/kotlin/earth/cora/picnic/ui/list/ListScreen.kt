@@ -868,10 +868,9 @@ private fun EggListScope.ListScreenContent(
                             else -> CompositionLocalProvider(LocalBringIntoViewSpec provides keyboardView(lazyState, entries, dockHeight)) {
                                 AisleList(
                                     state, p, engine, actions, screen, lazyState, entries, dockHeight, collapse,
+                                    // Egg 16: the umbrella's room is only at the list's end (listBottomPadding), so the last
+                                    // strip can scroll clear of its canopy; the viewport itself stays as it is (§12.2).
                                     topExtra = listTopExtra, bottomPadding = listBottomPadding(dockHeight),
-                                    // Egg 16: the list keeps out of the umbrella's band above the docked bar (not while it
-                                    // is folded into the FAB: the umbrella stands on the bar).
-                                    umbrellaBand = if (eggs.umbrella && collapse?.collapsed != true) barHeight + UMBRELLA_BAND else null,
                                 )
                             }
                         }
@@ -1128,8 +1127,6 @@ private fun AisleList(
     topExtra: Dp = 0.dp,
     /** The add bar + 26 dp, + the umbrella's room while it rains (EggListScope.listBottomPadding). */
     bottomPadding: Dp = dockHeight + 26.dp,
-    /** Egg 16: while the umbrella shows, the viewport ends this far above the screen's bottom (the bar + its band). */
-    umbrellaBand: Dp? = null,
 ) {
     val reduced = LocalReducedMotion.current
     val density = LocalDensity.current
@@ -1479,20 +1476,12 @@ private fun AisleList(
         }
     }
 
-    // Egg 16: while the umbrella stands on the add bar's shoulder, its canopy rises above the bar (42 dp at the top of its
-    // pop). The list's words keep out of that band: the viewport ends above it, so no row or strip ever lies under the
-    // canopy at any scroll position, and the list's end needs only a small gap then (§12.2).
-    val umbrella = umbrellaBand != null
     val listRoom = LocalListRoom.current
     // Clipped to the viewport: the bunting starts above it (−34 dp) and comes out from under the top stack (R6).
     Box(
         Modifier
             .fillMaxSize()
-            .padding(bottom = umbrellaBand ?: 0.dp)
             .clipToBounds()
-            // Egg 16: where the viewport ends above the umbrella's band, the list fades out into the binder as it does
-            // into the add bar's pad (§6.1), never a hard cut across a strip.
-            .then(if (umbrella) Modifier.fadeOutAtBottom(UMBRELLA_FADE) else Modifier)
             .onGloballyPositioned {
                 val b = it.boundsInWindow()
                 screen.listBounds = b
@@ -1556,7 +1545,7 @@ private fun AisleList(
                 start = 8.dp,
                 end = 8.dp,
                 top = LIST_TOP_PAD,
-                bottom = (if (umbrella) UMBRELLA_END_GAP else bottomPadding) + with(density) { endRoom.toDp() },
+                bottom = bottomPadding + with(density) { endRoom.toDp() },
             ),
         ) {
             entries.forEachIndexed { index, e ->
@@ -1687,37 +1676,6 @@ private fun AisleList(
         if (screen.pull > 0f && !reduced) Bunting(screen.pull / pullPx, Modifier.align(Alignment.TopCenter))
     }
 }
-
-/**
- * The umbrella's band above the docked bar (egg 16): its 44 dp sticker centred 13 dp above the bar's top reaches 35 dp up,
- * 42 dp at the top of its pop (×1.3).
- */
-private val UMBRELLA_BAND: Dp = 44.dp
-
-/** While it rains the viewport already ends above the umbrella's canopy: the list's end keeps this small gap (§6.1). */
-private val UMBRELLA_END_GAP: Dp = 12.dp
-
-/** How far up from the viewport's end above the umbrella's band the list fades out (egg 16). */
-private val UMBRELLA_FADE: Dp = 20.dp
-
-/** The content fades from opaque to clear over the last [fade] at the bottom (alpha mask: the binder shows through). */
-private fun Modifier.fadeOutAtBottom(fade: Dp): Modifier = this
-    .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
-    .drawWithContent {
-        drawContent()
-        val f = fade.toPx().coerceAtMost(size.height)
-        drawRect(
-            androidx.compose.ui.graphics.Brush.verticalGradient(
-                0f to androidx.compose.ui.graphics.Color.Black,
-                1f to androidx.compose.ui.graphics.Color.Transparent,
-                startY = size.height - f,
-                endY = size.height,
-            ),
-            topLeft = Offset(0f, size.height - f),
-            size = androidx.compose.ui.geometry.Size(size.width, f),
-            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
-        )
-    }
 
 /** Whether a finger is on the list (the pull to refresh follows only her own drags). */
 private interface PullGate {

@@ -149,18 +149,29 @@ class AppSurpriseEngine(
                 derive()
                 // Egg 14's rules run on what the album holds whenever the eggs come on (at start, or turned back on):
                 // trips filed while they were off still open the back pocket and the sakura sheet (§12.2).
-                if (eggsOn && (before == null || !before.eggs)) albumNow?.let(::applyAlbumRules)
+                val eggsCameOn = eggsOn && (before == null || !before.eggs)
+                if (eggsCameOn) albumNow?.let(::applyAlbumRules)
+                // "Use my area" off (or off at start): the forecast city worked out from her area goes too (§0.4 Q6,
+                // WeatherService.forgetCity).
+                val areaOff = !s.useMyArea && (before == null || before.useMyArea)
                 when {
                     // A cold start straight into the list: the list said it was showing before the switches had loaded,
                     // when no egg could know it was on. Its checks run now (SNACK?, the forecast, the ants).
-                    before == null && listShown && eggsOn -> listShownChecks(snackDue = true)
+                    before == null && listShown && eggsOn -> {
+                        refresh()
+                        listShownChecks(snackDue = true)
+                    }
                     // "Use my area" on or off: golden hour and the forecast follow the new place at once, not tomorrow
                     // (the forecast is asked again when its city changed, WeatherService).
                     before != null && before.useMyArea != s.useMyArea -> {
                         refresh()
                         if (listShown) checkWeather()
                     }
+                    // The eggs came on (or the first settings arrived): golden hour is worked out now, not at the next tick.
+                    eggsCameOn -> refresh()
                 }
+                // Either order with a forecast check is fine: a check for another city asks again and keeps only Toronto's.
+                if (areaOff) weather?.let { service -> scope.launch { safely { service.forgetCity() } } }
             }
         }
         scope.launch {
@@ -172,6 +183,7 @@ class AppSurpriseEngine(
                     tuckAllOnStart(s)
                 }
                 if (before != null && before.currentListId != s.currentListId) onListSwitched(s.currentListId)
+                dropGoneReveals(s)
                 dropFiledReceipt(s)
                 derive()
             }
@@ -256,8 +268,9 @@ class AppSurpriseEngine(
             goldenMinutesLeft = sunset?.let { goldenMinutesLeft(at, it) },
         )
         // The place is read again on every refresh (the minute tick; AreaPlaceSource answers from its 6 h store), so a
-        // new area, or "Use my area" turned on or off, moves golden hour at once.
-        scope.launch {
+        // new area, or "Use my area" turned on or off, moves golden hour at once. With Easter eggs off nothing can use it
+        // (golden hour is an egg, §2.5), so the place is not asked for.
+        if (eggsOn) scope.launch {
             val place = try {
                 places.place()
             } catch (e: CancellationException) {
@@ -682,6 +695,29 @@ class AppSurpriseEngine(
         val fx = _state.value.receipt
         if (fx != null && fx.listId != listId) tuckPrinted(silent = true)
         if (_state.value.bonusStage) endBonusStage()
+        dropPendingReveals()
+    }
+
+    /**
+     * The shiny burst and the jackpot reveal wait for their row to be on screen (EggOverlays); one still waiting when the
+     * list is switched expires unplayed. (Not when the trip is filed: an add that starts a new book files it in the very
+     * commit that rolls a shiny, and the item stays on the list to be found.)
+     */
+    private fun dropPendingReveals() {
+        if (_state.value.jackpot == null && _state.value.shinyBursts.isEmpty()) return
+        _state.update { it.copy(jackpot = null, shinyBursts = emptyList()) }
+        derive()
+    }
+
+    /** A pending reveal whose item has left the current list (torn off, cleared) expires. */
+    private fun dropGoneReveals(s: AppState) {
+        val st = _state.value
+        if (st.jackpot == null && st.shinyBursts.isEmpty()) return
+        val ids = s.list(s.currentListId)?.items?.mapTo(HashSet()) { it.id } ?: return
+        val jackpot = st.jackpot?.takeIf { it.itemId in ids }
+        val shiny = st.shinyBursts.filter { it.itemId in ids }
+        if (jackpot == st.jackpot && shiny.size == st.shinyBursts.size) return
+        _state.update { it.copy(jackpot = jackpot, shinyBursts = shiny) }
     }
 
     /**
