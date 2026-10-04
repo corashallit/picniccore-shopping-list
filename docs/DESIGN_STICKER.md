@@ -2310,7 +2310,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 ### 20.18 Copy, IP and units
 
 293. **[WP10]** None of the IP reference words (Sanrio, Bonbon, Q-Lia, Sun-Star, Bandai, Amada, Carddass, Sailor, Moon Prism, HBC, …) appears in `res/`, `assets/` or generated sources. — *Test:* `IpWordsTest` (unit scan)
-294. **[WP10]** No user-visible string mentions a proxy, a model name or prices, none uses an emoji as an icon. — *Test:* `CopyRulesTest` (unit scan)
+294. **[WP10]** No user-visible string mentions a proxy, a model name or prices, and none uses an emoji as an icon. — *Test:* `CopyRulesTest` (unit scan)
 295. **[WP10]** Strings use Canadian spelling and metric units only (cooking measures only in a recipe amount, §4.17). — *Test:* `CopyRulesTest.canadianAndMetric` (unit scan)
 296. **[WP5 · WP7]** Every detail line shown is metric after normalisation, except a recipe amount after the "·", which may be cup, tbsp, tsp or pinch. — *Test:* `ListUiStateTest.detailMetric` (unit)
 297. **[WP1 · WP2]** The critters (nap cat without forehead mark or bow, ants carrying food, bee, ladybug) and every sticker pass the IP review sheet. — *Test:* golden `critters_contact` (reviewed by Cora, against the §20 criteria)
