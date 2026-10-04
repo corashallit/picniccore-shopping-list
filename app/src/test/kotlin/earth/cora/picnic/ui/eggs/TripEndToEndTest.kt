@@ -17,6 +17,7 @@ import earth.cora.picnic.ui.list.motion.NEXT_CARD_TAG
 import earth.cora.picnic.ui.theme.TOAST_TAG
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.list
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -58,6 +59,19 @@ class TripEndToEndTest {
         return out
     }
 
+    /** The screen's own coroutine scope: her drags run in it, as the list's gestures do. */
+    private var screenScope: kotlinx.coroutines.CoroutineScope? = null
+
+    /**
+     * Her thumb moving the list by [delta] px: a scroll at user-input priority, so it stops a scroll the list is making
+     * (the next stop coming into view) as her drag would, rather than adding to it. One frame lets it run.
+     */
+    private fun EggRig.drag(list: LazyListState, delta: Float) {
+        act {
+            screenScope!!.launch { list.scroll(androidx.compose.foundation.MutatePriority.UserInput) { scrollBy(delta) } }
+        }
+    }
+
     /**
      * Brings [tag]'s node into view just below the pinned plate, as her thumb would scroll the list (by the list's own
      * state: no animation waits on the held clock), and waits (bounded) while a toast or the Next card lies over it.
@@ -79,7 +93,7 @@ class TripEndToEndTest {
             val pinned = boxes("picnic_tray_header_").filter { it.top <= top + 2f && it.bottom > top }.maxOfOrNull { it.bottom } ?: top
             val delta = bounds(tag).top - (pinned + 16 * 3f)
             if (kotlin.math.abs(delta) < 3f) return@repeat
-            act { list.dispatchRawDelta(delta) }
+            drag(list, delta)
         }
         val bar = anchor(AnchorRegistry.ADD_BAR).top
         assertTrue("$tag above the add bar (${bounds(tag)}, bar $bar)", bounds(tag).center.y < bar)
@@ -95,7 +109,10 @@ class TripEndToEndTest {
     fun checkEverythingToTheReceiptInTheAlbum() {
         val scroll = LazyListState()
         val r = EggRig(compose, fixture = PracticeFixture.unchecked())
-        r.start { PracticeListScreen(r.sandbox, listState = scroll) }
+        r.start {
+            screenScope = androidx.compose.runtime.rememberCoroutineScope()
+            PracticeListScreen(r.sandbox, listState = scroll)
+        }
         assertNull(r.list.trip)
         assertEquals(24, r.list.items.size)
         // Go round the store as she would: in walking order, open each stop with a tap on its strip if it is folded,
