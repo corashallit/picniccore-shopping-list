@@ -92,7 +92,10 @@ fun fitNextName(
         val lines = tabLines(name, maxWidthPx) { measurer.measure(it, s, softWrap = false, maxLines = 1).size.width }
         if (lines != null && (lines.size <= 2 || sp <= floorSp + 0.01f)) return NextNameFit(sp, lines.size, false, lines)
         if (sp <= floorSp + 0.01f) {
-            val wrapped = measurer.measure(keepWithNextWord(name), s, softWrap = true, constraints = Constraints(maxWidth = maxWidthPx))
+            // A word with its "&" wider than the line: the "&" ends a line rather than a word breaking; only a word
+            // wider than the line on its own breaks inside itself.
+            tabLines(name, maxWidthPx, glue = false) { measurer.measure(it, s, softWrap = false, maxLines = 1).size.width }?.let { return NextNameFit(sp, it.size, false, it) }
+            val wrapped = measurer.measure(name, s, softWrap = true, constraints = Constraints(maxWidth = maxWidthPx))
             return NextNameFit(sp, wrapped.lineCount, true)
         }
         sp -= 1f
@@ -252,7 +255,7 @@ private fun nameNeed(measurer: TextMeasurer, name: String, style: TextStyle): In
     var hi = maxOf(one, widestWord)
     while (lo < hi) {
         val mid = (lo + hi) / 2
-        if ((tabLines(name, mid, ::width)?.size ?: 3) <= 2) hi = mid else lo = mid + 1
+        if ((tabLines(name, mid, width = ::width)?.size ?: 3) <= 2) hi = mid else lo = mid + 1
     }
     return lo + 1
 }
@@ -293,7 +296,7 @@ private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: A
                 val fit = remember(displayName, nameStyle, room) { fitNextName(measurer, displayName, nameStyle, room) }
                 // Laid out line by line (balanced, "&" with the word after it, §0.4), so the tab hugs its widest line.
                 Text(
-                    fit.text?.joinToString("\n") ?: keepWithNextWord(displayName),
+                    fit.text?.joinToString("\n") ?: displayName,
                     style = nameStyle.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp),
                     softWrap = fit.text == null,
                     modifier = Modifier.semantics {

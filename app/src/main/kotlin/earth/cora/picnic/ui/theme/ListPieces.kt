@@ -85,12 +85,12 @@ fun keepWithNextWord(name: String): String = name.replace(" & ", " & ").replace
 /**
  * [name]'s lines in [room] px (§4.10, §0.4): the name itself when [width] says it fits on one line; else broken between
  * words into the fewest lines, balanced (the widest line as narrow as it can be, a longer first line on a tie), "&"
- * and "+" kept with the word after them ([keepWithNextWord]). Null when a word on its own is wider than [room]: the
- * text then wraps inside that word rather than losing letters.
+ * and "+" kept with the word after them ([keepWithNextWord]; without [glue], words only). Null when a word on its own
+ * (with its "&") is wider than [room].
  */
-fun tabLines(name: String, room: Int, width: (String) -> Int): List<String>? {
+fun tabLines(name: String, room: Int, glue: Boolean = true, width: (String) -> Int): List<String>? {
     if (width(name) <= room) return listOf(name)
-    val words = keepWithNextWord(name).split(' ').filter { it.isNotEmpty() }
+    val words = (if (glue) keepWithNextWord(name) else name).split(' ').filter { it.isNotEmpty() }
     if (words.size < 2) return null
     val n = words.size
     val widths = HashMap<Int, Int>()
@@ -268,10 +268,18 @@ private fun TabFace(
     // third line ("Canned goods / & soups"), gets the 14 dp the pattern end gives up when it narrows from 26 to 12 dp.
     val narrowRoom = if (room == Int.MAX_VALUE) room else room + with(density) { (PATTERN_END - PATTERN_END_NARROW).roundToPx() }
     val wrapped = remember(displayName, style, room, fit, look.pattern) {
-        fun lines(r: Int) = tabLines(displayName, r) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width }
+        fun lines(r: Int, glue: Boolean = true) = tabLines(displayName, r, glue) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width }
+        val canNarrow = look.pattern != TabPattern.Plain
         val wide = if (fit.wraps) lines(room) else listOf(displayName)
-        val narrower = if (look.pattern != TabPattern.Plain && (wide == null || wide.size > 2)) lines(narrowRoom) else null
-        if (narrower != null && (wide == null || narrower.size < wide.size)) narrower to true else wide to false
+        val narrower = if (canNarrow && (wide == null || wide.size > 2)) lines(narrowRoom) else null
+        when {
+            narrower != null && (wide == null || narrower.size < wide.size) -> narrower to true
+            wide != null -> wide to false
+            // A word with its "&" wider than the whole tab ("& international" at a large font on a narrow phone): the
+            // "&" ends a line rather than a word breaking.
+            canNarrow -> lines(narrowRoom, glue = false) to true
+            else -> lines(room, glue = false) to false
+        }
     }
     val lines = wrapped.first
     val narrow = wrapped.second || (lines == null && look.pattern != TabPattern.Plain && room != Int.MAX_VALUE)
@@ -300,7 +308,7 @@ private fun TabFace(
     ) {
         TabNumber(number, look, size, maxSize = if (circle >= grown) Dp.Infinity else circle, numberModifier)
         Text(
-            lines?.joinToString("\n") ?: keepWithNextWord(displayName),
+            lines?.joinToString("\n") ?: displayName,
             style = if (lines == null) style.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading) else style,
             softWrap = lines == null,
             modifier = nameModifier.layout { m, c ->
