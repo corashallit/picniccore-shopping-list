@@ -2609,14 +2609,15 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 
 ## Appendix C. Golden manifest (`GoldenCoverageTest`)
 
-`GoldenCoverageTest` reads `app/src/test/screenshots/manifest.txt`, generated from this appendix, and fails if a name is missing from the screenshots folder or a screenshot is not in the manifest. Expansion rules:
+`GoldenCoverageTest` reads `app/src/test/screenshots/manifest.txt`, generated from this appendix (the test writes it again with `GOLDEN_MANIFEST_WRITE=1` in the environment and fails while it differs), and fails if a name is missing from the screenshots folder or a screenshot is not in the manifest; it also checks that every golden a §20 item names exists. CI's golden gate (item 305) fails a full run in which a golden in the folder is not compared by any test: no golden is an orphan. Expansion rules:
 
-- A name with no variant suffix (`_day`, `_glow`, `_dusk`, `_golden`, `_rm`) is recorded twice, `<name>_day` and `<name>_glow`, unless its row says otherwise; `<variant>` expands to `day` and `glow`.
+- A name with no variant suffix (`_day`, `_glow`, `_dusk`, `_golden`, `_rm`) is recorded twice, `<name>_day` and `<name>_glow`, unless its row says **Day only** (each such name is then one Day golden, `<name>.png`); a name ending `_fs130`, `_fs200` or `_w411` is one Day golden too, unless it is written with its variants (`row_states_fs200_{day,glow}`); `<variant>` expands to `day` and `glow`, and a name written with its variants (`puffy_title_{day,glow}_long`) is taken as written.
 - `{a,b,c}` expands to one name per entry; `<density>` to `1x`, `2x`, `2_625x`, `3x`, `3_5x`, `4x`; `<category>` to the 20 catalog categories; `<n>` with `_end_<variant>` to each egg and the variants §12.3 lists for it.
 - `*_fs130` and `*_fs200` expand to `list`, `add`, `edit`, `mystore`, `settings`, `album`, `nextcard`, `celebration_summary` and `receipt`, each in Day only.
 - A trailing `_*` (e.g. `button_secondary_*`, `field_*`, `loaders_*`) expands to every state that component's §4 entry lists.
 - Frame strips (`strip`) are stored as one PNG per sampled frame, `<name>_<t>.png`, at the times their item lists (otherwise every 83 ms over the motion).
 - Every name renders at `w360dp-h760dp-xxhdpi`; a name ending `_w411` renders at `w411dp-h891dp`.
+- `<preview>` stands for the goldens Roborazzi's preview scanner records for every `@Preview` in `earth.cora.picnic` (`earth.cora.picnic.<file>Kt.<function>.<preview name>_W…dp_H…dp`).
 
 | Item | Goldens | Frame strips |
 |---|---|---|
@@ -2642,7 +2643,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 52 | `appbar_sun_day`, `appbar_moon_dusk`, `appbar_moon_glow` | — |
 | 54 | `checkbox_spot_<density>_<variant>`, `hanko_<density>_<variant>`, `ghost_<density>_<variant>`, `landing_spot_<density>_<variant>` | — |
 | 55 | `checkbox_hanko_angles` | — |
-| 57 | `row_states_fs200` | — |
+| 57 | `row_states_fs200_{day,glow}` | — |
 | 59 | `hanko_variants` | — |
 | 60 | `button_primary_{rest,pressed,disabled,focused}` | — |
 | 61 | `button_secondary_*`, `button_text_*`, `button_round_*`, `fab_*` | — |
@@ -2666,7 +2667,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 85 | `row_pressed_day`, `row_pressed_glow` | — |
 | 86 | `row_checked_day`, `row_checked_glow` | — |
 | 92 | `list_tray_open_day` | — |
-| 93 | `list_pinned_mid_scroll` | — |
+| 93 | `list_pinned_mid_scroll` (Day only) | — |
 | 94 | `list_tray_open_glow`, `list_tray_open_fs200` | — |
 | 96 | `list_pinned_under_book` | — |
 | 97 | `list_pinned_under_book_glow`, `list_pinned_under_book_dusk`, `list_pinned_under_book_golden` | — |
@@ -2686,12 +2687,12 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 125 | — | `hop_berry`, `hop_egg`, `hop_bread`, `hop_can`, `hop_frozen` |
 | 126 | — | `landing_strip` |
 | 127 | — | `uncheck_strip` |
-| 146 | `book_{new,midtrip,page2,full,perfect_receipt,glow,collapsed,stops14,stops20}` | — |
+| 146 | `book_{new,midtrip,page2,full,perfect_receipt,glow,collapsed,stops14,stops20}` (Day only: `book_glow` is the book in Glow) | — |
 | 148 | — | `book_magic_strip` |
 | 150 | — | `book_peel_strip` |
 | 160 | `book_fs200` | — |
-| 161 | `book_collapsed` | — |
-| 163 | `tripbook_sheet_current`, `tripbook_sheet_finished`, `tripbook_sheet_glow` | — |
+| 161 | `book_collapsed` (Day only) | — |
+| 163 | `tripbook_sheet_current`, `tripbook_sheet_finished`, `tripbook_sheet_glow` (Day only: `tripbook_sheet_glow` is the sheet in Glow) | — |
 | 165 | `album_tripbooks` | — |
 | 168 | `nextcard_day`, `nextcard_glow` | — |
 | 170 | `nextcard_long_name`, `nextcard_fs200` | — |
@@ -2703,7 +2704,7 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | 189 | `celebration_shelf_1`, `celebration_shelf_8`, `celebration_shelf_20` | `celebration_ride_100_items` |
 | 200 | `addbar_waiting` | — |
 | 203 | `recipe_card_day`, `recipe_card_glow` | — |
-| 205 | — | `gashapon_fanout` |
+| 205 | `gashapon_fanout` (Day only: its frames side by side in one image) | — |
 | 206 | `add_tabs_{write,snap,speak}` | — |
 | 207 | `snap_reading`, `snap_lines`, `snap_popped` | — |
 | 210 | `speak_recording`, `speak_transcribing`, `speak_heard` | — |
@@ -2740,4 +2741,18 @@ Ids are from `c_spec/inv_spec.json` and `c_spec/inv_mockup.json`; every id in an
 | Edit, switcher, sheets (§6.3–§6.6) | `edit_renamed`, `newtrip_sheet`, `toast_new_book_undo` (the automatic new book, §0.4 Q9: no idle prompt exists), `deletelist_sheet_with_book` |
 | My store, Settings, About (§6.7–§6.9) | `mystore_text_focused`, `mystore_error`, `settings_save_error`, `surprise_lab`, `surprise_lab_practice_list` |
 | Album (§6.10, §6.12) | `album_early`, `album_full`, `album_holo_glint`, `album_face_blink`, `album_back_pocket`, `album_empty`, `album_tripbook_open` (a filed book's sheet), `album_receipt_full` (its receipt at full size), `album_pocket_lift` (§4.25 pocket interaction) |
-| Book (§7.5) | `book_dusk`, `book_golden`, `book_bonus_stage`, `book_empty_list_hidden` |
+| Book (§7.5) | `book_dusk`, `book_golden`, `book_bonus_stage`, `book_empty_list_hidden`, `book_seasonal`, `book_perfect_glow`, `book_page2_fs200` (Day only) |
+
+**Further goldens** (the states the §20 items after 312, the large-text audits and the egg tests record, and the preview scanner; item 304 covers them):
+
+| Area | Goldens | Frame strips |
+|---|---|---|
+| List (§6.1, §4.10, items 313, 314) | `list_after_finale`, `list_nudge_toast`, `list_tearoff_toast`, `overflow_menu`, `peek_note_more`, `row_focused`, `strip_focused`, `strip_done_fs130_{day,glow}`, `tray_current_pinned_{day,glow}`, `appbar_secondary`, `basket_lid_hanko`, `basket_badge_fs200`, `stamp_pictograms`, `checkbox_states`, `empty_state`, `itemicon_kit`, `wordmark_glow` | — |
+| Celebration (§11, item 314) | `celebration_summary_closing`, `celebration_summary_kept_day`, `celebration_pet_dance_day` | — |
+| Add at large text (§6.2, item 281) | `add_fs200_top`, `add_error_fs200_day`, `add_tabs_fs200_day`, `addbar_fs130_day`, `addbar_fs200_day`, `snap_reading_fs200_day`, `snap_popped_fs200_day`, `speak_heard_fs200_day` (Day only) | — |
+| Pantry and recipes (§6.13, items 323, 325–327, 329) | `pantry_{empty,few,full,text_focused,glow,fs200}`, `pantry_popcard`, `pantry_takeoff_toast` (Day only: `pantry_glow` is the pantry in Glow) | — |
+| Pantry rows and toggle (items 323, 329) | `recipe_card_pantry`, `edit_sheet_pantry_on` | — |
+| Settings, album, Trip book (§6.6, §6.8, §6.10) | `settings_typed_shown`, `album_back_pocket_reveal`, `about`, `tripbook_sheet_fs130`, `tripbook_sheet_fs200` | — |
+| Eggs on the real list (§12) | `eggs_on_list_ladybug_day`, `eggs_on_list_nap_day`, `eggs_on_list_rain_day`, `eggs_on_list_midnight` (Day only) | `egg_1_strip_day`, `egg_9_strip` |
+| Stickers in Dusk (§3, items 33, 34) | `stickers_contact_<category>_dusk`, `stickers_calibration_contact_dusk`, `stickers_ontario_contact_dusk` | — |
+| Previews (the kit's `@Preview`s) | `<preview>` | — |
