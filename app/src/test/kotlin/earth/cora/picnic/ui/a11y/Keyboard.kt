@@ -1,5 +1,6 @@
 package earth.cora.picnic.ui.a11y
 
+import android.os.SystemClock
 import android.view.View
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
@@ -68,14 +69,40 @@ class Keyboard(private val compose: ComposeContentTestRule) {
     }
 
     /**
+     * The phone's Back button (or gesture), as the system sends it: to the window in front (a pop card's when one is up,
+     * else the activity's, whose Back handlers take it).
+     */
+    fun back(settle: () -> Unit = { compose.waitForIdle() }) = windowKey(android.view.KeyEvent.KEYCODE_BACK, settle)
+
+    /**
+     * A key pressed and let go as the system delivers it: to the root view of the window in front (the activity's, or a
+     * pop card's popup, which handles Back and Escape itself), not straight to the composition as [press] does.
+     */
+    fun windowKey(code: Int, settle: () -> Unit = { compose.waitForIdle() }) {
+        focusFrontWindow()
+        val front = windows().last()
+        compose.runOnIdle {
+            val t = SystemClock.uptimeMillis()
+            front.dispatchKeyEvent(android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_DOWN, code, 0))
+            front.dispatchKeyEvent(android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_UP, code, 0))
+        }
+        settle()
+    }
+
+    /** The app's windows, back to front. */
+    private fun windows(): List<View> {
+        val global = Class.forName("android.view.WindowManagerGlobal")
+        val instance = global.getMethod("getInstance").invoke(null)
+        @Suppress("UNCHECKED_CAST")
+        return (global.getDeclaredField("mViews").apply { isAccessible = true }.get(instance) as List<View>).filter { it.isAttachedToWindow }
+    }
+
+    /**
      * A focusable popup window (a pop card) takes the window focus from the screen as it opens, so keys go to it: the
      * phone's window manager does that; Robolectric's never does, so it is handed over here, as the phone would.
      */
     private fun focusFrontWindow() {
-        val global = Class.forName("android.view.WindowManagerGlobal")
-        val instance = global.getMethod("getInstance").invoke(null)
-        @Suppress("UNCHECKED_CAST")
-        val views = (global.getDeclaredField("mViews").apply { isAccessible = true }.get(instance) as List<View>).filter { it.isAttachedToWindow }
+        val views = windows()
         if (views.size < 2) return
         val front = views.last()
         val params = front.layoutParams as? WindowManager.LayoutParams ?: return

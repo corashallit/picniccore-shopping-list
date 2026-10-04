@@ -1,6 +1,7 @@
 package earth.cora.picnic.ui.a11y
 
 import android.view.accessibility.AccessibilityManager
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.focusGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -137,14 +138,16 @@ fun ModalLayersHost(content: @Composable () -> Unit) {
 /**
  * A layer over the screen that holds the keyboard while it is up (§15 Focus, Keyboard / switch access): a letter-set
  * sheet, the overflow menu. Opened with the keyboard in use, it takes focus (its first control, or the layer itself when
- * it has none); Tab and the arrows stay inside it, never wandering onto the screen behind; Escape closes it as Back does
- * ([onClose]). TalkBack is held by the scrim under it, which covers the screen behind.
+ * it has none); Tab and the arrows stay inside it, never wandering onto the screen behind; Escape and the Back key do what
+ * Back does (the innermost Back handler: a full-size receipt in the Trip book closes before the book; [onClose] where there
+ * is no Back dispatcher). TalkBack is held by the scrim under it, which covers the screen behind.
  */
 @Composable
 fun Modifier.modalLayer(onClose: () -> Unit): Modifier {
     val layer = remember { ModalLayer() }
     var selfFocused by remember { mutableStateOf(false) }
     val close by rememberUpdatedState(onClose)
+    val backs = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val input = LocalInputModeManager.current
     val layers = LocalModalLayers.current
     DisposableEffect(layers, layer) {
@@ -161,8 +164,12 @@ fun Modifier.modalLayer(onClose: () -> Unit): Modifier {
     return this
         .onPreviewKeyEvent { e ->
             when {
-                e.key == Key.Escape -> {
-                    if (e.type == KeyEventType.KeyUp) close()
+                // Compose would take these keys as a move of focus out of the layer (and keep them from the activity's
+                // Back): they go to the Back handlers instead.
+                e.key == Key.Escape || e.key == Key.Back -> {
+                    if (e.type == KeyEventType.KeyUp) {
+                        if (backs?.hasEnabledCallbacks() == true) backs.onBackPressed() else close()
+                    }
                     true
                 }
                 // Holding focus itself (nothing inside to move to), the layer keeps it: Tab never leaves for the screen

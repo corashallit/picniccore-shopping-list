@@ -877,9 +877,8 @@ private fun EggListScope.ListScreenContent(
                     }
                 }
             }
-            // The dock (the bar, or the FAB it folds into) is one focus group: the list hands the keyboard on to it after
-            // its last item (§15).
-            Box(Modifier.matchParentSize().focusRequester(screen.dockFocus).focusGroup()) {
+            // The dock (the bar, or the FAB it folds into): the list hands the keyboard on to it after its last item (§15).
+            Box(Modifier.matchParentSize().focusRequester(screen.dockFocus)) {
                 // The eggs follow the docked bar (egg 16's umbrella stands on it, and steps off while it is folded into the
                 // FAB).
                 dock(dockAnchors(engine.anchors).eggAddBar(folded = collapse?.collapsed == true))

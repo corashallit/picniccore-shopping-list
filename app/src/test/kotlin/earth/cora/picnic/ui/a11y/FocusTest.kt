@@ -88,7 +88,7 @@ class FocusTest {
      */
     private fun trapsAndReturns(opener: SemanticsMatcher, layer: String, stops: Int = 2, open: () -> Unit = { keys.press(Key.Enter) }) {
         focus(opener)
-        val from = keys.focused()!!.id
+        val from = KeyRules.key(keys.focused()!!)
         open()
         val first = keys.focused()
         assertNotNull("$layer took focus", first)
@@ -108,7 +108,7 @@ class FocusTest {
         assertTrue("Tab moved through $layer's controls: $seen", seen.size >= stops)
         keys.press(Key.Escape)
         assertFalse("Escape closed $layer", compose.exists(layer))
-        assertEquals("focus is back on what opened $layer (now on ${keys.focused()?.spoken()})", from, keys.focused()?.id)
+        assertEquals("focus is back on what opened $layer", from, keys.focused()?.let(KeyRules::key))
     }
 
     @Test
