@@ -254,7 +254,7 @@ class StateOpsTest {
     @Test
     fun storeNameAndAisleText() {
         val s = state()
-        assertEquals("No Frills", s.setStoreName("  No Frills ").store.name)
+        assertEquals("Hillcrest Market", s.setStoreName("  Hillcrest Market ").store.name)
         assertSame(s, s.setStoreName("  "))
 
         val withBaskets = s.copy(store = s.store.copy(aisleBaskets = mapOf("produce" to BasketKind.BERRY_PUNNET, "frozen" to BasketKind.COOLER)))

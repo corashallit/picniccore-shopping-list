@@ -1758,7 +1758,17 @@ data class ListUiState(…, val sections: List<SectionUi> /* displayName, storeA
     val lcd: LcdState, val trip: TripUi?, val openSectionId: String?, val currentSectionId: String?, val nowSectionId: String?,
     val stops: Int, val storeName: String, val canStartNewTrip: Boolean)
 data class BookUi(val dateLabel: String, val season: Season?, val total: Int, val stickers: List<BookStickerUi>,
-    val stamps: List<StampUi>, val perfect: Boolean, val full: Boolean, val receiptSaved: Boolean, val pixel: Boolean)
+    val stamps: List<StampUi>, val perfect: Boolean, val full: Boolean, val receiptSaved: Boolean, val pixel: Boolean,
+    val holoStamps: Boolean = false)        // (+) egg 14: a perfect week makes every stamp page holo (PER-FECT! stays the finale's)
+@Composable fun ListScreen(state: ListUiState, actions: ListActions, …, engine: MotionChoreographer,
+    dock: @Composable BoxScope.(bar: Modifier) -> Unit,   // (+) the docked bar wears [bar]: the eggs' `addbar` anchor, its words'
+        // keep-out and its measured height (EggListScope.eggAddBar)
+    surprises: SurpriseEngine = NoOpSurpriseEngine, feedback: Feedback = NoOpFeedback,   // (+) the screen sits in WP9's EggListHost
+    imeVisible: Boolean? = null)            // (+) test hook for egg 17's keyboard rule
+fun buildListUiState(…, perfectWeek: Boolean = false, hankoFor: (GroceryItem) -> HankoText = { HankoText.GotIt })   // (+) eggs 14 and 9
+@Composable fun IndexTab(…, nameModifier: Modifier = Modifier, numberModifier: Modifier = Modifier)   // (+) the tab's words only
+    // (the eggs' `text:` keep-outs, not the sticker's edge)
+@Composable fun StickerBook(…, pageNumber: Boolean = true)   // (+) false while egg 3's roll bumps a basket at the list's top edge
 
 // ui/list/motion (owner WP6)
 interface Choreographer {
@@ -1829,6 +1839,24 @@ interface SurpriseEngine {
 class SurpriseLabSandbox(fixture: AppState, clock: FakeClock) {   // §6.9: InMemoryStateStore + InMemoryAlbumStore + in-memory DataStore
     fun fire(egg: Int); fun close() }                                // discarded on close; never touches real files
 class ThemeVariantSource(settings, clock, sunClock) { val variant: StateFlow<ThemeVariant> }
+// (+) WP9's additions, all with defaults (see SurpriseEngine.kt's header for the per-piece checklist):
+//   val events: Flow<EggToast>; onListShown(listId) / onListHidden(); onReceiptTap(); onToastShown(toast); onNapTap();
+//   onMotionEvent(event); onImeVisible(visible); onIconDrawing(item) / onIconDrawFailed(item); refresh(); effectDone(id);
+//   onDuskSunset(id); setReducedMotion(on); onBasketHello(sectionId)
+AppSurpriseEngine(…, variant: () -> ThemeVariant)   // (+) the Glow moon is static for every caller
+// The list's hand-off (consumers: WP5's ListScreen, the Surprise lab's PracticeList). Wired in the integration of part 3.
+@Composable fun EggListHost(engine: SurpriseEngine, listId: String, anchors: AnchorRegistry, listState: LazyListState,
+    indexOfSection: (String) -> Int, toasts: ToastHostState? = null, motion: MotionChoreographer? = null,
+    feedback: Feedback = NoOpFeedback, onOpenAlbum: () -> Unit = {}, peek: Dp = 4.dp, listPlacesDecor: Boolean = true,
+    imeVisible: Boolean = WindowInsets.isImeVisible, content: @Composable EggListScope.() -> Unit)
+class EggListScope { val eggs: SurpriseState; fun Modifier.eggAddBar(); fun listBottomPadding(bar = barHeight);
+    fun overlayInset(bar = barHeight); val barHeight: Dp; val listTopExtra: Dp; val tapeAfterDoodle: Boolean;
+    val overlays: @Composable BoxScope.() -> Unit; @Composable fun BoxScope.Wash() }
+object EggAnchors { strip(id); tab(id); line(itemId); LIST = "list"; TEXT_PREFIX = "text:" }
+// list pieces: TabMetaDoodle, SnackDoodle, NapCatInBasket, StripLadybug, RowRoller, TrayBee, EndCapLadybug,
+//   Modifier.basketHello / eggTwinkle / eggTitleSticker, SurpriseState.lcd / hankoFor / pixelStickers / goldCapsule /
+//   hidesRowSticker / hidesCheckSpot / snackDoodleAt; Modifier.pageSticker(name) on every page sticker (§4.1)
+AddBar / AddDock (WP7) (+ tapeAfterDoodle: Boolean = false)
 
 // platform (owner WP10)
 interface Feedback { fun cue(cue: Cue) }      // Cue = sound + haptic pair from §14.3
