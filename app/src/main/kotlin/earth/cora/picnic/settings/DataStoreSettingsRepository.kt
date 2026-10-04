@@ -33,8 +33,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Keys: `draw_icons` (absent = true), `token_hint` (masked key; present = a key is stored),
  * `install_id` (random UUID, created on first use; hashed into LlmConfig.safetyIdentifier), the Surprises switches
  * (`eggs`, `sounds`, `haptics`, `next_stop_card`, `celebration`, `weather`, `use_my_area`; absent = the switch's
- * default, [Surprise.default]), the egg state `dusk_binder` and `surprise_lab` (absent = false) and `seen_books` (the
- * trip books the album has shown, §7.8; absent = none). Builds
+ * default, [Surprise.default]), the egg state `dusk_binder` and `surprise_lab` (absent = false) and `ants_day` (egg 17's
+ * last parade, her local date as yyyy-mm-dd; absent = never), and `seen_books` (the trip books the album has shown, §7.8;
+ * absent = none). Builds
  * with a server-address setting also stored `base_url`; [migrateOnce] removes it. The key itself
  * never enters DataStore, a Flow, a data class or a log line: it is decrypted only inside [token].
  */
@@ -94,6 +95,13 @@ class DataStoreSettingsRepository(
 
     override suspend fun setSurpriseLab(unlocked: Boolean) {
         dataStore.edit { if (unlocked) it[SURPRISE_LAB] = true else it.remove(SURPRISE_LAB) }
+    }
+
+    override suspend fun antsDay(): java.time.LocalDate? =
+        prefs.first()[ANTS_DAY]?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+
+    override suspend fun markAntsDay(day: java.time.LocalDate) {
+        dataStore.edit { it[ANTS_DAY] = day.toString() }
     }
 
     override val seenBooks: Flow<Set<String>> = prefs.map { it[SEEN_BOOKS].orEmpty() }.distinctUntilChanged()
@@ -220,6 +228,7 @@ class DataStoreSettingsRepository(
         internal val DUSK_BINDER = booleanPreferencesKey("dusk_binder")
         internal val SURPRISE_LAB = booleanPreferencesKey("surprise_lab")
         internal val SEEN_BOOKS = stringSetPreferencesKey("seen_books")
+        internal val ANTS_DAY = stringPreferencesKey("ants_day")
 
         /** One boolean key per Surprises switch, named [Surprise.key]; absent = [Surprise.default]. */
         internal val SURPRISE_KEYS: Map<Surprise, Preferences.Key<Boolean>> = Surprise.entries.associateWith { booleanPreferencesKey(it.key) }

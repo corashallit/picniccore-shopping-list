@@ -129,7 +129,8 @@ class AppSurpriseEngine(
     private var listShown = false
     private var shownListId: String? = null
     private var imeOpen = false
-    private var antsSeen = false
+    /** Egg 17: the day (her local date) the ants last marched, once read from or written to the settings. */
+    private val antsDay = java.util.concurrent.atomic.AtomicReference<LocalDate?>(null)
     private var startTucked = false
     /** Egg 13: each drawing's roll, from its start (the icon repository calls from its own threads). */
     private val goldRolls = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -619,21 +620,32 @@ class AppSurpriseEngine(
         _state.update { it.copy(lcdWord = LcdWord(nextId(), EggRules.SNACK, EggRules.SNACK_MS)) }
     }
 
-    /** Egg 17: once per app process, ≥ 3 unchecked picnic things, never with the keyboard open or reduced motion. */
+    /**
+     * Egg 17: at most once a day (her local date; §0.4: Android ends the process between most openings, so "once per
+     * process" was nearly every opening), with ≥ 3 unchecked picnic things, never with the keyboard open or reduced
+     * motion. The day it marched is kept in the settings (DataStore), so a new process the same day stays quiet. The
+     * Surprise lab plays it on demand: each try is a fresh sandbox with its own in-memory settings.
+     */
     private fun checkAnts() {
-        if (antsSeen || imeOpen || reducedMotion || !eggsOn || !listShown) return
+        if (imeOpen || reducedMotion || !eggsOn || !listShown) return
+        val today = Instant.ofEpochMilli(clock()).atZone(localZone).toLocalDate()
+        if (antsDay.get() == today) return
         scope.launch {
-            val s = try {
-                store.current()
+            val (s, last) = try {
+                store.current() to settings.antsDay()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 return@launch
             }
+            if (last == today) antsDay.compareAndSet(null, today)
             val list = s.list(s.currentListId)
-            if (!EggRules.antsWanted(list, catalog) || antsSeen || imeOpen) return@launch
-            antsSeen = true
+            if (last == today || !EggRules.antsWanted(list, catalog) || imeOpen) return@launch
+            // One parade, whichever check got here first.
+            val seen = antsDay.get()
+            if (seen == today || !antsDay.compareAndSet(seen, today)) return@launch
             _state.update { it.copy(antsId = nextId(), ants = true) }
+            safely { settings.markAntsDay(today) }
         }
     }
 

@@ -68,7 +68,9 @@ data class NextNameFit(val fontSizeSp: Float, val lines: Int, val overflowed: Bo
  * Fits [name] into [maxWidthPx] by the §10 rule: [fromSp] → [toSp] on one line, then two lines at [toSp], then two
  * lines shrinking to [floorSp] (large font scales only need it), then as many lines at [floorSp] as it takes (§0.4: an
  * aisle name wraps, it is never cut). It wraps between words into balanced lines, "&" kept with the word after it
- * ([tabLines]); only a word wider than the whole room breaks inside itself, which counts as overflowed.
+ * ([tabLines]); only where "&" and that word are too wide together for a line at that size (a long word at a large font
+ * scale: "Pasta, rice & / international" at 2.0) does the "&" end a line, so the name keeps its size, and only a word
+ * wider than the line on its own breaks inside itself, which counts as overflowed.
  */
 fun fitNextName(
     measurer: TextMeasurer,
@@ -80,26 +82,24 @@ fun fitNextName(
     floorSp: Float = 14f,
 ): NextNameFit {
     fun at(sp: Float) = style.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp)
+    fun lines(sp: Float, glue: Boolean): List<String>? {
+        val s = at(sp)
+        return tabLines(name, maxWidthPx, glue) { measurer.measure(it, s, softWrap = false, maxLines = 1).size.width }
+    }
     var sp = fromSp
     while (sp >= toSp - 0.01f) {
         val width = measurer.measure(name, at(sp), softWrap = false, maxLines = 1).size.width
         if (width <= maxWidthPx) return NextNameFit(sp, 1, false, listOf(name))
         sp -= 1f
     }
-    sp = toSp
-    while (true) {
-        val s = at(sp)
-        val lines = tabLines(name, maxWidthPx) { measurer.measure(it, s, softWrap = false, maxLines = 1).size.width }
-        if (lines != null && (lines.size <= 2 || sp <= floorSp + 0.01f)) return NextNameFit(sp, lines.size, false, lines)
-        if (sp <= floorSp + 0.01f) {
-            // A word with its "&" wider than the line: the "&" ends a line rather than a word breaking; only a word
-            // wider than the line on its own breaks inside itself.
-            tabLines(name, maxWidthPx, glue = false) { measurer.measure(it, s, softWrap = false, maxLines = 1).size.width }?.let { return NextNameFit(sp, it.size, false, it) }
-            val wrapped = measurer.measure(name, s, softWrap = true, constraints = Constraints(maxWidth = maxWidthPx))
-            return NextNameFit(sp, wrapped.lineCount, true)
-        }
-        sp -= 1f
+    val sizes = generateSequence(toSp) { it - 1f }.takeWhile { it >= floorSp - 0.01f }.toList()
+    for (size in sizes) {
+        (lines(size, glue = true) ?: lines(size, glue = false))?.takeIf { it.size <= 2 }?.let { return NextNameFit(size, it.size, false, it) }
     }
+    val floor = sizes.last()
+    (lines(floor, glue = true) ?: lines(floor, glue = false))?.let { return NextNameFit(floor, it.size, false, it) }
+    val wrapped = measurer.measure(name, at(floor), softWrap = true, constraints = Constraints(maxWidth = maxWidthPx))
+    return NextNameFit(floor, wrapped.lineCount, true)
 }
 
 /** The card's fixed width (§2.9 `nextCard`). */
