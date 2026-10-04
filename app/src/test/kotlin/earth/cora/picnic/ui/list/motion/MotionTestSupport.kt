@@ -126,7 +126,7 @@ class HarnessRig(
     }
 
     /**
-     * The toast's note as drawn (root px): its live-region body, which sits inside the note's motion layer, grown by the
+     * The toast's note as drawn (root px): its written body, which sits inside the note's motion layer, grown by the
      * note's padding, border and the washi strip above it (WP4's StickyNote: 17 / 29 / 13 dp, and 11 dp below with an
      * action chip, 19 without).
      */
@@ -135,7 +135,7 @@ class HarnessRig(
         val below = if (toasts.current?.actionLabel != null) 11f else 19f
         val body = compose.onAllNodes(
             androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(TOAST_TAG)) and
-                androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.LiveRegion),
+                androidx.compose.ui.test.hasTestTag(earth.cora.picnic.ui.theme.TOAST_BODY_TAG),
             useUnmergedTree = true,
         ).fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: return null
         if (body.width <= 0f || body.height <= 0f) return null

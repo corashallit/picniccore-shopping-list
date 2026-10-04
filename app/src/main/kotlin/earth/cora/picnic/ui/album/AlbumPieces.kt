@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.platform.testTag
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -219,7 +220,7 @@ private fun AlbumTabFace(text: String, tab: AlbumTab, on: Boolean, fit: TabFit, 
     Box(
         Modifier
             .heightIn(min = 48.dp)
-            .selectable(selected = on, interactionSource = null, indication = null, role = Role.Tab, onClick = onClick),
+            .selectable(selected = on, interactionSource = null, indication = focusRingIndication(outer), role = Role.Tab, onClick = onClick),
         contentAlignment = if (wrapped) Alignment.Center else Alignment.BottomCenter,
     ) {
         Box(
@@ -373,7 +374,8 @@ internal fun Pocket(
                     // No ripple: the pressed pocket answers with its own lift and curl (§4.25).
                     Modifier.combinedClickable(
                         interactionSource = null,
-                        indication = null,
+                        // No ripple: the pressed pocket answers with its own lift and curl; focus wears the ring.
+                        indication = focusRingIndication(RoundedCornerShape(8.dp)),
                         onClickLabel = liftLabel,
                         onClick = onTap,
                         onLongClick = onLongPress,

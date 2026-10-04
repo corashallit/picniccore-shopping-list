@@ -1,5 +1,7 @@
 package earth.cora.picnic.ui.common
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -15,20 +17,20 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -41,17 +43,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import earth.cora.picnic.R
-import androidx.compose.ui.unit.sp
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.INLINE_GLYPHS
 import earth.cora.picnic.ui.theme.MenuItem
-import earth.cora.picnic.ui.theme.PadPatch
-import earth.cora.picnic.ui.theme.PicnicText
-import earth.cora.picnic.ui.theme.PuffyText
 import earth.cora.picnic.ui.theme.OverflowMenu
+import earth.cora.picnic.ui.theme.PadPatch
 import earth.cora.picnic.ui.theme.PicnicBackground
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
@@ -59,8 +59,10 @@ import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicIconButton
 import earth.cora.picnic.ui.theme.PicnicSurface
 import earth.cora.picnic.ui.theme.PicnicSwitch
+import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.PicnicTopBar
+import earth.cora.picnic.ui.theme.PuffyText
 import earth.cora.picnic.ui.theme.SectionDivider
 import earth.cora.picnic.ui.theme.ToastHost
 import earth.cora.picnic.ui.theme.ToastHostState
@@ -248,14 +250,17 @@ fun SwitchRow(
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
+    // The row is the one switch: one keyboard stop, its focus drawn round the pill (§15).
+    val interaction = remember { MutableInteractionSource() }
     Row(
         modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .toggleable(
                 value = checked,
-                interactionSource = null,
-                indication = highlighterPress(),
+                interactionSource = interaction,
+                // The pill wears the focus ring (one ring a row).
+                indication = highlighterPress(ring = false),
                 enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange,
@@ -268,7 +273,7 @@ fun SwitchRow(
             Text(label, style = t.fieldValue.copy(color = c.ink))
             if (hint != null) Text(hint, style = t.caption.copy(color = c.inkSoft))
         }
-        PicnicSwitch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled, modifier = Modifier.clearAndSetSemantics { })
+        PicnicSwitch(checked = checked, onCheckedChange = null, enabled = enabled, interactionSource = interaction, modifier = Modifier.clearAndSetSemantics { })
     }
 }
 

@@ -4,8 +4,15 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.traversalIndex
+import earth.cora.picnic.R
+import earth.cora.picnic.ui.a11y.modalLayer
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -120,19 +127,34 @@ fun LetterSetSheet(
         val maxH = maxHeight
         // Below the app bar when asked (never under 60 % of a small window), else 92 % of the window.
         val cap = if (topClearance == null) maxH * 0.92f else minOf(maxH * 0.92f, maxOf(maxH * 0.6f, maxH - statusTop - topClearance))
+        // The scrim: a tap closes the sheet. Never a keyboard stop (Escape and Back close it, §15); for TalkBack it is the
+        // "Close sheet" button read after the sheet's own controls, and it covers the screen behind, so TalkBack stays in
+        // the sheet (a scrim that said nothing was a nameless button over the whole screen).
+        val closeLabel = stringResource(R.string.a11y_close_sheet)
+        val dismiss by rememberUpdatedState(onDismissRequest)
         Box(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = enter.value.coerceIn(0f, 1f) }
                 .background(c.scrim)
-                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDismissRequest)
-                .clearAndSetSemantics { },
+                .pointerInput(Unit) { detectTapGestures { dismiss() } }
+                .clearAndSetSemantics {
+                    contentDescription = closeLabel
+                    traversalIndex = 1f
+                    onClick(label = closeLabel) {
+                        dismiss()
+                        true
+                    }
+                },
         )
         Box(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .heightIn(max = cap)
+                // Opened from the keyboard, the sheet takes focus and keeps it (Tab never wanders behind the scrim);
+                // Escape closes it as Back does (§15).
+                .then(if (visible) Modifier.modalLayer(onDismissRequest) else Modifier)
                 .graphicsLayer {
                     if (reduced) {
                         alpha = enter.value

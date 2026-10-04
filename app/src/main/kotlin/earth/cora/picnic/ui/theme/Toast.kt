@@ -42,14 +42,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
+import androidx.compose.ui.res.stringResource
+import earth.cora.picnic.R
 import earth.cora.picnic.platform.Timeouts
+import earth.cora.picnic.ui.a11y.LocalAnnouncer
+import earth.cora.picnic.ui.a11y.spokenLine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
@@ -194,16 +195,24 @@ class ToastHostState {
  * Hosts the toasts at the bottom-left: 14 dp from the left, [bottomGap] (20 dp) above [bottomInset] (the add bar, the FAB
  * or the IME). Drops in 220 ms from −30 dp at −9°, overshoots +4 dp at −1°, settles at −2°, stays still for its hold (on
  * the frame clock under the fixed motion scale), lifts off upward (260 ms). A swipe dismisses it. Reduced motion: 120 ms
- * fades, the same hold. A polite live region.
+ * fades, the same hold. Spoken politely through the app's Announcer as it drops in, and again whenever a merge changes
+ * its words; its Undo, once run, says what it undid (§15 Announcements).
  */
 @Composable
 fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset: Dp = 0.dp, bottomGap: Dp = 20.dp) {
     val message = state.current
     val timeouts = LocalTimeouts.current
     val reduced = LocalReducedMotion.current
+    val announcer = LocalAnnouncer.current
     val drop = remember { Animatable(0f) }
     val lift = remember { Animatable(0f) }
     var dropped by remember { mutableStateOf<Long?>(null) }
+    // A toast is one of §15's announcements: a live region on a note that has just appeared is not reliably read, and
+    // the Announcer de-duplicates it with the moment's other lines.
+    LaunchedEffect(message?.id, message?.text) {
+        val m = message ?: return@LaunchedEffect
+        announcer.polite(spokenLine(m.text))
+    }
     LaunchedEffect(message?.id, state.generation) {
         val m = message ?: return@LaunchedEffect
         withContext(FixedMotionScale) {
@@ -233,12 +242,14 @@ fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset:
             val l = lift.value
             val from = PicnicMotion.toastDropFrom
             val rest = PicnicMotion.toastRest
+            val undone = stringResource(R.string.a11y_undone, spokenLine(message.text))
             StickyNote(
                 message.text,
                 message.actionLabel,
                 actionGlyph = if (message.undo) PicnicGlyph.Undo else null,
                 onAction = {
                     message.onAction?.invoke()
+                    if (message.undo) announcer.polite(undone)
                     state.leaving = true
                     state.finished(message.id)
                 },
@@ -274,6 +285,9 @@ fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset:
 /** The host's test tag on the note. */
 const val TOAST_TAG: String = "picnic_toast"
 
+/** The note's written body (its words and the action chip), inside the note's motion layer. */
+const val TOAST_BODY_TAG: String = "picnic_toast_body"
+
 /** Holds for [millis] measured on the frame clock (§8.8): never a tween delay, never scaled. */
 suspend fun holdOnFrameClock(millis: Long) {
     val start = withFrameMillis { it }
@@ -295,7 +309,8 @@ private suspend fun holdUnlessPaused(millis: Long, paused: () -> Boolean): Boole
  * The sticky note itself (§4.15): a 220 dp lemon-pastel square note rotated −2° ([rotate]), a pink-gingham washi strip
  * (90 dp, +3°) on top, 3 dp white border, hs2; text Zen Maru 700 14 sp ballpoint (hearts drawn as vectors); the action
  * is a tiny white chip sticker in a 48 dp target, with the undo glyph only when it undoes something ([actionGlyph]: an
- * offer such as the nudge's "New trip" or the back pocket's "Look" is its label alone). `role=status` (polite).
+ * offer such as the nudge's "New trip" or the back pocket's "Look" is its label alone). Its host speaks it through
+ * the Announcer (§15).
  */
 @Composable
 fun StickyNote(
@@ -319,7 +334,7 @@ fun StickyNote(
                 .padding(3.dp)
                 .background(c.toastNote)
                 .padding(start = 14.dp, end = 10.dp, top = 18.dp, bottom = if (actionLabel != null) 8.dp else 16.dp)
-                .semantics { liveRegion = LiveRegionMode.Polite },
+                .testTag(TOAST_BODY_TAG),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             // Balanced lines (§4.6): never a one-word last line.

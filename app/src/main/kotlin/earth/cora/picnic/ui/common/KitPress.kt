@@ -2,6 +2,7 @@ package earth.cora.picnic.ui.common
 
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.FocusInteraction
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.runtime.Composable
@@ -14,10 +15,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.node.invalidateDraw
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.unit.dp
+import earth.cora.picnic.ui.a11y.FocusRingShape
+import earth.cora.picnic.ui.a11y.drawFocusRing
+import earth.cora.picnic.ui.a11y.focusRingInk
 import earth.cora.picnic.ui.theme.PicnicTheme
 import kotlinx.coroutines.launch
 
@@ -51,24 +59,28 @@ fun NoMaterialPress(content: @Composable () -> Unit) {
  * The kit's pressed state for a whole text row (§4.6 text button, §4.11 row): while pressed, a highlighter band
  * (`pressedBand`: `#FFF3A6` in Day, `#3A438A` in Glow) lies behind the row's content, 3 dp in from its top and bottom,
  * rounded like a marker stroke (3, 10, 4, 12 dp) and turned −0.6°. Pass it as the `indication` of the row's clickable,
- * placed after the row's own background so the band sits on the paper and under the text.
+ * placed after the row's own background so the band sits on the paper and under the text. Focused from the keyboard,
+ * the row wears the kit's focus ring (§4.6, §15), unless [ring] is false (a switch row, whose pill wears it).
  */
 @Composable
-fun highlighterPress(): IndicationNodeFactory {
+fun highlighterPress(ring: Boolean = true): IndicationNodeFactory {
     val color = PicnicTheme.colors.pressedBand
-    return remember(color) { HighlighterIndication(color) }
+    val ink = focusRingInk()
+    return remember(color, ink, ring) { HighlighterIndication(color, if (ring) ink else null) }
 }
 
-private class HighlighterIndication(private val color: Color) : IndicationNodeFactory {
-    override fun create(interactionSource: InteractionSource): DelegatableNode = HighlighterNode(interactionSource, color)
+private class HighlighterIndication(private val color: Color, private val ring: Color?) : IndicationNodeFactory {
+    override fun create(interactionSource: InteractionSource): DelegatableNode = HighlighterNode(interactionSource, color, ring)
 
-    override fun equals(other: Any?): Boolean = other is HighlighterIndication && other.color == color
+    override fun equals(other: Any?): Boolean = other is HighlighterIndication && other.color == color && other.ring == ring
 
-    override fun hashCode(): Int = color.hashCode()
+    override fun hashCode(): Int = 31 * color.hashCode() + ring.hashCode()
 }
 
-private class HighlighterNode(private val source: InteractionSource, private val color: Color) : Modifier.Node(), DrawModifierNode {
+private class HighlighterNode(private val source: InteractionSource, private val color: Color, private val ring: Color?) :
+    Modifier.Node(), DrawModifierNode, CompositionLocalConsumerModifierNode {
     private val presses = mutableListOf<PressInteraction.Press>()
+    private val focuses = mutableListOf<FocusInteraction.Focus>()
 
     override fun onAttach() {
         coroutineScope.launch {
@@ -77,6 +89,8 @@ private class HighlighterNode(private val source: InteractionSource, private val
                     is PressInteraction.Press -> presses += interaction
                     is PressInteraction.Release -> presses -= interaction.press
                     is PressInteraction.Cancel -> presses -= interaction.press
+                    is FocusInteraction.Focus -> focuses += interaction
+                    is FocusInteraction.Unfocus -> focuses -= interaction.focus
                     else -> return@collect
                 }
                 invalidateDraw()
@@ -100,5 +114,8 @@ private class HighlighterNode(private val source: InteractionSource, private val
             rotate(-0.6f) { drawPath(Path().apply { addRoundRect(band) }, color) }
         }
         drawContent()
+        if (ring != null && focuses.isNotEmpty() && currentValueOf(LocalInputModeManager).inputMode == InputMode.Keyboard) {
+            drawFocusRing(FocusRingShape, ring)
+        }
     }
 }

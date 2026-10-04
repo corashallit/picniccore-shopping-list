@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.IconRef
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LocalIconCatalog
@@ -61,7 +62,7 @@ private fun StickerCell(key: String, label: String, selected: Boolean, onClick: 
         Modifier
             .size(52.dp)
             // No ripple: the chosen cell answers with its lemon ring.
-            .clickable(interactionSource = null, indication = null, role = Role.RadioButton, onClick = onClick)
+            .clickable(interactionSource = null, indication = focusRingIndication(shape), role = Role.RadioButton, onClick = onClick)
             .semantics(mergeDescendants = true) {
                 this.selected = selected
                 contentDescription = label

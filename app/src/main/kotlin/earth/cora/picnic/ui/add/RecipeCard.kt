@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import earth.cora.picnic.R
 import earth.cora.picnic.core.assistant.SkipReason
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.a11y.spokenItemLabel
 import earth.cora.picnic.ui.theme.AisleLook
 import earth.cora.picnic.ui.theme.AisleLooks
@@ -282,7 +283,7 @@ internal fun ReviewRowView(
                 Modifier.toggleable(
                     value = row.keep,
                     interactionSource = interaction,
-                    indication = null,
+                    indication = focusRingIndication(),
                     role = Role.Switch,
                     onValueChange = { onToggleKeep(row.key) },
                 ).semantics { contentDescription = label }

@@ -2,6 +2,7 @@ package earth.cora.picnic.ui.eggs
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,7 +36,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -43,6 +43,7 @@ import earth.cora.picnic.R
 import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.a11y.focusRingInk
 import earth.cora.picnic.ui.common.ReceiptPitch
 import earth.cora.picnic.ui.common.ReceiptSticker
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
@@ -50,7 +51,9 @@ import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.FixedMotionScale
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.focusRing
 import earth.cora.picnic.ui.theme.holdOnFrameClock
+import earth.cora.picnic.ui.theme.showsFocusRing
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
@@ -251,20 +254,22 @@ internal fun ReceiptPrint(fx: ReceiptFx, anchors: AnchorRegistry, local: (Rect) 
         }
         // Slot and paper lie under no word (placeReceipt), so nothing is cut out of them (§12.1, item 259).
         Box(Modifier.fillMaxSize()) {
+            // The click and its focus sit outside the clearing semantics, so the keyboard reaches the one node TalkBack
+            // reads (§15), and it wears the kit's ring while the keyboard has it.
+            val interaction = remember { MutableInteractionSource() }
+            val ringed = showsFocusRing(interaction)
+            // Its own name: the slot below is drawn in the outer ballpoint `ink`, which must stay ballpoint in Glow too.
+            val ringInk = focusRingInk()
             Box(
                 Modifier
                     .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
                     .testTag(EggTags.RECEIPT)
                     .onSizeChanged { paperW = it.width; paperH = it.height }
+                    .clickable(interaction, indication = null, role = Role.Button, onClickLabel = saveLabel) { engine.onReceiptTap() }
                     .clearAndSetSemantics {
                         contentDescription = spoken
                         role = Role.Button
-                        onClick(label = saveLabel) {
-                            engine.onReceiptTap()
-                            true
-                        }
                     }
-                    .clickable(remember { MutableInteractionSource() }, indication = null) { engine.onReceiptTap() }
                     .graphicsLayer {
                         // The sticker draws itself at 3°; while it feeds it hangs straight out of the slot.
                         rotationZ = rot - 3f
@@ -273,6 +278,8 @@ internal fun ReceiptPrint(fx: ReceiptFx, anchors: AnchorRegistry, local: (Rect) 
                         // Not a pixel before it has been placed (its size is known after the first layout).
                         if (paperW == 0) this.alpha = 0f
                     }
+                    // The kit's 2 dp ring 3 dp round the paper, turned with it (§4.4).
+                    .focusRing(RoundedCornerShape(4.dp), ringInk, ringed)
                     .drawWithContent {
                         // The clip reveal: only what has come out of the slot shows.
                         val shown = size.height * fed

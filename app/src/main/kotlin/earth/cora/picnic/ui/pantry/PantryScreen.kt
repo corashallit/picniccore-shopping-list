@@ -73,6 +73,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.common.DoneButton
 import earth.cora.picnic.ui.common.MagicAppearBox
 import earth.cora.picnic.ui.common.PadCard
@@ -515,7 +516,7 @@ private fun ShelfStickerView(
         Modifier
             .size(width = 64.dp, height = 60.dp)
             // No ripple: the tap answers with the pop card (§6.13).
-            .clickable(interactionSource = null, indication = null, role = Role.Button, onClick = onTap)
+            .clickable(interactionSource = null, indication = focusRingIndication(), role = Role.Button, onClick = onTap)
             .semantics {
                 contentDescription = label
                 role = Role.Button
@@ -563,7 +564,7 @@ private fun SuggestionChip(name: String, onClick: () -> Unit) {
     Box(
         Modifier
             .heightIn(min = 48.dp)
-            .clickable(interactionSource = null, indication = null, role = Role.Button, onClick = onClick)
+            .clickable(interactionSource = null, indication = focusRingIndication(RoundedCornerShape(50)), role = Role.Button, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {

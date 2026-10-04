@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.common.LinkRow
 import earth.cora.picnic.ui.common.accentInk
 import earth.cora.picnic.ui.common.highlighterPress
@@ -113,7 +114,7 @@ fun AboutScreen(
                         .padding(top = 4.dp)
                         .heightIn(min = 48.dp)
                         .widthIn(min = 48.dp)
-                        .clickable(interactionSource = null, indication = null) {
+                        .clickable(interactionSource = null, indication = focusRingIndication()) {
                             if (state.canUnlock && unlock.tap()) {
                                 actions.onUnlockLab()
                                 toasts.show(ToastMessage(resources.getString(R.string.about_lab_unlocked), kind = "lab"))

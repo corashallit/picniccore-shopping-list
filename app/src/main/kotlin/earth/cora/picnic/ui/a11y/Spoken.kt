@@ -56,6 +56,26 @@ fun spokenDuration(minutes: Int): String {
     }
 }
 
+/** The copy's drawn glyphs (§16: hearts, stars and notes are vector inline content, never words). */
+private const val COPY_GLYPHS = "♡♥☆★✦♪"
+
+private val GLYPH_BETWEEN_WORDS = Regex("""[\s ]+[$COPY_GLYPHS·]+[\s ]+""")
+
+private val SPACES = Regex("""[\s ]+""")
+
+/**
+ * A line of copy as TalkBack should hear it (§15 Announcements): a glyph between two phrases ("New sticker book for
+ * today ✦ your last shop is in the album") and the "·" between two phrases become a comma pause, a glyph anywhere else
+ * ("Added 5 items to Saturday shop ♡") is dropped, and the spaces are tidied.
+ */
+fun spokenLine(text: String): String =
+    GLYPH_BETWEEN_WORDS.replace(text, ", ")
+        .filterNot { it in COPY_GLYPHS }
+        .replace(SPACES, " ")
+        .trim()
+        .trim(',')
+        .trim()
+
 private class UnitWords(val singular: String, val plural: String)
 
 private val UNITS: Map<String, UnitWords> = run {

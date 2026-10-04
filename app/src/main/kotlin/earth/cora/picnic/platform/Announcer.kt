@@ -14,9 +14,9 @@ import android.view.accessibility.AccessibilityManager
  * screenshots; tests record announcements with FakeAnnouncer (test sources).
  *
  * The §15 moments: "<Name> added to today's sticker book" / "peeled out of today's sticker book", "<Aisle> done",
- * "Next: aisle 5, Breakfast", "List complete! …", toasts without their own live region, loader labels (once),
- * "Receipt saved to your sticker book". A check-off itself is NOT announced here: the row's checkbox state
- * change says it.
+ * "Next: aisle 5, Breakfast", "List complete! …", toasts (their words as they drop in, from the toast host, and
+ * "Undone: …" once their Undo ran), loader labels (once), "Receipt saved to your sticker book" (its toast). A
+ * check-off itself is NOT announced here: the row's checkbox state change says it.
  */
 interface Announcer {
     /** Speaks [text] politely. Blank text, and the same text again within 1 s, are dropped. Never throws. */
@@ -67,7 +67,7 @@ class AnnouncementDeduper(
  * and an announcement event is spoken from any of them without moving focus or adding a stray node to the
  * screen. Android 16 deprecates announcement events to steer apps away from chatty, disruptive speech; ours are
  * the short, rare, polite lines of §15, never a substitute for a control's own state (the row's checkbox
- * state, a toast's own `status` live region).
+ * state). A toast is one of them: a live region on a note that has only just appeared is not reliably read.
  */
 class AndroidAnnouncer(
     context: Context,

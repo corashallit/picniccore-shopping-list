@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
 import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.LetterSetSheet
@@ -335,7 +336,7 @@ private fun AddTab(
         modifier
             // §15: a 48 dp target; the face below keeps its drawn height at the bottom.
             .heightIn(min = TAB_TARGET)
-            .selectable(selected = selected, enabled = enabled, role = Role.Tab, interactionSource = interaction, indication = null, onClick = onClick)
+            .selectable(selected = selected, enabled = enabled, role = Role.Tab, interactionSource = interaction, indication = focusRingIndication(shape), onClick = onClick)
             .semantics { if (recording) stateDescription = recordingText },
         contentAlignment = Alignment.BottomCenter,
     ) {

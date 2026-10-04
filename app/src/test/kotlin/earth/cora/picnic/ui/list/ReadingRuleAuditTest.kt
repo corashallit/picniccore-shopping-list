@@ -3,8 +3,6 @@ package earth.cora.picnic.ui.list
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -26,6 +24,7 @@ import earth.cora.picnic.ui.theme.LocalPieceProbe
 import earth.cora.picnic.ui.theme.BookLayout
 import earth.cora.picnic.ui.theme.BookTags
 import earth.cora.picnic.ui.theme.PicnicMotion
+import earth.cora.picnic.ui.theme.TOAST_BODY_TAG
 import earth.cora.picnic.ui.theme.TOAST_TAG
 import earth.cora.picnic.ui.theme.readHold
 import earth.cora.picnic.ui.theme.stampCentre
@@ -104,10 +103,10 @@ class ReadingRuleAuditTest {
             }
         }
 
-        /** The toast's note as drawn: its live-region body (inside the note's motion layer) grown by the note's frame. */
+        /** The toast's note as drawn: its written body (inside the note's motion layer) grown by the note's frame. */
         private fun toastNote(): Rect? {
             val body = compose.onAllNodes(
-                hasAnyAncestor(hasTestTag(TOAST_TAG)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion),
+                hasAnyAncestor(hasTestTag(TOAST_TAG)) and hasTestTag(TOAST_BODY_TAG),
                 useUnmergedTree = true,
             ).fetchSemanticsNodes().firstOrNull()?.boundsInRoot ?: return null
             if (body.width <= 0f || body.height <= 0f) return null

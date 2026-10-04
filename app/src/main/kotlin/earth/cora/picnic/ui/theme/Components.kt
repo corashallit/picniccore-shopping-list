@@ -32,6 +32,7 @@ import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,6 +57,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
@@ -103,6 +105,9 @@ import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.toSize
 import earth.cora.picnic.R
+import earth.cora.picnic.ui.a11y.LocalFocusRingInk
+import earth.cora.picnic.ui.a11y.focusRingInk
+import earth.cora.picnic.ui.a11y.tabLeavesField
 import earth.cora.picnic.ui.a11y.textOverflowed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -156,14 +161,18 @@ fun PicnicSurface(
 ) {
     val c = PicnicTheme.colors
     val border = outlined && !(c.isDark && color == c.pad)
+    // A focus ring on this card shows against its paper (§4.6): the ballpoint on a light card (the Glow page's own ink,
+    // white, would vanish on it), white on a dark one.
+    val ring = if (color.alpha < 0.5f) LocalFocusRingInk.current else if (color.luminance() > 0.5f) c.ballpoint else Color.White
     Box(
         modifier
             .then(if (shadow) Modifier.hardShadow(shape, PicnicTheme.shadows, large) else Modifier)
             .clip(shape)
             .background(color)
             .then(if (border) Modifier.border(PicnicTheme.dimens.border, c.stickerWhite, shape) else Modifier),
-        content = content,
-    )
+    ) {
+        CompositionLocalProvider(LocalFocusRingInk provides ring) { content() }
+    }
 }
 
 /**
@@ -584,7 +593,7 @@ private fun PillButton(
         Box(
             Modifier
                 .heightIn(min = height)
-                .focusRing(CappedStadium(capInner / 2 + border + FOCUS_GROW), c.ink, focused)
+                .focusRing(CappedStadium(capInner / 2 + border + FOCUS_GROW), focusRingInk(), focused)
                 .then(if (enabled) Modifier.hardShadow(shape, shadows.color, shadowOffset) else Modifier)
                 .offset(faceOffset.x, faceOffset.y)
                 .clip(shape)
@@ -786,7 +795,7 @@ private fun TextButton(
     ) {
         Row(
             Modifier
-                .focusRing(shape, c.ink, focused)
+                .focusRing(shape, focusRingInk(), focused)
                 .then(patch)
                 .drawBehind {
                     if (pressed) {
@@ -939,7 +948,7 @@ fun RoundStickerButton(
         Box(
             Modifier
                 .size(faceSize)
-                .focusRing(CircleShape, c.ink, focused)
+                .focusRing(CircleShape, focusRingInk(), focused)
                 .then(if (enabled) Modifier.hardShadow(CircleShape, shadows.color, shadows.hs) else Modifier)
                 .offset(faceOffset.x, faceOffset.y)
                 .clip(CircleShape)
@@ -980,6 +989,7 @@ fun PicnicFab(
     val reduced = LocalReducedMotion.current
     val interaction = interactionSource ?: remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val focused by interaction.collectIsFocusedAsState()
     val press = rememberPressFraction(pressed)
     val faceOffset = DpOffset(shadows.hs2.x * press, shadows.hs2.y * press)
     val t by rememberLoopTime(enabled = bob && !reduced)
@@ -1000,6 +1010,7 @@ fun PicnicFab(
         Box(
             Modifier
                 .size(face + border * 2)
+                .focusRing(CircleShape, focusRingInk(), focused)
                 .hardShadow(CircleShape, shadows.color, shadows.hs2)
                 .offset(faceOffset.x, faceOffset.y)
                 .clip(CircleShape)
@@ -1121,7 +1132,7 @@ fun ChipFace(
     Row(
         modifier
             .then(if (grows) Modifier.heightIn(min = height) else Modifier.height(height))
-            .focusRing(CappedStadium(inner / 2 + border + FOCUS_GROW), PicnicTheme.colors.ink, focused)
+            .focusRing(CappedStadium(inner / 2 + border + FOCUS_GROW), focusRingInk(), focused)
             .hardShadow(shape, shadows)
             .offset(shadows.hs.x * press, shadows.hs.y * press)
             .clip(shape)
@@ -1643,6 +1654,8 @@ fun PicnicTextField(
             interactionSource = interaction,
             modifier = Modifier
                 .fillMaxWidth()
+                // Tab leaves the field, a ruled note of many lines too (§15 Keyboard / switch access).
+                .tabLeavesField()
                 .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier),
             decorationBox = { inner ->
                 Column {
@@ -1779,9 +1792,10 @@ fun KeyField(
 @Composable
 fun PicnicSwitch(
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
+    onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     val reduced = LocalReducedMotion.current
     var knob by remember { mutableFloatStateOf(if (checked) 1f else 0f) }
@@ -1801,19 +1815,27 @@ fun PicnicSwitch(
     val shadows = PicnicTheme.shadows
     val c = PicnicTheme.colors
     // No ripple (§0.2): the knob's move is the switch's feedback; focus wears the kit's ring round the pill.
-    val interaction = remember { MutableInteractionSource() }
+    // A row that is the switch itself ([onCheckedChange] null: SwitchRow) passes its own [interactionSource]: the pill
+    // then draws the row's focus, and is no second keyboard stop of its own (§15).
+    val interaction = interactionSource ?: remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     Box(
         modifier
             .minimumInteractiveComponentSize()
-            .toggleable(value = checked, interactionSource = interaction, indication = null, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .then(
+                if (onCheckedChange == null) {
+                    Modifier
+                } else {
+                    Modifier.toggleable(value = checked, interactionSource = interaction, indication = null, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+                },
+            )
             .alpha(if (enabled) 1f else 0.5f),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
                 .size(width = 40.dp, height = 24.dp)
-                .focusRing(shape, c.ink, focused)
+                .focusRing(shape, focusRingInk(), focused)
                 .hardShadow(shape, shadows)
                 .clip(shape)
                 .background(c.stickerWhite)
@@ -1873,7 +1895,7 @@ fun KeepSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: M
             .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        StickerSpot(Modifier.focusRing(CircleShape, PicnicTheme.colors.ink, focused), size = 30.dp)
+        StickerSpot(Modifier.focusRing(CircleShape, focusRingInk(), focused), size = 30.dp)
         if (checked) {
             DecorSticker(
                 "star",

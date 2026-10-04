@@ -96,6 +96,7 @@ import earth.cora.picnic.core.assistant.AisleSyncReport
 import earth.cora.picnic.core.model.AisleStyle
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.displayName
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.common.DashedAddSpot
 import earth.cora.picnic.ui.common.DoneButton
 import earth.cora.picnic.ui.common.PadCard
@@ -836,7 +837,7 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
                     Modifier
                         .size(52.dp)
                         // No ripple: the chosen basket answers with its lemon ring.
-                        .selectable(selected = selected, interactionSource = null, indication = null, role = Role.RadioButton, onClick = { actions.onBasket(id, kind) })
+                        .selectable(selected = selected, interactionSource = null, indication = focusRingIndication(), role = Role.RadioButton, onClick = { actions.onBasket(id, kind) })
                         .semantics { contentDescription = basketNames.getOrElse(i) { kind.key } }
                         .drawBehind {
                             if (selected) {
@@ -881,7 +882,7 @@ private fun SwatchCell(selected: Boolean, description: String, onClick: () -> Un
     Box(
         Modifier
             .size(48.dp)
-            .selectable(selected = selected, interactionSource = null, indication = null, role = Role.RadioButton, onClick = onClick)
+            .selectable(selected = selected, interactionSource = null, indication = focusRingIndication(CircleShape), role = Role.RadioButton, onClick = onClick)
             .semantics { contentDescription = description }
             .drawBehind {
                 if (selected) drawCircle(ring, 14.5.dp.toPx(), style = Stroke(2.5.dp.toPx()))

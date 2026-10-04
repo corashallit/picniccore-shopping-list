@@ -24,7 +24,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import earth.cora.picnic.ui.list.ListFixture
-import earth.cora.picnic.ui.list.StripsOf
 import earth.cora.picnic.ui.list.TrayOf
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.PicnicBackground
@@ -43,9 +42,8 @@ import org.robolectric.annotation.GraphicsMode
  * - `glyphs_all` (item 48, §3.4): every toolbar glyph at its 24 dp size and at 48 dp, ballpoint 2u lines with round caps,
  *   no border and no gloss;
  * - `row_states_greyscale` (item 288, §15): the row states (to get, got, drawing, shiny, new) with the colour taken out,
- *   so checked and unchecked still read apart by shape, mark, strike and ghost alone;
- * - `strips_greyscale` (item 289, §15): the fixture's eight aisle strips with the colour taken out, told apart by pattern,
- *   number and name.
+ *   so checked and unchecked still read apart by shape, mark, strike and ghost alone.
+ * `strips_greyscale` (item 289) is `ui.a11y.GreyscaleGoldensTest`.
  * Owner: WP10.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -115,10 +113,5 @@ class ReleaseGoldensTest(private val variant: ThemeVariant) {
     fun rowStatesGreyscale() = record("row_states_greyscale_$v", grey = true) {
         val ui = ListFixture.ui(ListFixture.rowStates(), busy = ListFixture.DRAWING)
         TrayOf(ui.sections.first { it.id == "breakfast" })
-    }
-
-    @Test
-    fun stripsGreyscale() = record("strips_greyscale_$v", grey = true) {
-        StripsOf(ListFixture.ui().sections)
     }
 }
