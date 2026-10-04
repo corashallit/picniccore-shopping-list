@@ -170,7 +170,10 @@ class PinnedBackingProbeTest {
             }
             val list = compose.boundsOf(ListTags.LIST)
             if (compose.exists(ListTags.header(open))) {
-                val plate = compose.boundsOf(ListTags.header(open))
+                // Where the plate is laid out, not clipped by the list's viewport (a sliced plate's clipped bounds start
+                // at the list's top too).
+                val plate = compose.onNodeWithTag(ListTags.header(open)).fetchSemanticsNode()
+                    .let { androidx.compose.ui.geometry.Rect(it.positionInRoot, androidx.compose.ui.geometry.Size(it.size.width.toFloat(), it.size.height.toFloat())) }
                 assertTrue("$open: the plate rests whole or gone (${plate.top}..${plate.bottom} vs ${list.top})", plate.top >= list.top - 1f || plate.bottom <= list.top + 1f)
             }
         }

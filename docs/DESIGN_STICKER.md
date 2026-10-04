@@ -206,7 +206,7 @@ It plays on 90s glow-in-the-dark ceiling stars. Stickers, baskets, tray pastels 
 | `margin` | `#FF7FB0` | Margin line | decorative |
 | `ink` | `#FFFFFF` | Primary text | 13.60 on page, 16.78 on binder |
 | `inkSoft` | `#C9CFF5` | Secondary text | 8.89 on page |
-| `glowStar` | `#C9FFDE` | Glow stars, current-aisle ring | 15.06 on binder |
+| `glowStar` | `#C9FFDE` | Glow stars (the current-aisle ring is lemon mid in every variant, Glow included: §0.4 "The lemon ring never breaks", item 313) | 15.06 on binder |
 | `hanko` | `#FF8A7A` | Stamp, strike, errors | 5.94 on page |
 | `stickerShadow` | `#0B0D24` | Hard shadow | — |
 | `puffyStroke` | `#3A438A` | Stroke under puffy titles (instead of white) | — |
