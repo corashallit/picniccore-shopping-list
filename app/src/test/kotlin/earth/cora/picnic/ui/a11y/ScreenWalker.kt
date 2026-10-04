@@ -97,6 +97,9 @@ class ScreenFixture(val group: String, val name: String, val build: (ComposeCont
 class ScreenWalker(val compose: ComposeContentTestRule) {
     private class Shown(val n: Int, val look: Look, val stage: Stage)
 
+    /** The keyboard on what the walker shows (FocusTest, KeyboardNavTest). */
+    val keys: Keyboard = Keyboard(compose)
+
     private var shown: Shown? by mutableStateOf(null)
     private var started = false
     private var count = 0
@@ -137,6 +140,7 @@ class ScreenWalker(val compose: ComposeContentTestRule) {
 
     @Composable
     private fun Host() {
+        keys.Capture()
         val s = shown ?: return
         key(s.n) {
             val base = LocalDensity.current

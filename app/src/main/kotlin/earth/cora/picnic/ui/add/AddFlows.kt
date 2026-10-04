@@ -12,7 +12,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
@@ -44,6 +47,7 @@ class AddFlows internal constructor(
     val focusRequester: FocusRequester,
     private val keyboard: SoftwareKeyboardController?,
     private val focusManager: FocusManager? = null,
+    private val inputModes: InputModeManager? = null,
 ) {
     /** The field takes focus as soon as the bar is on screen ([AddDock] does it; the FAB unfolds the bar first). */
     internal var focusPending by mutableStateOf(false)
@@ -84,7 +88,9 @@ class AddFlows internal constructor(
     fun releaseField() {
         focusPending = false
         collapse.fieldFocused = false
-        focusManager?.clearFocus(force = true)
+        // With a hardware keyboard or switch access, focus stays where she is (§15: she keeps her place, and a sheet
+        // that closes gives focus back to what opened it); there is no on-screen keyboard to put away then.
+        if (inputModes?.inputMode != InputMode.Keyboard) focusManager?.clearFocus(force = true)
         keyboard?.hide()
     }
 
@@ -119,11 +125,14 @@ fun rememberAddFlows(vm: AddViewModel, sources: AddSources? = null): AddFlows {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val inputModes = LocalInputModeManager.current
     val activity = LocalActivity.current
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (activity?.isChangingConfigurations != true) vm.onStop()
     }
-    return remember(vm, sources, collapse, focus, keyboard, focusManager) { AddFlows(vm, sources, collapse, focus, keyboard, focusManager) }
+    return remember(vm, sources, collapse, focus, keyboard, focusManager, inputModes) {
+        AddFlows(vm, sources, collapse, focus, keyboard, focusManager, inputModes)
+    }
 }
 
 /**

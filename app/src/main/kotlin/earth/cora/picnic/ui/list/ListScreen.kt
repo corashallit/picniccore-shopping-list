@@ -7,6 +7,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -36,11 +39,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -56,22 +58,30 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.zIndex
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -82,12 +92,13 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
@@ -98,6 +109,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -107,6 +119,8 @@ import earth.cora.picnic.core.model.NewTripMode
 import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.platform.NoOpFeedback
+import earth.cora.picnic.ui.a11y.ClearOfCovers
+import earth.cora.picnic.ui.a11y.ModalLayersHost
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.a11y.modalLayer
 import earth.cora.picnic.ui.a11y.underModal
@@ -118,9 +132,9 @@ import earth.cora.picnic.ui.add.AddDock
 import earth.cora.picnic.ui.add.AddEventsEffect
 import earth.cora.picnic.ui.add.AddRules
 import earth.cora.picnic.ui.add.AddSheetHost
-import earth.cora.picnic.ui.common.NoMaterialPress
 import earth.cora.picnic.ui.add.AddViewModel
 import earth.cora.picnic.ui.add.rememberAddFlows
+import earth.cora.picnic.ui.common.NoMaterialPress
 import earth.cora.picnic.ui.edit.EditItemSheet
 import earth.cora.picnic.ui.eggs.EggAnchors
 import earth.cora.picnic.ui.eggs.EggListHost
@@ -129,8 +143,8 @@ import earth.cora.picnic.ui.eggs.LocalListRoom
 import earth.cora.picnic.ui.eggs.NoOpSurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseState
-import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.list.motion.AmbientBasket
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.list.motion.CelebrationHost
 import earth.cora.picnic.ui.list.motion.FoldFocusEffect
 import earth.cora.picnic.ui.list.motion.FoldToggles
@@ -160,9 +174,9 @@ import earth.cora.picnic.ui.theme.ToastMessage
 import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.WashiPattern
 import earth.cora.picnic.ui.theme.holdOnFrameClock
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 /*
  * The List screen (docs/DESIGN_STICKER.md §6.1). Top to bottom: the top stack (title, LCD, the trip's sticker book),
@@ -333,6 +347,34 @@ class ListScreenState(
 
     internal fun focusOf(sectionId: String): Pair<FocusRequester, FocusRequester> = focus.getOrPut(sectionId) { FocusRequester() to FocusRequester() }
 
+    /** The list item that last took the keyboard's focus (its lazy key) and its section (§15: a fold hands focus on). */
+    internal var keyFocus: Pair<String, String>? = null
+
+    /** A section whose strip or chevron takes the keyboard's focus once laid out: the row that had it folded away. */
+    internal var refocus by mutableStateOf<String?>(null)
+
+    private val rowFocus = HashMap<String, FocusRequester>()
+
+    /** The docked add bar (or its FAB): where Tab goes on from the list's last item (§15). */
+    internal val dockFocus = FocusRequester()
+
+    /** Row [id]'s focus requester (a sheet it opened gives focus back to it, §15). */
+    internal fun rowFocus(id: String): FocusRequester = rowFocus.getOrPut(id) { FocusRequester() }
+
+    /**
+     * Gives the keyboard's focus back to the list item that last had it (a row, a strip, the open tray's chevron), when
+     * it is still laid out: a sheet it opened has closed (§15). False when it is not.
+     */
+    internal fun restoreKeyFocus(): Boolean {
+        val (key, section) = keyFocus ?: return false
+        val requester = when {
+            key.startsWith("strip:") -> focusOf(section).second
+            key.startsWith("header:") -> focusOf(section).first
+            else -> rowFocus[key] ?: return false
+        }
+        return runCatching { requester.requestFocus() }.getOrDefault(false)
+    }
+
     /**
      * The re-sync (§6.1, item 119), however she asks for it (the pull, the overflow menu's Refresh, the list's custom
      * action): the cue, the re-sync itself, the sun's one spin and "SYNC" on the LCD for 1500 ms.
@@ -502,29 +544,35 @@ fun ListRoute(
     }
     val tape = AddRules.addBarTape(surprises)
     val sheetUp = state.editing != null || showLists || screen.newTripOpen || screen.tripBookOpen
-    ListScreen(
-        state = state,
-        actions = actions,
-        engine = vm.engine,
-        toasts = toasts,
-        showLists = showLists,
-        screen = screen,
-        dockHeight = addFlows.dockHeight,
-        collapse = addFlows.collapse,
-        dock = { bar ->
-            AddDock(
-                addFlows, addState, tape = tape, otherSheetOpen = sheetUp,
-                // Egg 16: the umbrella stands at the bar's left end; the washi moves along after the doodle.
-                tapeAfterDoodle = surprises.umbrella,
-                modifier = bar,
-            )
-        },
-        surprises = vm.surpriseEngine,
-        feedback = vm.feedback,
-        addSheetUp = addState.sheetOpen,
-    )
-    // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet.
-    NoMaterialPress { AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry) }
+    // The list's sheets and WP7's Add sheet beside it share one set of modal layers: the list hands the keyboard to
+    // whichever is up (§15).
+    ModalLayersHost {
+        ListScreen(
+            state = state,
+            actions = actions,
+            engine = vm.engine,
+            toasts = toasts,
+            showLists = showLists,
+            screen = screen,
+            dockHeight = addFlows.dockHeight,
+            collapse = addFlows.collapse,
+            dock = { bar ->
+                AddDock(
+                    addFlows, addState, tape = tape, otherSheetOpen = sheetUp,
+                    // Egg 16: the umbrella stands at the bar's left end; the washi moves along after the doodle.
+                    tapeAfterDoodle = surprises.umbrella,
+                    modifier = bar,
+                    // Folded, the FAB takes the keyboard from the list's last item, as the bar does (§15).
+                    fabModifier = Modifier.focusRequester(screen.dockFocus),
+                )
+            },
+            surprises = vm.surpriseEngine,
+            feedback = vm.feedback,
+            addSheetUp = addState.sheetOpen,
+        )
+        // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet.
+        NoMaterialPress { AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry) }
+    }
 }
 
 /** The nudge's toast kind. */
@@ -710,13 +758,16 @@ fun ListScreen(
         CompositionLocalProvider(LocalListEggs provides eggs, LocalListSurprises provides surprises) {
             // No Material default survives (§0.2): anything on the list that falls back on LocalIndication (inside
             // PicnicTheme that is Material's ripple) shows no ripple here; the kit draws its own pressed states.
+            // Its sheets and menu hold the keyboard while up (§15); ListRoute's set when it hosts the screen.
             NoMaterialPress {
-                ListScreenContent(
-                    state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
-                    // Egg 18: while a printed receipt waits for its tap, a scroll leaves the book open under it (§13.2).
-                    bookCollapsed = (screen.scrolledDown && !receiptWaits) || ime || shortWindow,
-                    addSheetUp = addSheetUp,
-                )
+                ModalLayersHost {
+                    ListScreenContent(
+                        state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
+                        // Egg 18: while a printed receipt waits for its tap, a scroll leaves the book open under it (§13.2).
+                        bookCollapsed = (screen.scrolledDown && !receiptWaits) || ime || shortWindow,
+                        addSheetUp = addSheetUp,
+                    )
+                }
             }
         }
     }
@@ -738,6 +789,7 @@ internal fun dockAnchors(anchors: AnchorRegistry): Modifier =
     with(anchors) { Modifier.anchor(AnchorRegistry.ADD_BAR).anchor(EggAnchors.TEXT_PREFIX + "addbar") }
 
 /** The screen inside its [EggListHost]: the top stack, the list, the dock, the overlay, the sheets, the celebration. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EggListScope.ListScreenContent(
     state: ListUiState,
@@ -785,7 +837,7 @@ private fun EggListScope.ListScreenContent(
                 close != null
             },
     ) {
-        Box(Modifier.fillMaxSize().underModal(covered)) {
+        Box(Modifier.fillMaxSize().underModal(covered, restore = screen::restoreKeyFocus)) {
             PicnicBackground(Modifier.fillMaxSize()) {
                 // Egg 1: the ground being left fades out over the new one, beneath everything else.
                 Wash()
@@ -813,19 +865,22 @@ private fun EggListScope.ListScreenContent(
                         when {
                             state.loading -> LoadingList()
                             state.total == 0 -> EmptyList(state, actions, dockHeight)
-                            else -> AisleList(
-                                state, p, engine, actions, screen, lazyState, entries, dockHeight, collapse,
-                                topExtra = listTopExtra, bottomPadding = listBottomPadding(dockHeight),
-                                // Egg 16: the list keeps out of the umbrella's band above the docked bar (not while it is
-                                // folded into the FAB: the umbrella stands on the bar).
-                                umbrellaBand = if (eggs.umbrella && collapse?.collapsed != true) barHeight + UMBRELLA_BAND else null,
-                            )
+                            // What the keyboard focuses lands clear of the pinned plate and the dock (§15).
+                            else -> CompositionLocalProvider(LocalBringIntoViewSpec provides keyboardView(lazyState, entries, dockHeight)) {
+                                AisleList(
+                                    state, p, engine, actions, screen, lazyState, entries, dockHeight, collapse,
+                                    topExtra = listTopExtra, bottomPadding = listBottomPadding(dockHeight),
+                                    // Egg 16: the list keeps out of the umbrella's band above the docked bar (not while it
+                                    // is folded into the FAB: the umbrella stands on the bar).
+                                    umbrellaBand = if (eggs.umbrella && collapse?.collapsed != true) barHeight + UMBRELLA_BAND else null,
+                                )
+                            }
                         }
                     }
                 }
             }
             // The eggs follow the docked bar (egg 16's umbrella stands on it, and steps off while it is folded into the FAB).
-            dock(dockAnchors(engine.anchors).eggAddBar(folded = collapse?.collapsed == true))
+            dock(dockAnchors(engine.anchors).eggAddBar(folded = collapse?.collapsed == true).focusRequester(screen.dockFocus))
             // The toasts sit 20 dp above the bar's top (above the umbrella's canopy while it rains); the eggs' overlays ride
             // in the overlay's `eggs` slot (§12, §19.2).
             MotionOverlay(engine, p, toasts, bottomInset = overlayInset(dockHeight), eggs = overlays)
@@ -921,6 +976,42 @@ private fun EmptyList(state: ListUiState, actions: ListActions, dockHeight: Dp) 
             action = { PicnicButton(stringResource(R.string.list_empty_action), onClick = actions.onStartList, leadingStar = true) },
         )
     }
+}
+
+/**
+ * Where the list brings what the keyboard focuses (§15): wholly clear of the plate pinned at its top and of the dock
+ * over its bottom, so a row reached with Tab or the D-pad is never hidden under either.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun keyboardView(list: LazyListState, entries: List<Entry>, dockHeight: Dp): BringIntoViewSpec {
+    val latest by rememberUpdatedState(entries)
+    val dockPx by rememberUpdatedState(with(LocalDensity.current) { dockHeight.toPx() })
+    return remember(list) { ClearOfCovers(top = { pinnedPlateBottom(list, latest) }, bottom = { dockPx }) }
+}
+
+/** The list's keyboard stops in its order: each strip, the open tray's chevron, each of its rows (index, requester). */
+private fun ListScreenState.focusTargets(entries: List<Entry>): List<Pair<Int, FocusRequester>> =
+    entries.mapIndexedNotNull { i, e ->
+        when (e) {
+            is Entry.Strip -> i to focusOf(e.s.id).second
+            is Entry.Header -> i to focusOf(e.s.id).first
+            is Entry.RowItem -> i to rowFocus(e.row.id)
+            else -> null
+        }
+    }
+
+/** Notes [key] (an item of section [sectionId]) as where the keyboard's focus is when it takes focus. */
+private fun Modifier.keyFocusIn(screen: ListScreenState, key: String, sectionId: String): Modifier =
+    onFocusChanged { if (it.hasFocus) screen.keyFocus = key to sectionId }
+
+/** The pinned plate's bottom in the list's viewport (px from its start), or 0 while no plate is pinned (§4.10). */
+private fun pinnedPlateBottom(list: LazyListState, entries: List<Entry>): Float {
+    val info = list.layoutInfo
+    val header = info.visibleItemsInfo.firstOrNull { entries.getOrNull(it.index) is Entry.Header } ?: return 0f
+    val pinned = list.firstVisibleItemIndex > header.index ||
+        (list.firstVisibleItemIndex == header.index && list.firstVisibleItemScrollOffset > 0)
+    return if (pinned) (header.offset + header.size - info.viewportStartOffset).toFloat() else 0f
 }
 
 /** One lazy item of the list. */
@@ -1078,6 +1169,47 @@ private fun AisleList(
 
     val latestEntries by rememberUpdatedState(entries)
     val latestSections by rememberUpdatedState(state.sections)
+    /** Tab and Shift+Tab from a list item to the next one in the list's order (see the list's modifier). */
+    fun tabInListOrder(e: KeyEvent): Boolean {
+        if (e.key != Key.Tab) return false
+        val key = screen.keyFocus?.first ?: return false
+        val entries = latestEntries
+        val targets = screen.focusTargets(entries)
+        val at = targets.indexOfFirst { entries[it.first].key == key }
+        if (at < 0) return false
+        val back = e.isShiftPressed
+        val next = targets.getOrNull(if (back) at - 1 else at + 1)
+        // Up and out of the list: the top stack's own order takes it from there.
+        if (next == null && back) return false
+        if (e.type != KeyEventType.KeyDown) return true
+        scope.launch {
+            if (next == null) {
+                // On from the list's last item to the dock (never back up to a plate pinned above it).
+                runCatching { screen.dockFocus.requestFocus() }
+                return@launch
+            }
+            val (index, requester) = next
+            if (listState.layoutInfo.visibleItemsInfo.none { it.index == index }) {
+                listState.scrollToItem(index)
+                withFrameMillis { }
+            }
+            runCatching { requester.requestFocus() }
+        }
+        return true
+    }
+
+    // The row that held the keyboard's focus folded away with its aisle (§15): its strip takes focus once it is laid out
+    // (the open tray's chevron, had the aisle opened again meanwhile), so she goes on from where she was.
+    val inputModes = LocalInputModeManager.current
+    LaunchedEffect(screen.refocus) {
+        val id = screen.refocus ?: return@LaunchedEffect
+        var waited = 0
+        while (latestEntries.none { it.sectionId == id && (it is Entry.Strip || it is Entry.Header) } && waited++ < OPEN_WAIT_FRAMES) withFrameMillis { }
+        withFrameMillis { }
+        val (chevron, strip) = screen.focusOf(id)
+        runCatching { if (latestEntries.any { it is Entry.Header && it.sectionId == id }) chevron.requestFocus() else strip.requestFocus() }
+        screen.refocus = null
+    }
     val dockPx by rememberUpdatedState(with(density) { dockHeight.roundToPx() })
     val snap by rememberUpdatedState(reduced)
     val gapPx = with(density) { REVEAL_MARGIN.roundToPx() }
@@ -1375,6 +1507,35 @@ private fun AisleList(
                 // Egg 18: the viewport starts under a waiting receipt's paper (its inset, not the content's).
                 .padding(top = topExtra)
                 .testTag(ListTags.LIST)
+                // Tab and Shift+Tab go through the list in its own order (§15): strips, the open tray's chevron and its
+                // rows by their place in the list. The lazy list places a pinned plate after the rows it covers, and
+                // Compose orders Tab by placement, so Tab alone would loop through a long tray's rows and plate.
+                .onPreviewKeyEvent(::tabInListOrder)
+                .focusProperties {
+                    onEnter = {
+                        // Entering the list, Tab starts at its first item laid out in its order (the open tray's
+                        // chevron before its rows), Shift+Tab at its last.
+                        val laid = listState.layoutInfo.visibleItemsInfo.map { it.index }.toSet()
+                        val ends = screen.focusTargets(latestEntries).filter { it.first in laid }
+                        val pick = when (requestedFocusDirection) {
+                            FocusDirection.Next -> ends.firstOrNull()
+                            FocusDirection.Previous -> ends.lastOrNull()
+                            else -> null
+                        }
+                        pick?.let { runCatching { it.second.requestFocus() } }
+                    }
+                }
+                .focusGroup()
+                // A row holding the keyboard's focus that a fold takes away (its aisle done): focus goes on to its strip
+                // instead of back to the top of the screen (§15).
+                .onFocusChanged { f ->
+                    if (f.hasFocus) return@onFocusChanged
+                    val (key, section) = screen.keyFocus ?: return@onFocusChanged
+                    if (inputModes.inputMode == InputMode.Keyboard && latestEntries.none { it.key == key }) {
+                        screen.keyFocus = null
+                        screen.refocus = section
+                    }
+                }
                 // The eggs' room: the list's viewport (the scenes are brought into it, the ladybug flies off its sides).
                 .then(with(anchors) { Modifier.anchor(EggAnchors.LIST) })
                 .visibleFraction { fraction = it }
@@ -1418,6 +1579,7 @@ private fun AisleList(
                             ambientClock = ambient.clock,
                             modifier = Modifier
                                 .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis)
+                                .keyFocusIn(screen, e.key, s.id)
                                 // A peeked basket, or egg 2's ladybug walking under this strip, draws over the strip below
                                 // (and over the open tray's band beside it).
                                 .zIndex(if (screen.peek == s.id || ladybugStrip == s.id) Z_LIFTED else 0f)
@@ -1449,7 +1611,7 @@ private fun AisleList(
                             },
                             // The band draws over its tray's rows when it pins (R6), and over the strips that slide
                             // past the tray as it opens or closes (§4.10).
-                            modifier = Modifier.zIndex(Z_PLATE).unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
+                            modifier = Modifier.zIndex(Z_PLATE).keyFocusIn(screen, e.key, s.id).unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
                         )
                     }
                     is Entry.RowItem -> item(key = e.key, contentType = "row") {
@@ -1470,6 +1632,8 @@ private fun AisleList(
                             current = e.s.id == currentId,
                             modifier = Modifier
                                 .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = SLOT_CLOSE_MS)
+                                .keyFocusIn(screen, e.key, e.s.id)
+                                .focusRequester(screen.rowFocus(e.row.id))
                                 // The open tray draws over the folded strips that slide past it as it opens (the strip
                                 // below never covers its rows or its cap, §4.10).
                                 .zIndex(Z_TRAY)

@@ -97,6 +97,7 @@ import earth.cora.picnic.R
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.a11y.tabLeavesField
 import earth.cora.picnic.ui.theme.AddBarButton
 import earth.cora.picnic.ui.theme.AddBarButtonKind
 import earth.cora.picnic.ui.theme.BittenEdgeShape
@@ -379,6 +380,8 @@ private fun AddBarField(
         keyboardActions = KeyboardActions(onSend = { onSend() }),
         modifier = modifier
             .testTag(ADD_FIELD_TAG)
+            // Tab leaves the two-line field (§15 Keyboard / switch access).
+            .tabLeavesField()
             .focusRequester(focusRequester)
             .onFocusChanged {
                 focused = it.isFocused
@@ -453,6 +456,8 @@ internal fun NoteField(text: String, onTextChange: (String) -> Unit, modifier: M
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(NOTE_FIELD_TAG)
+                // Tab leaves the note (§15 Keyboard / switch access).
+                .tabLeavesField()
                 .onFocusChanged { focused = it.isFocused }
                 .semantics { contentDescription = label },
             decorationBox = { inner ->
@@ -709,6 +714,8 @@ fun BoxScope.AddDock(
     tapeAfterDoodle: Boolean = false,
     /** False where there is no camera or microphone to offer (the Surprise lab's practice list): Snap and Speak are off. */
     captureEnabled: Boolean = true,
+    /** On the FAB (the bar folded): the list hands the keyboard to it after its last item (§15), as to the bar. */
+    fabModifier: Modifier = Modifier,
 ) {
     val collapse = flows.collapse
     val reduced = LocalReducedMotion.current
@@ -770,6 +777,7 @@ fun BoxScope.AddDock(
             // The FAB's room from the bottom: the inset, its 12 dp margin and the 64 dp sticker.
             .onSizeChanged { flows.fabHeight = with(density) { it.height.toDp() } }
             .windowInsetsPadding(bottomInsets.only(WindowInsetsSides.Bottom))
-            .padding(end = 6.dp, bottom = 12.dp),
+            .padding(end = 6.dp, bottom = 12.dp)
+            .then(fabModifier),
     )
 }

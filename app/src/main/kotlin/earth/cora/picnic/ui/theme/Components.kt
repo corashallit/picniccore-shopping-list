@@ -103,6 +103,7 @@ import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.toSize
 import earth.cora.picnic.R
+import earth.cora.picnic.ui.a11y.tabLeavesField
 import earth.cora.picnic.ui.a11y.textOverflowed
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -1623,6 +1624,8 @@ fun PicnicTextField(
             interactionSource = interaction,
             modifier = Modifier
                 .fillMaxWidth()
+                // Tab leaves the field, a ruled note of many lines too (§15 Keyboard / switch access).
+                .tabLeavesField()
                 .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier),
             decorationBox = { inner ->
                 Column {
@@ -1759,9 +1762,10 @@ fun KeyField(
 @Composable
 fun PicnicSwitch(
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
+    onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    interactionSource: MutableInteractionSource? = null,
 ) {
     val reduced = LocalReducedMotion.current
     var knob by remember { mutableFloatStateOf(if (checked) 1f else 0f) }
@@ -1781,12 +1785,20 @@ fun PicnicSwitch(
     val shadows = PicnicTheme.shadows
     val c = PicnicTheme.colors
     // No ripple (§0.2): the knob's move is the switch's feedback; focus wears the kit's ring round the pill.
-    val interaction = remember { MutableInteractionSource() }
+    // A row that is the switch itself ([onCheckedChange] null: SwitchRow) passes its own [interactionSource]: the pill
+    // then draws the row's focus, and is no second keyboard stop of its own (§15).
+    val interaction = interactionSource ?: remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     Box(
         modifier
             .minimumInteractiveComponentSize()
-            .toggleable(value = checked, interactionSource = interaction, indication = null, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .then(
+                if (onCheckedChange == null) {
+                    Modifier
+                } else {
+                    Modifier.toggleable(value = checked, interactionSource = interaction, indication = null, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+                },
+            )
             .alpha(if (enabled) 1f else 0.5f),
         contentAlignment = Alignment.Center,
     ) {
