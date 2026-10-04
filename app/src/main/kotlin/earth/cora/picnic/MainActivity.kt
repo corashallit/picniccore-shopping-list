@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import earth.cora.picnic.ui.PicnicAppRoot
+import earth.cora.picnic.ui.a11y.LocalAnnouncer
 import earth.cora.picnic.ui.theme.LocalPinholeWork
 import earth.cora.picnic.ui.theme.LocalStickerArt
 import earth.cora.picnic.ui.theme.LocalTimeouts
@@ -66,6 +67,8 @@ class MainActivity : ComponentActivity() {
                         CompositionLocalProvider(
                             LocalStickerArt provides container.stickerArt,
                             LocalTimeouts provides container.timeouts,
+                            // Toasts speak through the app's Announcer (§15 Announcements).
+                            LocalAnnouncer provides container.announcer,
                             // Puffy titles scan for pinholes off the main thread in the app (§2.7, item 308).
                             LocalPinholeWork provides PinholeWork.Background,
                         ) {

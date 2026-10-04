@@ -31,6 +31,7 @@ import earth.cora.picnic.ui.common.FakeRecorder
 import earth.cora.picnic.ui.common.RecordingIconRepository
 import earth.cora.picnic.ui.list.motion.MotionChoreographer
 import earth.cora.picnic.ui.nav.AppNav
+import earth.cora.picnic.ui.a11y.LocalAnnouncer
 import earth.cora.picnic.ui.nav.LocalAppNav
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.ThemeVariant
@@ -119,13 +120,14 @@ class ListRig(
     initial: AppState = ListFixture.state(),
     album: Album = Album(),
     var now: Long = ListFixture.NOW,
+    /** TalkBack's ear: the view models, the engine and the toasts all speak into it (one on the test clock de-duplicates). */
+    val announcer: FakeAnnouncer = FakeAnnouncer(),
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     val store = InMemoryStateStore(initial)
     val album = InMemoryAlbumStore(album)
     val icons = CountingIcons()
     val assistant = FakeAssistant()
-    val announcer = FakeAnnouncer()
     val feedback = FakeFeedback()
     val surprises = ListSurprises()
     val nav = RecordingNav()
@@ -185,7 +187,7 @@ class ListRig(
     /** The List destination as the app hosts it. */
     @Composable
     fun Content() {
-        CompositionLocalProvider(LocalAppNav provides nav.nav) {
+        CompositionLocalProvider(LocalAppNav provides nav.nav, LocalAnnouncer provides announcer) {
             ListRoute(vm, addVm, onOpenAisles = { aisles += "aisles" }, onOpenSettings = { settingsOpened += Unit })
         }
     }

@@ -7,10 +7,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -69,6 +68,11 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -104,6 +108,8 @@ import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.platform.NoOpFeedback
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.a11y.modalLayer
+import earth.cora.picnic.ui.a11y.underModal
 import earth.cora.picnic.ui.add.AddBar
 import earth.cora.picnic.ui.add.AddBarCollapseState
 import earth.cora.picnic.ui.add.AddBarUi
@@ -515,6 +521,7 @@ fun ListRoute(
         },
         surprises = vm.surpriseEngine,
         feedback = vm.feedback,
+        addSheetUp = addState.sheetOpen,
     )
     // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet.
     NoMaterialPress { AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry) }
@@ -638,6 +645,8 @@ fun ListScreen(
      * (EggListHost). Her own list never scrolls by itself for them (§12.1).
      */
     sceneScrolls: Boolean = false,
+    /** WP7's Add sheet is up over the list (it is hosted beside the screen): the list holds no keyboard focus meanwhile. */
+    addSheetUp: Boolean = false,
 ) {
     MotionEngineHost(engine, nextStopCard = state.nextStopCard, celebration = state.celebration, eggs = state.eggs, talkBackOverride = talkBackOverride)
     val p = engine.current.value
@@ -706,6 +715,7 @@ fun ListScreen(
                     state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
                     // Egg 18: while a printed receipt waits for its tap, a scroll leaves the book open under it (§13.2).
                     bookCollapsed = (screen.scrolledDown && !receiptWaits) || ime || shortWindow,
+                    addSheetUp = addSheetUp,
                 )
             }
         }
@@ -744,6 +754,7 @@ private fun EggListScope.ListScreenContent(
     collapse: AddBarCollapseState?,
     dock: @Composable BoxScope.(bar: Modifier) -> Unit,
     bookCollapsed: Boolean,
+    addSheetUp: Boolean,
 ) {
     // The New trip sheet is only ever up over a trip it can file: once the list has none (a New trip from the menu, the
     // last sticker peeled), a request still pending is dropped, so the sheet never opens unasked later and the add bar
@@ -751,50 +762,74 @@ private fun EggListScope.ListScreenContent(
     LaunchedEffect(state.canStartNewTrip, state.loading) {
         if (!state.loading && !state.canStartNewTrip) screen.newTripOpen = false
     }
-    Box(modifier.fillMaxSize()) {
-        PicnicBackground(Modifier.fillMaxSize()) {
-            // Egg 1: the ground being left fades out over the new one, beneath everything else.
-            Wash()
-            Column(Modifier.fillMaxSize()) {
-                TopStack(
-                    state = state,
-                    presentation = p,
-                    engine = engine,
-                    ui = TopStackUi(
-                        // Egg 18: the binder top stays open while a printed receipt hangs from its LCD (§13.2).
-                        barCollapsed = screen.scrolledDown && !receiptWaits,
-                        bookCollapsed = bookCollapsed,
-                        syncing = screen.syncing,
-                        sunSpin = screen.sunSpin,
-                    ),
-                    actions = actions,
-                    onMore = { screen.menuOpen = true },
-                    onMoreBounds = { screen.moreBounds = it },
-                    onOpenBook = { slot ->
-                        screen.tripBookSlot = slot
-                        screen.tripBookOpen = true
-                    },
-                )
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    when {
-                        state.loading -> LoadingList()
-                        state.total == 0 -> EmptyList(state, actions, dockHeight)
-                        else -> AisleList(
-                            state, p, engine, actions, screen, lazyState, entries, dockHeight, collapse,
-                            topExtra = listTopExtra, bottomPadding = listBottomPadding(dockHeight),
-                            // Egg 16: the list keeps out of the umbrella's band above the docked bar (not while it is
-                            // folded into the FAB: the umbrella stands on the bar).
-                            umbrellaBand = if (eggs.umbrella && collapse?.collapsed != true) barHeight + UMBRELLA_BAND else null,
-                        )
+    // A sheet or the menu over the list (§15 Focus): the keyboard stays in it, and the control that opened it gets focus
+    // back when it closes.
+    val covered = screen.menuOpen || state.editing != null || showLists || (screen.newTripOpen && state.canStartNewTrip) ||
+        screen.tripBookOpen || addSheetUp
+    // Back with the Next card up skips it, as a tap does (§15: Back closes overlays), instead of leaving the list; a sheet
+    // over it keeps Back for itself, and the celebration has its own.
+    BackHandler(enabled = p.nextCard?.let { it.exitT0 == null } == true && p.celebration == null && !covered) { engine.skipNextCard() }
+    Box(
+        modifier
+            .fillMaxSize()
+            // Escape closes the Next card or the celebration as a tap or Back does (§15: Escape / Back closes sheets and
+            // overlays); neither ever takes the keyboard's focus, so it reaches them through the list's.
+            .onKeyEvent { e ->
+                if (e.key != Key.Escape) return@onKeyEvent false
+                val close: (() -> Unit)? = when {
+                    p.celebration != null -> engine::closeCelebration
+                    p.nextCard != null -> engine::skipNextCard
+                    else -> null
+                }
+                if (close != null && e.type == KeyEventType.KeyUp) close()
+                close != null
+            },
+    ) {
+        Box(Modifier.fillMaxSize().underModal(covered)) {
+            PicnicBackground(Modifier.fillMaxSize()) {
+                // Egg 1: the ground being left fades out over the new one, beneath everything else.
+                Wash()
+                Column(Modifier.fillMaxSize()) {
+                    TopStack(
+                        state = state,
+                        presentation = p,
+                        engine = engine,
+                        ui = TopStackUi(
+                            // Egg 18: the binder top stays open while a printed receipt hangs from its LCD (§13.2).
+                            barCollapsed = screen.scrolledDown && !receiptWaits,
+                            bookCollapsed = bookCollapsed,
+                            syncing = screen.syncing,
+                            sunSpin = screen.sunSpin,
+                        ),
+                        actions = actions,
+                        onMore = { screen.menuOpen = true },
+                        onMoreBounds = { screen.moreBounds = it },
+                        onOpenBook = { slot ->
+                            screen.tripBookSlot = slot
+                            screen.tripBookOpen = true
+                        },
+                    )
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        when {
+                            state.loading -> LoadingList()
+                            state.total == 0 -> EmptyList(state, actions, dockHeight)
+                            else -> AisleList(
+                                state, p, engine, actions, screen, lazyState, entries, dockHeight, collapse,
+                                topExtra = listTopExtra, bottomPadding = listBottomPadding(dockHeight),
+                                // Egg 16: the list keeps out of the umbrella's band above the docked bar (not while it is
+                                // folded into the FAB: the umbrella stands on the bar).
+                                umbrellaBand = if (eggs.umbrella && collapse?.collapsed != true) barHeight + UMBRELLA_BAND else null,
+                            )
+                        }
                     }
                 }
             }
+            // The eggs follow the docked bar (egg 16's umbrella stands on it, and steps off while it is folded into the FAB).
+            dock(dockAnchors(engine.anchors).eggAddBar(folded = collapse?.collapsed == true))
+            // The toasts sit 20 dp above the bar's top (above the umbrella's canopy while it rains); the eggs' overlays ride
+            // in the overlay's `eggs` slot (§12, §19.2).
+            MotionOverlay(engine, p, toasts, bottomInset = overlayInset(dockHeight), eggs = overlays)
         }
-        // The eggs follow the docked bar (egg 16's umbrella stands on it, and steps off while it is folded into the FAB).
-        dock(dockAnchors(engine.anchors).eggAddBar(folded = collapse?.collapsed == true))
-        // The toasts sit 20 dp above the bar's top (above the umbrella's canopy while it rains); the eggs' overlays ride
-        // in the overlay's `eggs` slot (§12, §19.2).
-        MotionOverlay(engine, p, toasts, bottomInset = overlayInset(dockHeight), eggs = overlays)
         PeekLayer(state, screen, dockHeight)
         if (screen.menuOpen) ListMenu(state, actions, screen)
         state.editing?.let { editing ->
@@ -1649,7 +1684,8 @@ private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScree
         Modifier
             .fillMaxSize()
             .onGloballyPositioned { origin = it.boundsInWindow().topLeft }
-            .clickable(remember { MutableInteractionSource() }, indication = null, onClick = close)
+            // A tap outside closes the menu; never a keyboard stop of its own (Escape closes it, §15).
+            .pointerInput(Unit) { detectTapGestures { close() } }
             .testTag(LIST_MENU_SCRIM_TAG)
             .clearAndSetSemantics {
                 contentDescription = closeLabel
@@ -1698,7 +1734,9 @@ private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScree
                         Modifier.offset { IntOffset(-8.dp.roundToPx(), top.roundToPx()) }
                     },
                 )
-                .testTag(LIST_MENU_TAG),
+                .testTag(LIST_MENU_TAG)
+                // Opened from the keyboard, the menu takes focus and keeps it; Escape closes it (§15).
+                .modalLayer(close),
         )
     }
 }
