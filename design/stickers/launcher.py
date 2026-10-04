@@ -45,8 +45,15 @@ def mono_icon(icon):
         lines = list(cut.geoms) if isinstance(cut, MultiLineString) else [cut] if isinstance(cut, LineString) else []
         seen += ['M' + 'L'.join(f'{fmt(x)} {fmt(y)}' for x, y in ln.simplify(.03).coords) for ln in lines if ln.length > 1]
     outline = 'M' + 'L'.join(f'{fmt(x)} {fmt(y)}' for x, y in list(mound.exterior.coords)[:-1]) + 'Z'
+    # each berry keeps what makes it a strawberry in one tint: its sepals (the calyx's outline, a notched cap) and three
+    # seed holes, a little larger than the colour icon's so they survive at launcher size
+    marks = []
+    for cx, top, w, h in [(24, 9.6, 11.6, 14.4), (15, 13.4, 10.6, 12.6), (33, 13.4, 10.6, 12.6)]:
+        marks.append(F(('path', calyx(cx, top, .9)), 'melon', 'm', cut=False))
+        marks += [F(('circle', cx + dx, top + dy, .7), 'strawberry', 'm', cut=False) for dx, dy in [(-2.4, 5.4), (2.4, 5.4), (0, 8.8)]]
     return Icon('launchmono', 'Picnic hamper (mono)', [         # the handle hides behind the berries, so it is left out
         F(('path', outline), 'strawberry', 'm', det=seen),
+        *marks,
         F(('path', 'M7.6 26H40.4L37.6 39.6Q37 42 34.6 42H13.4Q11 42 10.4 39.6Z'), 'melon', 'p'),
         F(('rect', 5.6, 23.4, 36.8, 5.2, 2.6), 'melon', 'm'),
     ])

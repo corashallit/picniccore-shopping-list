@@ -69,7 +69,7 @@ object StickerManifest {
         StickerEntry("sweet_potato", R.drawable.sk_i_sweet_potato, listOf("strawberry", "peach"), Personality.NONE, null, StickerSource.DSL, "sweetpotato"),
         StickerEntry("onion", R.drawable.sk_i_onion, listOf("peach", "melon"), Personality.NONE, null, StickerSource.DSL, "onion"),
         StickerEntry("green_onion", R.drawable.sk_i_green_onion, listOf("melon", "sakura"), Personality.NONE, null, StickerSource.DSL, "green_onion"),
-        StickerEntry("garlic", R.drawable.sk_i_garlic, listOf("grape"), Personality.NONE, null, StickerSource.DSL, "garlic"),
+        StickerEntry("garlic", R.drawable.sk_i_garlic, listOf("cocoa"), Personality.NONE, null, StickerSource.DSL, "garlic"),
         StickerEntry("ginger", R.drawable.sk_i_ginger, listOf("cocoa"), Personality.NONE, null, StickerSource.DSL, "ginger"),
         StickerEntry("tomato", R.drawable.sk_i_tomato, listOf("strawberry", "melon"), Personality.NONE, null, StickerSource.DSL, "tomatoes"),
         StickerEntry("cucumber", R.drawable.sk_i_cucumber, listOf("melon"), Personality.NONE, null, StickerSource.DSL, "cucumber"),
