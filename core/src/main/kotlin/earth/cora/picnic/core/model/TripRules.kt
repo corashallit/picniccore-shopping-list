@@ -57,11 +57,36 @@ object TripRules {
     /**
      * Cora's answer to Q9 (§0.4): no question. The first check-off more than [IDLE_MILLIS] after the trip's
      * last activity starts a new book on its own (toggleCheckedStartingNewBook files the old book, clears what
-     * was got and checks the item onto the fresh trip; undoNewBook takes it back). False without a trip.
+     * was got and checks the item onto the fresh trip; undoNewBook takes it back). The first add that changes the
+     * list does the same (addItemsStartingNewBook: the new items go onto the fresh list), so building next week's
+     * list never adds to, or peels stickers out of, last week's book. False without a trip.
      */
     fun startsNewBook(list: GroceryList, now: Long): Boolean {
         val trip = list.trip ?: return false
         return now - trip.lastActivityAt > IDLE_MILLIS
+    }
+
+    /**
+     * The items the trip's book counts (§7.1, §7.8): every checked item, and every unchecked one except those added
+     * after the trip's finale was shown. Those were written down for the next shop once this one was finished, so they
+     * never cost a finished book its spots, stamps or PERFECT (the evening after a Saturday shop, items added for next
+     * week stay out of Saturday's book; the first add or check-off more than 12 h on files the book and starts the
+     * next one, [startsNewBook]). Without a trip, or before its finale, every item counts.
+     */
+    fun bookItems(list: GroceryList): List<GroceryItem> {
+        val finale = list.trip?.finaleShownAt ?: return list.items
+        return list.items.filter { it.checked || it.addedAt <= finale }
+    }
+
+    /**
+     * The trip's book is complete: it has spots and every one holds a sticker ([bookItems] all checked). Equal to
+     * [isComplete] until something is added after the finale; then the list has more to get, but the finished shop's
+     * book is still complete.
+     */
+    fun bookComplete(list: GroceryList): Boolean {
+        if (list.trip == null) return false
+        val items = bookItems(list)
+        return items.isNotEmpty() && items.all { it.checked }
     }
 
     /** The open trip is complete (the LCD hold prints the receipt, D21). */

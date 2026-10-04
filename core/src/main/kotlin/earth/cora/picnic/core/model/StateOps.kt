@@ -193,21 +193,39 @@ fun AppState.toggleChecked(listId: String, itemId: String, now: Long): AppState 
     TripRules.reconcile(list.copy(items = items, trip = trip), now, store.name)
 }
 
-/** A check-off that started a new book on its own (§0.4 Q9): file [book] in the album, show the toast, keep [undo]. */
+/**
+ * A check-off or an add that started a new book on its own (§0.4 Q9): file [book] in the album, show the toast, keep
+ * [undo].
+ */
 data class AutoNewBook(val book: TripBook, val undo: NewBookUndo)
 
 /**
  * What [undoNewBook] needs to take an automatic new book back: the old [trip], the items "Clear what I got"
- * removed (with their indices) and the list's previous [lastClosedAt] and [openAisle].
+ * removed (with their indices) and the list's previous [lastClosedAt] and [openAisle]. [itemId] is the tapped item
+ * of a check-off; null when an add started the book (addItemsStartingNewBook).
  */
 data class NewBookUndo(
     val listId: String,
-    val itemId: String,
+    val itemId: String?,
     val trip: Trip,
     val cleared: List<IndexedValue<GroceryItem>>,
     val lastClosedAt: Long?,
     val openAisle: String?,
 )
+
+/**
+ * The automatic new book [auto] still stands (§0.4 Q9): its list still carries the fresh book it started (the tapped
+ * item's trip, or no trip yet after an add or after that item was un-checked) and nothing was filed since. Its Undo
+ * applies only then: after a New trip, a deleted list or a later book, the old book stays in the album and the album's
+ * counters keep the newer filing (TripFiling.undoNewBook).
+ */
+fun AppState.newBookStands(auto: AutoNewBook): Boolean {
+    val list = list(auto.undo.listId) ?: return false
+    val filedAt = auto.book.closedAt
+    if (list.lastClosedAt != filedAt) return false
+    val trip = list.trip ?: return true
+    return trip.id == TripRules.tripId(list.id, filedAt)
+}
 
 /**
  * The check-off tap (§0.4 Q9, TripRulesTest.autoNewBookAfterIdle). When it CHECKS an item on a trip whose last
@@ -229,11 +247,35 @@ fun AppState.toggleCheckedStartingNewBook(listId: String, itemId: String, now: L
 }
 
 /**
+ * The add (§0.4 Q9, the add-side twin of [toggleCheckedStartingNewBook]; TripRulesTest.autoNewBookOnAdd). When an add
+ * would change a list whose trip's last activity is more than 12 h old (TripRules.startsNewBook), the old book is
+ * filed exactly as it stands (TripRules.bookItems: a finished shop keeps its PERFECT) and what was got is cleared
+ * (newTrip(CLEAR_GOTTEN)); then [items] are added to the fresh list, so a name that was got last time is a new row
+ * rather than a sticker peeled out of last week's book. The book opens again at the next check-off. The result
+ * carries the filed book (write it to the album BEFORE this state, §7.2; TripFiling.addItems does both) and the
+ * [NewBookUndo] for the toast's Undo. An add that changes nothing (only rows already on the list), or one within
+ * 12 h, is [addItems] with no [AutoNewBook].
+ */
+fun AppState.addItemsStartingNewBook(listId: String, items: List<GroceryItem>, now: Long): Triple<AppState, AddOutcome, AutoNewBook?> {
+    val (plain, outcome) = addItems(listId, items, now)
+    val list = list(listId) ?: return Triple(plain, outcome, null)
+    val oldTrip = list.trip
+    if (plain === this || oldTrip == null || !TripRules.startsNewBook(list, now)) return Triple(plain, outcome, null)
+    val cleared = list.items.withIndex().filter { it.value.checked }
+    val (fresh, book) = newTrip(listId, NewTripMode.CLEAR_GOTTEN, now)
+    if (book == null) return Triple(plain, outcome, null)
+    val (added, freshOutcome) = fresh.addItems(listId, items, now)
+    return Triple(added, freshOutcome, AutoNewBook(book, NewBookUndo(listId, null, oldTrip, cleared, list.lastClosedAt, list.openAisle)))
+}
+
+/**
  * Undo of an automatic new book (§0.4 Q9, TripRulesTest.autoNewBookUndo): the old trip comes back with the
  * items that were cleared (at their old indices and book spots), and everything checked since (the tapped item
  * first among them) is checked into the OLD book instead, taking its lowest free spots in check-off order. Items
- * added meanwhile stay. The caller also takes the book back out of the album (Album.unfile) after this state is
- * saved (TripFiling.undoNewBook). Unknown list -> this.
+ * added meanwhile stay. A check-off's undo is activity on the trip (lastActivityAt = [now]); an add's undo
+ * ([NewBookUndo.itemId] null) checks nothing, so the trip keeps its old lastActivityAt and the items added stay out
+ * of a finished book (TripRules.bookItems). The caller also takes the book back out of the album (Album.unfile) after
+ * this state is saved, and only while [newBookStands] (TripFiling.undoNewBook). Unknown list -> this.
  */
 fun AppState.undoNewBook(undo: NewBookUndo, now: Long): AppState {
     val present = lists.flatMapTo(HashSet()) { l -> l.items.map { it.id } }
@@ -246,7 +288,7 @@ fun AppState.undoNewBook(undo: NewBookUndo, now: Long): AppState {
         }
         val restored = list.copy(
             items = items,
-            trip = undo.trip.copy(lastActivityAt = now),
+            trip = if (undo.itemId != null) undo.trip.copy(lastActivityAt = now) else undo.trip,
             lastClosedAt = undo.lastClosedAt,
             openAisle = undo.openAisle,
         )
