@@ -400,14 +400,26 @@ internal fun rememberPressFraction(pressed: Boolean): Float {
 
 /**
  * A 2 dp focus ring 3 dp outside [shape] (keyboard / switch access): flat, never a glow. Every kit control draws it in
- * the page's ink (ballpoint in Day, white in Glow), so it shows on the navy page too.
+ * the page's ink (ballpoint in Day, white in Glow), so it shows on the navy page too. The list's own pieces (rows,
+ * strips, the tray's chevron, the sticker book) wear the same ring through [showsFocusRing] (§4.4).
  */
-internal fun Modifier.focusRing(shape: Shape, color: Color, visible: Boolean): Modifier = if (!visible) this else drawBehind {
+fun Modifier.focusRing(shape: Shape, color: Color, visible: Boolean): Modifier = if (!visible) this else drawBehind {
     val gap = 3.dp.toPx()
     val w = 2.dp.toPx()
     val grow = gap + w / 2f
     val outline = shape.createOutline(Size(size.width + grow * 2, size.height + grow * 2), layoutDirection, this)
     translate(-grow, -grow) { drawOutline(outline, color, style = Stroke(w)) }
+}
+
+/**
+ * Whether a piece focused through [interaction] wears its focus ring (§4.4, §15): while it has focus and the keyboard
+ * (or a switch acting as one) is driving focus. A piece that also takes focus in touch mode, so a fold can hand focus
+ * to it (§8.5), shows no ring after a tap: a ring is a keyboard user's cursor, not a touch mark.
+ */
+@Composable
+fun showsFocusRing(interaction: androidx.compose.foundation.interaction.InteractionSource): Boolean {
+    val focused by interaction.collectIsFocusedAsState()
+    return focused && androidx.compose.ui.platform.LocalInputModeManager.current.inputMode == androidx.compose.ui.input.InputMode.Keyboard
 }
 
 /* ------------------------------------------------------------------------------------------------

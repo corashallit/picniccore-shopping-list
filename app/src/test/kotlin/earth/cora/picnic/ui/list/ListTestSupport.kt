@@ -22,6 +22,7 @@ class RecordingProbe : PieceProbe {
     val bounds = HashMap<String, Rect>()
     val fonts = HashMap<String, Float>()
     val history = HashMap<String, MutableList<Rect>>()
+    val texts = HashMap<String, androidx.compose.ui.text.TextLayoutResult>()
 
     override fun report(key: String, bounds: Rect, fontSp: Float?) {
         this.bounds[key] = bounds
@@ -31,6 +32,10 @@ class RecordingProbe : PieceProbe {
 
     override fun gone(key: String) {
         bounds.remove(key)
+    }
+
+    override fun text(key: String, layout: androidx.compose.ui.text.TextLayoutResult) {
+        texts[key] = layout
     }
 
     /** The keys laid out now that start with [prefix]. */

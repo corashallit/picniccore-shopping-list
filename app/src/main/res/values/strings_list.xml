@@ -10,7 +10,7 @@
     </plurals>
 
     <!-- A folded strip (§4.10): "A3 · 2 left of 5" / "5 of 5 in the basket"; TalkBack "Aisle 1, Produce: 2 left of 5". -->
-    <string name="list_strip_store_prefix">"A%1$d · "</string>
+    <string name="list_strip_after_chip">"· "</string>
     <string name="list_strip_left_count">%1$d left</string>
     <string name="list_strip_left_tail">" of %1$d"</string>
     <string name="list_strip_done_count">%1$d of %2$d</string>

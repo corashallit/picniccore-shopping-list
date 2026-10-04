@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -80,6 +81,8 @@ import earth.cora.picnic.ui.theme.StoreAisleChip
 import earth.cora.picnic.ui.theme.TabSize
 import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
+import earth.cora.picnic.ui.theme.focusRing
+import earth.cora.picnic.ui.theme.showsFocusRing
 import earth.cora.picnic.ui.theme.drawDashedCircle
 import earth.cora.picnic.ui.theme.groundBacking
 import earth.cora.picnic.ui.theme.probe
@@ -111,6 +114,7 @@ object ListTags {
     fun strip(id: String): String = "picnic_strip_$id"
     fun stripTab(id: String): String = "picnic_strip_tab_$id"
     fun stripMeta(id: String): String = "picnic_strip_meta_$id"
+    fun stripChip(id: String): String = "picnic_strip_store_$id"
     fun ribbon(id: String): String = "picnic_strip_ribbon_$id"
     fun basket(id: String): String = "picnic_basket_$id"
     fun header(id: String): String = "picnic_tray_header_$id"
@@ -149,8 +153,8 @@ internal fun trayHeading(s: SectionUi): String =
     if (s.position > 0) stringResource(R.string.list_aisle_heading, s.position, spokenAisleName(s)) else spokenAisleName(s)
 
 /**
- * A folded strip (§4.10): white 56 dp, radius 6, hs: the tab on the top-left, the meta line under it (led by the store
- * chip "A3 · "), the 80 × 64 basket on the right overhanging the top, its badge, the 48 dp chevron. The whole strip is
+ * A folded strip (§4.10): white 56 dp, radius 6, hs: the tab on the top-left, the meta line under it (led by the
+ * store-aisle chip, "[A3] · 2 left of 5"), the 80 × 64 basket on the right overhanging the top, its badge, the 48 dp chevron. The whole strip is
  * one button ("Aisle 1, Produce: 2 left of 5", action "Expand"). A finished strip is tied with the sakura ribbon, placed
  * from the end of the text, never over it. Holding the basket peeks into it ([onPeek]); that hold never opens the strip.
  */
@@ -187,7 +191,8 @@ internal fun FoldedStrip(
     val probe = LocalPieceProbe.current
     val badgeGap = basketGap(section, 6.dp)
     val metaText = buildAnnotatedString {
-        section.storeAisle?.let { append(stringResource(R.string.list_strip_store_prefix, it)) }
+        // After the store-aisle chip that leads the line (§4.10): "[A3] · 2 left of 5".
+        if (section.storeAisle != null) append(stringResource(R.string.list_strip_after_chip))
         if (toGet == 0) {
             withStyle(SpanStyle(fontWeight = t.stripMetaCount.fontWeight, color = c.ink)) {
                 append(stringResource(R.string.list_strip_done_count, section.total, section.total))
@@ -202,6 +207,9 @@ internal fun FoldedStrip(
     }
     val complete = section.complete
     val presentedComplete = basket?.lidClosed ?: complete
+    // Keyboard / switch access: the strip face wears the 2 dp ink ring 3 dp outside it (§4.4, §15).
+    val interaction = remember { MutableInteractionSource() }
+    val ringed = showsFocusRing(interaction)
     Layout(
         modifier = modifier
             .fillMaxWidth()
@@ -209,14 +217,20 @@ internal fun FoldedStrip(
             .focusRequester(focus)
             .focusProperties { canFocus = true }
             // The click (and its focus) outside the clearing semantics, so the one node keeps both (§15).
-            .clickable(remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = expand) { open() }
+            .clickable(interaction, indication = null, role = Role.Button, onClickLabel = expand) { open() }
             .clearAndSetSemantics {
                 contentDescription = label
                 role = Role.Button
             },
         content = {
             // The white card is the eggs' `strip:` anchor (egg 2's ladybug walks its bottom edge, §12.2).
-            Box(Modifier.layoutId("face").then(with(anchors) { Modifier.anchor(EggAnchors.strip(section.id)) }).stripFace())
+            Box(
+                Modifier
+                    .layoutId("face")
+                    .then(with(anchors) { Modifier.anchor(EggAnchors.strip(section.id)) })
+                    .focusRing(PicnicTheme.shapes.strip, c.ink, ringed)
+                    .stripFace(),
+            )
             // The tab at its own fitted width, the meta line under it; egg 5's snack doodle only in the room the tab leaves
             // (it never shrinks the tab), else after the meta line (§4.10, §12.2).
             TabMetaDoodle(
@@ -236,22 +250,39 @@ internal fun FoldedStrip(
                     )
                 },
                 meta = {
-                    Text(
-                        metaText,
-                        style = t.stripMeta.copy(color = c.inkSoft),
-                        modifier = Modifier
-                            .padding(start = 3.dp, top = 2.dp)
-                            .testTag(ListTags.stripMeta(section.id))
-                            .probe(probe, "meta:${section.id}")
-                            .then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + section.id) }),
-                    )
+                    // Led by the store-aisle chip when the aisle has one (§4.7, §4.10), its "A3" on the line's baseline;
+                    // decorative, since the strip's one TalkBack line already says "store aisle 3" (§15).
+                    Row(Modifier.padding(start = 3.dp, top = 2.dp)) {
+                        section.storeAisle?.let { n ->
+                            StoreAisleChip(
+                                n,
+                                Modifier
+                                    .alignByBaseline()
+                                    .padding(end = 4.dp)
+                                    .testTag(ListTags.stripChip(section.id))
+                                    .decorative()
+                                    .probe(probe, "stripChip:${section.id}")
+                                    .then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "stripChip:" + section.id) }),
+                            )
+                        }
+                        Text(
+                            metaText,
+                            style = t.stripMeta.copy(color = c.inkSoft),
+                            modifier = Modifier
+                                .alignByBaseline()
+                                .testTag(ListTags.stripMeta(section.id))
+                                .probe(probe, "meta:${section.id}")
+                                .then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + section.id) }),
+                        )
+                    }
                 },
                 doodle = if (eggs.snackDoodleAt(section.id)) ({ SnackDoodle(eggs, section.id) }) else null,
                 modifier = Modifier.layoutId("text"),
             )
             if (complete || aisle?.untieT0 != null) {
                 Box(Modifier.layoutId("ribbon").testTag(ListTags.ribbon(section.id)).probe(probe, "ribbon:${section.id}")) {
-                    StripRibbon(complete, aisle, clock, height = 56.dp)
+                    // The band runs the strip's whole height, however tall large text makes it (§4.10, §15).
+                    StripRibbon(complete, aisle, clock, height = Dp.Unspecified)
                 }
                 Box(Modifier.layoutId("bow").testTag(ListTags.ribbon(section.id) + "_bow").probe(probe, "bow:${section.id}")) {
                     StripRibbon(complete, aisle, clock, height = 30.dp, bowOnly = true)
@@ -337,7 +368,7 @@ internal fun FoldedStrip(
         val textEnd = start + text.width
         val bandX = textEnd + px(12.dp)
         val fits = bandX <= basketX - px(22.dp)
-        val ribbon = if (fits) ribbonMeasurable?.measure(Constraints()) else null
+        val ribbon = if (fits) ribbonMeasurable?.measure(Constraints.fixedHeight(h)) else null
         val bow = if (!fits) bowMeasurable?.measure(Constraints()) else null
         // Egg 2's lane: StripLadybug walks 2 dp below the bottom of the box it is given. The strip's words sit close to its
         // bottom edge and the next strip's tab 7 dp below it, so the 15 dp bug walks a little lower, in the gap between
@@ -348,9 +379,12 @@ internal fun FoldedStrip(
             text.place(start, ((h - text.height) / 2).coerceAtLeast(px(3.dp)))
             // The ribbon box is 30 dp wide with its 10 dp band at 10–20 dp.
             ribbon?.place(bandX - px(10.dp), 0)
-            // On the basket's left shoulder, and never back over the end of a long name.
-            bow?.place(maxOf(basketX - px(14.dp), textEnd + px(1.dp)), px(4.dp))
-            basketM.place(basketX, h - basketM.height)
+            // On the basket's left shoulder, and never back over the end of a long name. The bow follows the basket down
+            // when large text makes the strip taller (the basket stands on the strip's bottom edge): 12 dp below the
+            // basket's top, as at 1.0, where the strip is 56 dp and the basket overhangs it by 8 dp.
+            val basketY = h - basketM.height
+            bow?.place(maxOf(basketX - px(14.dp), textEnd + px(1.dp)), basketY + px(BOW_BELOW_BASKET_TOP))
+            basketM.place(basketX, basketY)
             chevron.place(chevronX, (h - chevron.height) / 2)
             ladybug?.place(0, 0)
         }
@@ -418,6 +452,8 @@ internal fun TrayHeader(
     val heading = trayHeading(section)
     val fold by rememberUpdatedState(onFold)
     val badgeGap = basketGap(section, 4.dp)
+    val chevronInteraction = remember { MutableInteractionSource() }
+    val chevronRinged = showsFocusRing(chevronInteraction)
     Layout(
         modifier = modifier
             .fillMaxWidth()
@@ -488,13 +524,17 @@ internal fun TrayHeader(
                     .focusRequester(chevronFocus)
                     // Focusable by touch too, so her unfold can hand focus to it (§15, item 193).
                     .focusProperties { canFocus = true }
-                    .clickable(remember { MutableInteractionSource() }, indication = null, role = Role.Button, onClickLabel = collapse) { fold() }
+                    .clickable(chevronInteraction, indication = null, role = Role.Button, onClickLabel = collapse) { fold() }
                     .clearAndSetSemantics {
                         contentDescription = collapse
                         role = Role.Button
                     },
                 contentAlignment = Alignment.Center,
-            ) { ChevronFace(up = true) }
+            ) {
+                // Keyboard / switch access: the ring 3 dp outside the chevron's 30 dp face (§4.4), centred on it.
+                Box(Modifier.offset((-1).dp, (-1).dp).size(30.dp).focusRing(CircleShape, c.ink, chevronRinged))
+                ChevronFace(up = true)
+            }
             if (current) Bee(Modifier.layoutId("bee"))
         },
     ) { measurables, constraints ->
@@ -533,6 +573,12 @@ internal fun TrayHeader(
         }
     }
 }
+
+/**
+ * Where the bow-only ribbon's box stands below the strip basket's top: its 30 dp bow is drawn 12 dp above the box, so
+ * the bow's top lines up with the basket's top and the knot sits on the basket's left shoulder (§4.10).
+ */
+internal val BOW_BELOW_BASKET_TOP: Dp = 12.dp
 
 /** How far below the strip's bottom edge egg 2's ladybug walks, past StripLadybug's own 2 dp (the centre of its lane). */
 private val LADYBUG_LANE_DROP: Dp = 2.5.dp

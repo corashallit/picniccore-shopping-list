@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -102,7 +103,9 @@ import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
 import earth.cora.picnic.ui.theme.hankoAngle
+import earth.cora.picnic.ui.theme.focusRing
 import earth.cora.picnic.ui.theme.highlighterBand
+import earth.cora.picnic.ui.theme.showsFocusRing
 import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.traySlice
 import kotlin.math.abs
@@ -179,6 +182,10 @@ internal fun TrayRow(
     }
     val thresholdPx = with(density) { SWIPE_THRESHOLD.toPx() }
     val minH = rowMinHeight()
+    // The row's press and focus: its focus ring (§4.4) reaches 1 dp past a 56 dp row, so a focused row draws over the
+    // rows around it.
+    val interaction = remember { MutableInteractionSource() }
+    val ringed = showsFocusRing(interaction)
     fun home(ms: Int) {
         settling?.cancel()
         settling = scope.launch {
@@ -194,7 +201,7 @@ internal fun TrayRow(
             .heightIn(min = minH)
             .testTag(ListTags.rowSlot(row.id))
             // The torn halves tumble over the rows and the cap below (§8.6).
-            .zIndex(if (tearT0 != null) 1f else 0f)
+            .zIndex(if (tearT0 != null) 1f else if (ringed) 0.5f else 0f)
             .traySlice(TrayPart.Row, section.look, ring, shadows.color, c.pad, c.rule, first = first, last = last),
     ) {
         val inset = TrayMetrics.panelInset
@@ -219,6 +226,7 @@ internal fun TrayRow(
         val content: @Composable (Modifier) -> Unit = { m ->
             RowContent(
                 row = row,
+                interaction = interaction,
                 twinkleIndex = twinkleIndex,
                 presentation = presentation,
                 clock = clock,
@@ -453,6 +461,8 @@ internal fun RowContent(
     ambientClock: MotionClock? = null,
     /** Egg 7: the row's place in its tray (each sticker twinkles 60 ms after the one before). */
     twinkleIndex: Int = 0,
+    /** The row's press and focus (its slot hoists it to lift a focused row over its neighbours). */
+    interaction: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
@@ -460,8 +470,9 @@ internal fun RowContent(
     val eggs = LocalListEggs.current
     val phase = presentation.rows[row.id]
     val start = presentation.rowStarts[row.id]
-    val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    // Keyboard / switch access: the 2 dp ballpoint ring 3 dp outside the 48 dp checkbox target (§4.4, R2).
+    val ringed = showsFocusRing(interaction)
     val gotIt = stringResource(R.string.list_row_got_it)
     val notChecked = stringResource(R.string.list_row_not_checked)
     val checkLabel = stringResource(if (row.checked) R.string.list_row_uncheck else R.string.list_row_check)
@@ -602,7 +613,15 @@ internal fun RowContent(
             }
         }
         with(anchors) {
-            Box(Modifier.size(48.dp).anchor(AnchorRegistry.checkKey(row.id)).testTag(ListTags.check(row.id)).probe(probe, "check:${row.id}"), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .anchor(AnchorRegistry.checkKey(row.id))
+                    .testTag(ListTags.check(row.id))
+                    .probe(probe, "check:${row.id}")
+                    .focusRing(CircleShape, c.ink, ringed),
+                contentAlignment = Alignment.Center,
+            ) {
                 val lifting = RowMotion.liftsHanko(phase)
                 // Egg 13: the empty spot steps aside while JACK / POT! is stamped over its column (1.8 s).
                 if ((!row.checked || lifting) && !eggs.hidesCheckSpot(row.id)) StickerSpot()

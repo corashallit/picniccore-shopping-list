@@ -107,6 +107,13 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
         StripsOf(ui.sections.filter { it.complete })
     }
 
+    /** Item 79 at font scale 1.3 (§4.10, §15): the taller strips keep the band from top to bottom, the bows on the baskets. */
+    @Test
+    fun stripDoneFs130() = compose.recordPiece(name("strip_done_fs130"), variant, fontScale = 1.3f) {
+        val ui = ListFixture.ui(ListFixture.everyDefaultAisle().toggleChecked(ListFixture.LIST_ID, "d6", ListFixture.NOW).toggleChecked(ListFixture.LIST_ID, "d10", ListFixture.NOW))
+        StripsOf(ui.sections.filter { it.complete })
+    }
+
     @Test
     fun stripEverythingElse() = compose.recordPiece(name("strip_everything_else"), variant) { StripsOf(listOf(everythingElse)) }
 

@@ -129,6 +129,17 @@ class ListBookGoldensTest {
         ListScreen(ListFixture.ui(), ListActions(), screen = remember { ListScreenState(tripBookOpen = true) })
     }
 
+    /** §6.6, §15 at large text: the aisle names wrap between words and are never cut; the stamps take fewer a row. */
+    @Test
+    fun tripBookFs130() = compose.recordScreen("tripbook_sheet_fs130", fontScale = 1.3f) {
+        ListScreen(ListFixture.ui(), ListActions(), screen = remember { ListScreenState(tripBookOpen = true) })
+    }
+
+    @Test
+    fun tripBookFs200() = compose.recordScreen("tripbook_sheet_fs200", fontScale = 2f) {
+        ListScreen(ListFixture.ui(), ListActions(), screen = remember { ListScreenState(tripBookOpen = true) })
+    }
+
     // ---- The New trip sheet (§6.5) ----
 
     @Test

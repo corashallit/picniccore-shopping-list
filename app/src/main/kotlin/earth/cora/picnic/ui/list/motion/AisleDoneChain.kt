@@ -2,8 +2,10 @@ package earth.cora.picnic.ui.list.motion
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.IconRef
@@ -581,6 +584,7 @@ fun Modifier.unfoldMotion(foldT0: Long?, clock: MotionClock, reduced: Boolean = 
  * The finished strip's ribbon (§4.10): a vertical sakura ribbon (10 dp: white 1.5 / sakura 7 / white 1.5) [height] tall
  * with a 30 dp bow at its top. It ties down (scaleY 0 → 1 from the top, 3 steps, 300 ms) and the bow pops (300 ms), or
  * unties (un-check). [tied] is the state's; [ap] overrides it while a chain plays. [bowOnly]: the long-name form.
+ * [height] [Dp.Unspecified]: the ribbon fills the height it is given (a strip grown by large text, §15).
  */
 @Composable
 fun StripRibbon(tied: Boolean, ap: AislePresentation?, clock: MotionClock, height: Dp, modifier: Modifier = Modifier, bowOnly: Boolean = false) {
@@ -590,11 +594,12 @@ fun StripRibbon(tied: Boolean, ap: AislePresentation?, clock: MotionClock, heigh
     if (!show && untieT0 == null) return
     val ribbonT0 = ap?.ribbonT0
     val bowT0 = ap?.bowT0
-    Box(modifier.size(30.dp, height).decorative()) {
+    val fill = !height.isSpecified
+    Box(modifier.then(if (fill) Modifier.width(30.dp).fillMaxHeight() else Modifier.size(30.dp, height)).decorative()) {
         if (!bowOnly) {
             Canvas(
                 Modifier
-                    .size(10.dp, height)
+                    .then(if (fill) Modifier.width(10.dp).fillMaxHeight() else Modifier.size(10.dp, height))
                     .offset(10.dp, 0.dp)
                     .graphicsLayer {
                         val now = clock.now

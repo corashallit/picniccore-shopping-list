@@ -155,7 +155,8 @@ class ListInteractionTest {
     @Test
     fun stripLabelAndToggle() {
         val rig = ListRig()
-        compose.show(rig)
+        val probe = RecordingProbe()
+        compose.show(rig, probe)
         val c = config(ListTags.strip("produce"))
         assertEquals(listOf("Aisle 1, Produce: 2 left of 5"), c.getOrNull(SemanticsProperties.ContentDescription))
         assertEquals(Role.Button, c.getOrNull(SemanticsProperties.Role))
@@ -172,6 +173,15 @@ class ListInteractionTest {
         assertEquals(listOf("Aisle 4, Baking, store aisle 2: 1 left of 3"), config(ListTags.strip("aisle-2-baking")).getOrNull(SemanticsProperties.ContentDescription))
         compose.onNodeWithTag(ListTags.LIST).performScrollToKey("strip:aisle-2-baking")
         compose.waitForIdle()
+        // §4.10: the meta line is led by the store-aisle chip "A2" (§4.7), then "· 1 left of 3", on one baseline; an
+        // aisle without a store number has none.
+        val chip = probe["stripChip:aisle-2-baking"]
+        val meta = probe["meta:aisle-2-baking"]
+        assertTrue("the chip leads the meta line ($chip, $meta)", chip.right <= meta.left + 0.5f && chip.left < meta.left)
+        assertTrue("the chip and the count share the line", chip.top < meta.bottom && meta.top < chip.bottom)
+        val others = probe.keys("meta:").map { it.removePrefix("meta:") }.filter { it != "aisle-2-baking" }
+        assertTrue("other strips on screen", others.isNotEmpty())
+        for (id in others) assertTrue("no chip on $id (no store number)", probe.bounds["stripChip:$id"] == null)
         compose.onNodeWithTag(ListTags.strip("aisle-2-baking")).performClick()
         compose.waitForIdle()
         val heading = config(ListTags.headerTab("aisle-2-baking"))

@@ -4,6 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +49,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -132,7 +139,9 @@ object BookRules {
  * [onStampTap] feeds egg 10. TalkBack: one node with the summary and the action "Open trip book"; the twins have no
  * nodes. [dateOnPage] false: the date is a caption above the book (font scale over 1.3), and the name tag goes there too
  * through [onNameTag] (its text while it holds, then null), where it can grow with the text. [turnKey] changes: the page
- * turns to a fresh book (New trip).
+ * turns to a fresh book (New trip). Keyboard and switch access: the book takes focus (Enter or Space opens the Trip book
+ * sheet) and wears the 2 dp ink ring 3 dp outside its outline (§4.4, §15). [readOnly]: a still picture of the book
+ * (the New trip sheet's, §6.5): no taps, swipes, boing or name tag, no focus and no action.
  */
 @Composable
 fun StickerBook(
@@ -153,6 +162,7 @@ fun StickerBook(
      */
     pageNumber: Boolean = true,
     onNameTag: ((String?) -> Unit)? = null,
+    readOnly: Boolean = false,
 ) {
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
@@ -163,16 +173,34 @@ fun StickerBook(
     val open by rememberUpdatedState(onOpen)
     // The book's own turn to a fresh page on New trip (3 frames, 240 ms); the engine turns it for an automatic new book.
     val freshTurn = rememberFreshTurn(turnKey)
+    val interaction = remember { MutableInteractionSource() }
+    val ringed = !readOnly && showsFocusRing(interaction)
     Box(
         modifier
             .width(width)
             .testTag(BookTags.BOOK)
+            .then(
+                if (readOnly) {
+                    Modifier
+                } else {
+                    // Enter / Space open the Trip book sheet, as a tap on the right page does (§7.7, §15).
+                    Modifier
+                        .onKeyEvent { e ->
+                            val opens = e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.Spacebar
+                            if (opens && e.type == KeyEventType.KeyUp) open()
+                            opens
+                        }
+                        .focusable(interactionSource = interaction)
+                },
+            )
             .clearAndSetSemantics {
                 contentDescription = summary
-                role = Role.Button
-                onClick(label = openLabel) {
-                    open()
-                    true
+                if (!readOnly) {
+                    role = Role.Button
+                    onClick(label = openLabel) {
+                        open()
+                        true
+                    }
                 }
             },
     ) {
@@ -202,6 +230,7 @@ fun StickerBook(
             Modifier
                 .fillMaxWidth()
                 .height(h.dp)
+                .focusRing(shape, c.ink, ringed)
                 .hardShadow(shape, PicnicTheme.shadows, large = true)
                 .clip(shape)
                 .background(c.stickerWhite)
@@ -217,7 +246,7 @@ fun StickerBook(
                         .height((layout.height - BookLayout.BORDERS).dp)
                         .graphicsLayer { alpha = 1f - folded },
                 ) {
-                    BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, onOpen, paging, page, onNameTag)
+                    BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, onOpen, paging, page, onNameTag, readOnly)
                 }
             }
             if (folded > 0f) {
@@ -290,6 +319,7 @@ private fun BookPages(
     paging: PagingState,
     page: Int,
     onNameTag: ((String?) -> Unit)?,
+    readOnly: Boolean,
 ) {
     val c = PicnicTheme.colors
     val fx = presentation.fx
@@ -313,7 +343,8 @@ private fun BookPages(
                     .probe(LocalPieceProbe.current, "bookLeft")
                     // PERFECT, or a perfect week (egg 14): the stamp page is holo.
                     .then(if (perfect || state.holoStamps) Modifier.drawBehind { drawRect(holoBrush(center)) } else Modifier)
-                    .pointerInput(state.stamps, layout, gridTop) {
+                    .pointerInput(state.stamps, layout, gridTop, readOnly) {
+                        if (readOnly) return@pointerInput
                         detectTapGestures { pos ->
                             val hit = nearestStamp(state.stamps, layout, Offset(pos.x / density, pos.y / density), gridTop) ?: return@detectTapGestures
                             val s = state.stamps[hit]
@@ -362,7 +393,8 @@ private fun BookPages(
                         cameraDistance = 12f * density
                         transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
                     }
-                    .pointerInput(pageCount) {
+                    .pointerInput(pageCount, readOnly) {
+                        if (readOnly) return@pointerInput
                         var dx = 0f
                         detectHorizontalDragGestures(
                             onDragStart = { dx = 0f },
@@ -380,7 +412,7 @@ private fun BookPages(
                             },
                         ) { _, amount -> dx += amount }
                     }
-                    .pointerInput(Unit) { detectTapGestures { onOpen() } },
+                    .pointerInput(readOnly) { if (!readOnly) detectTapGestures { onOpen() } },
             ) {
                 ReleasePaper(state, fx, clock)
                 Spots(state, presentation, clock, layout, page, anchors, fresh = freshTurnElapsed != null)
