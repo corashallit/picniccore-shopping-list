@@ -506,10 +506,6 @@ fun shadowsFor(variant: ThemeVariant): PicnicShadows = when (variant) {
     ThemeVariant.Day, ThemeVariant.Dusk -> DayShadows
 }
 
-/** v1 names, kept for v1 call sites: the C Day and Glow palettes. */
-val PlaceholderLightColors: PicnicColors get() = DayColors
-val PlaceholderDarkColors: PicnicColors get() = GlowColors
-
 /* ------------------------------------------------------------------------------------------------
  * Typography (§2.7).
  * ------------------------------------------------------------------------------------------------ */
@@ -677,9 +673,6 @@ fun typographyFor(c: PicnicColors): PicnicTypography {
     )
 }
 
-/** v1 name: the Day roles. */
-val PlaceholderTypography: PicnicTypography get() = typographyFor(DayColors)
-
 /* ------------------------------------------------------------------------------------------------
  * Shapes (§2.8).
  * ------------------------------------------------------------------------------------------------ */
@@ -733,9 +726,6 @@ val PicnicShapeTokens = PicnicShapes(
     section = RoundedCornerShape(12.dp),
     sectionInner = RoundedCornerShape(8.dp),
 )
-
-/** v1 name. */
-val PlaceholderShapes: PicnicShapes get() = PicnicShapeTokens
 
 /* ------------------------------------------------------------------------------------------------
  * Spacing and sizes (§2.9).

@@ -336,7 +336,7 @@ class AppIconRepository internal constructor(
         return store.current().iconOverrides.none { it.name == job.key } && stillApproximate(job.key)
     }
 
-    /** Some item with this name still shows a stand-in icon (a user choice made meanwhile wins). */
+    /** Some item with this name still shows its approximate (generic) sticker (a user choice made meanwhile wins). */
     private suspend fun stillApproximate(key: String): Boolean = store.current().lists.any { list ->
         list.items.any { it.iconFit == IconFit.APPROXIMATE && it.customIconId == null && normalizeName(it.name) == key }
     }
