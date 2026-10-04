@@ -107,7 +107,6 @@ import androidx.compose.ui.unit.toSize
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.LocalFocusRingInk
 import earth.cora.picnic.ui.a11y.focusRingInk
-import earth.cora.picnic.ui.a11y.spaceToggles
 import earth.cora.picnic.ui.a11y.tabLeavesField
 import earth.cora.picnic.ui.a11y.textOverflowed
 import kotlinx.coroutines.delay
@@ -1807,9 +1806,7 @@ fun PicnicSwitch(
                 if (onCheckedChange == null) {
                     Modifier
                 } else {
-                    Modifier
-                        .spaceToggles(checked, enabled, onCheckedChange)
-                        .toggleable(value = checked, interactionSource = interaction, indication = null, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+                    Modifier.toggleable(value = checked, interactionSource = interaction, indication = null, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
                 },
             )
             .alpha(if (enabled) 1f else 0.5f),
@@ -1874,7 +1871,6 @@ fun KeepSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: M
     Box(
         modifier
             .size(48.dp)
-            .spaceToggles(checked, onValueChange = onCheckedChange)
             .toggleable(value = checked, interactionSource = interaction, indication = null, role = Role.Switch, onValueChange = onCheckedChange)
             .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
         contentAlignment = Alignment.Center,

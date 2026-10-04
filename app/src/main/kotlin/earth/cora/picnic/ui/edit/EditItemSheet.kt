@@ -48,7 +48,6 @@ import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.AisleStyle
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.core.model.displayName
-import earth.cora.picnic.ui.a11y.spaceToggles
 import earth.cora.picnic.ui.common.HankoTextButton
 import earth.cora.picnic.ui.common.MagicAppearBox
 import earth.cora.picnic.ui.common.NoMaterialPress
@@ -347,7 +346,6 @@ private fun StickerToggle(
     Row(
         Modifier
             .heightIn(min = 48.dp)
-            .spaceToggles(checked, onValueChange = onCheckedChange)
             .toggleable(value = checked, interactionSource = null, indication = highlighterPress(), role = Role.Switch, onValueChange = onCheckedChange),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

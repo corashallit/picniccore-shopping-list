@@ -58,7 +58,6 @@ import earth.cora.picnic.R
 import earth.cora.picnic.core.assistant.PhotoLine
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.a11y.focusRingIndication
-import earth.cora.picnic.ui.a11y.spaceToggles
 import earth.cora.picnic.ui.a11y.spokenItemLabel
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
@@ -385,15 +384,13 @@ private fun StickerCell(row: ReviewRow, clock: RevealClock?, onToggleKeep: (Int)
             .heightIn(min = 52.dp)
             .then(
                 if (row.canKeep) {
-                    Modifier
-                        .spaceToggles(row.keep) { onToggleKeep(row.key) }
-                        .toggleable(
-                            value = row.keep,
-                            interactionSource = interaction,
-                            indication = focusRingIndication(),
-                            role = Role.Switch,
-                            onValueChange = { onToggleKeep(row.key) },
-                        ).semantics { contentDescription = label }
+                    Modifier.toggleable(
+                        value = row.keep,
+                        interactionSource = interaction,
+                        indication = focusRingIndication(),
+                        role = Role.Switch,
+                        onValueChange = { onToggleKeep(row.key) },
+                    ).semantics { contentDescription = label }
                 } else {
                     Modifier.clearAndSetSemantics { contentDescription = label }
                 },

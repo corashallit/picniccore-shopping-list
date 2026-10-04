@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import earth.cora.picnic.R
-import earth.cora.picnic.ui.a11y.spaceToggles
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.INLINE_GLYPHS
 import earth.cora.picnic.ui.theme.MenuItem
@@ -257,7 +256,6 @@ fun SwitchRow(
         modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .spaceToggles(checked, enabled, onCheckedChange)
             .toggleable(
                 value = checked,
                 interactionSource = interaction,

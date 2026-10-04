@@ -156,8 +156,11 @@ class KeyboardNavTest {
             val before = switch.config[SemanticsProperties.ToggleableState]
             focus(switch)
             keys.press(Key.Spacebar)
-            val after = nodes().first { it.id == switch.id }.config[SemanticsProperties.ToggleableState]
-            assertTrue("$where: Space toggles ${switch.spoken()}", after != before)
+            // The Edit sheet's favourite heart is the store's: its new value comes back from a write off the main thread.
+            val toggled = runCatching {
+                compose.waitUntil(timeoutMillis = 5_000) { nodes().first { it.id == switch.id }.config[SemanticsProperties.ToggleableState] != before }
+            }.isSuccess
+            assertTrue("$where: Space toggles ${switch.spoken()}", toggled)
         }
         walker.visit(A11yScreens.all.single { it.id == "album/default" }, Look.Day1) {
             val keys = walker.keys
