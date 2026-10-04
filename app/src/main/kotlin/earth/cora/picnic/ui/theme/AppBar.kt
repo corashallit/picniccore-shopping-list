@@ -257,7 +257,7 @@ fun PicnicTopBar(
         if (subtitle != null) {
             // Under the title's first letter: past the 48 dp Back target and its 4 dp gap.
             Box(Modifier.padding(start = if (navigation == null) 0.dp else 52.dp, end = 8.dp, top = 2.dp)) {
-                PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
+                PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft, lineBreak = androidx.compose.ui.text.style.LineBreak.Heading)) }
             }
         }
         if (bottom != null) Box(Modifier.padding(top = 4.dp)) { bottom() }

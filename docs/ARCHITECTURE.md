@@ -713,10 +713,10 @@ Rows read `busy` and show `IconCatalog.displayRef(item, busy = normalizeName(ite
 ### 8.5 Display rule (core `IconCatalog.displayRef(item, busy)`, implemented)
 
 1. A bespoke icon attached → `IconRef(item.icon, customIconId)`.
-2. `busy` or `iconFit == PENDING` → **art pass (D5):** the capsule sentinel `IconRef(IconCatalog.CAPSULE)`, tinted by its aisle (v1: the category fallback), and the row overlays the "drawing…" sparkle while busy.
-3. Otherwise → `IconRef(item.icon)`.
+2. `busy`, `iconFit == PENDING`, or the `DEFAULT_ICON` kept because nothing matched (fit not EXACT; `IconCatalog.showsCapsule(icon, fit)`) → **art pass (D5):** the capsule sentinel `IconRef(IconCatalog.CAPSULE)`, tinted by its aisle (v1: the category fallback), and the row overlays the "drawing…" sparkle while busy.
+3. Otherwise → `IconRef(item.icon)`: an item matched EXACT to `paper_bag` ("grocery bags") shows the kraft "Shopping bag" sticker.
 
-`ItemIcon` then draws (art pass): the live sticker from `StickerArt` for a `customIconId` (the library art while it loads, or if its file is gone) → the key's library sticker → its category's generic → the capsule. v1 rendered through `IconImages.load` and placeholder art.
+`ItemIcon` then draws (art pass): the live sticker from `StickerArt` for a `customIconId` (the library art while it loads, or if its file is gone) → the key's library sticker (`paper_bag` included) → its category's generic → the capsule (an unknown key, whose fallback is `DEFAULT_ICON`, draws the capsule, not the bag). v1 rendered through `IconImages.load` and placeholder art.
 
 ### 8.6 Decisions API seam (TODO, not implemented)
 

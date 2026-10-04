@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import earth.cora.picnic.R
@@ -155,7 +156,8 @@ private fun SubtitleTopBar(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                if (subtitle != null) PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
+                // Balanced lines at large text: "★ 64 of 216 / collected · 3 holo", never a dot ending a line.
+                if (subtitle != null) PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft, lineBreak = LineBreak.Heading)) }
                 trailing?.invoke()
             }
         }
