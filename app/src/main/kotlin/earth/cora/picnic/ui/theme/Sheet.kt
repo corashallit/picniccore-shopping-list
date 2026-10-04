@@ -251,22 +251,26 @@ private val TOP_FADE = 12.dp
 /**
  * Fades the scrolling content itself out at the viewport's edges (an alpha mask, not a pad-coloured wash), so cards
  * thin out onto the paper and its rules instead of being tinted: over [top] while something lies above, over [bottom]
- * while something lies below. At rest at either end that edge is drawn as it is (and with neither, without a layer).
+ * while something lies below. Each fade is only as deep as what is left to scroll that way (up to its height), so it
+ * eases off as she reaches the end instead of vanishing at the last pixel; at rest at either end that edge is drawn as
+ * it is (and with neither, without a layer).
  */
 private fun Modifier.scrollEdgeFade(scroll: ScrollState, top: Dp, bottom: Dp): Modifier =
     graphicsLayer {
-        val fading = (top > 0.dp && scroll.canScrollBackward) || (bottom > 0.dp && scroll.canScrollForward)
+        val fading = (top > 0.dp && scroll.value > 0) || (bottom > 0.dp && scroll.value < scroll.maxValue)
         compositingStrategy = if (fading) CompositingStrategy.Offscreen else CompositingStrategy.Auto
     }.drawWithContent {
         drawContent()
-        if (top > 0.dp && scroll.canScrollBackward) {
+        if (top > 0.dp && scroll.value > 0) {
             val h = top.toPx()
-            drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black), startY = 0f, endY = h), Offset.Zero, Size(size.width, h), blendMode = BlendMode.DstIn)
+            val depth = (scroll.value / h).coerceIn(0f, 1f)
+            drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 1f - depth), Color.Black), startY = 0f, endY = h), Offset.Zero, Size(size.width, h), blendMode = BlendMode.DstIn)
         }
-        if (bottom > 0.dp && scroll.canScrollForward) {
+        if (bottom > 0.dp && scroll.value < scroll.maxValue) {
             val h = bottom.toPx()
             val y = size.height - h
-            drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent), startY = y, endY = size.height), Offset(0f, y), Size(size.width, h), blendMode = BlendMode.DstIn)
+            val depth = ((scroll.maxValue - scroll.value) / h).coerceIn(0f, 1f)
+            drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 1f - depth)), startY = y, endY = size.height), Offset(0f, y), Size(size.width, h), blendMode = BlendMode.DstIn)
         }
     }
 

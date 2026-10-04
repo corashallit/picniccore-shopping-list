@@ -62,7 +62,6 @@ import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.rememberLoopTime
 import earth.cora.picnic.ui.theme.groundBacking
 import androidx.compose.ui.zIndex
-import androidx.compose.foundation.ExperimentalFoundationApi
 import kotlinx.coroutines.launch
 
 /** Everything the album can ask for. Defaults do nothing. */
@@ -130,7 +129,6 @@ object AlbumTags {
  * A "2 trip sticker books" link above the tabs jumps down to the books past a long pocket page.
  * Tap a pocket to lift its sticker (tap again or elsewhere to drop it); long-press a face pocket and it blinks.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AlbumScreen(
     state: AlbumUiState,
@@ -187,6 +185,19 @@ fun AlbumScreen(
         val books = if (state.books.isNotEmpty()) 1 else 0
         val index = books + 1 + slices.size + books + 1
         if (reduced) listState.scrollToItem(index) else listState.animateScrollToItem(index)
+    }
+
+    // The tabs stay at the top while the page scrolls under them (Groceries runs to some 50 rows of pockets): once the
+    // list's own row starts to pass under the top, a pinned copy sits there on the binder ground (R6). It is drawn above
+    // the list rather than pinned inside it, and kept out of the keyboard's order, so Tab still goes through the pockets
+    // in their order (a lazy list's pinned header comes after every row it covers); Shift+Tab back to the list's own row
+    // brings the page's top back into view.
+    val tabsIndex = if (state.books.isNotEmpty()) 1 else 0
+    val tabsPinned by remember(listState, tabsIndex) {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > tabsIndex ||
+                (listState.firstVisibleItemIndex == tabsIndex && listState.firstVisibleItemScrollOffset > 0)
+        }
     }
 
     SecondaryScreen(
@@ -252,26 +263,19 @@ fun AlbumScreen(
                     })
                 }
             }
-            // The tabs stay at the top while the page scrolls under them (Groceries runs to some 50 rows of pockets), on
-            // the binder ground repainted behind them once they pin (R6), and above the page whose edge the selected tab
-            // overlaps.
-            val tabsIndex = if (state.books.isNotEmpty()) 1 else 0
-            stickyHeader("tabs") {
-                val pinned by remember(listState, tabsIndex) {
-                    derivedStateOf {
-                        listState.firstVisibleItemIndex > tabsIndex ||
-                            (listState.firstVisibleItemIndex == tabsIndex && listState.firstVisibleItemScrollOffset > 0)
-                    }
-                }
+            // The tabs, standing on the page. Once the page scrolls under the top, the pinned copy below shows in their
+            // place, and this row keeps its room and its place in the keyboard's order, unseen and silent.
+            item("tabs") {
                 AlbumTabs(
                     state.tab,
                     onSelect = {
                         lifted = null
                         actions.onSelectTab(it)
-                        // From deep in a page, the new page starts at its top, right under the tabs.
-                        if (pinned) scope.launch { listState.scrollToItem(tabsIndex) }
                     },
-                    modifier = Modifier.zIndex(1f).then(if (pinned) Modifier.groundBacking() else Modifier),
+                    // Above the page whose edge the selected tab overlaps.
+                    modifier = Modifier.zIndex(1f),
+                    bleed = ScreenGutter,
+                    shown = !tabsPinned,
                 )
             }
             itemsIndexed(slices, key = { _, s -> s.key }, contentType = { _, s -> s::class }) { i, slice ->
@@ -329,6 +333,23 @@ fun AlbumScreen(
             item("bottom") {
                 Spacer(Modifier.height(8.dp).windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)))
             }
+        }
+        if (tabsPinned && !state.loading && !state.empty) {
+            AlbumTabs(
+                state.tab,
+                onSelect = {
+                    lifted = null
+                    actions.onSelectTab(it)
+                    // From deep in a page, the new page starts at its top, right under the tabs.
+                    scope.launch { listState.scrollToItem(tabsIndex) }
+                },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .groundBacking()
+                    .padding(start = ScreenGutter, end = ScreenGutter),
+                bleed = ScreenGutter,
+                keys = false,
+            )
         }
     }
 }

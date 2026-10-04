@@ -251,7 +251,11 @@ class AlbumTest {
         val newest = compose.onNodeWithText("Sat 26 Sep", substring = true).getBoundsInRoot()
         val older = compose.onNodeWithText("Sat 19 Sep", substring = true).getBoundsInRoot()
         assertTrue("newest first", newest.top < older.top)
-        compose.onNodeWithText("19 of 19 stickers · perfect · receipt", substring = true).assertExists()
+        // Its line breaks only between its parts, so a dot never ends a line.
+        val line = compose.onNodeWithText("19 of 19 stickers", substring = true, useUnmergedTree = true).fetchSemanticsNode()
+            .config[SemanticsProperties.Text].joinToString("") { it.text }
+        assertEquals("19 of 19 stickers · perfect · receipt", line.replace("\n", " · "))
+        assertTrue("no line ends on a dot: $line", line.lines().none { it.trimEnd().endsWith("·") })
         compose.onNodeWithText("21 of 22 stickers", substring = true).assertExists()
 
         compose.onNodeWithText("Sat 26 Sep", substring = true).performClick()

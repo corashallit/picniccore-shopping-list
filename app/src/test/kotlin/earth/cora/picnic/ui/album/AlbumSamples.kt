@@ -63,7 +63,7 @@ object AlbumSamples {
     /** Sat 26 Sep: 19 of 19, perfect, receipt printed. */
     val perfectBook: TripBook = run {
         val start = at(9, 26, 10, 2)
-        val keys = listOf("banana", "milk_bag", "eggs", "sliced_bread", "coffee", "apple", "strawberry", "croissant", "butter", "peas", "jam", "lemon", "carrot", "broccoli", "peach", "cheese_curds", "peameal_bacon", "butter_tart", "maple_syrup")
+        val keys = listOf("banana", "milk_bag", "eggs", "sliced_bread", "coffee", "apple", "strawberry", "croissant", "butter", "frozen_vegetables", "jam", "lemon", "carrot", "broccoli", "peach", "cheese_curds", "peameal_bacon", "butter_tart", "maple_syrup")
         TripBook(
             id = "trip-0926", listTitle = "Saturday shop", storeName = "Hillcrest Market",
             startedAt = start, completedAt = start + 41 * 60_000L, closedAt = start + 50 * 60_000L,
@@ -75,7 +75,7 @@ object AlbumSamples {
     /** Sat 19 Sep: 21 of 22, not perfect, no receipt. */
     val partBook: TripBook = run {
         val start = at(9, 19, 9, 48)
-        val keys = listOf("strawberry", "croissant", "butter", "peas", "jam", "lemon", "apple", "banana", "milk_bag", "eggs", "coffee", "sliced_bread", "carrot", "broccoli", "peach", "cheese_curds", "peameal_bacon", "butter_tart", "banana", "lemon", "apple")
+        val keys = listOf("strawberry", "croissant", "butter", "frozen_vegetables", "jam", "lemon", "apple", "banana", "milk_bag", "eggs", "coffee", "sliced_bread", "carrot", "broccoli", "peach", "cheese_curds", "peameal_bacon", "butter_tart", "banana", "lemon", "apple")
         TripBook(
             id = "trip-0919", listTitle = "Saturday shop", storeName = "Hillcrest Market",
             startedAt = start, completedAt = null, closedAt = start + 60 * 60_000L,

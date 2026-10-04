@@ -1,5 +1,6 @@
 package earth.cora.picnic.ui.eggs
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -230,6 +231,9 @@ class PerfectWeekTest {
         r.fire(14)
         r.advance(600)
         assertTrue(r.eggs.perfectWeek)
-        compose.onNodeWithText("week 4 of 4 · sakura sheet unlocked").assertExists()
+        // One line where it fits, else broken between its two parts.
+        val line = compose.onNodeWithText("week 4 of 4", substring = true, useUnmergedTree = true).fetchSemanticsNode()
+            .config[SemanticsProperties.Text].joinToString("") { it.text }
+        assertEquals("week 4 of 4 · sakura sheet unlocked", line.replace("\n", " · "))
     }
 }
