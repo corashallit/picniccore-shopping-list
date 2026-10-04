@@ -312,10 +312,10 @@ fun OverflowMenu(
             },
         large = true,
     ) {
+        // Bounded, the rows scroll inside the card; without a bound (a caller in a scrolling column) it keeps its height.
         Column(
             Modifier
-                .then(if (maxHeight.isSpecified) Modifier.heightIn(max = maxHeight) else Modifier)
-                .verticalScroll(rememberScrollState())
+                .then(if (maxHeight.isSpecified) Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()) else Modifier)
                 .padding(vertical = 6.dp),
         ) {
             for (item in items) MenuRow(item, onDismissRequest)
