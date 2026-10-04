@@ -1,7 +1,6 @@
 package earth.cora.picnic.ui.eggs
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -26,9 +25,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
@@ -103,7 +99,29 @@ val LocalListRoom = staticCompositionLocalOf<ListRoom?> { null }
  * Where the receipt prints (overlay px): its slot line, the paper's top-left as it feeds out of the slot ([feed]) and
  * where it settles ([settled]), and the room the list makes below it.
  */
-internal data class ReceiptPlacement(val slot: Rect, val feed: Offset, val settled: Offset, val listShift: Float)
+internal data class ReceiptPlacement(
+    val slot: Rect,
+    val feed: Offset,
+    val settled: Offset,
+    val listShift: Float,
+    private val listTop: Float? = null,
+    private val paperH: Float = 0f,
+    private val gap: Float = 0f,
+    /** How far the settled paper's turned corner (and shadow) reaches below its box. */
+    private val below: Float = 0f,
+) {
+    /**
+     * The room the list makes for the paper as it is at [elapsed] ms into the print (px): its viewport [gap] under the
+     * paper's lowest point then, so the room grows in step with the feed and the settle; [listShift] once it rests.
+     */
+    fun roomAt(elapsed: Long): Float {
+        val top = listTop ?: return 0f
+        val (_, sdy, rot) = ReceiptMotion.settle(elapsed)
+        val y = feed.y + (settled.y - feed.y) * (sdy / 10f).coerceIn(0f, 1f)
+        val bottom = y + paperH * ReceiptMotion.fed(elapsed) + below * (rot / 3f)
+        return (bottom + gap - top).coerceIn(0f, listShift)
+    }
+}
 
 /**
  * Places the receipt (§13.2, item 259). Where it rests comes first: the paper ([paperW] × [paperH] px), centred under
@@ -157,7 +175,7 @@ internal fun placeReceipt(
     val box = covers(settled.x, settled.y)
     // Less than a pixel is no room at all (the paper ends at the list's top).
     val shift = if (listTop != null) (box.bottom + dp(4f) - listTop).takeIf { it >= 1f } ?: 0f else 0f
-    return ReceiptPlacement(slot, feed, settled, shift)
+    return ReceiptPlacement(slot, feed, settled, shift, listTop, paperH, dp(4f), above + dp(1f))
 }
 
 /** The binder top's and the book's words the receipt passes under and settles clear of (the anchors' names after `text:`). */
@@ -207,9 +225,14 @@ internal fun ReceiptPrint(fx: ReceiptFx, anchors: AnchorRegistry, local: (Rect) 
         val (sdx, sdy, rot) = if (reduced) Triple(-4f, 10f, 3f) else ReceiptMotion.settle(t)
         val jitter = if (reduced) 0f else ReceiptMotion.jitterDp(t)
         val fed = if (reduced) 1f else ReceiptMotion.fed(t)
-        // The list's viewport starts under the paper while it waits, the room growing in step with the feed (EggListHost
-        // eases each step), never in one jump.
-        val shift = if (paperW > 0) placed.listShift * fed else 0f
+        // The list's viewport starts under the paper while it waits, the room growing in step with the feed and the
+        // settle, never in one jump: each step's room is asked for one step ahead, and EggListHost eases there before the
+        // paper reaches it.
+        val shift = when {
+            paperW == 0 -> 0f
+            reduced -> placed.listShift
+            else -> placed.roomAt(t + ReceiptMotion.FEED_MS / ReceiptMotion.FRAMES)
+        }
         if (room != null) androidx.compose.runtime.SideEffect { room.receiptShift = shift }
         val alpha = if (reduced) (t.toFloat() / ReceiptMotion.FADE_MS).coerceIn(0f, 1f) else 1f
         // From the slot to where it settles, in step with the settle's own beats (its 10 dp drop: 0, 6, 10).
@@ -297,8 +320,8 @@ internal fun ReceiptPoof(id: Long, engine: SurpriseEngine) {
     if (reduced) {
         Box(
             Modifier
-                .decorative()
                 .testTag(EggTags.RECEIPT_POOF)
+                .decorative()
                 .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
                 .graphicsLayer { alpha = 1f - (t.toFloat() / ReceiptMotion.FADE_MS).coerceIn(0f, 1f) },
         ) { ReceiptSticker(lines, pitch = ReceiptPitch) }
@@ -307,8 +330,8 @@ internal fun ReceiptPoof(id: Long, engine: SurpriseEngine) {
     val (scale, turn) = ReceiptMotion.poof(t) ?: return
     Box(
         Modifier
-            .decorative()
             .testTag(EggTags.RECEIPT_POOF)
+            .decorative()
             .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
             .graphicsLayer {
                 scaleX = scale

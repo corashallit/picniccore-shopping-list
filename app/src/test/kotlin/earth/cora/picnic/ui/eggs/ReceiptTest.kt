@@ -403,6 +403,40 @@ class ReceiptTest {
         EggRig(compose, variant = ThemeVariant.Glow, fixture = completedFixture(41)).start().recordStrip()
     }
 
+    /**
+     * The trip review (§13.2, item 259): where the paper rests comes first, and the slot is derived from it, 10 dp above
+     * and 4 dp right of the settled paper; slot, feed and rest move down together under the lowest of the book's words
+     * they would meet (here the date chip beside the column, PER-FECT! and the page LCD in it), so no word ever lies on
+     * the paper; the list's room is the settled paper's, reached in step with the feed and the settle.
+     */
+    @Test
+    fun placementStartsFromWhereItRests() {
+        val d = 3f
+        val lcd = Rect(250 * d, 20 * d, 340 * d, 52 * d)
+        val date = Rect(20 * d, 80 * d, 110 * d, 100 * d)
+        val perfect = Rect(250 * d, 90 * d, 300 * d, 130 * d)
+        val pageLcd = Rect(300 * d, 170 * d, 336 * d, 186 * d)
+        val paperW = 150 * d
+        val paperH = 130 * d
+        val p = placeReceipt(lcd, 360 * d, paperW, paperH, d, listOf(date, perfect, pageLcd), listTop = 200 * d)
+        assertEquals("settles 4 dp left of the feed", -4f, (p.settled.x - p.feed.x) / d, 0.01f)
+        assertEquals("settles 10 dp below the feed", 10f, (p.settled.y - p.feed.y) / d, 0.01f)
+        assertEquals("the paper feeds from the slot's line", p.slot.top + 2 * d, p.feed.y, 0.01f)
+        assertEquals("the slot is as wide as the paper, centred on it", p.feed.x + paperW / 2, p.slot.center.x, 0.01f)
+        assertTrue("under the lowest word in its column (${p.slot.top / d} dp)", p.slot.top >= pageLcd.bottom)
+        val sweep = Rect(p.slot.left - 8 * d, p.slot.top, p.slot.right + 8 * d, p.settled.y + paperH + 8 * d)
+        listOf(lcd, date, perfect, pageLcd).forEach { assertFalse("no word on the paper's way ($it, $sweep)", it.overlaps(sweep)) }
+        // The list's room: none before the paper reaches the list's top, the settled paper's once it rests, never less
+        // from one step of the feed to the next.
+        val rooms = (0L..ReceiptMotion.SETTLE_AT step 10).map { p.roomAt(it) }
+        assertEquals(p.listShift, p.roomAt(ReceiptMotion.SETTLE_AT), 0.01f)
+        assertTrue("the room only grows (${rooms.zipWithNext().firstOrNull { (a, b) -> b < a }})", rooms.zipWithNext().all { (a, b) -> b >= a - 0.01f })
+        assertTrue("no step bigger than one feed step and its slack (${rooms.zipWithNext().maxOf { (a, b) -> b - a } / d} dp)", rooms.zipWithNext().all { (a, b) -> b - a <= paperH / ReceiptMotion.FRAMES + 8 * d })
+        // Nothing in its column: it hangs 3 dp under the LCD.
+        val free = placeReceipt(lcd, 360 * d, paperW, paperH, d, listOf(date), listTop = 200 * d)
+        assertEquals(lcd.bottom + 3 * d, free.slot.top, 0.01f)
+    }
+
     // ---- 259: never over words, at 1.0, 1.3 and 2.0 ----
 
     @Test
@@ -415,12 +449,13 @@ class ReceiptTest {
     fun neverOverWords200() = neverOverWords(2f)
 
     /**
-     * Item 259 (§4.1, §13.2) on the real List screen at font scale [scale], on every frame from the hold to well after
-     * the settle: the slot line is 4 dp, its top within 4 dp of the LCD's bottom, as wide as the paper and centred on
-     * it; while the paper feeds, its top edge comes out of the slot and it hangs from it; the binder top's and the book's
-     * words (the title, the subtitle, the book's date, PER-FECT!) lie over the slot and the paper, untouched pixel for
-     * pixel; the paper and the slot lie over no other word (the tabs, the metas, the rows, the text nodes) and never
-     * over the LCD; the settled paper is clear of every word, and where it would cover the list, the list makes room.
+     * Item 259 (§4.1, §13.2) and the trip review on the real List screen at font scale [scale], on every frame from the
+     * hold to well after the settle: the slot line is 4 dp, at or under the LCD (under the lowest of the binder top's and
+     * the book's words its paper would meet), as wide as the paper and centred on it; while the paper feeds, its top
+     * edge comes out of the slot and it hangs from it; neither the slot nor the paper ever lies under or over any word
+     * (the title, the subtitle, the LCD, the book's date, PER-FECT! and its page LCD stay untouched pixel for pixel, and
+     * nothing is drawn on the receipt's own lines); it settles (−4, +10) dp from where it fed, within 1 dp; and the list
+     * makes its room in step with the feed, never in one jump.
      */
     private fun neverOverWords(scale: Float) {
         val r = EggRig(compose, fontScale = scale, fixture = completedFixture(41)).start()
@@ -433,6 +468,7 @@ class ReceiptTest {
         assertTrue("fs $scale: the book's date is a keep-out", header.any { it.first == "date" })
         val before = r.grab()
         val headerPixels = header.associate { (k, b) -> k to pixels(before, b.deflate(px)) }
+        val listTop0 = r.anchor(EggAnchors.LIST).top
         r.probe.clear()
         r.holdLcd(r.timeouts.holdThresholdMs + 20)
         val t0 = r.now
@@ -441,51 +477,69 @@ class ReceiptTest {
         var slots = 0
         var papers = 0
         var settled: Rect? = null
+        var fedFrame: EggProbe.Frame? = null
+        var listTop = listTop0
+        var biggestStep = 0f
         while (r.now < t0 + ReceiptMotion.SETTLE_AT + 600) {
             r.advance(32)
             val t = r.now - t0
             val now = r.grab()
             val lcd = r.anchor(AnchorRegistry.LCD)
-            val under = headerKeys.mapNotNull { r.anchors.bounds(EggAnchors.TEXT_PREFIX + it) } + lcd
-            // The words the paper may pass under are cut out of it: they must be untouched.
+            // The binder top's and the book's words never move and are never covered.
             for ((k, b) in header) {
                 val at = r.anchors.bounds(EggAnchors.TEXT_PREFIX + k)
                 if (at != b) wrong += "the $k moved from $b to $at at $t ms"
                 else if (!pixels(now, b.deflate(px)).contentEquals(headerPixels.getValue(k))) wrong += "the $k changed at $t ms"
             }
-            val words = wordBoxes(compose, r.anchors).filterNot { (_, box) -> under.any { it.inflate(1f).contains(box.topLeft) && it.inflate(1f).contains(box.bottomRight) } }
+            val words = wordBoxes(compose, r.anchors) + ("LCD" to lcd)
             val frames = r.probe.frames.groupBy { it.tag }.mapValues { it.value.last() }
             r.probe.clear()
             val slot = frames["slot"]?.bounds
             val paper = frames["receipt"]?.bounds
             if (slot != null) {
                 slots++
-                assertTrue("fs $scale: the slot's top within 4 dp of the LCD's bottom (${slot.top} vs ${lcd.bottom})", slot.top - lcd.bottom in 0f..4 * px + 1f)
+                assertTrue("fs $scale: the slot at or under the LCD (${slot.top} vs ${lcd.bottom})", slot.top >= lcd.bottom + 2 * px - 1f)
                 assertEquals("fs $scale: 4 dp", 4 * px, slot.height, 1f)
                 if (paper != null && t < ReceiptMotion.FEED_MS) {
                     assertTrue("fs $scale, $t ms: the paper's top edge comes out of the slot (${paper.top} in ${slot.top}..${slot.bottom})", paper.top in slot.top..slot.bottom)
                     assertTrue("fs $scale, $t ms: it hangs from the slot ($paper under $slot)", paper.left >= slot.left - 1f && paper.right <= slot.right + 1f)
                     assertEquals("fs $scale: the slot is as wide as the paper, centred on it", paper.center.x, slot.center.x, 2f)
                 }
-                if (slot.overlaps(lcd)) wrong += "the slot over the LCD at $t ms"
             }
             if (paper != null) {
                 papers++
-                if (paper.deflate(2f).overlaps(lcd)) wrong += "the paper over the LCD at $t ms"
+                if (t < ReceiptMotion.FEED_MS) fedFrame = frames["receipt"]
                 if (t >= ReceiptMotion.SETTLE_AT) settled = paper
             }
             for ((tag, f) in listOf("receipt" to paper, "slot" to slot)) {
                 val piece = f?.deflate(2f) ?: continue
                 if (piece.width <= 0f || piece.height <= 0f) continue
-                words.filter { (_, box) -> box.overlaps(piece) }.forEach { (w, _) -> wrong += "$tag over \"$w\"" }
+                words.filter { (_, box) -> box.overlaps(piece) }.forEach { (w, _) -> wrong += "$tag and \"$w\" at $t ms" }
             }
+            // The list's room grows with the feed: no frame moves it by more than 12 dp.
+            val top = r.anchor(EggAnchors.LIST).top
+            biggestStep = maxOf(biggestStep, kotlin.math.abs(top - listTop))
+            listTop = top
         }
         assertTrue("the slot line showed ($slots frames)", slots > 10)
         assertTrue("the paper showed ($papers frames)", papers > 10)
         assertEquals("font scale $scale", emptyList<String>(), wrong.toList())
-        // Settled, it is clear of every word (it passes under none of them any more).
-        val rest = settled!!.deflate(2f)
-        header.forEach { (k, b) -> assertFalse("fs $scale: the settled paper over the $k ($rest, $b)", rest.overlaps(b)) }
+        assertTrue("fs $scale: the list makes room in steps of at most 12 dp a frame (${biggestStep / px} dp)", biggestStep <= 12 * px)
+        // It settles (−4, +10) dp from where it fed (the fed frame is straight, ±0.6 dp of jitter; at rest it is turned
+        // 3°, its drawn box a few px larger on each side: Probe "receipt").
+        val fed = fedFrame!!
+        val paperW = fed.bounds.width
+        val paperH = fed.bounds.height
+        val feedX = fed.bounds.left - ReceiptMotion.jitterDp(fed.time) * px
+        val rest = settled!!
+        val restX = rest.left + paperH * 0.03f
+        val restY = rest.top + paperW * 0.03f
+        assertEquals("fs $scale: settles 4 dp left of where it fed", -4f, (restX - feedX) / px, 1f)
+        assertEquals("fs $scale: settles 10 dp below where it fed", 10f, (restY - fed.bounds.top) / px, 1f)
+        // Settled, it is clear of every word, and the list's viewport starts under it.
+        val clear = rest.deflate(2f)
+        header.forEach { (k, b) -> assertFalse("fs $scale: the settled paper over the $k ($clear, $b)", clear.overlaps(b)) }
+        assertTrue("fs $scale: the list starts under the paper (${r.anchor(EggAnchors.LIST).top} vs ${rest.bottom})", r.anchor(EggAnchors.LIST).top >= rest.bottom - 1f)
         // Still a working list: its first strip is on screen below the receipt.
         val tabs = wordBoxes(compose, r.anchors).filter { it.first.startsWith(EggAnchors.TEXT_PREFIX + "tab:") }.map { it.second }
         assertTrue("a tab shows on screen", tabs.any { it.top >= rest.bottom - 1f && it.bottom <= compose.onRoot().fetchSemanticsNode().boundsInRoot.bottom })
@@ -512,7 +566,12 @@ class ReceiptTest {
         assertNull(r.eggs.receipt)
         assertNotNull("it poofs into the book", r.eggs.receiptTuckId)
         assertTrue(r.list.trip!!.receiptSaved)
-        assertEquals("Receipt saved to your sticker book ♡", r.model.toasts.current?.text)
+        // "Receipt saved…" when the slip lands, 420 ms after the tap, not over the paper as it poofs.
+        assertNull("no toast over the poof", r.model.toasts.current?.text?.takeIf { it.startsWith("Receipt") })
+        r.advance(ReceiptMotion.SLIP_AT - 60)
+        assertNull("no toast before the slip lands", r.model.toasts.current?.text?.takeIf { it.startsWith("Receipt") })
+        r.advance(120)
+        assertEquals("Receipt saved to your sticker\u00A0book\u00A0♡", r.model.toasts.current?.text)
         // The slip appears at the book's fore-edge (its magic appear, 420 ms on).
         r.advance(900)
         compose.onNodeWithTag(earth.cora.picnic.ui.theme.BookTags.SLIP, useUnmergedTree = true).assertExists()
@@ -526,6 +585,44 @@ class ReceiptTest {
         val book = runBlocking { r.sandbox.album.current() }.books.first()
         assertEquals(printed, book.receipt)
         assertNull("the overlay goes with its trip", r.eggs.receipt)
+    }
+
+    /**
+     * Item 268 and the trip review: her tap poofs the printed receipt itself (its lines, at its settled 3°), not a blank
+     * sheet; the list keeps the room under the paper until the poof is over (400 ms), then takes it back over 220 ms,
+     * never in one jump.
+     */
+    @Test
+    fun tapPoofsThePrintedReceipt() {
+        val r = EggRig(compose, fontScale = 2f, fixture = completedFixture(41)).start()
+        r.advance(300)
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST).performScrollToIndex(0)
+        r.advance(900)
+        val top0 = r.anchor(EggAnchors.LIST).top
+        r.holdLcd(r.timeouts.holdThresholdMs + 20)
+        r.advance(2_400)
+        val waiting = r.anchor(EggAnchors.LIST).top
+        assertTrue("fs 2: the list made room under the paper ($top0 → $waiting)", waiting > top0 + 20 * px)
+        compose.onNodeWithTag(EggTags.RECEIPT).performClick()
+        r.frame()
+        val poof = compose.onNodeWithTag(EggTags.RECEIPT_POOF, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val ink = pixels(r.grab(), poof).count { c -> (android.graphics.Color.red(c) + android.graphics.Color.green(c) + android.graphics.Color.blue(c)) / 3 < 110 }
+        assertTrue("the printed receipt poofs, its lines and all ($ink ink px)", ink > 400)
+        val t0 = r.now
+        var last = r.anchor(EggAnchors.LIST).top
+        var biggest = 0f
+        while (r.now < t0 + ReceiptMotion.POOF_MS - 40) {
+            r.advance(32)
+            assertEquals("the room stays while it poofs (${r.now - t0} ms)", waiting, r.anchor(EggAnchors.LIST).top, 1f)
+        }
+        while (r.now < t0 + ReceiptMotion.POOF_MS + 220 + 160) {
+            r.advance(16)
+            val top = r.anchor(EggAnchors.LIST).top
+            biggest = maxOf(biggest, kotlin.math.abs(top - last))
+            last = top
+        }
+        assertEquals("then the list takes its room back", top0, r.anchor(EggAnchors.LIST).top, 1f)
+        assertTrue("eased back, not in one jump (${biggest / px} dp in a frame)", biggest < (waiting - top0) / 3f)
     }
 
     // ---- 269: the auto-tuck ----
@@ -597,6 +694,10 @@ class ReceiptTest {
         compose.onNodeWithTag(EggTags.RECEIPT).performClick()
         r.frame()
         assertTrue(r.list.trip!!.receiptSaved)
+        // The printed receipt itself fades, not a blank sheet.
+        val poof = compose.onNodeWithTag(EggTags.RECEIPT_POOF, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val ink = pixels(r.grab(), poof).count { c -> (android.graphics.Color.red(c) + android.graphics.Color.green(c) + android.graphics.Color.blue(c)) / 3 < 110 }
+        assertTrue("its lines fade with it ($ink ink px)", ink > 200)
         r.advance(ReceiptMotion.FADE_MS + 50)
         assertNull("the tap tucks it in with a fade", r.eggs.receiptTuckId)
     }

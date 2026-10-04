@@ -229,8 +229,13 @@ fun EggListHost(
                 scope.room.shownAnim.snapTo(target)
             } else {
                 // In step with the feed as the paper prints; back over 220 ms once the poof is over (§13.2).
-                val ms = if (target < scope.room.shownAnim.value) ROOM_RELEASE_MS else ROOM_EASE_MS
-                withContext(FixedMotionScale) { scope.room.shownAnim.animateTo(target, tween(ms, easing = PicnicMotion.standard.easing)) }
+                val spec = if (target < scope.room.shownAnim.value) {
+                    tween<Float>(ROOM_RELEASE_MS, easing = PicnicMotion.standard.easing)
+                } else {
+                    // Steady steps, each done before the paper's next one.
+                    tween(ROOM_EASE_MS, easing = androidx.compose.animation.core.LinearEasing)
+                }
+                withContext(FixedMotionScale) { scope.room.shownAnim.animateTo(target, spec) }
             }
         }
     }
@@ -308,7 +313,8 @@ private class EggBarNode(private var scope: EggListScope, private var folded: Bo
 }
 
 /** The receipt's room eases in and out over this long (ms). */
-private const val ROOM_EASE_MS = 200
+/** Each step of the receipt's room eases in within one step of its feed (121 ms). */
+private const val ROOM_EASE_MS = 100
 
 /** The list takes back the receipt's room over 220 ms once the poof is over. */
 private const val ROOM_RELEASE_MS = 220

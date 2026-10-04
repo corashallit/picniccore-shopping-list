@@ -1379,16 +1379,18 @@ THANK YOU ♪
 
 | t | Beat |
 |---|---|
-| 0 | a 4 dp ballpoint slot line appears under the LCD; the LCD reads "PRINT★"; CLOCK_TICK; "print" sound (10 ticks 120 ms apart, if on) |
+| 0 | a 4 dp ballpoint slot line appears under the LCD (3 dp under it; lower, under the lowest of the binder top's and the book's words the paper would otherwise meet, so no word is ever drawn on the paper and the paper never covers a word); the LCD reads "PRINT★"; CLOCK_TICK; "print" sound (10 ticks 120 ms apart, if on) |
 | 0–1700 | the paper **feeds out of the slot** top-down in 14 stepped frames (clip reveal), with a 2-frame dot-matrix jitter every 120 ms |
 | 1700 | the paper tears off (2 frames, 260 ms, "tk") |
 | 1960 | it settles at (−4, +10) dp rotated 3°, the slot line vanishes, the LCD returns to the count |
 | — | it **stays until tapped** (no timeout) |
-| tap | §7.6: it poofs into the book as the fore-edge slip; toast "Receipt saved to your sticker book ♡" (4 s); `receiptSaved = true`; the album's book carries it |
+| tap | §7.6: the printed receipt itself (its lines, at its settled 3°) poofs into the book as the fore-edge slip (1.08 → 0, turning 10°, 4 steps, 400 ms); toast "Receipt saved to your sticker book ♡" (4 s) when the slip lands, 420 ms after the tap; `receiptSaved = true`; the album's book carries it |
+
+- **Where it prints.** The settled paper's place is worked out first and the slot from it (10 dp above, 4 dp right), so feed and settle are exactly (−4, +10) dp apart and nothing jumps at 1.96 s. Where the paper hangs past the top of the list's viewport, the list makes room under it in step with the feed and the settle (never in one jump), keeps it while the receipt waits and while it poofs, and gives it back over 220 ms once the poof is over.
 
 - Holding the LCD again later prints it again (the same receipt; the stats are frozen at the first print). Tapping the slip in the Trip book sheet shows it full size.
 - **Never lost.** A printed receipt that has not been tapped is tucked into the book as if tapped (no animation, no toast; `receiptSaved = true`) when she leaves the list screen, switches lists or starts a New trip, and on the next start if the process died; New trip and list deletion file it as saved.
-- Reduced motion: the receipt fades in place (120 ms) fully printed; the tap tucks it in with a fade.
+- Reduced motion: the receipt fades in place (120 ms) fully printed; the tap tucks it in with a fade (the printed receipt fading, lines and all).
 - TalkBack: a button "Trip receipt: Saturday 3 October, Hillcrest, 24 stickers, 8 baskets, 41 minutes, 1 shiny. Double-tap to save it to the sticker book".
 
 ---

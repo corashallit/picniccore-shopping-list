@@ -7,7 +7,7 @@
     <string name="egg_toast_bonus">BONUS STAGE! ♪</string>
     <string name="egg_toast_back_pocket">Your album’s back pocket opened!</string>
     <string name="egg_toast_look">Look</string>
-    <string name="egg_toast_receipt">Receipt saved to your sticker book ♡</string>
+    <string name="egg_toast_receipt">Receipt saved to your sticker\u00A0book\u00A0♡</string>
 
     <!-- Egg 5: the doodle by the frozen aisle's tab (decorative). -->
     <string name="egg_snack_doodle">snack?</string>
