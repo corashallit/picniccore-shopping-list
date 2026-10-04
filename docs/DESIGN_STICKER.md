@@ -109,7 +109,7 @@ Smaller conflicts between the written spec, the mockup and the app, and how this
 | Q9 idle trip | **Never ask** | No question at the first check-off. Instead, the **first check-off more than 12 h after the trip's last activity starts a new book on its own**: the old book is filed in the album, what was got last time is cleared (as with "Clear what I got"), and the tapped item lands in the fresh book. A sticky-note toast then says "New sticker book for today ✦ your last shop is in the album", with **Undo**. Undo restores the old book and its checked items, and checks the tapped item into the old book instead. When that same tap also finishes the fresh trip (a one-thing top-up the evening after a shop), the fresh trip's finale counts as shown at once: no celebration and no bonus sticker, only the aisle's in-place chain, so the Undo note stays readable. This fits her week (build the list over the week, shop once): she is never interrupted and last week's book never swallows this week's shop. The New trip sheet stays available from the overflow menu. |
 | Q4 ribbon ride | Keep | As specified. |
 | The mockup | **Reference only from now on** | Cora reviews the real app, not the mockup. The mockup in `design/mockup/` is frozen at r9 as a visual reference: no sync pass, no control manifest, no assertion suite, no further fixes. Where it disagrees with this spec (the pinned ring, the clipped title stroke, the produce spin, the Speak line, the pantry, everything in this table) **the spec wins**. Items 311, 312 and 318 are retired; 332, 334 and 335 cover the app only. |
-| Copy: the Speak prompt | **"Anything the paper forgot? Say it." is cut** | It reads as filler: paper doesn't remember or forget. The prompt after a photo is now **"Anything else? Say it out loud."** Rule for all copy (§16): say plain true things; objects don't remember, forget, want or feel. Item 333. |
+| Copy: the Speak prompt | **"Anything the paper forgot? Say it." is cut** | It was filler. The prompt after a photo is now **"Anything else? Say it out loud."** That was feedback on one line, not a rule to enforce with a test (Cora, 4 October); §16 keeps a plain-copy guideline for whoever writes copy. Item 333 is retired. |
 | Pinned current aisle (bug in mockup r9) | **The lemon ring never breaks** | When the current aisle's tray is pinned while its rows scroll, the pinned plate carries the tray's 3 dp lemon ring (top and sides) and its offset shadow, so the yellow border runs unbroken from the plate down the tray. The plate's solid backing (R6) still hides the rows. This holds in Day, Glow and the other variants, and in the mockup too. |
 
 ## 1. Concept
@@ -1504,7 +1504,7 @@ Canadian spelling (colour, favourite), metric only (g, kg, mL, L) in detail line
 
 No copy mentions a proxy, model names, prices or any brand.
 
-**Say plain true things** (§0.4). Copy never gives objects a mind: paper, lists, baskets and stickers don't remember, forget, want, miss or feel. Cute lives in the art, the hanko texts and the eggs; instructions and prompts say what to do in ordinary words ("Anything else? Say it out loud.").
+**Plain copy** (§0.4, a guideline, not a test). Say what to do in ordinary words. Skip clever literary flourishes: decorative adjectives and objects with feelings ("the paper forgot") read as filler. Cute lives in the art, the hanko texts and the eggs.
 
 ---
 
@@ -2310,7 +2310,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 ### 20.18 Copy, IP and units
 
 293. **[WP10]** None of the IP reference words (Sanrio, Bonbon, Q-Lia, Sun-Star, Bandai, Amada, Carddass, Sailor, Moon Prism, HBC, …) appears in `res/`, `assets/` or generated sources. — *Test:* `IpWordsTest` (unit scan)
-294. **[WP10]** No user-visible string mentions a proxy, a model name or prices, none uses an emoji as an icon, and none gives an object a mind (the §16 plain-things rule; the review list is in `CopyRulesTest`, e.g. no "forgot", "remembers", "wants" on paper, lists, baskets or stickers). — *Test:* `CopyRulesTest` (unit scan)
+294. **[WP10]** No user-visible string mentions a proxy, a model name or prices, none uses an emoji as an icon. — *Test:* `CopyRulesTest` (unit scan)
 295. **[WP10]** Strings use Canadian spelling and metric units only (cooking measures only in a recipe amount, §4.17). — *Test:* `CopyRulesTest.canadianAndMetric` (unit scan)
 296. **[WP5 · WP7]** Every detail line shown is metric after normalisation, except a recipe amount after the "·", which may be cup, tbsp, tsp or pinch. — *Test:* `ListUiStateTest.detailMetric` (unit)
 297. **[WP1 · WP2]** The critters (nap cat without forehead mark or bow, ants carrying food, bee, ladybug) and every sticker pass the IP review sheet. — *Test:* golden `critters_contact` (reviewed by Cora, against the §20 criteria)
@@ -2364,7 +2364,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 330. **[WP8 · WP10]** PRIVACY.md says the pantry is stored on the phone, is sent to OpenAI with each AI request, and is never sent without a key. — *Test:* `PrivacyDocTest`, review gate
 331. **[WP5]** The overflow menu's "My pantry" opens the screen (item 121). — *Test:* `ListInteractionTest.overflowMenuActions`
 332. **[WP10]** The audits cover My pantry (touch targets, font scale 1.3 and 2.0, TalkBack copy, text on pattern). — *Test:* audit walkers
-333. **[WP10]** Copy says plain true things (§16): the Speak prompt after a photo is "Anything else? Say it out loud."; no string gives paper, lists, baskets or stickers a mind. — *Test:* `CopyRulesTest.noMindedObjects` (word list over every string file), review gate on the copy deck
+333. **[Retired]** ~~Copy says plain true things, checked by a word-list test.~~ Retired on 4 October: the Speak line was one piece of feedback, not a rule to test (§0.4). The line itself is fixed.
 334. **[WP4 · WP10]** Puffy text never clips: for every stroked title at its longest real text ("Saturday shop", "Kirakira Basket", "Everything else", "List complete!", the celebration and NEXT), in Day and Glow and at font scale 1.0 and 2.0, the white (Glow: `#3A438A`) stroke and the hard shadow are whole on all four sides, including when the title is ellipsized; the List screen's own title (open, and with its bar collapsed) is checked in place; an emoji in a list's name ("Picnic 🍓 party") casts a shadow-coloured silhouette, never a full-colour ghost, and wears the die-cut halo. — *Test:* `PuffyTextBoundsTest` (Robolectric: drawn stroke bounds ⊆ the composable's bounds and every ancestor's clip, for a fitting and an ellipsized title; `realCallersNeverClipTheirTitles` with the real ListScreen; `colourGlyphsCastNoGhost`), goldens `puffy_title_{day,glow}_long`, `puffy_title_ellipsized`, `puffy_title_emoji_{day,glow}`
 335. **[WP9]** Egg 3's produce spins with its travel: clockwise moving right, anticlockwise moving left, one turn per 138 dp (θ = Δx ⁄ r). — *Test:* `EggRollingTest.spinMatchesTravel`
 336. **[WP4]** The postage-edged recipe card shows its bites on all four sides on the white letter-set sheet: a 1 dp 55 % periwinkle rim follows the whole cut shape; the hard shadow stays on the right and bottom. — *Test:* goldens `recipe_card_*` and the paper kit (`PaperDayPreview`, `PaperGlowPreview`), read at full size
@@ -2479,7 +2479,7 @@ Ten packages, each with exclusive file ownership so agents can work in parallel 
 - **Owns**: `platform/Feedback.kt` (SoundPool, haptics, gating), `platform/Announcer.kt`, `platform/Timeouts.kt` (recommended timeouts, hold threshold), new `ui/a11y/**` (`spokenDetail`, semantics helpers, the `TextOverflowed` key), `.github/workflows/android.yml`, `res/values/strings_a11y.xml`; `design/mockup/**` (frozen reference, §18.4: only its README note); cross-cutting tests under `app/src/test/…/a11y/**` and `…/release/**` (TouchTargetAuditTest, FontFamilyBudgetTest, TalkBackCopyTest, ReducedMotionAuditTest, NoFlashTest, KeyboardNavTest, FocusTest, DecorSemanticsTest, TimeoutsTest, TextOnPatternTest, MinTextSizeTest, NoClippedTextTest, IpWordsTest, CopyRulesTest, NoBlurLintTest, NoPlaceholderTest, GoldenCoverageTest); the Macrobenchmark module `benchmark/`.
 - **Provides**: `Feedback`, `Cue`, `Announcer`, `Timeouts`, `FakeFeedback`, `FakeAnnouncer`, `FakeTimeouts`, the screen-fixture walker used by the audits.
 - **Consumes**: WP2 sounds; WP8 switches; every screen (for the audits, which run last).
-- **Acceptance**: 26, 197–198, 276–295, 303–305, 307–310, 317, 330, 332–334
+- **Acceptance**: 26, 197–198, 276–295, 303–305, 307–310, 317, 330, 332, 334
 
 ### 21.2 Dependency graph
 
