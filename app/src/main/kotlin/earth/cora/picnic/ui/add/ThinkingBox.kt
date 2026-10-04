@@ -47,6 +47,7 @@ import earth.cora.picnic.ui.theme.PicnicMotion
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.StickerFamily
 import earth.cora.picnic.ui.theme.ThemeVariant
+import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.hardShadow
 import earth.cora.picnic.ui.theme.rememberLoopTime
 import androidx.compose.runtime.LaunchedEffect
@@ -126,8 +127,18 @@ fun ThinkingBox(
                 if (popped && popAge in 0 until 2L * PicnicMotion.pose && !reduced) PopBurst()
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val headline = stringResource(if (!waiting && recipe) R.string.add_thinking_recipe else R.string.add_thinking_reading)
-                Text(
+                // Once every step is ticked, the headline says it is done ("Found a recipe ♡" / "All sorted"), no ellipsis.
+                val done = steps != null && clock != null && steps.isNotEmpty() && clock.stepsShown() >= steps.size &&
+                    clock.since(clock.plan.stepAt[steps.size - 1]) >= RevealPlan.TICK_MILLIS
+                val headline = stringResource(
+                    when {
+                        done && recipe -> R.string.add_thinking_recipe_done
+                        done -> R.string.add_thinking_done
+                        !waiting && recipe -> R.string.add_thinking_recipe
+                        else -> R.string.add_thinking_reading
+                    },
+                )
+                PicnicText(
                     headline,
                     style = PicnicTheme.type.label.copy(fontSize = 15.sp, lineHeight = 20.sp, color = c.ballpoint),
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
@@ -191,7 +202,8 @@ fun stepText(step: ThinkingStep): String = when (step) {
         val recipes = step.recipes
         val servings = step.servings
         when {
-            recipes != null && servings != null -> pluralStringResource(R.plurals.add_step_compared, recipes, recipes) + "\u00A0· " +
+            // The separator goes with the words after it: a line never ends in "·".
+            recipes != null && servings != null -> pluralStringResource(R.plurals.add_step_compared, recipes, recipes) + " ·\u00A0" +
                 stringResource(R.string.add_step_makes, servings)
             recipes != null -> pluralStringResource(R.plurals.add_step_compared, recipes, recipes)
             servings != null -> stringResource(R.string.add_step_makes_alone, servings)

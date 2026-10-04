@@ -142,9 +142,11 @@ class RecipeCardTest {
     /** Pixels in the right-hand 56 dp of the row (the switch) that changed from [off] to [on]. */
     private fun starPixels(off: Bitmap, on: Bitmap): Int {
         val density = compose.density.density
-        val from = (on.width - 56 * density).toInt().coerceAtLeast(0)
+        // The switch's column, right-aligned in both (a kept row's detail may take one more line, so the heights differ).
+        val width = minOf(on.width, off.width)
+        val from = (width - 56 * density).toInt().coerceAtLeast(0)
         var n = 0
-        for (y in 0 until on.height) for (x in from until on.width) {
+        for (y in 0 until minOf(on.height, off.height)) for (x in from until width) {
             val a = off.getPixel(x, y)
             val b = on.getPixel(x, y)
             val d = Math.abs((a shr 16 and 255) - (b shr 16 and 255)) + Math.abs((a shr 8 and 255) - (b shr 8 and 255)) + Math.abs((a and 255) - (b and 255))
@@ -180,5 +182,41 @@ class RecipeCardTest {
         review(h)
         compose.onNodeWithTag(RECIPE_CARD_TAG).assertExists()
         compose.onNodeWithTag(EDIT_PANTRY_TAG).assertDoesNotExist()
+    }
+
+    /**
+     * The trip review (§4.17, D15): a skipped row she switches on says what the footer will do. Blueberries (optional)
+     * shows its own detail ending in "optional", never "optional · skipped"; Salt (in her pantry) says "in your pantry ·
+     * adding this time". Switched off again, they say why they are skipped.
+     */
+    @Test
+    fun keptRowsSayWhatTheyDo() {
+        val h = compose.setHarness(FakeAssistant(ingest = { _, _ -> f.pancakes(withPantry = true) }), state = f.stateWithPantry)
+        review(h)
+        fun detailOf(name: String): String =
+            compose.onNode(reviewRow(name) and isToggleable()).fetchSemanticsNode().config[SemanticsProperties.ContentDescription].single()
+        assertTrue(detailOf("Blueberries"), detailOf("Blueberries").contains("optional, skipped") || detailOf("Blueberries").contains("optional · skipped"))
+        toggle("Blueberries")
+        val kept = detailOf("Blueberries")
+        assertTrue("kept: its own detail and \"optional\" ($kept)", kept.contains("170 g") && kept.contains("optional") && !kept.contains("skipped"))
+        compose.onNode(hasText("optional", substring = true) and hasText("170", substring = true), useUnmergedTree = true).assertExists()
+        compose.onAllNodes(hasText("optional · skipped", substring = true), useUnmergedTree = true).fetchSemanticsNodes().let { nodes ->
+            assertTrue("no skipped line left on Blueberries", nodes.none { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString()?.contains("170") == true })
+        }
+        toggle("Salt")
+        val salt = detailOf("Salt")
+        assertTrue("kept: \"in your pantry · adding this time\" ($salt)", salt.contains("in your pantry") && salt.contains("adding this time"))
+        toggle("Salt")
+        assertTrue("off again: its reason and amount (${detailOf("Salt")})", detailOf("Salt").contains("½") && !detailOf("Salt").contains("adding"))
+    }
+
+    /** §4.17 detail lines: an amount never splits, a whole number and its fraction included ("1 ½ cups"). */
+    @Test
+    fun detailKeepsAmountsTogether() {
+        val nb = '\u00A0'
+        assertEquals("in your pantry$nb· 1$nb½${nb}cups", AddRules.keepTogether("in your pantry · 1 ½ cups"))
+        assertEquals("2.5${nb}kg bag$nb· 2${nb}cups", AddRules.keepTogether("2.5 kg bag · 2 cups"))
+        assertEquals("½${nb}tsp", AddRules.keepTogether("½ tsp"))
+        assertEquals("pack of 12$nb· 2 ⅛${nb}cups".replace("2 ⅛", "2$nb⅛"), AddRules.keepTogether("pack of 12 · 2 ⅛ cups"))
     }
 }

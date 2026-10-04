@@ -277,7 +277,7 @@ class AddBarTest {
         val commit = h.commits.single()
         assertEquals(listOf("Lemons", "Oat milk"), commit.added.map { it.name })
         val toast = h.shown.last()
-        assertEquals("Added 2 items to Saturday shop ♡", toast.text)
+        assertEquals("Added 2 items to Saturday\u00A0shop\u00A0♡", toast.text)
         assertEquals("Undo", toast.actionLabel)
         toast.onAction!!()
         compose.waitForIdle()

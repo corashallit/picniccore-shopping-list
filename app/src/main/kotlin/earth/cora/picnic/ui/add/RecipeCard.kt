@@ -347,15 +347,26 @@ internal const val LARGE_TEXT: Float = 1.3f
 /** From this font scale the review rows stack their words under the sticker and the switch. */
 internal const val VERY_LARGE_TEXT: Float = 1.5f
 
-/** A row's detail line (§4.17): the reason for a skipped row, else the pack size · recipe amount · note. */
+/**
+ * A row's detail line (§4.17): the reason for a skipped row, else the pack size · recipe amount · note. A skipped row she
+ * switched on says what the footer will do: an optional one shows its own detail and "optional", a pantry one "in your
+ * pantry · adding this time" (D15).
+ */
 @Composable
 internal fun rowDetail(row: ReviewRow): String? = when (row.skipReason) {
     SkipReason.ALREADY_ON_LIST -> stringResource(R.string.add_reason_already)
-    SkipReason.IN_PANTRY -> {
+    SkipReason.IN_PANTRY -> if (row.keep) {
+        stringResource(R.string.add_reason_pantry_kept)
+    } else {
         val reason = stringResource(R.string.add_reason_pantry)
         AddRules.recipeAmount(row.item.quantity)?.let { "$reason · $it" } ?: reason
     }
-    SkipReason.OPTIONAL -> stringResource(R.string.add_reason_optional)
+    SkipReason.OPTIONAL -> if (row.keep) {
+        val optional = stringResource(R.string.add_reason_optional_kept)
+        AddRules.detailLine(row.item)?.let { "$it · $optional" } ?: optional
+    } else {
+        stringResource(R.string.add_reason_optional)
+    }
     SkipReason.NONE -> AddRules.detailLine(row.item)
 }
 

@@ -308,7 +308,8 @@ fun EmptyState(title: String, body: String, modifier: Modifier = Modifier, actio
         ) {
             StickerSheetArt()
             Text(title, style = t.emptyTitle.copy(color = c.ballpoint), textAlign = TextAlign.Center)
-            Text(body, style = t.body.copy(color = c.ballpoint), textAlign = TextAlign.Center)
+            // Balanced lines (§4.6): never a one-word last line ("…say it out / loud.").
+            Text(body, style = t.body.copy(color = c.ballpoint, lineBreak = androidx.compose.ui.text.style.LineBreak.Paragraph), textAlign = TextAlign.Center)
             PicnicText(
                 "♡ " + stringResource(R.string.theme_empty_doodle) + " ♡",
                 style = t.doodle.copy(color = Families.sakura.trace),

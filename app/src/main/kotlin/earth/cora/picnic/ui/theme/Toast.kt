@@ -236,6 +236,7 @@ fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset:
             StickyNote(
                 message.text,
                 message.actionLabel,
+                actionGlyph = if (message.undo) PicnicGlyph.Undo else null,
                 onAction = {
                     message.onAction?.invoke()
                     state.leaving = true
@@ -293,7 +294,8 @@ private suspend fun holdUnlessPaused(millis: Long, paused: () -> Boolean): Boole
 /**
  * The sticky note itself (§4.15): a 220 dp lemon-pastel square note rotated −2° ([rotate]), a pink-gingham washi strip
  * (90 dp, +3°) on top, 3 dp white border, hs2; text Zen Maru 700 14 sp ballpoint (hearts drawn as vectors); the action
- * is a tiny white chip sticker with an undo glyph in a 48 dp target. `role=status` (polite).
+ * is a tiny white chip sticker in a 48 dp target, with the undo glyph only when it undoes something ([actionGlyph]: an
+ * offer such as the nudge's "New trip" or the back pocket's "Look" is its label alone). `role=status` (polite).
  */
 @Composable
 fun StickyNote(
@@ -302,6 +304,7 @@ fun StickyNote(
     onAction: () -> Unit,
     modifier: Modifier = Modifier,
     rotate: Boolean = true,
+    actionGlyph: PicnicGlyph? = PicnicGlyph.Undo,
 ) {
     val c = PicnicTheme.colors
     val shape = PicnicTheme.shapes.toast
@@ -319,7 +322,8 @@ fun StickyNote(
                 .semantics { liveRegion = LiveRegionMode.Polite },
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            PicnicText(message, style = PicnicTheme.type.toast)
+            // Balanced lines (§4.6): never a one-word last line.
+            PicnicText(message, style = PicnicTheme.type.toast.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Paragraph))
             if (actionLabel != null) {
                 // Pressed, the chip sticker drops onto its shadow in 2 steps like the kit's chips (never a ripple, §0.2,
                 // §4.7); focused, it wears their 2 dp ring.
@@ -334,7 +338,7 @@ fun StickyNote(
                     contentAlignment = Alignment.Center,
                 ) {
                     ChipFace(fill = c.stickerWhite, height = 32.dp, border = 0.dp, horizontal = 12.dp, press = rememberPressFraction(pressed), focused = focused) {
-                        Glyph(PicnicGlyph.Undo, null, tint = c.ballpoint, size = 16.dp)
+                        actionGlyph?.let { Glyph(it, null, tint = c.ballpoint, size = 16.dp) }
                         Text(actionLabel, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
                     }
                 }

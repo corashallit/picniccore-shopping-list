@@ -70,7 +70,7 @@ class AddToastsTest {
         r.vm.send()
         advanceUntilIdle()
         host.show(notes.toast(commits[0]))
-        assertEquals("Added 2 items to Saturday shop ♡", host.current!!.text)
+        assertEquals("Added 2 items to Saturday\u00A0shop\u00A0♡", host.current!!.text)
 
         r.vm.setText("limes")
         r.vm.send()
@@ -79,7 +79,7 @@ class AddToastsTest {
 
         // One note: it counts both commits, so it says what Undo restores; nothing waits behind it.
         val note = host.current!!
-        assertEquals("Added 3 items to Saturday shop ♡", note.text)
+        assertEquals("Added 3 items to Saturday\u00A0shop\u00A0♡", note.text)
         assertEquals("Undo", note.actionLabel)
         assertTrue(host.queue.isEmpty())
 
@@ -101,12 +101,12 @@ class AddToastsTest {
         r.vm.send()
         advanceUntilIdle()
         host.show(notes.toast(commits[0]))
-        assertEquals("Added Limes to Produce ♡", host.current!!.text)
+        assertEquals("Added Limes to Produce\u00A0♡", host.current!!.text)
         r.vm.setText("bananas")
         r.vm.send()
         advanceUntilIdle()
         host.show(notes.toast(commits[1]))
-        assertEquals("Added Limes to Produce ♡ · Bananas is back on your list", host.current!!.text)
+        assertEquals("Added Limes to Produce\u00A0♡ · Bananas is back on your list", host.current!!.text)
 
         host.current!!.onAction!!()
         advanceUntilIdle()

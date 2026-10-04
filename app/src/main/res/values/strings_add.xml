@@ -33,6 +33,9 @@
     <!-- The thinking box (§4.18, D16): only real steps -->
     <string name="add_thinking_reading">Reading your note…</string>
     <string name="add_thinking_recipe">Looking up a recipe…</string>
+    <!-- Once every step is ticked (§4.18): what the box found, with no ellipsis. -->
+    <string name="add_thinking_recipe_done">Found a recipe ♡</string>
+    <string name="add_thinking_done">All sorted</string>
     <string name="add_step_web">Searched the web: “%1$s”</string>
     <!-- When the answer names no query (the step never quotes her note: it may not be what was searched) -->
     <string name="add_step_web_plain">Searched the web</string>
@@ -42,7 +45,7 @@
     </plurals>
     <string name="add_step_makes">makes\u00A0%1$d</string>
     <string name="add_step_makes_alone">Makes\u00A0%1$d</string>
-    <string name="add_step_pantry">Checked your pantry\u00A0· left\u00A0out\u00A0%1$d</string>
+    <string name="add_step_pantry">Checked your pantry ·\u00A0left\u00A0out\u00A0%1$d</string>
     <plurals name="add_step_sorted">
         <item quantity="one">Checked your list, sorted into %1$d aisle</item>
         <item quantity="other">Checked your list, sorted into %1$d aisles</item>
@@ -61,6 +64,9 @@
     <string name="add_reason_already">already on your list</string>
     <string name="add_reason_pantry">in your pantry</string>
     <string name="add_reason_optional">optional · skipped</string>
+    <!-- A skipped row she switched on (D15): an optional one ends its own detail with this; a pantry one says the second. -->
+    <string name="add_reason_optional_kept">optional</string>
+    <string name="add_reason_pantry_kept">in your pantry · adding this time</string>
     <string name="add_edit_pantry">Edit my pantry</string>
     <string name="add_sources">Sources</string>
     <string name="add_everything_else">Everything else</string>
@@ -123,10 +129,10 @@
     <string name="add_problem_save">Couldn\'t save. Try again.</string>
 
     <!-- Toasts after a commit (§4.15, §16) -->
-    <string name="add_toast_added_one">Added %1$s to %2$s ♡</string>
+    <string name="add_toast_added_one">Added %1$s to %2$s\u00A0♡</string>
     <plurals name="add_toast_added_many">
-        <item quantity="one">Added %1$d item to %2$s ♡</item>
-        <item quantity="other">Added %1$d items to %2$s ♡</item>
+        <item quantity="one">Added %1$d item to %2$s\u00A0♡</item>
+        <item quantity="other">Added %1$d items to %2$s\u00A0♡</item>
     </plurals>
     <string name="add_toast_already_one">%1$s is already on your list</string>
     <plurals name="add_toast_already_many">

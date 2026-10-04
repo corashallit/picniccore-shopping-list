@@ -59,7 +59,9 @@ class ThinkingStepsTest {
         val plain = AddRules.thinkingSteps(answer(f.proposed("Lemons", "lemon", "produce"), f.proposed("Eggs", "eggs", "dairy-eggs")))
         assertEquals(listOf(ThinkingStep.SortedAisles(2)), plain)
         show { ThinkingBox(plain, recipe = false, clock = clockAt(plain.size, RevealClock.DONE), family = Families.melon) }
-        compose.onNodeWithText("Reading your note…").assertExists()
+        // Every step ticked: the headline says it is done, with no ellipsis.
+        compose.onNodeWithText("All sorted").assertExists()
+        compose.onNodeWithText("Reading your note…").assertDoesNotExist()
         compose.onNodeWithText("Checked your list, sorted into 2 aisles").assertExists()
         compose.onNodeWithText("Searched the web", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Compared", substring = true).assertDoesNotExist()
@@ -92,11 +94,18 @@ class ThinkingStepsTest {
         compose.onNodeWithText("Compared 3 recipes", substring = true).assertDoesNotExist()
         clock.elapsed = 250
         compose.waitForIdle()
-        compose.onNodeWithText("Compared 3 recipes · makes 12").assertExists()
+        // The separator goes with the words after it (a line never ends in "·").
+        compose.onNodeWithText("Compared 3 recipes · makes 12").assertExists()
         compose.onNodeWithText("Checked your list", substring = true).assertDoesNotExist()
         clock.elapsed = 500
         compose.waitForIdle()
         compose.onNodeWithText("Checked your list, sorted into 4 aisles").assertExists()
+        compose.onNodeWithText("Looking up a recipe…").assertExists()
+        // The last tick has landed: the headline says what it found, no ellipsis left.
+        clock.elapsed = 500 + RevealPlan.TICK_MILLIS
+        compose.waitForIdle()
+        compose.onNodeWithText("Found a recipe", substring = true).assertExists()
+        compose.onNodeWithText("Looking up a recipe…").assertDoesNotExist()
     }
 
     /** A search the answer names no query for: "Searched the web", unquoted (it never quotes her note instead). */
@@ -123,7 +132,7 @@ class ThinkingStepsTest {
         assertTrue(ThinkingStep.CheckedPantry(4) in withPantry)
         assertEquals(withPantry.size - 2, withPantry.indexOf(ThinkingStep.CheckedPantry(4)))
         show { ThinkingBox(withPantry, recipe = true, clock = clockAt(withPantry.size, RevealClock.DONE), family = Families.lemon) }
-        compose.onNodeWithText("Checked your pantry · left out 4").assertExists()
+        compose.onNodeWithText("Checked your pantry · left out 4").assertExists()
 
         // No in_pantry rows (an empty pantry, or nothing in it): no pantry step.
         assertTrue(AddRules.thinkingSteps(f.pancakes()).none { it is ThinkingStep.CheckedPantry })

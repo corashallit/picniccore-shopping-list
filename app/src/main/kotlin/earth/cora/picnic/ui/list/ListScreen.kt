@@ -421,6 +421,8 @@ fun ListRoute(
                         resources.getString(R.string.list_toast_nudge),
                         kind = NUDGE_KIND,
                         actionLabel = resources.getString(R.string.list_toast_nudge_action),
+                        // An offer, not an Undo: its chip wears no undo arrow (§4.15).
+                        undo = false,
                         // Only while the list it was offered on still has a trip to close: never a sheet left waiting.
                         onAction = {
                             val now = vm.state.value

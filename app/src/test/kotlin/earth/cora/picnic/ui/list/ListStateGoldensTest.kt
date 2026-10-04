@@ -180,6 +180,25 @@ class ListStateGoldensTest {
         }) { rig.Content() }
     }
 
+    /**
+     * §6.1, §4.15 (item 120) and the trip review: the nudge "New shop? Start a fresh sticker book" with its "New trip"
+     * chip, an offer with no undo arrow on it, held still after its drop.
+     */
+    @Test
+    fun nudgeToastDay() = nudgeToast(ThemeVariant.Day)
+
+    @Test
+    fun nudgeToastGlow() = nudgeToast(ThemeVariant.Glow)
+
+    private fun nudgeToast(variant: ThemeVariant) {
+        val rig = ListRig(now = ListFixture.NOW + 13 * ListFixture.HOUR).inSeason()
+        compose.recordScreen("list_nudge_toast_${variant.name.lowercase()}", variant, settleMillis = 0, before = {
+            mainClock.autoAdvance = false
+            assertTrue("the nudge dropped in", framesUntil(3000) { exists(TOAST_TAG) })
+            advanceMs(220 + 600)
+        }) { rig.Content() }
+    }
+
     @Test
     fun tearOffStripDay() = tearOff(ThemeVariant.Day)
 

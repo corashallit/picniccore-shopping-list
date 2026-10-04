@@ -245,6 +245,13 @@ operator fun AddCommit.plus(other: AddCommit): AddCommit {
  * "Added as typed · add your OpenAI key for smart sorting" (rule 2), "Milk is back on your list" (rule 7, joined after
  * the added part), "Milk is already on your list" (nothing new), plus "★ shiny!" for a shiny pull (egg 6).
  */
+/** "Saturday shop" → "Saturday shop" with a no-break space: the note never leaves "shop ♡" alone on its last line (§4.6). */
+internal fun lastTwoTogether(name: String): String {
+    val trimmed = name.trim()
+    val at = trimmed.lastIndexOf(' ')
+    return if (at <= 0) trimmed else trimmed.substring(0, at) + '\u00A0' + trimmed.substring(at + 1)
+}
+
 fun AddCommit.toastText(resources: Resources): String {
     val parts = mutableListOf<String>()
     when {
@@ -253,9 +260,9 @@ fun AddCommit.toastText(resources: Resources): String {
         added.size == 1 -> parts += resources.getString(
             R.string.add_toast_added_one,
             added.single().name,
-            aisleTitle?.takeIf { it.isNotBlank() } ?: resources.getString(R.string.add_everything_else),
+            lastTwoTogether(aisleTitle?.takeIf { it.isNotBlank() } ?: resources.getString(R.string.add_everything_else)),
         )
-        else -> parts += resources.getQuantityString(R.plurals.add_toast_added_many, added.size, added.size, listTitle)
+        else -> parts += resources.getQuantityString(R.plurals.add_toast_added_many, added.size, added.size, lastTwoTogether(listTitle))
     }
     if (revived.isNotEmpty()) {
         parts += if (revived.size == 1) {
