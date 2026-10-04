@@ -29,6 +29,7 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
@@ -205,6 +206,17 @@ fun Modifier.tabLeavesField(): Modifier {
         true
     }
 }
+
+/**
+ * Space toggles the switch or checkbox this sits on, as Enter does (§15, item 287: Space/Enter toggles). Put it just
+ * before the control's `toggleable`, which keeps Enter.
+ */
+fun Modifier.spaceToggles(value: Boolean, enabled: Boolean = true, onValueChange: (Boolean) -> Unit): Modifier =
+    onKeyEvent { e ->
+        if (!enabled || e.key != Key.Spacebar) return@onKeyEvent false
+        if (e.type == KeyEventType.KeyUp) onValueChange(!value)
+        true
+    }
 
 /** The keys that move focus (Tab, the arrows and the D-pad). */
 private fun KeyEvent.movesFocus(): Boolean =

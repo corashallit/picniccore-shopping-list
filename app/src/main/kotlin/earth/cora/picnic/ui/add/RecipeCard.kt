@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import earth.cora.picnic.R
 import earth.cora.picnic.core.assistant.SkipReason
+import earth.cora.picnic.ui.a11y.spaceToggles
 import earth.cora.picnic.ui.a11y.spokenItemLabel
 import earth.cora.picnic.ui.theme.AisleLook
 import earth.cora.picnic.ui.theme.AisleLooks
@@ -279,13 +280,15 @@ internal fun ReviewRowView(
         .then(
             if (row.canKeep) {
                 // The whole row is the switch; pressed shows the highlighter band behind its words (§4.4), no ripple.
-                Modifier.toggleable(
-                    value = row.keep,
-                    interactionSource = interaction,
-                    indication = null,
-                    role = Role.Switch,
-                    onValueChange = { onToggleKeep(row.key) },
-                ).semantics { contentDescription = label }
+                Modifier
+                    .spaceToggles(row.keep) { onToggleKeep(row.key) }
+                    .toggleable(
+                        value = row.keep,
+                        interactionSource = interaction,
+                        indication = null,
+                        role = Role.Switch,
+                        onValueChange = { onToggleKeep(row.key) },
+                    ).semantics { contentDescription = label }
             } else {
                 Modifier.clearAndSetSemantics { contentDescription = label }
             },

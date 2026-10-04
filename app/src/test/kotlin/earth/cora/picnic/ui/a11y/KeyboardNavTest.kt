@@ -1,20 +1,39 @@
 package earth.cora.picnic.ui.a11y
 
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import earth.cora.picnic.ui.album.AlbumTags
+import earth.cora.picnic.ui.album.PocketLifted
 import earth.cora.picnic.ui.common.PHONE_360
+import earth.cora.picnic.ui.common.SwitchRow
 import earth.cora.picnic.ui.list.LIST_MENU_TAG
+import earth.cora.picnic.ui.list.ListTags
+import earth.cora.picnic.ui.list.exists
 import earth.cora.picnic.ui.list.motion.CELEBRATION_TAG
 import earth.cora.picnic.ui.list.motion.NEXT_CARD_TAG
+import earth.cora.picnic.ui.theme.KeepSwitch
 import earth.cora.picnic.ui.theme.LETTERSET_TAG
+import earth.cora.picnic.ui.theme.PicnicSwitch
+import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.ThemeVariant
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -27,8 +46,12 @@ import org.robolectric.annotation.GraphicsMode
  * same focus), on every screen fixture of the walker:
  * - every control on the layer in front (the screen, or the sheet, menu or pop card over it) is reached by Tab alone,
  *   from the first stop to the last, scrolling where it must;
- * - the keyboard never lands behind a sheet or menu;
+ * - the keyboard never lands behind a sheet or menu, nor on anything that does nothing;
+ * - the keys work what they reach: Space and Enter toggle (rows and every kind of switch), Enter opens an aisle and
+ *   lifts a pocket;
  * - Escape and Back close every sheet, menu, pop card and overlay (the Next card, the celebration).
+ * That focus shows where it lands, and moves where it should as things open and close, is FocusTest's and
+ * FocusRingTest's.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -51,10 +74,15 @@ class KeyboardNavTest {
             // From the top of the screen as reached: Tab forward round the screen (or to the end of a sheet, which
             // holds focus), then Shift+Tab back from where it started.
             toStart()
-            val walk = tabWalk { f -> FocusStop(KeyRules.key(f), KeyRules.key(KeyRules.controlAt(f)), KeyRules.inFront(this, f, front()), f.spoken()) }
+            val walk = tabWalk { f ->
+                val control = KeyRules.controlAt(f)
+                FocusStop(KeyRules.key(f), KeyRules.key(control), KeyRules.inFront(this, f, front()), f.spoken(), KeyRules.acts(control) || KeyRules.holdsItself(f))
+            }
             stops += walk.size
             val before = problems.size
             for (n in walk) if (!n.inFront) problems += "$where: Tab landed behind the layer in front, on ${n.said}"
+            // A stop is something to press, toggle or type in: Tab never rests on what does nothing.
+            for (n in walk) if (!n.operable) problems += "$where: Tab stops on what does nothing: ${n.said}"
             val got = walk.map { it.control }.toSet()
             // What there is to reach: the controls on screen as the walk began, and those in its scrolling lists and
             // pages, scrolled through (the dock folding into the FAB as a list scrolls is another state, not more).
@@ -76,6 +104,94 @@ class KeyboardNavTest {
         }
         assertTrue("focus stops: $stops", stops > 300)
         assertTrue("keyboard problems:\n" + problems.joinToString("\n"), problems.isEmpty())
+    }
+
+    /**
+     * The keys work the controls they reach (§4.4, §15): Space and Enter toggle a row, Enter opens a folded aisle and
+     * lifts an album pocket, Space toggles a settings switch. (Holding Enter edits a row: FocusTest.)
+     */
+    @Test
+    fun keysOperateTheControls() {
+        val walker = ScreenWalker(compose)
+        fun state(tag: String) = compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().single().config.getOrNull(SemanticsProperties.ToggleableState)
+        fun focus(n: SemanticsNode) {
+            compose.onNode(SemanticsMatcher("node ${n.id}") { it.id == n.id }).performSemanticsAction(SemanticsActions.RequestFocus)
+            compose.waitForIdle()
+        }
+        walker.visit(A11yScreens.all.single { it.id == "list/mid-trip" }, Look.Day1) {
+            val keys = walker.keys
+            keys.on()
+            // A row she has: Space puts it back, Enter takes it again.
+            val row = nodes().first { n ->
+                n.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("picnic_row_") == true &&
+                    n.config.getOrNull(SemanticsProperties.ToggleableState) == ToggleableState.On
+            }
+            val tag = row.config[SemanticsProperties.TestTag]
+            focus(row)
+            keys.press(Key.Spacebar)
+            assertEquals("Space toggles $tag", ToggleableState.Off, state(tag))
+            keys.press(Key.Enter)
+            assertEquals("Enter toggles $tag", ToggleableState.On, state(tag))
+            // A folded aisle: Enter opens it (its tray's chevron shows).
+            val strip = nodes().first { it.config.getOrNull(SemanticsProperties.TestTag) == ListTags.strip("bakery") }
+            focus(strip)
+            keys.press(Key.Enter)
+            assertTrue("Enter opens the bakery", compose.exists(ListTags.chevron("bakery")))
+        }
+        // The switches of the screens' own state: the Edit sheet's, the recipe card's keep switches (the settings rows:
+        // spaceTogglesEverySwitch).
+        for (id in listOf("sheet/edit", "sheet/add-recipe")) walker.visit(A11yScreens.all.single { it.id == id }, Look.Day1) {
+            val keys = walker.keys
+            keys.on()
+            val front = KeyRules.front(this)()
+            val switch = nodes().first { n ->
+                n.config.getOrNull(SemanticsProperties.Role) == Role.Switch && n.config.getOrNull(SemanticsProperties.Disabled) == null &&
+                    KeyRules.inFront(this, n, front)
+            }
+            val before = switch.config[SemanticsProperties.ToggleableState]
+            focus(switch)
+            keys.press(Key.Spacebar)
+            val after = nodes().first { it.id == switch.id }.config[SemanticsProperties.ToggleableState]
+            assertTrue("$where: Space toggles ${switch.spoken()}", after != before)
+        }
+        walker.visit(A11yScreens.all.single { it.id == "album/default" }, Look.Day1) {
+            val keys = walker.keys
+            keys.on()
+            val pocket = nodes().first { it.config.getOrNull(SemanticsProperties.TestTag) == AlbumTags.pocket("apple") }
+            focus(pocket)
+            keys.press(Key.Enter)
+            val lifted = nodes().first { it.config.getOrNull(SemanticsProperties.TestTag) == AlbumTags.pocket("apple") }
+            assertEquals("Enter lifts the apple's pocket", true, lifted.config.getOrNull(PocketLifted))
+        }
+        walker.finish()
+    }
+
+    /** Space and Enter toggle each kind of switch the kit has: a settings row, the bare switch, the keep spot. */
+    @Test
+    fun spaceTogglesEverySwitch() {
+        val keys = Keyboard(compose)
+        var row by mutableStateOf(false)
+        var bare by mutableStateOf(false)
+        var keep by mutableStateOf(false)
+        compose.setContent {
+            keys.Capture()
+            PicnicTheme(variant = ThemeVariant.Day) {
+                Column {
+                    SwitchRow(label = "Draw new stickers", checked = row, onCheckedChange = { row = it }, modifier = Modifier.testTag("row"))
+                    PicnicSwitch(checked = bare, onCheckedChange = { bare = it }, modifier = Modifier.testTag("bare"))
+                    KeepSwitch(checked = keep, onCheckedChange = { keep = it }, modifier = Modifier.testTag("keep"))
+                }
+            }
+        }
+        keys.on()
+        for ((tag, value) in listOf("row" to { row }, "bare" to { bare }, "keep" to { keep })) {
+            compose.onNode(hasTestTag(tag)).performSemanticsAction(SemanticsActions.RequestFocus)
+            compose.waitForIdle()
+            keys.press(Key.Spacebar)
+            assertTrue("Space switches $tag on", value())
+            keys.press(Key.Enter)
+            assertTrue("Enter switches $tag off", !value())
+        }
     }
 
     /**
@@ -153,7 +269,13 @@ object KeyRules {
     fun inFront(v: Visit, n: SemanticsNode, front: SemanticsNode?): Boolean =
         front == null || generateSequence(n) { it.parent }.any { it.id == front.id }
 
-    private fun acts(n: SemanticsNode): Boolean {
+    /**
+     * A sheet holding focus itself (the Trip book's page: nothing on it to press) is a stop that does nothing on purpose:
+     * Escape and Back reach it there (§15).
+     */
+    fun holdsItself(f: SemanticsNode): Boolean = f.config.getOrNull(SemanticsProperties.TestTag) == LETTERSET_TAG
+
+    fun acts(n: SemanticsNode): Boolean {
         val c = n.config
         return c.getOrNull(SemanticsActions.OnClick) != null || c.getOrNull(SemanticsActions.OnLongClick) != null ||
             c.getOrNull(SemanticsProperties.ToggleableState) != null || c.getOrNull(SemanticsProperties.EditableText) != null
@@ -192,7 +314,7 @@ fun Visit.toStart() {
 }
 
 /** One place the keyboard's focus landed, read as it landed (a lazy item may be gone by the walk's end). */
-class FocusStop(val key: String, val control: String, val inFront: Boolean, val said: String)
+class FocusStop(val key: String, val control: String, val inFront: Boolean, val said: String, val operable: Boolean = true)
 
 /**
  * The keyboard's walk through the visit (the phone in keyboard mode): from what holds focus (a sheet takes it as it
