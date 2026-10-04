@@ -69,7 +69,7 @@
       "id": "recipe-pancakes",
       "kind": "text",
       "tags": ["recipe"],
-      "about": "Well-known recipe; butter is already on the list; unrelated list items must not be mentioned",
+      "about": "Well-known recipe; butter is already on the list; unrelated list items must not be mentioned; an optional skip (maple syrup to serve) is never explained as something she already has",
       "input": "ingredients for pancakes from scratch",
       "existing": ["Butter", "Paper towels"],
       "search": "avoid",
@@ -87,7 +87,7 @@
         {"match": ["baking soda"], "aisle": ["baking"], "icons": ["baking_soda"], "optional": true}
       ],
       "forbidden": ["re:^(unsalted |salted )?butter$", "paper towel"],
-      "message": {"mustNot": ["paper towel"]}
+      "message": {"mustNot": ["paper towel", "re:\\balready (have|got)\\b"]}
     },
     {
       "id": "recipe-tacos-no-spices",

@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.boundsInRoot as layoutBoundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -44,7 +46,6 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
-import kotlin.math.hypot
 
 /**
  * WP4 polish (§4.6, §4.7, §4.8, §4.3, §15): the fixed-size pieces grow with the font instead of clipping it, at font
@@ -139,29 +140,89 @@ open class LargeTextComponentsTest {
     }
 
     /**
-     * The least distance (px) from the numeral's ink to the inside of the ring of the circle at [b] in [img]: over every
-     * pixel inside the ring's inner edge (half a px in, clear of the ring's own anti-aliasing) at least half-way from
-     * white to [trace]. Null when there is no ink.
+     * The index tab's number circle is the kit's (§2.7 "the circle grows when a large font needs it", §4.10, item 337):
+     * on strip and tray tabs, for every numeral 1 to 24 at 1.0, 1.3 and 2.0 and at 2.625 and 3 px per dp, its ink keeps
+     * 0.75 dp from the ring (read off the pixels as [numberCircleGrowsWithItsNumeral] does). At 1.0 the circle is its
+     * drawn 24 dp; at 2.0 it has grown beside the name, which keeps its whole word.
      */
-    private fun numeralRingGap(img: android.graphics.Bitmap, b: androidx.compose.ui.geometry.Rect, density: Float, trace: Int): Float? {
-        val cx = b.center.x
-        val cy = b.center.y
-        val inner = b.width / 2f - 2f * density
-        val lum = { c: Int -> (((c shr 16) and 0xFF) + ((c shr 8) and 0xFF) + (c and 0xFF)) / 3f }
-        val threshold = (255f + lum(trace)) / 2f
-        val left = b.left.toInt()
-        val top = b.top.toInt()
-        val w = b.width.toInt()
-        val h = b.height.toInt()
-        val px = IntArray(w * h)
-        img.getPixels(px, 0, w, left, top, w, h)
-        var gap: Float? = null
-        for (y in 0 until h) for (x in 0 until w) {
-            val dist = hypot(left + x + 0.5f - cx, top + y + 0.5f - cy)
-            if (dist >= inner - 0.5f) continue
-            if (lum(px[y * w + x]) <= threshold) gap = minOf(gap ?: Float.MAX_VALUE, inner - dist)
+    @Test
+    @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
+    fun tabNumbersGrowWithTheirName() {
+        val bounds = HashMap<Int, androidx.compose.ui.geometry.Rect>()
+        val failures = mutableListOf<String>()
+        var checked = 0
+        for (density in listOf(3f, 2.625f)) for (scale in listOf(1f, 1.3f, 2f)) for (size in TabSize.entries) {
+            bounds.clear()
+            show(scale, density) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    for (n in 1..24) Box(Modifier.testTag("tab$n")) {
+                        IndexTab(n, "Tea", AisleLooks.of(n), size, ballpoint = size == TabSize.Tray, numberModifier = Modifier.onGloballyPositioned { bounds[n] = it.layoutBoundsInRoot() })
+                    }
+                }
+            }
+            val img = compose.onRoot().captureToImage().asAndroidBitmap()
+            val drawn = Density(density).run { 24.dp.roundToPx() }
+            for (n in 1..24) {
+                val what = "$n on a $size tab at $scale, ${density}x"
+                val b = bounds.getValue(n)
+                if (scale == 1f && (abs(b.width - drawn) > 0.5f || abs(b.height - drawn) > 0.5f)) failures += "$what: drawn size not kept (${b.width} px for $drawn)"
+                if (scale == 2f && b.width <= drawn + 0.5f) failures += "$what: the circle never grew (${b.width} px)"
+                if (abs(b.width - b.height) > 0.5f) failures += "$what: not a circle (${b.width} × ${b.height})"
+                val gap = numeralRingGap(img, b, density, AisleLooks.of(n).family.trace.toArgb())
+                if (gap == null) failures += "$what: no numeral ink"
+                else if (gap < 0.75f * density - 0.5f) failures += "$what: ink ${"%.2f".format(gap / density)} dp from the ring"
+                if (walkAll(node("tab$n")).any { it.config.getOrNull(TextOverflowed) == true }) failures += "$what: \"Tea\" cut"
+                checked++
+            }
         }
-        return gap
+        assertEquals(24 * 3 * 2 * TabSize.entries.size, checked)
+        assertTrue("tab number circles: ${failures.joinToString("\n")}", failures.isEmpty())
+    }
+
+    /**
+     * The tab's circle gives way to its name (§4.10: the name is what she reads, the number repeats it). "Produce" on
+     * strip tabs from 150 to 340 dp wide, at 1.3 and 2.0, 2.625 and 3 px per dp, numerals 1, 20 and 24: the circle is
+     * never under its 24 dp and grows (never shrinks) as the tab widens; it holds back from its full growth only while
+     * the whole name needs the room, so the name is cut only where even a 24 dp circle leaves it too little; and however
+     * far it holds back, the numeral's ink keeps 0.75 dp from the ring (read off the pixels). The widest tab draws the
+     * circle at its full growth.
+     */
+    @Test
+    @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
+    fun tabCircleGivesWayToTheName() {
+        val widths = (150..340 step 10).toList()
+        val bounds = HashMap<Int, androidx.compose.ui.geometry.Rect>()
+        val failures = mutableListOf<String>()
+        for (density in listOf(3f, 2.625f)) for (scale in listOf(1.3f, 2f)) for (n in listOf(1, 20, 24)) {
+            bounds.clear()
+            var full = 0f
+            show(scale, density) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    for (w in widths) Box(Modifier.testTag("w$w")) {
+                        IndexTab(n, "Produce", AisleLooks.of(n), TabSize.Strip, ballpoint = false, maxWidth = w.dp, numberModifier = Modifier.onGloballyPositioned { bounds[w] = it.layoutBoundsInRoot() })
+                    }
+                    Box(Modifier.testTag("alone")) { NumberCircle(n, AisleLooks.of(n), Modifier.onGloballyPositioned { full = it.size.width.toFloat() }, size = 24.dp) }
+                }
+            }
+            val img = compose.onRoot().captureToImage().asAndroidBitmap()
+            val least = Density(density).run { 24.dp.roundToPx() }
+            var last = 0f
+            for (w in widths) {
+                val what = "$n in a $w dp tab at $scale, ${density}x"
+                val b = bounds.getValue(w)
+                val cut = walkAll(node("w$w")).any { it.config.getOrNull(TextOverflowed) == true }
+                if (b.width < least - 0.5f) failures += "$what: circle ${b.width} px, under 24 dp"
+                if (b.width < last - 0.5f) failures += "$what: circle shrank as the tab widened (${b.width} < $last px)"
+                if (cut && b.width > least + 0.5f) failures += "$what: \"Produce\" cut beside a ${b.width} px circle that could give way"
+                if (b.width > full + 0.5f) failures += "$what: circle ${b.width} px, past its full growth $full"
+                val gap = numeralRingGap(img, b, density, AisleLooks.of(n).family.trace.toArgb())
+                if (gap == null) failures += "$what: no numeral ink"
+                else if (gap < 0.75f * density - 0.5f) failures += "$what: ink ${"%.2f".format(gap / density)} dp from the ring"
+                last = b.width
+            }
+            if (abs(last - full) > 0.5f) failures += "$n at $scale, ${density}x: the widest tab's circle $last px is not its full $full px"
+        }
+        assertTrue("tab circles giving way: ${failures.joinToString("\n")}", failures.isEmpty())
     }
 
     /**

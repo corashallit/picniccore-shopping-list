@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.github.takahirom.roborazzi.captureRoboImage
 import earth.cora.picnic.core.model.IconRef
 import org.junit.Rule
@@ -179,6 +180,20 @@ class ThemeExtraGoldensTest(private val variant: ThemeVariant, private val v: St
     @Test fun lcdMoon() = compose.recordGolden("lcd_moon_$v", variant) {
         LcdChip(LcdState(LcdMode.Count, count = 10, total = 24))
         if (variant == ThemeVariant.Day) PicnicTheme(ThemeVariant.Dusk) { LcdChip(LcdState(LcdMode.Count, count = 10, total = 24)) }
+    }
+
+    /**
+     * Lists named with emoji (checklist 334): each emoji wears the die-cut halo (white; Glow navy) and casts a silhouette
+     * in the shadow colour, never a second full-colour emoji peeking out behind it. At 1.0 and, below, at 2.0.
+     */
+    @Test fun puffyEmoji() = compose.recordGolden("puffy_title_emoji_$v", variant) {
+        val title = PicnicTheme.type.screenTitle.copy(color = PicnicTheme.colors.ink)
+        for (t in listOf("Picnic \uD83C\uDF53 party", "Taco night \uD83C\uDF2E\uD83C\uDF36\uFE0F")) {
+            PuffyText(t, title, fill = PicnicTheme.colors.ink, stroke = 6.dp, minFontSize = 20.sp)
+        }
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(androidx.compose.ui.platform.LocalDensity.current.density, 2f)) {
+            PuffyText("Picnic \uD83C\uDF53", title, fill = PicnicTheme.colors.ink, stroke = 6.dp, minFontSize = 20.sp)
+        }
     }
 
     /** Titles ellipsized in the app bar and a narrow box: the stroke and shadow stay whole (checklist 334). */

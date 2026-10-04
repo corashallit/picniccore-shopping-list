@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -439,7 +440,7 @@ private fun SwipeBand(right: Boolean, progress: Float, modifier: Modifier) {
  * The row's content: the sticker (its ghost once checked), the name and detail (never moving during the chains), the
  * checkbox. One TalkBack node: "Strawberries, 1 litre basket", a checkbox, with Check / Uncheck, Delete and Edit.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun RowContent(
     row: ItemRowUi,
@@ -593,11 +594,18 @@ internal fun RowContent(
                 modifier = Modifier.testTag(ListTags.name(row.id)).probe(probe, "name:${row.id}").then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "name:" + row.id) }),
             )
             if (row.detail != null || row.holo) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // The "shiny!" / "jackpot!" chip follows the detail (§4.7, §4.11) and drops under it when the two cannot
+                // share a line (a long detail, a large font), so the detail keeps its own line breaks at the column's
+                // width and the chip its size (§4.7: a caller whose slot can be narrower than the chip gives it a line).
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
                     row.detail?.let {
-                        Text(it, style = t.itemDetail.copy(color = c.inkSoft), modifier = Modifier.weight(1f, fill = false).testTag(ListTags.detail(row.id)).probe(probe, "detail:${row.id}").then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "detail:" + row.id) }))
+                        Text(it, style = t.itemDetail.copy(color = c.inkSoft), modifier = Modifier.testTag(ListTags.detail(row.id)).probe(probe, "detail:${row.id}").then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "detail:" + row.id) }))
                     }
-                    if (row.holo) RarityChip(jackpot = row.rarity == earth.cora.picnic.core.model.Rarity.JACKPOT, modifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "chip:" + row.id) })
+                    if (row.holo) RarityChip(jackpot = row.rarity == earth.cora.picnic.core.model.Rarity.JACKPOT, modifier = Modifier.testTag(ListTags.rarityChip(row.id)).then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "chip:" + row.id) }))
                 }
             }
         }

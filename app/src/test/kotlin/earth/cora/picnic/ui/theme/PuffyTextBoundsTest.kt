@@ -60,8 +60,10 @@ import org.robolectric.annotation.GraphicsMode
  * and Glow at font scale 1.0 and 2.0, fitting and ellipsized:
  * - the drawn ink (stroke, shadow and fill, read back from the pixels on a plain ground, nothing clipping) lies inside
  *   the PuffyText's own box, so laying the box out is enough to show it whole;
- * - in every real caller (the binder top, the secondary screens' bar with and without a glyph subtitle, the About
- *   wordmark, the Next card, the celebration's title and banner) no ancestor's clip cuts into that box;
+ * - in every real caller (the List screen's own title, open and with its bar collapsed, the binder top, the secondary
+ *   screens' bar with and without a glyph subtitle, the About wordmark, the Next card, the celebration's title and
+ *   banner) no ancestor's clip cuts into that box;
+ * - a colour glyph (an emoji in a list's name) casts no full-colour ghost and wears its halo;
  * - the white (Glow #3A438A) stroke has no pinholes (the NEXT "XT" speck);
  * - an ellipsized title drops the space before its "…" and its box ends where its ink ends.
  */
@@ -163,6 +165,7 @@ class PuffyTextBoundsTest {
     @Test
     fun realCallersNeverClipTheirTitles() {
         val puffy = SemanticsMatcher.keyIsDefined(PuffyFontSize)
+        val collapsed = earth.cora.picnic.ui.list.ListScreenState().also { it.scrolledDown = true }
         val callers: List<Pair<String, @Composable () -> Unit>> = listOf(
             "binder top" to {
                 Column {
@@ -175,6 +178,23 @@ class PuffyTextBoundsTest {
                         lcd = LcdState(LcdMode.Count, count = 104, total = 128), onMore = {}, onSunTap = {}, state = remember { AppBarState(true) },
                     )
                 }
+            },
+            // The shipping list title (ListScreen's TopStack): its own row beside the sun, egg 7's fill brush, the size
+            // refitting in half-sp steps as the bar collapses. Open, and collapsed by a scroll.
+            "list" to {
+                earth.cora.picnic.ui.list.ListScreen(
+                    earth.cora.picnic.ui.list.ListFixture.ui(MotionFixture.state("Thanksgiving dinner at the cottage with everyone")),
+                    earth.cora.picnic.ui.list.ListActions(),
+                )
+            },
+            "list, bar collapsed" to {
+                earth.cora.picnic.ui.list.ListScreen(
+                    earth.cora.picnic.ui.list.ListFixture.ui(MotionFixture.state("Thanksgiving dinner at the cottage with everyone")),
+                    earth.cora.picnic.ui.list.ListActions(),
+                    screen = collapsed,
+                    // Scrolled off the top, so the bar stays collapsed (at the top it comes back).
+                    listState = remember { androidx.compose.foundation.lazy.LazyListState(firstVisibleItemIndex = 3) },
+                )
             },
             "secondary bar" to {
                 PicnicTopBar("My store & aisles", subtitle = "Hillcrest Market", navigation = { PicnicIconButton(PicnicGlyph.Back, "Back", {}) })
@@ -212,6 +232,7 @@ class PuffyTextBoundsTest {
                 if (name == "wordmark") assertTrue("$what: the wordmark is ellipsized", !n.config.contains(earth.cora.picnic.ui.a11y.TextOverflowed))
             }
         }
+        assertTrue("the list's bar stayed collapsed for its case", collapsed.scrolledDown)
         // The wordmark only ever shrinks as its box narrows: one line shrinking, then stacked at the size it reached
         // (never a 40 sp stack at 232 dp after 25 sp on one line at 248 dp), never ellipsized, never clipped.
         for (scale in listOf(1f, 1.3f, 2f)) for (compact in listOf(false, true)) {
@@ -429,6 +450,79 @@ class PuffyTextBoundsTest {
         // The box's edge is open air: a sliver between the edge and a halo nearer than the neck is no hole.
         val sliver = grid(intArrayOf(0, 4, 2, 16))
         assertNull(PuffyPinholes.holes(sliver, w, h, pen = 6, neck = 2, shore = 3))
+    }
+
+    /**
+     * A colour glyph casts no ghost (§2.7, item 334): an emoji in a list's name ("Picnic 🍓 party") is a bitmap that the
+     * passes' Stroke and colours never reach, so the shadow pass used to draw a second, full-colour strawberry offset by
+     * hs, peeking out of the first, and the stroke left the emoji with no die-cut halo. Drawn with the stroke pure white,
+     * the shadow pure blue on a pure green ground, at 1.0 and 2.0, Day and Glow: no strawberry red or leaf green lies
+     * outside the emoji's own box in the fill's layout (only the fill draws it in colour), the strawberry is there in
+     * colour, and the ground never shows within the halo's reach of its left edge.
+     */
+    @Test
+    @Config(qualifiers = "w900dp-h400dp-xxhdpi")
+    fun colourGlyphsCastNoGhost() {
+        val text = "Picnic \uD83C\uDF53 party"
+        val index = text.indexOf("\uD83C\uDF53")
+        fun isRed(c: Int) = ((c shr 16) and 0xFF) > 150 && ((c shr 8) and 0xFF) < 110 && (c and 0xFF) < 110
+        fun isLeaf(c: Int): Boolean {
+            val r = (c shr 16) and 0xFF
+            val g = (c shr 8) and 0xFF
+            val b = c and 0xFF
+            // Leaf greens are yellow-greens, more red than blue; the ground's pure green and its blends with the white
+            // stroke and the blue shadow never are (they carry at least as much blue as red).
+            return g in 100..210 && r >= 40 && r < g - 30 && b < g - 40 && b < r - 10
+        }
+        for (variant in listOf(ThemeVariant.Day, ThemeVariant.Glow)) for (scale in listOf(1f, 2f)) {
+            var fit: PuffyFit? = null
+            show(variant, scale) {
+                val style = PicnicTheme.type.screenTitle.copy(color = PicnicTheme.colors.ink)
+                val hs = PicnicTheme.shadows.hs
+                val measurer = androidx.compose.ui.text.rememberTextMeasurer(cacheSize = 0)
+                val d = LocalDensity.current
+                Box(Modifier.background(ground).padding(24.dp).testTag("frame")) {
+                    Box(Modifier.width(800.dp)) {
+                        PuffyText(text, style, fill = style.color, stroke = 6.dp, modifier = Modifier.testTag("title"), strokeColor = Color.White, shadow = hs, shadowColor = probeShadow)
+                    }
+                }
+                fit = with(d) {
+                    fitPuffy(
+                        measurer, AnnotatedString(text), style, 6.dp.toPx(), hs.x.toPx(), hs.y.toPx(), TextUnit.Unspecified, 1,
+                        TextAlign.Start, 800.dp.roundToPx(), Color.White, probeShadow,
+                    )
+                }
+            }
+            val what = "\"$text\" ($variant, ×$scale)"
+            val f = requireNotNull(fit)
+            assertTrue("$what: the strawberry counts as a colour glyph", f.colourGlyphs)
+            assertTrue("$what: fits whole", !f.overflowed)
+            val frame = compose.onNodeWithTag("frame").fetchSemanticsNode().boundsInRoot
+            val box = compose.onNode(SemanticsMatcher.keyIsDefined(PuffyFontSize), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.translate(-frame.left, -frame.top)
+            val glyph = f.fill.getBoundingBox(index).translate(box.left + f.half, box.top + f.half)
+            val img = compose.onNodeWithTag("frame").captureToImage().asAndroidBitmap()
+            val px = IntArray(img.width * img.height)
+            img.getPixels(px, 0, img.width, 0, 0, img.width, img.height)
+            var inside = 0
+            val ghost = mutableListOf<String>()
+            for (y in 0 until img.height) for (x in 0 until img.width) {
+                val c = px[y * img.width + x]
+                if (!isRed(c) && !isLeaf(c)) continue
+                val within = x + 0.5f >= glyph.left - 1f && x + 0.5f <= glyph.right + 1f && y + 0.5f >= glyph.top - 1f && y + 0.5f <= glyph.bottom + 1f
+                if (within) inside++ else if (ghost.size < 8) ghost += "($x, $y) #${Integer.toHexString(c)}"
+            }
+            assertTrue("$what: the strawberry is drawn in colour in its box $glyph ($inside px)", inside > 20)
+            assertTrue("$what: strawberry colours outside its box $glyph: $ghost", ghost.isEmpty())
+            // Its halo: on the row through the strawberry's middle, the ground never shows within the halo's reach
+            // (half the stroke, less a px of anti-aliasing) to the left of its first red pixel.
+            val midY = glyph.center.y.toInt()
+            val firstRed = (glyph.left.toInt().coerceAtLeast(0)..glyph.right.toInt().coerceAtMost(img.width - 1)).firstOrNull { isRed(px[midY * img.width + it]) || isLeaf(px[midY * img.width + it]) }
+            requireNotNull(firstRed) { "$what: no strawberry on its middle row" }
+            val reach = (f.half - 1f).toInt()
+            for (x in (firstRed - reach) until firstRed) {
+                assertTrue("$what: the ground shows at ($x, $midY), ${firstRed - x} px from the strawberry's edge: no halo", !near(px[midY * img.width + x], ground.toArgb(), 40))
+            }
+        }
     }
 
     /** "Everything…", never "Everything …"; spans and their colour carry over to the "…". */

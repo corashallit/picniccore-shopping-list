@@ -3,7 +3,9 @@ package earth.cora.picnic.ui.list.motion
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
@@ -20,6 +22,12 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -303,6 +311,66 @@ class NextStopTest {
         assertEquals(17f, widths.getValue(1f).second, 0.01f)
         assertTrue("it grows at 1.3: ${widths.getValue(1.3f).second}", widths.getValue(1.3f).second > 17f)
         assertTrue("and at 2.0: ${widths.getValue(2f).second}", widths.getValue(2f).second > 17f)
+    }
+
+    /**
+     * Item 337 on the Next card (§10): its 30 dp circle holds every numeral 1 to 24 (a 24-aisle store's last stops) with
+     * the ink at least 0.75 dp from the ring, at font scale 1.0, 1.3 and 2.0, under Compose's linear scaling and under
+     * Android's own non-linear one (a phone at 130 % or 200 %), at 2.625 and 3 px per dp. Read off the pixels by each
+     * ink pixel's distance from the centre (LargeTextComponentsTest.numberCircleGrowsWithItsNumeral's check), half a px
+     * allowed for anti-aliasing. The circle stays 30 dp (item 170); the numeral is what gives way.
+     */
+    @Test
+    @Config(qualifiers = "w960dp-h1000dp-xxhdpi")
+    fun numeralsClearTheRing() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        fun platform(density: Float, fontScale: Float): Density {
+            val config = android.content.res.Configuration(context.resources.configuration).apply {
+                this.fontScale = fontScale
+                densityDpi = (density * 160f).let { kotlin.math.round(it).toInt() }
+            }
+            return Density(context.createConfigurationContext(config))
+        }
+        var content: @androidx.compose.runtime.Composable () -> Unit by androidx.compose.runtime.mutableStateOf({})
+        compose.setContent { content() }
+        val failures = mutableListOf<String>()
+        var checked = 0
+        for (px in listOf(3f, 2.625f)) for (scale in listOf(1f, 1.3f, 2f)) for (nonLinear in listOf(false, true)) {
+            if (nonLinear && scale == 1f) continue
+            val density = if (nonLinear) platform(px, scale) else Density(px, scale)
+            for (batch in (1..24).chunked(6)) {
+                content = {
+                    CompositionLocalProvider(LocalDensity provides density) {
+                        PicnicTheme(ThemeVariant.Day, reducedMotion = true) {
+                            Column(Modifier.background(androidx.compose.ui.graphics.Color.White)) {
+                                for (row in batch.chunked(3)) {
+                                    androidx.compose.foundation.layout.Row {
+                                        for (n in row) Box(Modifier.width(310.dp).testTag("cell$n")) {
+                                            NextStopCard(n, "Baking", null, earth.cora.picnic.ui.theme.AisleLooks.of(n), "NEXT")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                compose.waitForIdle()
+                val img = compose.onRoot().captureToImage().asAndroidBitmap()
+                for (n in batch) {
+                    val what = "$n at ${if (nonLinear) "the phone's" else "linear"} $scale, ${px}x"
+                    val b = compose.onNode(androidx.compose.ui.test.hasTestTag(earth.cora.picnic.ui.theme.NEXT_NUMBER_TAG) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("cell$n")), useUnmergedTree = true)
+                        .fetchSemanticsNode().boundsInRoot
+                    val drawn = Density(px).run { 30.dp.roundToPx() }
+                    if (kotlin.math.abs(b.width - drawn) > 0.5f || kotlin.math.abs(b.height - drawn) > 0.5f) failures += "$what: circle ${b.width} × ${b.height} px, not 30 dp"
+                    val gap = earth.cora.picnic.ui.theme.numeralRingGap(img, b, px, earth.cora.picnic.ui.theme.AisleLooks.of(n).family.trace.toArgb())
+                    if (gap == null) failures += "$what: no numeral ink"
+                    else if (gap < 0.75f * px - 0.5f) failures += "$what: ink ${"%.2f".format(gap / px)} dp from the ring"
+                    checked++
+                }
+            }
+        }
+        assertEquals(24 * 2 * 5, checked)
+        assertTrue("Next card numerals: ${failures.joinToString("\n")}", failures.isEmpty())
     }
 
     /** Item 171: a tap on the card skips it at once. */

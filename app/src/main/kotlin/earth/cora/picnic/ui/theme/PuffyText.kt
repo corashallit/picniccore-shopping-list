@@ -30,6 +30,10 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsPropertyKey
@@ -179,6 +183,10 @@ fun PuffyText(
             density.density, density.fontScale, direction, wrapLast,
         )
         val pinholes = rememberPinholes(fit, key, density, work)
+        // A colour glyph (an emoji in a list's name) is a bitmap: the passes' Stroke style and colours never reach it, so
+        // its shadow and stroke passes are drawn in layers that tint everything to the pass's colour ([tintedPass]).
+        val shadowTint = remember(fit.colourGlyphs, shadowColor) { if (fit.colourGlyphs) tintPaint(shadowColor) else null }
+        val strokeTint = remember(fit.colourGlyphs, strokeColor) { if (fit.colourGlyphs) tintPaint(strokeColor) else null }
         Box(
             Modifier
                 .size(widthDp, heightDp)
@@ -192,15 +200,23 @@ fun PuffyText(
                     val patch = pinholes?.image
                     val strokeStyle = Stroke(width = fit.half * 2, join = StrokeJoin.Round)
                     if (fit.sx > 0f || fit.sy > 0f) {
-                        translate(fit.half + fit.sx, fit.half + fit.sy) {
-                            drawText(fit.shadow, shadowColor, drawStyle = strokeStyle)
-                            drawText(fit.shadow, shadowColor, drawStyle = Fill)
+                        tintedPass(shadowTint) {
+                            translate(fit.half + fit.sx, fit.half + fit.sy) {
+                                drawText(fit.shadow, shadowColor, drawStyle = strokeStyle)
+                                drawText(fit.shadow, shadowColor, drawStyle = Fill)
+                                if (fit.colourGlyphs) drawHalo(fit.shadow, shadowColor, fit.half)
+                            }
                         }
                         if (patch != null) {
                             drawImage(patch, pinholes.topLeft + Offset(fit.sx, fit.sy), colorFilter = ColorFilter.tint(shadowColor, BlendMode.SrcIn))
                         }
                     }
-                    translate(fit.half, fit.half) { drawText(fit.outline, strokeColor, drawStyle = strokeStyle) }
+                    tintedPass(strokeTint) {
+                        translate(fit.half, fit.half) {
+                            drawText(fit.outline, strokeColor, drawStyle = strokeStyle)
+                            if (fit.colourGlyphs) drawHalo(fit.outline, strokeColor, fit.half)
+                        }
+                    }
                     if (patch != null) drawImage(patch, pinholes.topLeft, colorFilter = ColorFilter.tint(strokeColor, BlendMode.SrcIn))
                     translate(fit.half, fit.half) {
                         val brush = fillBrush?.invoke()
@@ -231,6 +247,66 @@ private fun rememberPinholes(fit: PuffyFit, key: PuffyPatchKey, density: Density
     }
     return state.value
 }
+
+/** A layer paint that turns everything drawn in it into [color] (its shape kept, its own colours dropped). */
+private fun tintPaint(color: Color): Paint = Paint().apply { colorFilter = ColorFilter.tint(color, BlendMode.SrcIn) }
+
+/**
+ * Draws [block] in a layer composited through [tint] (a [tintPaint]), or straight when [tint] is null (a title with no
+ * colour glyph pays nothing). In the layer an emoji's colour bitmap comes out as a silhouette in the pass's colour, so
+ * its shadow is a shadow, not a full-colour ghost peeking out from behind it, and its stroke is a die-cut halo.
+ */
+private inline fun DrawScope.tintedPass(tint: Paint?, block: DrawScope.() -> Unit) {
+    if (tint == null) {
+        block()
+        return
+    }
+    drawIntoCanvas { it.saveLayer(Rect(Offset.Zero, size), tint) }
+    block()
+    drawIntoCanvas { it.restore() }
+}
+
+/** Eight compass offsets (unit length) round which [drawHalo] repeats a glyph's fill. */
+private val HALO_DIRECTIONS = floatArrayOf(1f, 0f, -1f, 0f, 0f, 1f, 0f, -1f, 0.7071f, 0.7071f, -0.7071f, 0.7071f, 0.7071f, -0.7071f, -0.7071f, -0.7071f)
+
+/**
+ * [layout]'s fill, and copies of it moved [r] px in eight directions: a glyph's silhouette grown by about [r], which is
+ * what a Stroke [r] × 2 wide gives an outline glyph. A colour glyph (a bitmap) takes no Stroke, so this is its halo; in a
+ * tinted layer ([tintedPass]) it is drawn in the pass's colour. Under letters it falls inside their own stroke.
+ */
+private fun DrawScope.drawHalo(layout: TextLayoutResult, color: Color, r: Float) {
+    drawText(layout, color, drawStyle = Fill)
+    var i = 0
+    while (i < HALO_DIRECTIONS.size) {
+        translate(HALO_DIRECTIONS[i] * r, HALO_DIRECTIONS[i + 1] * r) { drawText(layout, color, drawStyle = Fill) }
+        i += 2
+    }
+}
+
+/**
+ * Whether [text] holds a character a font draws in colour (an emoji): anything from U+1F000 up (emoji, flags), an
+ * emoji presentation selector or keycap, or a symbol whose default look is an emoji. Such a glyph is a bitmap, which a
+ * Stroke draw style and a pass's colour never reach (PuffyText draws its passes in tinted layers then). Counting a plain
+ * symbol by mistake costs a layer, nothing else: the tinted passes draw letters as before.
+ */
+internal fun hasColourGlyphs(text: CharSequence): Boolean {
+    var i = 0
+    while (i < text.length) {
+        val cp = Character.codePointAt(text, i)
+        if (cp >= 0x1F000 || cp == 0xFE0F || cp == 0x20E3 || EMOJI_SYMBOLS.any { cp in it }) return true
+        i += Character.charCount(cp)
+    }
+    return false
+}
+
+/** The symbols below U+1F000 drawn as emoji by default (Unicode's Emoji_Presentation=Yes in the BMP). */
+private val EMOJI_SYMBOLS: List<IntRange> = listOf(
+    0x231A..0x231B, 0x23E9..0x23EC, 0x23F0..0x23F0, 0x23F3..0x23F3, 0x25FD..0x25FE, 0x2614..0x2615, 0x2648..0x2653,
+    0x267F..0x267F, 0x2693..0x2693, 0x26A1..0x26A1, 0x26AA..0x26AB, 0x26BD..0x26BE, 0x26C4..0x26C5, 0x26CE..0x26CE,
+    0x26D4..0x26D4, 0x26EA..0x26EA, 0x26F2..0x26F3, 0x26F5..0x26F5, 0x26FA..0x26FA, 0x26FD..0x26FD, 0x2705..0x2705,
+    0x270A..0x270B, 0x2728..0x2728, 0x274C..0x274C, 0x274E..0x274E, 0x2753..0x2755, 0x2757..0x2757, 0x2795..0x2797,
+    0x27B0..0x27B0, 0x27BF..0x27BF, 0x2B1B..0x2B1C, 0x2B50..0x2B50, 0x2B55..0x2B55,
+)
 
 /** What a pinhole patch depends on: the shapes of a fitted title (never its colours). */
 internal data class PuffyPatchKey(
@@ -299,6 +375,8 @@ internal class PuffyFit(
     val overflowed: Boolean,
     val width: Int,
     val height: Int,
+    /** The text holds a colour glyph (an emoji, [hasColourGlyphs]): its passes are drawn in tinted layers. */
+    val colourGlyphs: Boolean = false,
 )
 
 /**
@@ -389,7 +467,7 @@ internal fun fitPuffy(
     val inkW = max(inkRight(layout), layout.size.width.toFloat())
     val w = ceil(inkW + room).toInt()
     val h = ceil(layout.size.height + half * 2 + sy).toInt()
-    return PuffyFit(layout, outline, shadowLayout, mask, half, sx, sy, size, overflowed, w, h)
+    return PuffyFit(layout, outline, shadowLayout, mask, half, sx, sy, size, overflowed, w, h, hasColourGlyphs(shown.text))
 }
 
 /**
@@ -512,6 +590,8 @@ internal object PuffyPinholes {
             translate(fit.half, fit.half) {
                 drawText(fit.mask, Color.Black, drawStyle = Stroke(width = fit.half * 2, join = StrokeJoin.Round))
                 drawText(fit.mask, Color.Black, drawStyle = Fill)
+                // A colour glyph takes no Stroke: its halo, as the stroke pass draws it.
+                if (fit.colourGlyphs) drawHalo(fit.mask, Color.Black, fit.half)
             }
         }
         val alpha = IntArray(w * h)

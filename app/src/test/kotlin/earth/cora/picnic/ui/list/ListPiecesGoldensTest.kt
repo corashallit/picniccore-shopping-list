@@ -126,6 +126,18 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
         TrayOf(section(ListFixture.ui(ListFixture.rowStates(), busy = ListFixture.DRAWING), "breakfast"))
     }
 
+    /**
+     * §4.7, §4.11 at large text (item 337): a jackpot row with a long detail, a shiny honey and the shiny maple syrup;
+     * each chip follows its detail and drops under it when the two cannot share a line, the detail keeping its lines.
+     */
+    @Test
+    @Config(qualifiers = "w360dp-h1400dp-xxhdpi")
+    fun rowJackpotFs130() = compose.recordPiece(name("row_jackpot_fs130"), variant, fontScale = 1.3f, pad = 16.dp) { TrayOf(rarityRows()) }
+
+    @Test
+    @Config(qualifiers = "w360dp-h1400dp-xxhdpi")
+    fun rowShinyFs200() = compose.recordPiece(name("row_shiny_fs200"), variant, fontScale = 2f, pad = 16.dp) { TrayOf(rarityRows()) }
+
     @Test
     fun rowPressed() = compose.recordPiece(goldenName("row_pressed", variant), variant, pad = 16.dp, before = {
         onNodeWithTag(ListTags.row("baking-powder")).performTouchInput { down(center) }

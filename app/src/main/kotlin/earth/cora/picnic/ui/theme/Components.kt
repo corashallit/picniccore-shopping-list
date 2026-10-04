@@ -84,6 +84,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
@@ -1159,7 +1160,7 @@ internal fun numeralInk(layout: TextLayoutResult, ink: Color, paper: Color): Flo
 }
 
 /** Where a [len] px numeral box sits in a [d] px circle (centred, rounded as Compose's Alignment.Center rounds). */
-private fun numeralOffset(d: Int, len: Int): Int = ((d - len) / 2f).roundToInt()
+internal fun numeralOffset(d: Int, len: Int): Int = ((d - len) / 2f).roundToInt()
 
 /**
  * The aisle number circle's diameter (px): [min]; at a large font at least its numeral's [textW] × [textH] px text box
@@ -1203,16 +1204,21 @@ internal fun numberCircleDiameter(min: Int, textW: Int, textH: Int, ink: FloatAr
  * keeps [NUMBER_RING_CLEARANCE] from the numeral's ink (its glyphs: a two-digit numeral's corners reach past its box's
  * circle), so a numeral never touches or crosses the ring (§15, font scale 2.0). At 1.0 every numeral 1 to 24 already
  * clears it, so the circle keeps its drawn size. The numeral is drawn over the circle, never clipped by it.
+ *
+ * [maxSize] caps the growth (never under [size]) for a caller whose words need the room (the index tab, whose name the
+ * circle gives way to, §4.10): held smaller than it would grow, the circle keeps the numeral clear of its ring by setting
+ * it smaller instead ([fitNumeral]), never by letting it touch.
  */
 @Composable
-fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, size: Dp = 24.dp, ring: Dp = 2.dp) {
-    val style = if (size <= 20.dp) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
+fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, size: Dp = 24.dp, ring: Dp = 2.dp, maxSize: Dp = Dp.Infinity) {
+    val style = numberCircleStyle(size)
     val ink = rememberNumeralInk(number, style, look.family.trace)
+    val fitted = rememberNumeralFit(number.takeIf { maxSize != Dp.Infinity }, look, style, size, maxSize, ring)
     androidx.compose.ui.layout.Layout(
         content = {
             Box(Modifier.clip(CircleShape).background(PicnicTheme.colors.stickerWhite).ringStroke(ring, look.family.trace))
             if (number != null) {
-                Text(number.toString(), style = style.copy(color = look.family.trace), maxLines = 1, softWrap = false)
+                Text(number.toString(), style = (fitted?.style ?: style).copy(color = look.family.trace), maxLines = 1, softWrap = false)
             } else {
                 CapsuleMark(look.family, Modifier.size(size * 0.6f))
             }
@@ -1220,7 +1226,7 @@ fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, s
         modifier = modifier.clearAndSetSemantics { },
     ) { measurables, constraints ->
         val mark = measurables[1].measure(androidx.compose.ui.unit.Constraints())
-        val d = numberCircleDiameter(size.roundToPx(), mark.width, mark.height, ink, ring.toPx(), NUMBER_RING_CLEARANCE.toPx())
+        val d = fitted?.diameter ?: numberCircleDiameter(size.roundToPx(), mark.width, mark.height, ink, ring.toPx(), NUMBER_RING_CLEARANCE.toPx())
         val w = constraints.constrainWidth(d)
         val h = constraints.constrainHeight(d)
         val circle = measurables[0].measure(androidx.compose.ui.unit.Constraints.fixed(w, h))
@@ -1231,12 +1237,63 @@ fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, s
     }
 }
 
+/** The numeral style of a [size] number circle: the chip's 11 sp at 20 dp and under, the tab's 14 sp above. */
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
+private fun numberCircleStyle(size: Dp): TextStyle = if (size <= 20.dp) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
+
+/** A numeral fitted to a capped number circle: its [style] and the circle's [diameter] (px). */
+@Immutable
+internal class NumeralFit(val style: TextStyle, val diameter: Int)
+
+/** The least a capped circle sets its numeral, as drawn (dp, at any font scale): a 24 dp circle holds 1 to 24 well above it. */
+private val NUMERAL_FLOOR: Dp = 6.dp
+
+/**
+ * [number] in [style] in a circle of [min] to [max] px with a [ringPx] ring (§2.7, item 337): the diameter
+ * [numberCircleDiameter] asks for, capped at [max]. When the cap holds the circle smaller than that, the numeral is set
+ * 0.5 sp smaller each step (its line height in proportion) until the ring keeps [NUMBER_RING_CLEARANCE] from its ink in
+ * the capped circle. Measured on [ink] over [paper], as the circle draws it.
+ */
+internal fun Density.fitNumeral(measurer: TextMeasurer, number: Int, style: TextStyle, ink: Color, paper: Color, min: Int, max: Int, ringPx: Float): NumeralFit {
+    val clear = NUMBER_RING_CLEARANCE.toPx()
+    fun needs(s: TextStyle): Int {
+        val layout = measurer.measure(number.toString(), s, maxLines = 1, softWrap = false)
+        return numberCircleDiameter(min, layout.size.width, layout.size.height, numeralInk(layout, ink, paper), ringPx, clear)
+    }
+    val cap = max.coerceAtLeast(min)
+    val natural = needs(style)
+    if (natural <= cap) return NumeralFit(style, natural)
+    val from = style.fontSize.value
+    val lineRatio = if (style.lineHeight.isSp && style.fontSize.isSp) style.lineHeight.value / from else null
+    var sp = from
+    var s = style
+    while (sp.sp.toPx() > NUMERAL_FLOOR.toPx()) {
+        sp -= 0.5f
+        s = style.copy(fontSize = sp.sp, lineHeight = lineRatio?.let { (sp * it).sp } ?: style.lineHeight)
+        if (needs(s) <= cap) break
+    }
+    return NumeralFit(s, cap)
+}
+
+/** [fitNumeral] for [number] (null: no cap, or the capsule) in a [size] circle capped at [maxSize] here. */
+@Composable
+private fun rememberNumeralFit(number: Int?, look: AisleLook, style: TextStyle, size: Dp, maxSize: Dp, ring: Dp): NumeralFit? {
+    val measurer = rememberTextMeasurer(cacheSize = 1)
+    val density = LocalDensity.current
+    val paper = PicnicTheme.colors.stickerWhite
+    return remember(number, look, style, size, maxSize, ring, density, measurer, paper) {
+        if (number == null || maxSize == Dp.Infinity) return@remember null
+        with(density) { fitNumeral(measurer, number, style, look.family.trace, paper, size.roundToPx(), maxSize.roundToPx(), ring.toPx()) }
+    }
+}
+
 /**
  * A circle's ring exactly [width] wide, drawn as Modifier.border draws a circle's (a stroke half its width inside the
  * edge). Modifier.border rounds its stroke up to whole px: at 2.625 px per dp a 2 dp ring would draw 2.29 dp and crowd
  * the numeral the circle was sized for. At whole-px widths (3 px per dp) the two draw the same pixels.
  */
-private fun Modifier.ringStroke(width: Dp, color: Color): Modifier = drawWithContent {
+internal fun Modifier.ringStroke(width: Dp, color: Color): Modifier = drawWithContent {
     drawContent()
     val w = width.toPx()
     val half = w / 2f
@@ -1259,7 +1316,7 @@ private fun rememberNumeralInk(number: Int?, style: TextStyle, ink: Color): Floa
 /** How big a [NumberCircle] of [number] and [size] draws here (it grows with a large font, [numberCircleDiameter]). */
 @Composable
 internal fun rememberNumberCircleSize(number: Int?, look: AisleLook, size: Dp, ring: Dp = 2.dp): Dp {
-    val style = if (size <= 20.dp) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
+    val style = numberCircleStyle(size)
     val measurer = rememberTextMeasurer(cacheSize = 1)
     val density = LocalDensity.current
     val paper = PicnicTheme.colors.stickerWhite

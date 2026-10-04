@@ -1,7 +1,6 @@
 package earth.cora.picnic.ui.theme
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
@@ -35,7 +35,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.ui.a11y.textOverflowed
@@ -193,19 +192,44 @@ private fun tabFixed(circle: Dp, look: AisleLook): Dp = 3.dp * 2 + 6.dp + circle
 private const val NUMERAL_SP: Float = 17f
 
 /**
- * The numeral scales with the font, as tab numbers do (§2.7), up to [NUMERAL_MAX_DP]: the largest at which two digits
- * ("14") sit inside the 30 dp circle's ring. The circle itself stays 30 dp, because a circle grown for a fully scaled
- * numeral takes the room the aisle name needs to stay at 18 sp on two lines at font scale 2.0 (item 170), and the name
- * is what she reads; the number repeats what TalkBack says.
+ * The numeral scales with the font, as tab numbers do (§2.7), up to [NUMERAL_MAX_DP]. The circle itself stays 30 dp,
+ * because a circle grown for a fully scaled numeral takes the room the aisle name needs to stay at 18 sp on two lines at
+ * font scale 2.0 (item 170), and the name is what she reads; the number repeats what TalkBack says. Within that cap the
+ * numeral is fitted on its ink ([rememberNextNumeral]): it never comes nearer the ring than 0.75 dp (item 337).
  */
 const val NUMERAL_MAX_DP: Float = 21f
 
-/** The numeral's size in sp at [fontScale] (it renders at min(17 × fontScale, [NUMERAL_MAX_DP]) dp). */
+/** The numeral's starting size in sp at [fontScale] (min(17 × fontScale, [NUMERAL_MAX_DP]) dp), before its ink fit. */
 fun nextNumeralSp(fontScale: Float): Float = minOf(NUMERAL_SP * fontScale, NUMERAL_MAX_DP) / fontScale
 
 /** The number circle: 30 dp at every font scale (see [NUMERAL_MAX_DP]). */
 @Suppress("UNUSED_PARAMETER")
 private fun nextCircleSize(density: androidx.compose.ui.unit.Density): Dp = 30.dp
+
+/** The Next card's number circle, for tests (its numeral's clearance from the ring is read off the pixels). */
+const val NEXT_NUMBER_TAG: String = "nextNumber"
+
+/**
+ * [number]'s numeral style in the Next card's [size] circle with its [ring] (§10, item 337): from [nextNumeralSp], set
+ * 0.5 sp smaller each step until the kit's circle rule ([fitNumeral]: the numeral's text box inside the ring, and
+ * [NUMBER_RING_CLEARANCE] between its ink and the ring) holds it in [size]. Worked out once per number, look and density.
+ */
+@Composable
+private fun rememberNextNumeral(number: Int?, look: AisleLook, size: Dp, ring: Dp): TextStyle {
+    val base = PicnicTheme.type.tabNumber.copy(color = look.family.trace)
+    val paper = PicnicTheme.colors.stickerWhite
+    val measurer = rememberTextMeasurer(cacheSize = 1)
+    val density = LocalDensity.current
+    return remember(number, look, size, ring, base, paper, density, measurer) {
+        val sp = nextNumeralSp(density.fontScale)
+        val style = base.copy(fontSize = sp.sp, lineHeight = (sp * 1.1f).sp)
+        if (number == null) return@remember style
+        with(density) {
+            val d = size.roundToPx()
+            fitNumeral(measurer, number, style, look.family.trace, paper, d, d, ring.toPx()).style
+        }
+    }
+}
 
 /** The narrowest room (px) in which [name] sits on at most two lines at 18 sp with no word broken. */
 private fun nameNeed(measurer: TextMeasurer, name: String, style: TextStyle): Int {
@@ -252,7 +276,7 @@ private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: A
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            NextNumberCircle(number, look, size = circle, ring = 2.dp, numeral = nextNumeralSp(LocalDensity.current.fontScale).sp)
+            NextNumberCircle(number, look, size = circle, ring = 2.dp)
             BoxWithConstraints(Modifier.weight(1f, fill = false)) {
                 val room = constraints.maxWidth
                 val fit = remember(displayName, nameStyle, room) { fitNextName(measurer, displayName, nameStyle, room) }
@@ -276,24 +300,30 @@ private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: A
 }
 
 /**
- * The number circle at the Next card's size: [size] (30 dp), DynaPuff [numeral] sp in the trace, scaling with the font
- * up to what the circle holds ([nextNumeralSp]; the capsule for "Everything else").
+ * The number circle at the Next card's size: [size] (30 dp, at every font scale), white with the kit's [ring] in the
+ * trace, the DynaPuff numeral in the trace fitted on its ink ([rememberNextNumeral]) and placed as [NumberCircle] places
+ * it; the capsule for "Everything else".
  */
 @Composable
-private fun NextNumberCircle(number: Int?, look: AisleLook, size: Dp, ring: Dp, numeral: TextUnit) {
-    Box(
-        Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(Color.White)
-            .border(ring, look.family.trace, CircleShape)
-            .clearAndSetSemantics { },
-        contentAlignment = Alignment.Center,
-    ) {
-        if (number != null) {
-            Text(number.toString(), style = PicnicTheme.type.tabNumber.copy(color = look.family.trace, fontSize = numeral, lineHeight = numeral * 1.1f), maxLines = 1)
-        } else {
-            CapsuleMark(look.family, Modifier.size(size * 0.6f))
+private fun NextNumberCircle(number: Int?, look: AisleLook, size: Dp, ring: Dp) {
+    val numeral = rememberNextNumeral(number, look, size, ring)
+    androidx.compose.ui.layout.Layout(
+        content = {
+            Box(Modifier.clip(CircleShape).background(PicnicTheme.colors.stickerWhite).ringStroke(ring, look.family.trace))
+            if (number != null) {
+                Text(number.toString(), style = numeral, maxLines = 1, softWrap = false)
+            } else {
+                CapsuleMark(look.family, Modifier.size(size * 0.6f))
+            }
+        },
+        modifier = Modifier.testTag(NEXT_NUMBER_TAG).clearAndSetSemantics { },
+    ) { measurables, _ ->
+        val d = size.roundToPx()
+        val circle = measurables[0].measure(Constraints.fixed(d, d))
+        val mark = measurables[1].measure(Constraints())
+        layout(d, d) {
+            circle.place(0, 0)
+            mark.place(numeralOffset(d, mark.width), numeralOffset(d, mark.height))
         }
     }
 }
