@@ -8,7 +8,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.list
 import earth.cora.picnic.core.store.Album
@@ -50,6 +52,35 @@ class NewTripTest {
     }
 
     private fun summary(): String? = compose.onNodeWithTag(BookTags.BOOK).fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)?.single()
+
+    /**
+     * §6.5 (item 162): the closing book in the sheet is drawn small, still and read-only: taps on its stamp page and its
+     * sticker page boing nothing, show no name tag, feed no egg and open nothing; the sheet stays as it was.
+     */
+    @Test
+    fun theSmallBookIsStill() {
+        val rig = ListRig()
+        val probe = RecordingProbe()
+        compose.show(rig, probe)
+        openSheet()
+        val title = compose.onNodeWithText("Start a new trip?").fetchSemanticsNode().boundsInRoot
+        val d = compose.density.density
+        val y = title.bottom + (12 + 4 + 24) * d
+        val sheet = compose.onNodeWithTag(NewTripTags.SHEET).fetchSemanticsNode().boundsInRoot
+        compose.mainClock.autoAdvance = false
+        for (fx in listOf(0.15f, 0.25f, 0.6f, 0.85f)) {
+            compose.onNodeWithTag(NewTripTags.SHEET).performTouchInput { click(androidx.compose.ui.geometry.Offset(sheet.width * fx, y - sheet.top)) }
+            compose.frames(20)
+            assertTrue("no name tag ($fx)", probe.keys("nameTag:").isEmpty())
+        }
+        assertTrue("no stamp tap reached the eggs", rig.surprises.stampTaps.isEmpty())
+        assertTrue("the sheet is still open", compose.exists(NewTripTags.SHEET))
+        assertTrue(
+            "the Trip book sheet did not open",
+            compose.onAllNodes(androidx.compose.ui.test.hasText("aisles stamped", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),
+        )
+        compose.mainClock.autoAdvance = true
+    }
 
     /** Item 162: "Clear what I got", then (on the next trip) "Keep everything, uncheck it all". */
     @Test
@@ -122,7 +153,7 @@ class NewTripTest {
      * activity never opens the sheet; the item lands in a fresh book at once and the old book is filed.
      */
     @Test
-    fun idlePrompt() {
+    fun idleCheckStartsNewBookWithoutAsking() {
         val rig = ListRig(now = ListFixture.NOW + 13 * ListFixture.HOUR)
         compose.show(rig)
         val old = rig.app.list(ListFixture.LIST_ID)!!.trip!!.id

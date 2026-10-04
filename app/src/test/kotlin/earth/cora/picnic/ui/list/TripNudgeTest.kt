@@ -51,6 +51,67 @@ class TripNudgeTest {
         assertTrue(compose.exists(NewTripTags.SHEET))
     }
 
+    /** A lifecycle the test moves by hand (the app going to the background and coming back). */
+    private class HandLifecycle : androidx.lifecycle.LifecycleOwner {
+        val registry = androidx.lifecycle.LifecycleRegistry(this).apply { currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+        override val lifecycle: androidx.lifecycle.Lifecycle get() = registry
+    }
+
+    private fun showWith(rig: ListRig, owner: HandLifecycle) {
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) { rig.Themed() }
+        }
+    }
+
+    /** The app waits in the background, then comes back to the front [later] ms on. */
+    private fun backgroundFor(rig: ListRig, owner: HandLifecycle, later: Long) {
+        compose.runOnIdle {
+            owner.registry.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_PAUSE)
+            owner.registry.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_STOP)
+        }
+        rig.now += later
+        compose.runOnIdle {
+            owner.registry.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_START)
+            owner.registry.handleLifecycleEvent(androidx.lifecycle.Lifecycle.Event.ON_RESUME)
+        }
+    }
+
+    /**
+     * Items 120 and 143 (§6.1, §7.1): the app stays alive in the background and she comes back 13 h later. Returning to
+     * the list checks the trip again: it is idle now, so the nudge shows, once for that idle period (another return
+     * without a check-off in between says nothing more).
+     */
+    @Test
+    fun comingBackAfterTwelveHoursNudges() {
+        val rig = ListRig(now = ListFixture.NOW + ListFixture.HOUR)
+        val owner = HandLifecycle()
+        compose.mainClock.autoAdvance = false
+        showWith(rig, owner)
+        compose.advanceMs(1500)
+        assertFalse("not idle yet", compose.exists(TOAST_TAG))
+        backgroundFor(rig, owner, 13 * ListFixture.HOUR)
+        assertTrue("the nudge shows on her return", compose.framesUntil(1500) { compose.exists(TOAST_TAG) })
+        compose.onNodeWithText(nudge, useUnmergedTree = true).assertExists()
+        assertTrue("it goes after its hold", compose.framesUntil(15_000) { !compose.exists(TOAST_TAG) })
+        backgroundFor(rig, owner, ListFixture.HOUR)
+        compose.advanceMs(1500)
+        assertFalse("once per idle period", compose.exists(TOAST_TAG))
+        compose.mainClock.autoAdvance = true
+    }
+
+    /** Item 143 (§7.1): a fresh book shows today; back from the background the next day, its date says the new day. */
+    @Test
+    fun aFreshBookRollsOverToToday() {
+        val rig = ListRig(ListFixture.fresh(), now = ListFixture.NOW)
+        val owner = HandLifecycle()
+        showWith(rig, owner)
+        compose.waitForIdle()
+        assertEquals("Sat 3 Oct", rig.vm.state.value.book!!.dateLabel)
+        backgroundFor(rig, owner, 24 * ListFixture.HOUR)
+        compose.waitForIdle()
+        assertEquals("the new day", "Sun 4 Oct", rig.vm.state.value.book!!.dateLabel)
+    }
+
     @Test
     fun noNudgeWithinTwelveHours() {
         val rig = ListRig(now = ListFixture.NOW + 11 * ListFixture.HOUR)

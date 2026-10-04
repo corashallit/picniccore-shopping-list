@@ -161,9 +161,14 @@ class ListViewModel(
     /** The last automatic new book (§0.4 Q9), for its toast's Undo. */
     private var lastToggle: TripFiling.Toggle? = null
 
-    /** Lists the finale was owed on and the nudge was offered for, this session (once each). */
+    /** Lists the finale was owed on, this session (once each). */
     private val resumed = HashSet<String>()
+
+    /** The idle periods the nudge was offered for (once each): "<list id>:<the trip's last activity>". */
     private val nudged = HashSet<String>()
+
+    /** The inputs of the last state built, so a return to the list can build it again on the current clock. */
+    private var lastInputs: Inputs? = null
 
     init {
         engine.celebrationSource = {
@@ -200,6 +205,7 @@ class ListViewModel(
     // =============================================================================================
 
     private fun onStates(input: Inputs) {
+        lastInputs = input
         val app = input.state
         val list = app.currentList()
         val grouped = groupedOf(app, list, catalog)
@@ -255,9 +261,30 @@ class ListViewModel(
                 ),
             )
         }
-        if (nudged.add(list.id) && TripRules.startsNewBook(list, now)) {
+        nudgeIfIdle(list, now)
+    }
+
+    /**
+     * The nudge (§6.1, item 120): an open trip idle for more than 12 h gets "New shop? Start a fresh sticker book", once
+     * per idle period (a check-off starts a new period, so a later idle stretch is offered again).
+     */
+    private fun nudgeIfIdle(list: GroceryList, now: Long) {
+        val trip = list.trip ?: return
+        if (TripRules.startsNewBook(list, now) && nudged.add("${list.id}:${trip.lastActivityAt}")) {
             viewModelScope.launch { _events.send(ListEvent.Nudge(list.id)) }
         }
+    }
+
+    /**
+     * The List is back in front (its ON_RESUME; §6.1, §7.1, items 120 and 143). The app may have waited in the
+     * background for hours: the state is built again on the current clock, so a fresh book's date and the season roll
+     * over to today, and an open trip that has gone idle since gets its nudge (once per idle period).
+     */
+    fun onResumed() {
+        val inputs = lastInputs ?: return
+        onStates(inputs)
+        val s = seen ?: return
+        nudgeIfIdle(s.list, clock())
     }
 
     /** Compares two successive states of the same list and tells the engine what changed (§8.3, §8.4). */
@@ -516,7 +543,8 @@ class ListViewModel(
      * Pull to refresh, the overflow menu's Refresh and the list's custom action (§6.1, D18): pending stickers resume and
      * the items still in "Everything else" are sorted into aisles. [ListEvent.Refreshed] says what changed: the sorting
      * at once, and the stickers once the icon repository has finished the ones it resumed (their names have left its busy
-     * set, within [DRAW_WAIT_MS]). Nothing is said when nothing changed.
+     * set, within [DRAW_WAIT_MS]); that second event carries the sorting too, so the list folds it into the note still
+     * showing ("Sorted 2 items · 1 new sticker drawn", §6.1). Nothing is said when nothing changed.
      */
     fun refresh() {
         appScope.launch {
@@ -530,15 +558,21 @@ class ListViewModel(
             val waiting = list?.items?.filter { it.iconFit == IconFit.PENDING && it.customIconId == null }.orEmpty()
             icons.resumePending()
             val sync = aisleSync
+            var sorted = 0
+            var left = 0
             if (s != null && list != null && sync != null) {
                 val unsorted = groupedOf(s, list, catalog).sections.firstOrNull { it.kind == SectionKind.UNSORTED }
                 val ids = unsorted?.rows?.filterNot { it.manuallyPlaced }?.map { it.id }.orEmpty()
                 val report = if (ids.isEmpty()) null else runCatching { sync.sortItems(ids) }.getOrNull()
-                if (report != null && report.recategorized > 0) _events.send(ListEvent.Refreshed(report.recategorized, report.leftUnsorted, 0))
+                if (report != null && report.recategorized > 0) {
+                    sorted = report.recategorized
+                    left = report.leftUnsorted
+                    _events.send(ListEvent.Refreshed(sorted, left, 0))
+                }
             }
             if (list != null && waiting.isNotEmpty()) {
                 val drawn = awaitResumedStickers(list.id, waiting)
-                if (drawn > 0) _events.send(ListEvent.Refreshed(0, 0, drawn))
+                if (drawn > 0) _events.send(ListEvent.Refreshed(sorted, left, drawn))
             }
         }
     }

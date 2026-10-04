@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
@@ -19,6 +20,8 @@ import earth.cora.picnic.ui.common.goldenName
 import earth.cora.picnic.ui.common.recordScreen
 import earth.cora.picnic.ui.theme.ThemeVariant
 import kotlinx.coroutines.runBlocking
+import earth.cora.picnic.ui.theme.TOAST_TAG
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -153,6 +156,27 @@ class ListStateGoldensTest {
             }
             // The halves have fallen (720 ms), the row is out and its slot closing, the note has dropped in.
             frames(((TEAR_TOTAL + 260) / 16).toInt())
+        }) { rig.Content() }
+    }
+
+    /**
+     * §0.4 Q9, Appendix C (items 304, 315): the first check-off 13 h after the trip's last activity starts a new sticker
+     * book by itself; the note "New sticker book for today ✦ your last shop is in the album" with Undo, held still about
+     * 600 ms after its 220 ms drop.
+     */
+    @Test
+    fun newBookToastDay() = newBookToast(ThemeVariant.Day)
+
+    @Test
+    fun newBookToastGlow() = newBookToast(ThemeVariant.Glow)
+
+    private fun newBookToast(variant: ThemeVariant) {
+        val rig = ListRig(now = ListFixture.NOW + 13 * ListFixture.HOUR).inSeason()
+        compose.recordScreen("toast_new_book_undo_${variant.name.lowercase()}", variant, settleMillis = 0, before = {
+            mainClock.autoAdvance = false
+            onNodeWithTag(ListTags.row("baking-powder")).performClick()
+            assertTrue("the note dropped in", framesUntil(3000) { exists(TOAST_TAG) })
+            advanceMs(220 + 600)
         }) { rig.Content() }
     }
 

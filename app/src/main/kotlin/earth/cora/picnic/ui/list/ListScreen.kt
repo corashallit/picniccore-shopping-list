@@ -304,6 +304,8 @@ fun ListRoute(
     onOpenAisles: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    // Back from the background (maybe hours later): today's date on a fresh book, the idle trip's nudge (§6.1, §7.1).
+    androidx.lifecycle.compose.LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResumed() }
     val state by vm.state.collectAsStateWithLifecycle()
     val addState by addVm.state.collectAsStateWithLifecycle()
     val surprises by vm.surprisesState.collectAsStateWithLifecycle()
@@ -347,7 +349,7 @@ fun ListRoute(
                         minHoldMs = NUDGE_FLOOR,
                     ),
                 )
-                is ListEvent.Refreshed -> refreshedText(resources, event)?.let { toasts.show(ToastMessage(it, kind = "sync")) }
+                is ListEvent.Refreshed -> refreshedToast(resources, event)?.let { toasts.show(it) }
                 is ListEvent.Message -> toasts.show(ToastMessage(event.text, kind = "save"))
             }
         }
@@ -434,6 +436,22 @@ private const val NUDGE_KIND: String = "nudge"
 
 /** The nudge's reading floor (§6.1, §9: it carries an action): 6 s. */
 private const val NUDGE_FLOOR: Long = 6000
+
+/** The refresh notes' toast kind. */
+internal const val SYNC_KIND: String = "sync"
+
+/**
+ * The refresh's sticky note (§6.1), or null when nothing changed. One refresh says it all on one note: the stickers it
+ * drew arrive after the sorting (their event carries both counts), and fold into the sorting's note while that is still
+ * up ("Sorted 2 items · 1 new sticker drawn", its hold starting again); once that note has gone, a note of their own
+ * says only what is new ("1 new sticker drawn").
+ */
+internal fun refreshedToast(resources: Resources, e: ListEvent.Refreshed): ToastMessage? {
+    val full = refreshedText(resources, e) ?: return null
+    if (e.drawn == 0 || e.sorted == 0) return ToastMessage(full, kind = SYNC_KIND)
+    val alone = refreshedText(resources, e.copy(sorted = 0, left = 0)) ?: return null
+    return ToastMessage(alone, kind = SYNC_KIND, merge = { current, _ -> ToastMessage(full, kind = SYNC_KIND, id = current.id) })
+}
 
 /** "Sorted 2 items · 1 new sticker drawn" (§6.1), or null when nothing changed. */
 internal fun refreshedText(resources: Resources, e: ListEvent.Refreshed): String? {

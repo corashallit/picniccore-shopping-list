@@ -13,6 +13,9 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import earth.cora.picnic.ui.theme.TOAST_TAG
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.GroceryItem
@@ -225,6 +228,67 @@ class PullToRefreshTest {
         assertTrue("SYNC on the LCD", screen.syncing)
         assertFalse(compose.exists(ListTags.BUNTING))
         compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * One refresh, one note (§6.1, item 119): a refresh that sorts two things and draws their two stickers says so on one
+     * sticky note. "Sorted 2 items" comes at once; when the drawings finish while it is still up, it becomes "Sorted 2
+     * items · 2 new stickers drawn" in place (the same note, its hold starting again, no second note queued).
+     */
+    @Test
+    fun sortedAndDrawnShareOneNote() {
+        val rig = sortAndDraw()
+        compose.advanceMs(1000)
+        finishDrawing(rig)
+        assertTrue(
+            "the note says both",
+            compose.framesUntil(1500) { compose.onAllNodes(hasText("Sorted 2 items · 2 new stickers drawn"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() },
+        )
+        assertEquals("one note on screen", 1, compose.onAllNodes(hasTestTag(TOAST_TAG)).fetchSemanticsNodes().size)
+        // Its hold starts again at the merge: still up 3.5 s later; then it goes, and nothing waits behind it.
+        compose.advanceMs(3500)
+        assertTrue("held again from the merge", compose.exists(TOAST_TAG))
+        assertTrue("then gone", compose.framesUntil(12_000) { !compose.exists(TOAST_TAG) })
+        compose.advanceMs(1000)
+        assertFalse("no second note queued", compose.exists(TOAST_TAG))
+        compose.mainClock.autoAdvance = true
+    }
+
+    /** If the sorting's note has gone by the time the drawings finish, their own note says only what is new. */
+    @Test
+    fun drawnAfterTheNoteLeftSaysOnlyWhatIsNew() {
+        val rig = sortAndDraw()
+        assertTrue("the sorting's note has its hold and goes", compose.framesUntil(12_000) { !compose.exists(TOAST_TAG) })
+        finishDrawing(rig)
+        assertTrue("a note of their own", compose.framesUntil(1500) { compose.exists(TOAST_TAG) })
+        compose.onNodeWithText("2 new stickers drawn", useUnmergedTree = true).assertExists()
+        assertTrue("it does not repeat the sorting", compose.onAllNodes(hasText("Sorted", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        compose.mainClock.autoAdvance = true
+    }
+
+    private val drawingKeys = listOf("Birthday candles", "Paper plates").map { earth.cora.picnic.core.model.normalizeName(it) }.toSet()
+
+    /** The two unsorted, sticker-less things; a pull sorts them into Baking and starts their drawings: "Sorted 2 items". */
+    private fun sortAndDraw(): ListRig {
+        val rig = ListRig(unsorted())
+        rig.assistant.recategorize = { items, _ -> items.associate { it.id to "aisle-2-baking" } }
+        rig.icons.onResume = { rig.icons.inner.busyFlow.value = drawingKeys }
+        compose.show(rig)
+        compose.mainClock.autoAdvance = false
+        pull(140f)
+        compose.frames(2)
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput { up() }
+        assertTrue("the sorting's note", compose.framesUntil(1500) { compose.exists(TOAST_TAG) })
+        compose.onNodeWithText("Sorted 2 items", useUnmergedTree = true).assertExists()
+        return rig
+    }
+
+    /** The repository finishes both drawings: the items get their stickers and their names leave the busy set. */
+    private fun finishDrawing(rig: ListRig) {
+        kotlinx.coroutines.runBlocking {
+            rig.store.update { st -> drawingKeys.fold(st) { acc, k -> acc.attachCustomIcon(k, "drawn-$k", overwrite = true) } }
+        }
+        rig.icons.inner.busyFlow.value = emptySet()
     }
 
     /**

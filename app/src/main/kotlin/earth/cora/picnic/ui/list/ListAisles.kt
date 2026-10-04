@@ -107,6 +107,8 @@ object ListTags {
     const val END_NOTE: String = "picnic_list_end_note"
     const val TOP_STACK: String = "picnic_top_stack"
     const val MORE: String = "picnic_list_more"
+    /** The app bar's LCD (its slot: on the title row, beside the subtitle or on a line of its own at large text). */
+    const val LCD_SLOT: String = "picnic_list_lcd"
     const val EMPTY: String = "picnic_list_empty"
     const val LOADING: String = "picnic_list_loading"
     const val BUNTING: String = "picnic_list_bunting"

@@ -68,6 +68,10 @@ data class ToastMessage(
     val actionLabel: String? = null,
     val onAction: (() -> Unit)? = null,
     val undo: Boolean = actionLabel != null && onAction != null,
+    /**
+     * How this toast folds with another of its kind on screen: an Undo toast's merges the next Undo into it (§4.15); an
+     * info note's, on the incoming note, folds it into the one still up ([ToastHostState.show]).
+     */
     val merge: ((current: ToastMessage, incoming: ToastMessage) -> ToastMessage)? = null,
     val id: Long = ToastIds.next(),
     /** A higher reading floor than the toast's 4000 ms (the nudge holds max(6000, readHold), §6.1, §9). */
@@ -122,6 +126,14 @@ class ToastHostState {
         }
         if (!leaving && cur.undo && message.undo && cur.kind == message.kind) {
             current = cur.merge?.invoke(cur, message) ?: defaultMerge(cur, message)
+            generation++
+            return
+        }
+        // An info note that knows how to fold itself into the one of its kind still up does (a refresh's stickers drawn
+        // after its sorting, §6.1): one note, its hold starting again.
+        val fold = message.merge
+        if (!leaving && fold != null && !cur.undo && !message.undo && cur.kind == message.kind) {
+            current = fold(cur, message)
             generation++
             return
         }
