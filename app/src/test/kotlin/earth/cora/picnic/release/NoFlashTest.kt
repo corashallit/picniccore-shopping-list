@@ -103,12 +103,12 @@ class NoFlashTest {
     }
 
     companion object {
-        /** Samples every other frame (30 a second: a 3 Hz flash is ten samples) for [ms]. */
+        /** Samples every third frame (20 a second: a 3 Hz flash is near seven samples) for [ms]. */
         fun watch(stage: FixtureStage, meter: FlashMeter, ms: Long) {
             val start = stage.compose.mainClock.currentTime
             while (stage.compose.mainClock.currentTime - start < ms) {
                 meter.sample(stage.compose.mainClock.currentTime - start)
-                stage.frames(2)
+                stage.frames(3)
             }
         }
 

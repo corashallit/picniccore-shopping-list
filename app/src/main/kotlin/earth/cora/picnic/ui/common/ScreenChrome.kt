@@ -282,7 +282,8 @@ fun DoneButton(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Bool
     PicnicButton(
         stringResource(R.string.screens_done),
         onClick = onClick,
-        modifier = modifier.padding(end = 6.dp).widthIn(min = 48.dp),
+        // A few dp clear of the subtitle's patch when a large font brings them side by side.
+        modifier = modifier.padding(start = 4.dp, end = 6.dp).widthIn(min = 48.dp),
         style = PicnicButtonStyle.Text,
         enabled = enabled,
         // On the binder beside the title: on its pad patch, never straight on the pinstripes (§4.1).

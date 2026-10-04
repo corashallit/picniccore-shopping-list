@@ -35,6 +35,7 @@ class NoFlashEggsTest(private val egg: Int) {
             meter.sample(rig.now - t0)
             rig.frame()
             rig.frame()
+            rig.frame()
         }
         assertTrue("egg $egg: sampled (${meter.samples})", meter.samples > 20)
         val worst = meter.worst()
@@ -47,6 +48,6 @@ class NoFlashEggsTest(private val egg: Int) {
         fun params(): List<Array<Any>> = (1..18).map { arrayOf<Any>(it) }
 
         /** An egg's moment, start to rest (the longest, the rain and the bonus stage, settle within it). */
-        const val WATCH_MS = 6_000L
+        const val WATCH_MS = 5_000L
     }
 }

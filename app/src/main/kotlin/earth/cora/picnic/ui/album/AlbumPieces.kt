@@ -57,7 +57,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.platform.testTag
-import earth.cora.picnic.ui.theme.PadPatch
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -282,12 +281,21 @@ internal fun Modifier.vinylSlice(top: Boolean, bottom: Boolean): Modifier {
 /** A group's title on the vinyl ("Produce", "Drawn for you", "Picnic sheet"): Zen Maru 700 13.5 sp, ballpoint. */
 @Composable
 internal fun VinylTitle(text: String, modifier: Modifier = Modifier) {
-    // On a pad patch, never straight on the vinyl's pinstripes (§4.1).
+    // On a pad patch, never straight on the vinyl's pinstripes (§4.1): the white kiss-cut label in both variants, as
+    // the pink page keeps its own colours in Glow (a navy patch would be a hole in it).
+    val c = PicnicTheme.colors
+    val shape = PicnicTheme.shapes.patch
     Box(modifier.padding(start = 6.dp, top = 6.dp, bottom = 4.dp)) {
-        PadPatch {
+        Box(
+            Modifier
+                .hardShadow(shape, PicnicTheme.shadows)
+                .clip(shape)
+                .background(c.stickerWhite)
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        ) {
             Text(
                 text,
-                style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.onPad),
+                style = PicnicTheme.type.label.copy(color = c.ballpoint),
                 modifier = Modifier.semantics { heading() },
             )
         }
