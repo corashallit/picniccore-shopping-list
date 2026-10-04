@@ -68,6 +68,7 @@ import earth.cora.picnic.core.model.TripStats
 import earth.cora.picnic.core.store.BookStamp
 import earth.cora.picnic.core.store.TripBook
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.album.FiledBookTags
 import earth.cora.picnic.ui.album.receiptOf
 import earth.cora.picnic.ui.album.spokenReceipt
@@ -259,7 +260,7 @@ fun TripBookSheet(
                         .padding(start = 4.dp, top = 6.dp, bottom = 14.dp)
                         .testTag(FiledBookTags.RECEIPT)
                         .semantics(mergeDescendants = true) { contentDescription = spoken }
-                        .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = show) { fullReceipt = true },
+                        .clickable(interactionSource = null, indication = focusRingIndication(RoundedCornerShape(4.dp)), role = Role.Button, onClickLabel = show) { fullReceipt = true },
                 ) {
                     ReceiptSticker(slip.lines, Modifier.clearAndSetSemantics { })
                 }
@@ -428,7 +429,7 @@ private fun PageButton(next: Boolean, enabled: Boolean, label: String, tag: Stri
         Modifier
             .size(48.dp)
             .testTag(tag)
-            .clickable(interactionSource = null, indication = null, enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick)
+            .clickable(interactionSource = null, indication = focusRingIndication(CircleShape), enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick)
             .semantics { contentDescription = label }
             .alpha(if (enabled) 1f else 0.4f),
         contentAlignment = Alignment.Center,

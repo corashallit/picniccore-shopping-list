@@ -961,22 +961,28 @@ private fun LoadingList() {
  * The empty list (§4.21): the fresh sticker sheet, the copy, "Start my list"; no book. It scrolls to clear the docked
  * add bar ([dockHeight], which grows with large text and the navigation bar), so the button is never left under it.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EmptyList(state: ListUiState, actions: ListActions, dockHeight: Dp) {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .padding(bottom = dockHeight)
-            .testTag(ListTags.EMPTY),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        EmptyState(
-            title = stringResource(R.string.list_empty_title),
-            body = stringResource(R.string.list_empty_body, state.title),
-            action = { PicnicButton(stringResource(R.string.list_empty_action), onClick = actions.onStartList, leadingStar = true) },
-        )
+    // Its button, reached with Tab under a large font, scrolls up clear of the dock over the page's foot (§15).
+    val dockPx by rememberUpdatedState(with(LocalDensity.current) { dockHeight.toPx() })
+    val clear = remember { ClearOfCovers(top = { 0f }, bottom = { dockPx }) }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides clear) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(bottom = dockHeight)
+                .testTag(ListTags.EMPTY),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            EmptyState(
+                title = stringResource(R.string.list_empty_title),
+                body = stringResource(R.string.list_empty_body, state.title),
+                action = { PicnicButton(stringResource(R.string.list_empty_action), onClick = actions.onStartList, leadingStar = true) },
+            )
+        }
     }
 }
 

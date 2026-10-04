@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.ui.a11y.Decorative
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.a11y.textOverflowed
 import earth.cora.picnic.ui.theme.DayColors
 import earth.cora.picnic.ui.theme.DecorSticker
@@ -62,8 +63,9 @@ import kotlinx.coroutines.withContext
 
 /*
  * Small pieces the add flows share (docs/DESIGN_STICKER.md §4.4, §4.6, §4.7, §4.11, §4.17, §15; ARCHITECTURE §11: no
- * Material defaults). Every control here draws its own pressed state and passes `indication = null`, so no Material
- * ripple ever shows in the bar or the sheet (AddNoRippleTest scans this package). Owner: WP7.
+ * Material defaults). Every control here draws its own pressed state and passes `indication = null` (or the focus ring
+ * alone, `focusRingIndication`, §15), so no Material ripple ever shows in the bar or the sheet (AddNoRippleTest scans
+ * this package). Owner: WP7.
  */
 
 /**
@@ -121,7 +123,7 @@ internal fun AddChip(
     Box(
         modifier
             .minimumInteractiveComponentSize()
-            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick),
+            .clickable(interaction, indication = focusRingIndication(shape), role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Row(

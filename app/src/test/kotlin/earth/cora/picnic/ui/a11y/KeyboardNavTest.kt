@@ -69,6 +69,7 @@ class KeyboardNavTest {
     private fun reached(look: Look) {
         val problems = LinkedHashSet<String>()
         var stops = 0
+        val rings = RingCheck(compose, problems)
         ScreenWalker(compose).walk(A11yScreens.all, listOf(look)) {
             val front = KeyRules.front(this)
             // From the top of the screen as reached: Tab forward round the screen (or to the end of a sheet, which
@@ -76,8 +77,11 @@ class KeyboardNavTest {
             toStart()
             val walk = tabWalk { f ->
                 val control = KeyRules.controlAt(f)
+                // Focus shows where it lands (each kind of control once).
+                rings.at(this, f, control)
                 FocusStop(KeyRules.key(f), KeyRules.key(control), KeyRules.inFront(this, f, front()), f.spoken(), KeyRules.acts(control) || KeyRules.holdsItself(f))
             }
+            rings.end()
             stops += walk.size
             val before = problems.size
             for (n in walk) if (!n.inFront) problems += "$where: Tab landed behind the layer in front, on ${n.said}"
@@ -103,6 +107,7 @@ class KeyboardNavTest {
             }
         }
         assertTrue("focus stops: $stops", stops > 300)
+        assertTrue("kinds of control whose focus was seen: ${rings.checked}", rings.checked > 30)
         assertTrue("keyboard problems:\n" + problems.joinToString("\n"), problems.isEmpty())
     }
 

@@ -7,8 +7,8 @@ import java.io.File
 /**
  * No Material defaults in the add flows (docs/DESIGN_STICKER.md §0.2 polish, ARCHITECTURE §11): inside PicnicTheme the
  * default indication is Material's ripple, so every clickable, toggleable and selectable in WP7's package passes
- * `indication = null` and draws the spec's own pressed state (the highlighter band, or pressed flat). A source scan:
- * each such call must name its indication.
+ * `indication = null` (or the kit's focus ring alone, `focusRingIndication`, §15) and draws the spec's own pressed state
+ * (the highlighter band, or pressed flat). A source scan: each such call must name its indication.
  */
 class AddNoRippleTest {
     private val dir = File("src/main/kotlin/earth/cora/picnic/ui/add")
@@ -22,7 +22,7 @@ class AddNoRippleTest {
             val text = file.readText()
             for (m in call.findAll(text)) {
                 val args = argumentsAt(text, m.range.last)
-                if (!Regex("""indication\s*=\s*null""").containsMatchIn(args)) {
+                if (!Regex("""indication\s*=\s*(null|focusRingIndication\()""").containsMatchIn(args)) {
                     val line = text.substring(0, m.range.first).count { it == '\n' } + 1
                     offenders += "${file.name}:$line ${m.value}"
                 }

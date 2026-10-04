@@ -261,7 +261,8 @@ fun SwitchRow(
             .toggleable(
                 value = checked,
                 interactionSource = interaction,
-                indication = highlighterPress(),
+                // The pill wears the focus ring (one ring a row).
+                indication = highlighterPress(ring = false),
                 enabled = enabled,
                 role = Role.Switch,
                 onValueChange = onCheckedChange,

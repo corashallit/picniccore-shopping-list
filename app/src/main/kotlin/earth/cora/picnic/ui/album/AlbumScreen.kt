@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -44,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
+import earth.cora.picnic.ui.a11y.LocalFocusRingInk
 import earth.cora.picnic.ui.a11y.keyboardScrollsOn
 import earth.cora.picnic.ui.common.MoreMenuButton
 import earth.cora.picnic.ui.common.ScreenGutter
@@ -56,6 +58,7 @@ import earth.cora.picnic.ui.theme.LcdState
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.MenuItem
 import earth.cora.picnic.ui.theme.PicnicGlyph
+import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.rememberLoopTime
 import kotlinx.coroutines.launch
 
@@ -260,31 +263,34 @@ fun AlbumScreen(
                         .vinylSlice(top = top, bottom = bottom)
                         .padding(start = 8.dp, end = 8.dp, top = if (top) 8.dp else 3.dp, bottom = if (bottom) 10.dp else 3.dp),
                 ) {
-                    when (slice) {
-                        is PageSlice.Title -> VinylTitle(slice.text)
-                        is PageSlice.Season -> SeasonCard(
-                            slice.card,
-                            nextLabel = slice.card.nextDate?.let {
-                                stringResource(R.string.album_season_next, slice.card.sheet.holiday, AlbumViewModel.MONTH_DAY.format(it))
-                            },
-                            modifier = Modifier.padding(bottom = 6.dp),
-                        )
-                        is PageSlice.Pockets -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            slice.pockets.forEach { p ->
-                                Pocket(
-                                    p,
-                                    lifted = lifted == p.key,
-                                    onTap = { lifted = if (lifted == p.key) null else p.key },
-                                    onLongPress = {
-                                        if (p.face) blinks = blinks + (p.key to (blinks[p.key] ?: 0) + 1)
-                                    },
-                                    modifier = Modifier.weight(1f).testTag(AlbumTags.pocket(p.key)),
-                                    blinkKey = blinks[p.key] ?: 0,
-                                    wobble = p.key == wobbleKey,
-                                    onAppeared = { actions.onAppeared(p.key) },
-                                )
+                    // The vinyl is light in both themes: a pocket's focus ring there is the ballpoint (§4.6).
+                    CompositionLocalProvider(LocalFocusRingInk provides PicnicTheme.colors.ballpoint) {
+                        when (slice) {
+                            is PageSlice.Title -> VinylTitle(slice.text)
+                            is PageSlice.Season -> SeasonCard(
+                                slice.card,
+                                nextLabel = slice.card.nextDate?.let {
+                                    stringResource(R.string.album_season_next, slice.card.sheet.holiday, AlbumViewModel.MONTH_DAY.format(it))
+                                },
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
+                            is PageSlice.Pockets -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                slice.pockets.forEach { p ->
+                                    Pocket(
+                                        p,
+                                        lifted = lifted == p.key,
+                                        onTap = { lifted = if (lifted == p.key) null else p.key },
+                                        onLongPress = {
+                                            if (p.face) blinks = blinks + (p.key to (blinks[p.key] ?: 0) + 1)
+                                        },
+                                        modifier = Modifier.weight(1f).testTag(AlbumTags.pocket(p.key)),
+                                        blinkKey = blinks[p.key] ?: 0,
+                                        wobble = p.key == wobbleKey,
+                                        onAppeared = { actions.onAppeared(p.key) },
+                                    )
+                                }
+                                repeat(POCKETS_PER_ROW - slice.pockets.size) { Spacer(Modifier.weight(1f)) }
                             }
-                            repeat(POCKETS_PER_ROW - slice.pockets.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }

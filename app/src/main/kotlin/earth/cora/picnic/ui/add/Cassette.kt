@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.theme.ButtonGloss
 import earth.cora.picnic.ui.theme.FaceKind
 import earth.cora.picnic.ui.theme.Families
@@ -204,7 +205,7 @@ private fun HankoSticker(stop: Boolean, label: String, onClick: () -> Unit, modi
     Box(
         modifier
             .size(52.dp)
-            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick)
+            .clickable(interaction, indication = focusRingIndication(CircleShape), role = Role.Button, onClick = onClick)
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {

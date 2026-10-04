@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
@@ -20,6 +21,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.unit.Constraints
 import earth.cora.picnic.ui.a11y.Decorative
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.theme.rememberPressFraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -501,7 +503,7 @@ private fun WaitingCapsule(onStop: () -> Unit) {
         Modifier
             .size(60.dp)
             .testTag(ADD_CAPSULE_TAG)
-            .clickable(interaction, indication = null, role = Role.Button, onClick = onStop)
+            .clickable(interaction, indication = focusRingIndication(CircleShape), role = Role.Button, onClick = onStop)
             .semantics {
                 contentDescription = stop
                 stateDescription = reading

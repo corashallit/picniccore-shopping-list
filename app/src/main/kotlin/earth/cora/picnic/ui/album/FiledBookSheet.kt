@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -51,6 +52,7 @@ import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.Receipt
 import earth.cora.picnic.core.model.TripStats
 import earth.cora.picnic.core.store.TripBook
+import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.a11y.spokenDuration
 import earth.cora.picnic.ui.common.ReceiptLine
 import earth.cora.picnic.ui.common.ReceiptLines
@@ -172,7 +174,7 @@ fun FiledBookSheet(
                         .padding(start = 4.dp, top = 6.dp, bottom = 14.dp)
                         .testTag(FiledBookTags.RECEIPT)
                         .semantics(mergeDescendants = true) { contentDescription = spoken }
-                        .clickable(interactionSource = null, indication = null, role = Role.Button, onClickLabel = show) { fullReceipt = true },
+                        .clickable(interactionSource = null, indication = focusRingIndication(RoundedCornerShape(4.dp)), role = Role.Button, onClickLabel = show) { fullReceipt = true },
                 ) {
                     ReceiptSticker(slip.lines, Modifier.clearAndSetSemantics { })
                 }
