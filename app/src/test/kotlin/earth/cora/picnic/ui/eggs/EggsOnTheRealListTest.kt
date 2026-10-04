@@ -25,6 +25,7 @@ import org.robolectric.annotation.GraphicsMode
  * star and doodle by the frozen aisle's tab, clear of its words (egg 5), the ladybug walking along a folded strip's bottom
  * edge (egg 2), the sun turning into the moon after seven taps (egg 1), and the umbrella's band above the bar that no
  * row lies in while it rains (egg 16). The list-agnostic bounds and decor tests run on it too (EggListUnderTest.Real).
+ * Goldens `eggs_on_list_{nap,ladybug,rain}_day` and `eggs_on_list_midnight` (midnight is Glow by its own rule).
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -47,6 +48,7 @@ class EggsOnTheRealListTest {
         val basket = r.anchors.bounds(AnchorRegistry.basketKey(nap!!))!!
         assertTrue("in its basket ($cat, basket $basket)", basket.inflate(12 * 3f).contains(cat!!.center))
         assertTrue("a page sticker", "nap cat" in r.pageStickers())
+        r.capture("eggs_on_list_nap_day")
     }
 
     @Test
@@ -67,6 +69,7 @@ class EggsOnTheRealListTest {
         words.forEach { w -> assertTrue("the doodle $doodle clear of $w", !doodle!!.deflate(2f).overlaps(w)) }
         val tab = r.anchors.bounds(EggAnchors.tab(snack!!))!!
         assertTrue("by the tab ($doodle, tab $tab)", doodle!!.top < tab.bottom + 40 * 3f && doodle.left >= tab.left)
+        r.capture("eggs_on_list_midnight")
     }
 
     @Test
@@ -83,6 +86,7 @@ class EggsOnTheRealListTest {
         walk.forEach { f ->
             assertTrue("on the strip's bottom edge (${f.bounds.center.y} vs ${card.bottom})", f.bounds.center.y in card.bottom..card.bottom + 8 * 3f)
         }
+        r.capture("eggs_on_list_ladybug_day")
     }
 
     @Test
@@ -115,5 +119,6 @@ class EggsOnTheRealListTest {
         walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
         assertTrue("the open tray's rows are on screen", rows.isNotEmpty())
         rows.forEach { assertTrue("no row under the umbrella ($it)", !it.overlaps(umbrella.deflate(2f))) }
+        r.capture("eggs_on_list_rain_day")
     }
 }

@@ -177,8 +177,11 @@ fun LetterSetSurface(
             Column(
                 Modifier
                     .weight(1f, fill = false)
+                    // The scroll's viewport starts under the perforated rim and the washi handle, so what scrolls up passes
+                    // under the paper's edge instead of over its bites and the tape (§4.16). At rest nothing moves.
+                    .padding(top = SCROLL_TOP)
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 34.dp, end = 18.dp, top = 26.dp, bottom = if (footer == null) 24.dp else 8.dp),
+                    .padding(start = 34.dp, end = 18.dp, top = 26.dp - SCROLL_TOP, bottom = if (footer == null) 24.dp else 8.dp),
                 content = content,
             )
             if (footer != null) {
@@ -207,6 +210,9 @@ fun LetterSetSurface(
         )
     }
 }
+
+/** Where the sheet's scrolling content is cut off at the top: below the 4 dp bites and the handle's tape (to ~10 dp). */
+private val SCROLL_TOP = 16.dp
 
 /** The sheet's handle (§4.16): a pink-gingham washi strip 60 × 16 dp rotated −3°, straddling the top edge. Decorative. */
 @Composable

@@ -507,7 +507,13 @@ fun ListScreen(
     collapse: AddBarCollapseState? = null,
     /** The docked add bar; [bar] goes on it (the eggs' `addbar` anchor, its words' keep-out, its measured height). */
     dock: @Composable BoxScope.(bar: Modifier) -> Unit = { bar ->
-        StaticDock(tape = AddRules.addBarTape(SurpriseState(season = state.book?.season)), modifier = bar)
+        // The bar wears the eggs' tape (the season's, the rain's) when the eggs run here, else the season the book shows.
+        val eggs = LocalListEggs.current
+        StaticDock(
+            tape = AddRules.addBarTape(if (eggs.enabled) eggs else SurpriseState(season = state.book?.season)),
+            modifier = bar,
+            tapeAfterDoodle = eggs.umbrella,
+        )
     },
     /** WP9's engine: [EggListHost] mounts its overlays, shake, keyboard observer and scene scrolls on this list (§19.2). */
     surprises: SurpriseEngine = NoOpSurpriseEngine,
@@ -675,10 +681,10 @@ private const val SHORT_WINDOW_DP = 600
 
 /** The add bar at rest, docked at the bottom (previews and goldens; the app docks WP7's AddDock). */
 @Composable
-fun BoxScope.StaticDock(tape: WashiPattern = WashiPattern.SakuraStripe, modifier: Modifier = Modifier) {
+fun BoxScope.StaticDock(tape: WashiPattern = WashiPattern.SakuraStripe, modifier: Modifier = Modifier, tapeAfterDoodle: Boolean = false) {
     val c = PicnicTheme.colors
     Column(modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-        AddBar(AddBarUi(), onTextChange = {}, onSend = {}, onSnap = {}, onChoosePhoto = {}, onSpeak = {}, tape = tape)
+        AddBar(AddBarUi(), onTextChange = {}, onSend = {}, onSnap = {}, onChoosePhoto = {}, onSpeak = {}, tape = tape, tapeAfterDoodle = tapeAfterDoodle)
         Spacer(Modifier.fillMaxWidth().windowInsetsBottomHeight(WindowInsets.ime.union(WindowInsets.navigationBars)).background(c.pad))
     }
 }
@@ -804,6 +810,7 @@ private fun AisleList(
     val currentId = if (openId != null && openId != state.openSectionId) openId else state.nowSectionId
     // WP6's check-off chains have played out (no hop in flight, no burst, no celebration): egg 8's cat may curl up.
     val chainsDone = p.flights.isEmpty() && p.bursts.isEmpty() && p.celebration == null
+    val ladybugStrip = LocalListEggs.current.ladybug?.sectionId
     val scope = rememberCoroutineScope()
     val act by rememberUpdatedState(actions)
     val rowActions = remember(actions) {
@@ -988,7 +995,8 @@ private fun AisleList(
                             ambientClock = ambient.clock,
                             modifier = Modifier
                                 .itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis)
-                                .zIndex(if (screen.peek == s.id) 1f else 0f)
+                                // A peeked basket, or egg 2's ladybug walking under this strip, draws over the strip below.
+                                .zIndex(if (screen.peek == s.id || ladybugStrip == s.id) 1f else 0f)
                                 .onGloballyPositioned { screen.stripBounds[s.id] = it.boundsInWindow() }
                                 .unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
                         )
