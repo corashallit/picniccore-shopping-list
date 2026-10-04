@@ -156,7 +156,7 @@ Verified on this skeleton (2026-10-01): `./gradlew -p core build` (9 contract te
 | app-screens → app-shell | `icons.submit(items)` after every commit and every rename; `icons.redraw(name)`; `icons.forgetBespoke(name)` after `setItemIcon`; `icons.busy` for row sparkles | Never wait on icons. |
 | app-shell → core | `iconDecider.decide`, `assistant.drawIcon`, `store.update { applyIconDecisions / attachCustomIcon }`, `itemsNeedingIconDecision()` | The icon cascade, §8. |
 | app-shell → app-screens | `PicnicAppRoot(container)` inside `PicnicTheme` + `LocalStickerArt` and `LocalTimeouts` (art pass; v1: `LocalIconImages`); theme components | Screens use only theme tokens/components (§11). |
-| app-screens → core (art pass) | `TripFiling.newTrip / deleteList / toggle / undoNewBook` | Anything that files a book writes `album.json` before `state.json` through `TripFiling`; a ViewModel never pairs StateOps with album writes itself. |
+| app-screens → core (art pass) | `TripFiling.newTrip / deleteList / toggle / addItems / undoNewBook` | Anything that files a book writes `album.json` before `state.json` through `TripFiling`; a ViewModel never pairs StateOps with album writes itself. |
 | app-shell → core | `ConfigSource { settings.llmConfig() }`, `TokenSource { settings.token() }` | Read before every call; the token never leaves `token()`. |
 
 ---
@@ -394,7 +394,10 @@ object TripFiling {   // store/TripFiling.kt: the trip operations that write bot
     suspend fun newTrip(store, album, listId, mode, now): TripBook?
     suspend fun deleteList(store, album, listId, now): TripBook?
     suspend fun toggle(store, album, catalog, listId, itemId, now): Toggle   // Toggle(autoNewBook: AutoNewBook?, albumBefore: Album?)
-    suspend fun undoNewBook(store, album, toggle: Toggle, now)               // the state first, then Album.unfile
+    suspend fun addItems(store, album, listId, items, now, then): Add         // (item 315) an add after 12 h idle files the
+        // book first (addItemsStartingNewBook); Add(state, outcome, newBook: Toggle?)
+    suspend fun undoNewBook(store, album, toggle: Toggle, now): Boolean      // the state first (only while newBookStands),
+        // then Album.unfile; false when a newer book stands
     fun launchAlbumSync(scope, store, album, catalog, clock): Job }         // AppContainer.startOnce launches it once
 ```
 
