@@ -196,7 +196,7 @@
     <string name="about_title">About &amp; licences</string>
     <string name="about_version">Version %1$s</string>
     <string name="about_made_for">Made for one friend in Ontario</string>
-    <string name="about_sun_hint">tap the sun… 7 times?</string>
+    <string name="about_sun_hint">tap the sun?</string>
     <string name="about_licences">Licences</string>
     <string name="about_licences_intro">The lettering comes from free fonts under the SIL Open Font License 1.1. Their licences:</string>
     <string name="about_licence_use">%1$s · %2$s</string>
@@ -238,7 +238,7 @@
         <item>LCD receipt</item>
     </string-array>
     <string-array name="lab_egg_tries">
-        <item>Tap the sun by the title 7 times.</item>
+        <item>Tap the sun by the title.</item>
         <item>Press and hold a folded basket for a second.</item>
         <item>Add apples, lemons or strawberries.</item>
         <item>Give the phone a little shake.</item>

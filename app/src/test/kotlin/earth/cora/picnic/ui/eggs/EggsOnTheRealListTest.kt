@@ -23,7 +23,7 @@ import org.robolectric.annotation.GraphicsMode
  * The eggs on WP5's real List screen (integration of part 3; §12, §19.2 hand-off): the pieces the list itself places
  * through EggListHost are there and where the spec puts them — the nap cat curled in the empty basket (egg 8), the snack
  * star and doodle by the frozen aisle's tab, clear of its words (egg 5), the ladybug walking along a folded strip's bottom
- * edge (egg 2), the sun turning into the moon after seven taps (egg 1), and the umbrella's band above the bar that no
+ * edge (egg 2), the sun turning into the moon after one tap (egg 1), and the umbrella's band above the bar that no
  * row lies in while it rains (egg 16). The list-agnostic bounds and decor tests run on it too (EggListUnderTest.Real).
  * Goldens `eggs_on_list_{nap,ladybug,rain}_day` and `eggs_on_list_midnight` (midnight is Glow by its own rule).
  */
@@ -90,7 +90,7 @@ class EggsOnTheRealListTest {
     }
 
     @Test
-    fun sevenSunTapsTurnTheListDusk() {
+    fun oneSunTapTurnsTheListDusk() {
         val r = EggRig(compose, variant = ThemeVariant.Day).start(EggListUnderTest.Real)
         assertTrue(compose.onAllNodesWithContentDescription("Sun sticker").fetchSemanticsNodes().isNotEmpty())
         r.fire(1)

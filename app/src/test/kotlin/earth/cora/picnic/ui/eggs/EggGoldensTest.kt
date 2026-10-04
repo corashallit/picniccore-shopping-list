@@ -124,7 +124,7 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         r.capture(name)
     }
 
-    /** Egg 1, Day → Dusk at the 7th tap + 1.4 s; `list_dusk_day` once settled (item 238). The Glow moon is static. */
+    /** Egg 1, Day → Dusk at the tap + 1.4 s; `list_dusk_day` once settled (item 238). The Glow moon is static. */
     @Test
     fun egg1() {
         if (!day) return
@@ -133,7 +133,7 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         r.capture("list_dusk_day")
     }
 
-    /** Egg 1 from Golden: the binder is golden before the taps, Dusk after. */
+    /** Egg 1 from Golden: the binder is golden before the tap, Dusk after. */
     @Test
     fun egg1FromGolden() {
         if (!day) return
@@ -141,7 +141,7 @@ class EggGoldensTest(private val variant: ThemeVariant) {
         r.fire(12)
         r.advance(300)
         assertEquals(ThemeVariant.Golden, r.sandbox.variants.variant.value)
-        r.act { repeat(EggRules.SUN_TAPS) { r.clock.advance(300); r.engine.onSunTap() } }
+        r.act { r.engine.onSunTap() }
         val t0 = r.now
         r.advanceTo(t0 + 1400)
         assertEquals(ThemeVariant.Dusk, r.sandbox.variants.variant.value)

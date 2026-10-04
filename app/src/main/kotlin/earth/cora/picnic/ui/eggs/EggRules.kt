@@ -30,11 +30,7 @@ object EggRules {
     /** Egg 13: a finished live drawing comes out gold 1 time in 100. */
     const val JACKPOT_ODDS: Int = 100
 
-    // ---- Egg 1: Dusk binder ----
-
-    /** Seven sun taps, each within 1.5 s of the last. */
-    const val SUN_TAPS: Int = 7
-    const val SUN_TAP_GAP_MS: Long = 1500
+    // ---- Egg 1: Dusk binder (one tap on the sun sets it) ----
 
     /** The sun sinks (3 poses, 600 ms), then the moon rises (3 poses, 600 ms) with its sparkle burst. */
     const val DUSK_TRANSITION_MS: Long = 1200

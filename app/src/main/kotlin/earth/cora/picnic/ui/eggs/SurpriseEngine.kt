@@ -35,7 +35,7 @@ import kotlinx.coroutines.flow.emptyFlow
  *   bump), and the reduced-motion setting.
  * - [SurpriseState] gains the effects' fields below (ids are fresh per firing, so an overlay restarts on a new one).
  * - The engine takes the resolved theme variant (`variant`): the Glow moon (dark mode, midnight) is static, so a tap on it
- *   neither counts toward Dusk nor undoes it, whichever hook the list calls (onSunTap or onMoonTap).
+ *   neither sets Dusk nor undoes it, whichever hook the list calls (onSunTap or onMoonTap).
  *
  * ---------------------------------------------------------------------------------------------------------------------
  * THE LIST SCREEN'S CHECKLIST (WP5's ListScreen, which the Surprise lab's PracticeListScreen hosts too, so the lab runs
@@ -102,7 +102,7 @@ interface SurpriseEngine {
     /** A commit landed (eggs 3, 6, 9, 17). */
     fun onCommitted(items: List<GroceryItem>)
 
-    /** Egg 1: a tap on the sun sticker (in Dusk the sticker is the moon: the tap undoes Dusk). */
+    /** Egg 1: a tap on the sun sticker turns on Dusk (in Dusk the sticker is the moon: the tap undoes Dusk). */
     fun onSunTap()
 
     /** Egg 1: a tap on the moon (undoes Dusk). */

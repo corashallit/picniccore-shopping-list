@@ -87,7 +87,7 @@ class AppSurpriseEngine(
     private val forceEggs: Boolean = false,
     /**
      * The theme variant the list shows now (ThemeVariantSource, read lazily at each tap): in Glow (the phone in dark
-     * mode, or midnight) the sticker by the title is the static Glow moon, so egg 1 neither counts nor undoes anything.
+     * mode, or midnight) the sticker by the title is the static Glow moon, so a tap neither sets nor undoes egg 1.
      * AppContainer passes `{ themeVariants.variant.value }`; the lab's sandbox its own variants'.
      */
     private val variant: () -> ThemeVariant = { ThemeVariant.Day },
@@ -123,8 +123,6 @@ class AppSurpriseEngine(
         private set
 
     // ---- Hook state (main thread). ----
-    private var sunTaps = 0
-    private var lastSunTap = Long.MIN_VALUE
     private var bonusStep = 0
     private var bonusStartedAt = 0L
     private var lastPetals = Long.MIN_VALUE / 2
@@ -345,19 +343,16 @@ class AppSurpriseEngine(
         checkAnts()
     }
 
+    /** Egg 1: one tap on the sun (Day or Golden) turns the binder Dusk: the sun sinks, the moon rises (§12.2). */
     override fun onSunTap() {
         if (!eggsOn) return
         val s = _state.value
-        // The Glow moon (the phone in dark mode, or midnight) is static (§12.2 egg 1): no tap counts, none undoes Dusk.
+        // The Glow moon (the phone in dark mode, or midnight) is static (§12.2 egg 1): a tap neither sets nor undoes Dusk.
         if (glowMoon(s)) return
         // In Dusk the sticker by the title is the moon: a tap undoes Dusk.
         if (s.dusk) return onMoonTap()
+        // While the change plays (1.2 s, or its undo) further taps do nothing.
         if (s.duskFx != null) return
-        val now = clock()
-        sunTaps = if (now - lastSunTap <= EggRules.SUN_TAP_GAP_MS) sunTaps + 1 else 1
-        lastSunTap = now
-        if (sunTaps < EggRules.SUN_TAPS) return
-        sunTaps = 0
         val reduced = reducedMotion
         // Persisted at once (it survives a restart mid-transition); shown when the sun has set (600 ms), or at once
         // under reduced motion (the moon and the Dusk palette fade in, 120 ms).
@@ -378,9 +373,9 @@ class AppSurpriseEngine(
 
     override fun onMoonTap() {
         val s = _state.value
-        if (!eggsOn || !s.dusk || glowMoon(s)) return
+        // Not while the moon is still rising: a second tap during the change does nothing.
+        if (!eggsOn || !s.dusk || s.duskFx != null || glowMoon(s)) return
         duskPending = false
-        sunTaps = 0
         _state.update { it.copy(duskFx = DuskFx(nextId(), toDusk = false, reduced = reducedMotion)) }
         scope.launch { safely { settings.setDuskBinder(false) } }
         // The flag in memory goes at once (the DataStore write follows).
