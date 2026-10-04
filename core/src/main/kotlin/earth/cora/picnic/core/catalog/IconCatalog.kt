@@ -186,14 +186,16 @@ class IconCatalog(val file: CatalogFile) {
     /**
      * What a row shows for [item]. CONTRACT (D5, DisplayRefTest):
      * - bespoke icon attached -> IconRef(item.icon, customIconId) (a redraw in progress keeps showing it);
-     * - [busy] (IconRepository is deciding or drawing this name) or iconFit == PENDING -> the gashapon capsule
-     *   sentinel IconRef([CAPSULE]), tinted by its aisle (gold for a jackpot) by ItemIcon, with the "drawing..."
-     *   sparkle when busy. Display only: nothing persisted changes, and `paper_bag` is no longer a placeholder;
-     * - otherwise IconRef(item.icon) (an APPROXIMATE item that won't be drawn keeps its closest icon).
+     * - [busy] (IconRepository is deciding or drawing this name), iconFit == PENDING, or the stored [DEFAULT_ICON] that
+     *   was not chosen EXACT (nothing matched: [showsCapsule]) -> the gashapon capsule sentinel IconRef([CAPSULE]),
+     *   tinted by its aisle (gold for a jackpot) by ItemIcon, with the "drawing..." sparkle when busy. Display only:
+     *   nothing persisted changes;
+     * - otherwise IconRef(item.icon): an APPROXIMATE item that won't be drawn keeps its closest icon, and an item matched
+     *   EXACT to `paper_bag` ("grocery bags") shows the kraft shopping bag.
      */
     fun displayRef(item: GroceryItem, busy: Boolean): IconRef = when {
         item.customIconId != null -> IconRef(item.icon, item.customIconId)
-        busy || item.iconFit == IconFit.PENDING -> IconRef(CAPSULE)
+        busy || showsCapsule(item.icon, item.iconFit) -> IconRef(CAPSULE)
         else -> IconRef(item.icon)
     }
 
@@ -232,6 +234,13 @@ class IconCatalog(val file: CatalogFile) {
 
         /** D5: the gashapon capsule shown for PENDING and busy items. A display-only sentinel, never a catalog key. */
         const val CAPSULE: String = "_capsule"
+
+        /**
+         * Whether an item's stored [icon] and [fit] still show the [CAPSULE] (D5): PENDING, or the [DEFAULT_ICON] kept
+         * because nothing matched (not EXACT). `paper_bag` chosen EXACT is the real "Shopping bag" sticker.
+         */
+        fun showsCapsule(icon: String, fit: IconFit): Boolean =
+            fit == IconFit.PENDING || (icon == DEFAULT_ICON && fit != IconFit.EXACT)
 
         /** Album collected-key prefix for live-drawn stickers: "c:<customIconId>" (§7.2). */
         const val COLLECTED_CUSTOM_PREFIX: String = "c:"

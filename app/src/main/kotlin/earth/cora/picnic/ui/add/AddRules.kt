@@ -8,7 +8,6 @@ import earth.cora.picnic.core.calendar.Season
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.Aisle
 import earth.cora.picnic.core.model.AisleStyle
-import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.core.model.displayName
@@ -207,7 +206,7 @@ object AddRules {
                 aisleIndex = aisle?.let { it.position - 1 } ?: -1,
                 storeAisle = aisle?.let { style?.storeAisle ?: storeAisleNumber(it.name) },
                 style = style,
-                icon = if (item.iconFit == IconFit.PENDING) IconRef(IconCatalog.CAPSULE) else IconRef(item.icon),
+                icon = if (IconCatalog.showsCapsule(item.icon, item.iconFit)) IconRef(IconCatalog.CAPSULE) else IconRef(item.icon),
             )
         }
     }

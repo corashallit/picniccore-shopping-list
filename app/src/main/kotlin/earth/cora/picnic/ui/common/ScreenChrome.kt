@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -48,7 +49,6 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.theme.Glyph
-import earth.cora.picnic.ui.theme.INLINE_GLYPHS
 import earth.cora.picnic.ui.theme.MenuItem
 import earth.cora.picnic.ui.theme.OverflowMenu
 import earth.cora.picnic.ui.theme.PadPatch
@@ -61,7 +61,6 @@ import earth.cora.picnic.ui.theme.PicnicSurface
 import earth.cora.picnic.ui.theme.PicnicSwitch
 import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.PicnicTheme
-import earth.cora.picnic.ui.theme.PicnicTopBar
 import earth.cora.picnic.ui.theme.PuffyText
 import earth.cora.picnic.ui.theme.SectionDivider
 import earth.cora.picnic.ui.theme.ToastHost
@@ -100,17 +99,7 @@ fun SecondaryScreen(
     NoMaterialPress { PicnicBackground(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             val barInsets = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-            if (subtitle != null && subtitle.any { it in INLINE_GLYPHS }) {
-                GlyphSubtitleTopBar(title, subtitle, onBack, barInsets, actions, subtitleTrailing)
-            } else {
-                PicnicTopBar(
-                    title = title,
-                    subtitle = subtitle,
-                    modifier = barInsets,
-                    navigation = { BackButton(onBack) },
-                    actions = actions,
-                )
-            }
+            SubtitleTopBar(title, subtitle, onBack, barInsets, actions, subtitleTrailing)
             Box(
                 Modifier
                     .weight(1f)
@@ -126,17 +115,17 @@ fun SecondaryScreen(
 }
 
 /**
- * [PicnicTopBar]'s pieces for a subtitle that carries inline glyphs ("★ 64 of 216 collected · 3 holo"): the same Back
- * button and puffy title (one line, 24 → 20 sp, then an ellipsis, §4.2), then the subtitle on its pad patch in a
- * row of its own under the title, so it never shares its width with the actions (the album's LCD and More) and is never
- * cut; [trailing] (the album's LCD, with large text) follows it there, or wraps under it. [PicnicText] draws its star as
- * an inline vector (§2.7).
+ * Every secondary screen's top (§4.2), as [PicnicTopBar] lays it out: the Back button, the puffy title (one line, 24 →
+ * 20 sp, then an ellipsis) and the [actions] ("Done", the album's LCD and More) centred on the title's line, so Back
+ * never drifts off it; then the [subtitle] on its pad patch in a row of its own, indented under the title, so it never
+ * shares its width with the actions and is never cut; [trailing] (the album's LCD, with large text) follows it there,
+ * or wraps under it. [PicnicText] draws an inline star as a vector (§2.7).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun GlyphSubtitleTopBar(
+private fun SubtitleTopBar(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     onBack: () -> Unit,
     modifier: Modifier,
     actions: @Composable RowScope.() -> Unit,
@@ -159,14 +148,16 @@ private fun GlyphSubtitleTopBar(
             }
             actions()
         }
-        FlowRow(
-            Modifier.padding(start = 52.dp, end = 8.dp, top = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
-            trailing?.invoke()
+        if (subtitle != null || trailing != null) {
+            FlowRow(
+                Modifier.padding(start = 52.dp, end = 8.dp, top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (subtitle != null) PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
+                trailing?.invoke()
+            }
         }
     }
 }
@@ -219,11 +210,17 @@ fun PadCard(
             verticalArrangement = Arrangement.spacedBy(spacing),
         ) {
             if (title != null) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (glyph != null) Glyph(glyph, contentDescription = null, tint = glyphTint, size = 22.dp)
+                val titleStyle = PicnicTheme.type.cardTitle
+                // The glyph centres on the title's first line, so a title that wraps at large text ("Your OpenAI / key")
+                // keeps its glyph beside its first words instead of floating between the lines.
+                val firstLine = with(LocalDensity.current) { titleStyle.lineHeight.toDp() }
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (glyph != null) {
+                        Glyph(glyph, contentDescription = null, tint = glyphTint, size = 22.dp, modifier = Modifier.padding(top = ((firstLine - 22.dp) / 2).coerceAtLeast(0.dp)))
+                    }
                     Text(
                         title,
-                        style = PicnicTheme.type.cardTitle.copy(color = c.ink),
+                        style = titleStyle.copy(color = c.ink),
                         modifier = Modifier.weight(1f).semantics { heading() },
                     )
                     trailing()

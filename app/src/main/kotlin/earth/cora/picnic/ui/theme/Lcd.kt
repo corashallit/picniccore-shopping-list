@@ -29,8 +29,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -280,10 +283,22 @@ internal fun DrawScope.drawLcdCells(
 private fun DrawScope.drawExtra(extra: LcdExtra, left: Float, p: Float, color: Color, moon: Boolean) {
     val c = Offset(left + 3.5f * p, 3.5f * p)
     when {
-        extra == LcdExtra.Moon || (extra == LcdExtra.Star && moon) -> drawCircle(color, 3.1f * p, c)
+        extra == LcdExtra.Moon || (extra == LcdExtra.Star && moon) -> drawPath(moonPath(c, p), color)
         extra == LcdExtra.Star -> drawPath(starPath(c, 3.6f * p, 1.55f * p), color)
         else -> drawPath(heartPath(c, 6.4f * p), color)
     }
+}
+
+/**
+ * The LCD's full moon (§13.1): a lit disc with three unlit craters (holes through which the face shows), so "10/24" and
+ * its moon never read as a full stop. The same 3.1-pitch disc, so the line keeps its width.
+ */
+private fun moonPath(c: Offset, p: Float): Path = Path().apply {
+    fillType = PathFillType.EvenOdd
+    addOval(Rect(c, 3.1f * p))
+    addOval(Rect(Offset(c.x - 1.05f * p, c.y - 0.95f * p), 0.8f * p))
+    addOval(Rect(Offset(c.x + 1.15f * p, c.y + 0.35f * p), 0.6f * p))
+    addOval(Rect(Offset(c.x - 0.35f * p, c.y + 1.45f * p), 0.5f * p))
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -309,6 +324,11 @@ fun LcdChip(
      * BONUS★ and PRINT★): its text keeps one slot as wide as the widest of them and the count, in every mode.
      */
     words: List<String> = emptyList(),
+    /**
+     * The pet may come to live in this chip (the app bar with Easter eggs on, egg 15): the bee's room beside the count is
+     * kept from the start, so the chip is no wider once it hatches and the title and the sun beside it never move.
+     */
+    petRoom: Boolean = false,
 ) {
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
@@ -366,7 +386,7 @@ fun LcdChip(
     // chip can show as well, in every mode, so the chip keeps one width whatever it shows and the binder top's words
     // beside it never re-flow. The bee (Pet mode) stands beside the slot, so FED and PRINT★ with the bee are as wide as
     // the bee and the count. The text is centred in its slot.
-    val slot = remember(state.mode, state.count, state.total, state.text, state.petLives, words) { lcdSlot(state, words) }
+    val slot = remember(state.mode, state.count, state.total, state.text, state.petLives, words, petRoom) { lcdSlot(state, words, petRoom) }
 
     Box(
         modifier
@@ -434,16 +454,19 @@ internal data class LcdSlot(val alone: Int, val besideBee: Int?)
  * count), the widest of them and the count, in every mode, so the chip keeps one width whatever it shows; without, a
  * word or the bee standing in for the count is never narrower than the count. While the pet lives here (Pet mode, or
  * [LcdState.petLives] while another word stands in), the bee's room beside the count (or its own word, FED) is kept
- * too, and the star hides.
+ * too, and the star hides. With [petRoom] on the app bar (the pet may hatch here), that room is kept before it hatches
+ * as well: the widest word, the count with its star, and the bee beside the bare count, in every mode.
  */
-internal fun lcdSlot(state: LcdState, words: List<String>): LcdSlot {
+internal fun lcdSlot(state: LcdState, words: List<String>, petRoom: Boolean = false): LcdSlot {
     val petHome = state.mode == LcdMode.Pet || state.petLives
-    val count = if (state.total > 0) {
-        lcdColumns(lcdCells(if (petHome) "${state.count}/${state.total}" else "${state.count}/${state.total}★"))
-    } else {
-        0
-    }
+    val bare = if (state.total > 0) lcdColumns(lcdCells("${state.count}/${state.total}")) else 0
+    val starred = if (state.total > 0) lcdColumns(lcdCells("${state.count}/${state.total}★")) else 0
+    val count = if (petHome) bare else starred
     val wordsAlone = words.maxOfOrNull { lcdColumns(lcdCells(it)) } ?: 0
+    if (petRoom && words.isNotEmpty()) {
+        val own = if (state.mode == LcdMode.Pet) lcdColumns(lcdCells(state.text)) else 0
+        return LcdSlot(alone = maxOf(wordsAlone, starred), besideBee = maxOf(bare, own))
+    }
     return if (petHome) {
         val own = if (state.mode == LcdMode.Pet) lcdColumns(lcdCells(state.text)) else 0
         LcdSlot(alone = wordsAlone, besideBee = maxOf(count, own))

@@ -92,6 +92,9 @@ class IconCatalogTest {
         assertEquals(IconRef("lemon", "c-1"), catalog.displayRef(base.copy(customIconId = "c-1"), busy = true))
         assertEquals(IconRef(IconCatalog.CAPSULE), catalog.displayRef(base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.PENDING), busy = false))
         assertEquals(IconRef("condiments_generic"), catalog.displayRef(base.copy(icon = "condiments_generic", iconFit = IconFit.APPROXIMATE), busy = false))
+        // Matched nothing (the default key, not EXACT): still the capsule. Matched "grocery bags": the kraft bag itself.
+        assertEquals(IconRef(IconCatalog.CAPSULE), catalog.displayRef(base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.APPROXIMATE), busy = false))
+        assertEquals(IconRef(IconCatalog.DEFAULT_ICON), catalog.displayRef(base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.EXACT), busy = false))
     }
 
     @Test

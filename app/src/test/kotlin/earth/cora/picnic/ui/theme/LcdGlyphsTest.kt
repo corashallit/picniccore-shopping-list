@@ -54,6 +54,16 @@ class LcdGlyphsTest {
     }
 
     @Test
+    fun theAppBarsRoomIsTheSameBeforeAndAfterThePetHatches() {
+        val words = listOf("SYNC", "FED", "SNACK?", "PRINT★", "BONUS★")
+        for ((c, t) in listOf(0 to 1, 3 to 24, 10 to 24, 100 to 120)) {
+            val before = lcdSlot(LcdState(LcdMode.Count, count = c, total = t), words, petRoom = true)
+            assertEquals("$c/$t", before, lcdSlot(LcdState(LcdMode.Pet, count = c, total = t), words, petRoom = true))
+            assertEquals("$c/$t", before, lcdSlot(LcdState(LcdMode.Text, count = c, total = t, text = "SYNC", petLives = true), words, petRoom = true))
+        }
+    }
+
+    @Test
     fun extrasAreVectors() {
         assertEquals(LcdExtra.Star, lcdCells("★").single().extra)
         assertEquals(LcdExtra.Heart, lcdCells("♡").single().extra)

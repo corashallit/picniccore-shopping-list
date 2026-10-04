@@ -60,6 +60,9 @@ import earth.cora.picnic.ui.theme.MenuItem
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.rememberLoopTime
+import earth.cora.picnic.ui.theme.groundBacking
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.ExperimentalFoundationApi
 import kotlinx.coroutines.launch
 
 /** Everything the album can ask for. Defaults do nothing. */
@@ -127,6 +130,7 @@ object AlbumTags {
  * A "2 trip sticker books" link above the tabs jumps down to the books past a long pocket page.
  * Tap a pocket to lift its sticker (tap again or elsewhere to drop it); long-press a face pocket and it blinks.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AlbumScreen(
     state: AlbumUiState,
@@ -248,11 +252,27 @@ fun AlbumScreen(
                     })
                 }
             }
-            item("tabs") {
-                AlbumTabs(state.tab, onSelect = {
-                    lifted = null
-                    actions.onSelectTab(it)
-                })
+            // The tabs stay at the top while the page scrolls under them (Groceries runs to some 50 rows of pockets), on
+            // the binder ground repainted behind them once they pin (R6), and above the page whose edge the selected tab
+            // overlaps.
+            val tabsIndex = if (state.books.isNotEmpty()) 1 else 0
+            stickyHeader("tabs") {
+                val pinned by remember(listState, tabsIndex) {
+                    derivedStateOf {
+                        listState.firstVisibleItemIndex > tabsIndex ||
+                            (listState.firstVisibleItemIndex == tabsIndex && listState.firstVisibleItemScrollOffset > 0)
+                    }
+                }
+                AlbumTabs(
+                    state.tab,
+                    onSelect = {
+                        lifted = null
+                        actions.onSelectTab(it)
+                        // From deep in a page, the new page starts at its top, right under the tabs.
+                        if (pinned) scope.launch { listState.scrollToItem(tabsIndex) }
+                    },
+                    modifier = Modifier.zIndex(1f).then(if (pinned) Modifier.groundBacking() else Modifier),
+                )
             }
             itemsIndexed(slices, key = { _, s -> s.key }, contentType = { _, s -> s::class }) { i, slice ->
                 val top = i == 0

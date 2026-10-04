@@ -47,4 +47,20 @@ class ToastDismissTest {
         assertNull(state.retiring)
         assertEquals(torn.id, state.current?.id)
     }
+
+    @Test
+    fun aFullQueueDropsANoteNeverAnUndo() {
+        val state = ToastHostState()
+        state.show(ToastMessage("Oat cereal torn out", kind = "tear", actionLabel = "Undo", onAction = {}))
+        val added = ToastMessage("Added Milk to Dairy & eggs", kind = "add", actionLabel = "Undo", onAction = {})
+        val book = ToastMessage("New sticker book for today", kind = "nudge", actionLabel = "Undo", onAction = {})
+        val sort = ToastMessage("Couldn't sort. Try again.", kind = "sort")
+        state.show(added)
+        state.show(book)
+        state.show(sort)
+        assertEquals("the note goes, both Undos wait", listOf(added.id, book.id), state.queue.map { it.id })
+        val another = ToastMessage("Removed Eggs", kind = "remove", actionLabel = "Undo", onAction = {})
+        state.show(another)
+        assertEquals("all Undos: the queue grows", listOf(added.id, book.id, another.id), state.queue.map { it.id })
+    }
 }

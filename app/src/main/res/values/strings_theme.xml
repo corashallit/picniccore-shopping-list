@@ -39,7 +39,7 @@
     <string name="theme_key_paste">Paste key</string>
 
     <!-- Empty state art (§4.21): the doodle (hearts are drawn, not typed) and the sheet's printed caption. -->
-    <string name="theme_empty_doodle">let\'s go shopping</string>
+    <string name="theme_empty_doodle">let’s go shopping</string>
     <string name="theme_empty_sheet_caption">sticker sheet 1 of 2</string>
 
     <!-- Loaders under reduced motion (§4.22). -->
