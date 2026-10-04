@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -88,8 +89,8 @@ import earth.cora.picnic.ui.theme.TabSize
 import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
 import earth.cora.picnic.ui.theme.chipFloorScale
-import earth.cora.picnic.ui.theme.indexTabFirstWordWidth
 import earth.cora.picnic.ui.theme.indexTabLeastWidth
+import earth.cora.picnic.ui.theme.indexTabTwoLineWidth
 import earth.cora.picnic.ui.theme.focusRing
 import earth.cora.picnic.ui.theme.showsFocusRing
 import earth.cora.picnic.ui.theme.drawDashedCircle
@@ -512,15 +513,17 @@ internal fun TrayHeader(
     val heading = trayHeading(section)
     val fold by rememberUpdatedState(onFold)
     val badgeGap = basketGap(section, 4.dp)
-    // The narrowest tab that still shows the whole name: the store chip gives way to it (below).
+    // The narrowest tab that shows the whole name on one line, and the narrowest that holds it on two: the store chip
+    // gives way to them (below).
     val tabLeast = indexTabLeastWidth(section.position, section.displayName, section.look, TabSize.Tray)
-    val tabFirstWord = indexTabFirstWordWidth(section.position, section.displayName, section.look, TabSize.Tray)
+    val tabTwoLines = indexTabTwoLineWidth(section.displayName, section.look, TabSize.Tray)
     val chevronInteraction = remember { MutableInteractionSource() }
     val chevronRinged = showsFocusRing(chevronInteraction)
     Layout(
         modifier = modifier
             .fillMaxWidth()
-            .height(TrayMetrics.headerHeight)
+            // 56 dp, taller when the tab's name wraps onto more lines (§4.10): the band grows round it.
+            .heightIn(min = TrayMetrics.headerHeight)
             .testTag(ListTags.header(section.id))
             .then(if (pinned) Modifier.groundBacking() else Modifier)
             .traySlice(TrayPart.Header, section.look, ring, shadows.color, c.pad, c.rule),
@@ -531,7 +534,7 @@ internal fun TrayHeader(
                 look = section.look,
                 size = TabSize.Tray,
                 ballpoint = true,
-                // The tab is the tray's heading: TalkBack reads the whole name even when the tab ellipsizes (§15).
+                // The tab is the tray's heading: TalkBack reads the whole name in one go, however the tab wraps it (§15).
                 modifier = Modifier.layoutId("tab").testTag(ListTags.headerTab(section.id)).semantics {
                     contentDescription = heading
                     heading()
@@ -601,32 +604,27 @@ internal fun TrayHeader(
         },
     ) { measurables, constraints ->
         val w = constraints.maxWidth
-        val h = constraints.maxHeight
         val px = { d: Dp -> d.roundToPx() }
         val bandTop = px(TrayMetrics.ring + TrayMetrics.border)
-        val bandH = px(TrayMetrics.band)
         val chevron = measurables.first { it.layoutId == "chevron" }.measure(Constraints.fixed(px(48.dp), px(48.dp)))
         val basketM = measurables.first { it.layoutId == "basket" }.measure(Constraints())
         val chevronX = w - px(TrayMetrics.border) - px(2.dp) - chevron.width
         val basketX = chevronX - px(badgeGap) - basketM.width
         val start = px(TrayMetrics.border) + px(6.dp)
-        // The name is what she reads (§4.10): under a large font the store chip gives way before the name is cut. It is
-        // drawn smaller (StoreAisleChip: down to its 1.0 size, never under 13 sp) to leave the tab its whole name; at 1.0,
-        // or with room to spare, it keeps its natural width. When even its 1.0 size would cut the name ("Baking" from
-        // about 1.5 on a 360 dp phone, the tab's number circle grown too), the chip leaves the header only if that makes
-        // the name whole: it is not placed, the heading still reads "…, store aisle 2". A name cut either way keeps the
-        // chip at its 1.0 size (the A-number she reads on the store's signs) and is cut in the room left, unless that
-        // room would not hold its first word.
+        // The name is what she reads (§4.10), and the chip's A-number is what she reads on the store's signs: the chip
+        // stays whenever the name can sit beside it on one line or two. Under a large font it is drawn smaller first
+        // (StoreAisleChip: down to its 1.0 size, never under 13 sp) to keep the name on one line; at 1.0, or with room to
+        // spare, it keeps its natural width. When the name cannot share one line with it even then, the chip keeps its
+        // 1.0 size and the name wraps beside it onto two ("Baking / & spices"). A name that would need a third line beside
+        // it ("Breakfast, / coffee & tea" does not fit even two) takes the chip's room instead: the chip is not placed,
+        // the heading still reads "…, store aisle 1", and the folded strip's meta line shows the number.
         val chip = measurables.firstOrNull { it.layoutId == "chip" }?.let { m ->
             val natural = m.maxIntrinsicWidth(Constraints.Infinity)
             val least = kotlin.math.ceil(natural * chipFloorScale()).toInt()
             val room = basketX - px(CHIP_TO_BASKET) - px(CHIP_GAP) - start - tabLeast.roundToPx()
             when {
                 room >= least -> m.measure(Constraints(maxWidth = room.coerceIn(least, natural)))
-                // Without the chip the whole name fits: the chip gives way.
-                start + tabLeast.roundToPx() <= basketX - px(8.dp) -> null
-                // Cut either way: the chip stays, at its 1.0 size, while the tab keeps at least its first word.
-                basketX - px(CHIP_TO_BASKET) - least - px(CHIP_GAP) - start >= tabFirstWord.roundToPx() -> m.measure(Constraints(maxWidth = least))
+                basketX - px(CHIP_TO_BASKET) - least - px(CHIP_GAP) - start >= tabTwoLines.roundToPx() -> m.measure(Constraints(maxWidth = least))
                 else -> null
             }
         }
@@ -637,6 +635,9 @@ internal fun TrayHeader(
         val tab = measurables.first { it.layoutId == "tab" }.measure(Constraints(maxWidth = tabMax))
         val doodle = measurables.firstOrNull { it.layoutId == "doodle" }?.measure(Constraints())
         val bee = measurables.firstOrNull { it.layoutId == "bee" }?.measure(Constraints())
+        // The band is 50 dp, and grows round a tab whose name wraps (6 dp above and below it, as round the 38 dp tab).
+        val bandH = maxOf(px(TrayMetrics.band), tab.height + 2 * px(BAND_AROUND_TAB))
+        val h = maxOf(constraints.minHeight, bandTop + bandH)
         layout(w, h) {
             val tabY = bandTop + (bandH - tab.height) / 2
             tab.place(start, tabY)
@@ -669,6 +670,9 @@ internal const val STACKED_FONT_SCALE: Float = 1.5f
 
 /** How far below the strip's bottom edge egg 2's ladybug walks, past StripLadybug's own 2 dp (the centre of its lane). */
 private val LADYBUG_LANE_DROP: Dp = 2.5.dp
+
+/** The band's room above and below its tab: (50 − 38) / 2 dp. */
+private val BAND_AROUND_TAB: Dp = 6.dp
 
 /** The room between the tray tab's end and the store chip (§4.10): 8 dp. */
 private val CHIP_GAP: Dp = 8.dp

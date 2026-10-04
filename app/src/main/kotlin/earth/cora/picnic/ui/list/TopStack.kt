@@ -211,7 +211,7 @@ private fun BookWithCaption(caption: (@Composable () -> Unit)?, tag: String?, bo
         val frameY = 2 * (NAME_TAG_RIM + NAME_TAG_PAD_Y).roundToPx()
         val fitsAfterDate = tag == null || run {
             val column = (tagEnd - afterDate - frameX).coerceAtLeast(1)
-            measurer.measure(tag, tagStyle, constraints = Constraints(maxWidth = column)).size.height <= tagRoomH - frameY
+            measurer.measure(earth.cora.picnic.ui.theme.keepWithNextWord(tag), tagStyle, constraints = Constraints(maxWidth = column)).size.height <= tagRoomH - frameY
         }
         val tagWidth = if (fitsAfterDate) tagEnd - afterDate else tagEnd
         val tagP = measurables.firstOrNull { it.layoutId == "tag" }?.measure(

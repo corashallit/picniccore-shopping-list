@@ -140,7 +140,7 @@ class TalkBackCopyTest {
             s.one("Strawberries, collected, rarity 1 of 3")
             s.one("Not collected yet")
         }
-        // The tabs and strips read the aisle's whole name, however the tab ellipsizes (§15).
+        // The tabs and strips read the aisle's whole name, however the tab lays it out (§15).
         walker.visit(fixture("list/default-aisles"), Look.Day2) {
             val s = mutableListOf<Stop>()
             pages { s += stops() }

@@ -131,7 +131,7 @@ data class SectionUi(
     val position: Int,
     /** The tab's name: the aisle name without its store prefix (§4.10); "Everything else" for the Unsorted stop. */
     val displayName: String,
-    /** The full aisle name, for TalkBack (tabs and strips read it even when the tab ellipsizes). */
+    /** The full aisle name, for TalkBack (tabs and strips read it in one go, however the tab wraps it). */
     val fullName: String,
     /** The store's own aisle number (the "A2" chip), or null. */
     val storeAisle: Int?,

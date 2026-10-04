@@ -32,7 +32,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -58,13 +57,18 @@ import earth.cora.picnic.ui.a11y.textOverflowed
  * host's (NextCardHost).
  */
 
-/** The fitted name: its size and its line count (tests: NextStopTest.defaultAislesFit, fontScale200). */
+/**
+ * The fitted name: its size, its line count, and its lines as laid out ([text]: null when a word wider than the whole
+ * room wraps inside itself) (tests: NextStopTest.defaultAislesFit, fontScale200).
+ */
 @Immutable
-data class NextNameFit(val fontSizeSp: Float, val lines: Int, val overflowed: Boolean)
+data class NextNameFit(val fontSizeSp: Float, val lines: Int, val overflowed: Boolean, val text: List<String>? = null)
 
 /**
  * Fits [name] into [maxWidthPx] by the §10 rule: [fromSp] → [toSp] on one line, then two lines at [toSp], then two
- * lines shrinking to [floorSp] (large font scales only need it), then an ellipsis.
+ * lines shrinking to [floorSp] (large font scales only need it), then as many lines at [floorSp] as it takes (§0.4: an
+ * aisle name wraps, it is never cut). It wraps between words into balanced lines, "&" kept with the word after it
+ * ([tabLines]); only a word wider than the whole room breaks inside itself, which counts as overflowed.
  */
 fun fitNextName(
     measurer: TextMeasurer,
@@ -75,18 +79,22 @@ fun fitNextName(
     toSp: Float = 18f,
     floorSp: Float = 14f,
 ): NextNameFit {
+    fun at(sp: Float) = style.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp)
     var sp = fromSp
     while (sp >= toSp - 0.01f) {
-        val layout = measurer.measure(name, style.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp), softWrap = false, maxLines = 1, constraints = Constraints(maxWidth = maxWidthPx))
-        if (!layout.hasVisualOverflow) return NextNameFit(sp, 1, false)
+        val width = measurer.measure(name, at(sp), softWrap = false, maxLines = 1).size.width
+        if (width <= maxWidthPx) return NextNameFit(sp, 1, false, listOf(name))
         sp -= 1f
     }
     sp = toSp
     while (true) {
-        val two = measurer.measure(name, style.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp), softWrap = true, maxLines = 2, overflow = TextOverflow.Ellipsis, constraints = Constraints(maxWidth = maxWidthPx))
-        // A word wider than the line breaks inside itself: that is a clip too, so it counts as not fitting.
-        val wordsWhole = (0 until two.lineCount).all { l -> two.getLineEnd(l, visibleEnd = true).let { e -> e >= name.length || name[e - 1] == ' ' || name.getOrNull(e) == ' ' } }
-        if ((!two.hasVisualOverflow && wordsWhole) || sp <= floorSp + 0.01f) return NextNameFit(sp, two.lineCount.coerceAtMost(2), two.hasVisualOverflow || !wordsWhole)
+        val s = at(sp)
+        val lines = tabLines(name, maxWidthPx) { measurer.measure(it, s, softWrap = false, maxLines = 1).size.width }
+        if (lines != null && (lines.size <= 2 || sp <= floorSp + 0.01f)) return NextNameFit(sp, lines.size, false, lines)
+        if (sp <= floorSp + 0.01f) {
+            val wrapped = measurer.measure(keepWithNextWord(name), s, softWrap = true, constraints = Constraints(maxWidth = maxWidthPx))
+            return NextNameFit(sp, wrapped.lineCount, true)
+        }
         sp -= 1f
     }
 }
@@ -231,17 +239,20 @@ private fun rememberNextNumeral(number: Int?, look: AisleLook, size: Dp, ring: D
     }
 }
 
-/** The narrowest room (px) in which [name] sits on at most two lines at 18 sp with no word broken. */
+/**
+ * The narrowest room (px) in which [name] sits on at most two lines at 18 sp with no word broken, "&" kept with the
+ * word after it.
+ */
 private fun nameNeed(measurer: TextMeasurer, name: String, style: TextStyle): Int {
     val s = style.copy(fontSize = 18.sp, lineHeight = (18f * 1.2f).sp)
-    val one = measurer.measure(name, s, softWrap = false, maxLines = 1).size.width
-    val widestWord = name.split(' ').filter { it.isNotEmpty() }.maxOf { measurer.measure(it, s, softWrap = false, maxLines = 1).size.width }
+    fun width(text: String) = measurer.measure(text, s, softWrap = false, maxLines = 1).size.width
+    val one = width(name)
+    val widestWord = keepWithNextWord(name).split(' ').filter { it.isNotEmpty() }.maxOf { width(it) }
     var lo = widestWord
     var hi = maxOf(one, widestWord)
     while (lo < hi) {
         val mid = (lo + hi) / 2
-        val l = measurer.measure(name, s, softWrap = true, maxLines = 3, constraints = Constraints(maxWidth = mid))
-        if (l.lineCount <= 2) hi = mid else lo = mid + 1
+        if ((tabLines(name, mid, ::width)?.size ?: 3) <= 2) hi = mid else lo = mid + 1
     }
     return lo + 1
 }
@@ -280,12 +291,11 @@ private fun NextTab(number: Int?, displayName: String, storeAisle: Int?, look: A
             BoxWithConstraints(Modifier.weight(1f, fill = false)) {
                 val room = constraints.maxWidth
                 val fit = remember(displayName, nameStyle, room) { fitNextName(measurer, displayName, nameStyle, room) }
+                // Laid out line by line (balanced, "&" with the word after it, §0.4), so the tab hugs its widest line.
                 Text(
-                    displayName,
+                    fit.text?.joinToString("\n") ?: keepWithNextWord(displayName),
                     style = nameStyle.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp),
-                    maxLines = 2,
-                    softWrap = fit.lines > 1,
-                    overflow = TextOverflow.Ellipsis,
+                    softWrap = fit.text == null,
                     modifier = Modifier.semantics {
                         this[NextNameFontSize] = fit.fontSizeSp
                         this[NextNameLines] = fit.lines

@@ -919,7 +919,8 @@ fun NameTag(text: String, modifier: Modifier = Modifier, onPage: Boolean = false
         val room = if (constraints.hasBoundedHeight) (maxHeight / lineHeight).toInt().coerceAtLeast(1) else Int.MAX_VALUE
         val lines = if (onPage) minOf(3, room) else room
         Text(
-            text,
+            // "&" stays with the word after it (§0.4): "Deli / & meat", like "Dairy / & eggs".
+            keepWithNextWord(text),
             style = style,
             maxLines = lines,
             overflow = TextOverflow.Ellipsis,
@@ -932,7 +933,7 @@ fun NameTag(text: String, modifier: Modifier = Modifier, onPage: Boolean = false
 @Composable
 fun nameTagStyle(onPage: Boolean = false): TextStyle {
     val k = if (onPage) 1f / LocalDensity.current.fontScale.coerceAtLeast(1f) else 1f
-    return PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = (13f * k).sp, lineHeight = (15f * k).sp)
+    return PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = (13f * k).sp, lineHeight = (15f * k).sp, lineBreak = androidx.compose.ui.text.style.LineBreak.Heading)
 }
 
 /** The name tag's white rim, and its label's padding across and down: the frame around its text ([NameTag]). */

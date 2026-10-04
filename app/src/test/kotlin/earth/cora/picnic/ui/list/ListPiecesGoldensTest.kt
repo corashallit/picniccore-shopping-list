@@ -78,13 +78,13 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
     // ---- The default 14 aisles (item 76) ----
 
     @Test
-    @Config(qualifiers = "w360dp-h1100dp-xxhdpi")
+    @Config(qualifiers = "w360dp-h1300dp-xxhdpi")
     fun stripsDefaultAisles() = compose.recordPiece(name("strips_default_aisles"), variant) {
         StripsOf(ListFixture.ui(ListFixture.everyDefaultAisle()).sections)
     }
 
     @Test
-    @Config(qualifiers = "w360dp-h1100dp-xxhdpi")
+    @Config(qualifiers = "w360dp-h1300dp-xxhdpi")
     fun trayDefaultAisles() = compose.recordPiece(name("tray_default_aisles"), variant, pad = 14.dp) {
         val clock = remember { MotionClock() }
         val anchors = remember { AnchorRegistry() }

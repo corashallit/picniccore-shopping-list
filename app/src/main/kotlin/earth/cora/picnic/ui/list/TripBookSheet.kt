@@ -126,7 +126,7 @@ internal fun widestWordPx(text: String, style: androidx.compose.ui.text.TextStyl
  * A stamp's name as laid out under it: "&" is held to the word after it (a no-break space), so a name that wraps reads
  * "Deli / & meat" and "Dairy / & eggs" alike, never leaving "&" at a line's end.
  */
-internal fun stampName(aisleName: String): String = aisleName.replace(" & ", " &\u00A0")
+internal fun stampName(aisleName: String): String = earth.cora.picnic.ui.theme.keepWithNextWord(aisleName)
 
 /**
  * Facts joined with " · " ("24 of 24 stickers · 8 of 8 aisles stamped · 41 min"; "Saturday shop · Hillcrest Market"),
