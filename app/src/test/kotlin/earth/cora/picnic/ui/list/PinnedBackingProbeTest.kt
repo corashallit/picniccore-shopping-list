@@ -11,9 +11,12 @@ import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import earth.cora.picnic.core.model.setOpenAisle
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.theme.BookTags
 import org.junit.Assert.assertTrue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -145,6 +148,31 @@ class PinnedBackingProbeTest {
             assertGroundAt(bmp, plate.left - ring + 2f * dp, plate.top + 0.6f * dp, "$key: top-left corner")
             assertGroundAt(bmp, plate.right + ring - 0.8f * dp, plate.top + 0.8f * dp, "$key: top-right corner")
             assertGroundAt(bmp, plate.right + ring - 2f * dp, plate.top + 0.6f * dp, "$key: top-right corner")
+        }
+    }
+
+    /**
+     * Item 313, R6: a plate never rests partly pushed. With each aisle open in turn, she scrolls to the list's end (her
+     * own drags); at rest, the open tray's plate is either whole or gone, never a sliced band at the top.
+     */
+    @Test
+    fun listEndNoSlicedPlate() {
+        val opens = listOf("produce", "bakery", "deli-meat", "aisle-2-baking", "breakfast", "dairy-eggs", "frozen", "household")
+        val rigs = opens.map { ListRig(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, it)) }
+        var current by androidx.compose.runtime.mutableStateOf(rigs.first())
+        compose.setContent { androidx.compose.runtime.key(current) { current.Themed() } }
+        for ((i, open) in opens.withIndex()) {
+            compose.runOnIdle { current = rigs[i] }
+            compose.waitForIdle()
+            repeat(6) {
+                compose.onNodeWithTag(ListTags.LIST).performTouchInput { swipeUp(startY = centerY + 80 * dp, endY = centerY - 140 * dp, durationMillis = 250) }
+                compose.waitForIdle()
+            }
+            val list = compose.boundsOf(ListTags.LIST)
+            if (compose.exists(ListTags.header(open))) {
+                val plate = compose.boundsOf(ListTags.header(open))
+                assertTrue("$open: the plate rests whole or gone (${plate.top}..${plate.bottom} vs ${list.top})", plate.top >= list.top - 1f || plate.bottom <= list.top + 1f)
+            }
         }
     }
 }

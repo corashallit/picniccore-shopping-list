@@ -107,6 +107,13 @@ data class ListChange(
      * turns back to the old book's page (240 ms) and the twin fades into this spot (120 ms) once the turn has shown it.
      */
     val slot: Int? = null,
+    /**
+     * A row this change brought back into an aisle it re-opened (an Undo of a tear-off or a delete, §8.4, item 176): the
+     * list brings it into view, clear of the pinned plate, so she sees what came back. Null: nothing to show.
+     */
+    val revealItemId: String? = null,
+    /** The section [revealItemId] is in. */
+    val revealSectionId: String? = null,
 )
 
 /**

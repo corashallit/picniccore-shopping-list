@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -72,6 +73,9 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import earth.cora.picnic.ui.theme.PicnicMotion
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.zIndex
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.decorative
@@ -131,6 +135,11 @@ internal class RowActions(
     val onDelete: (String) -> Unit,
     val onEdit: (String) -> Unit,
     val onTearCue: () -> Unit = {},
+    /**
+     * A torn row's slot starts (true) or stops (false) closing: while it closes, the rows below follow its height frame
+     * by frame instead of sliding after it (the list's layout snaps), so the tray never shows a gap (§8.6).
+     */
+    val onSlotClosing: (Boolean) -> Unit = {},
 )
 
 /** A pop asked for by a commit (§6.2): the sticker pops and the text band flashes, [delayMs] after [generation] changed. */
@@ -186,6 +195,9 @@ internal fun TrayRow(
     var settling by remember { mutableStateOf<Job?>(null) }
     var tearT0 by remember { mutableStateOf<Long?>(null) }
     var tearNow by remember { mutableStateOf(0L) }
+    // After the halves have fallen, the slot closes (380 ms): its height goes to 0 on the tray's own paper (§8.6).
+    var closing by remember { mutableStateOf<Float?>(null) }
+    var fullHeight by remember { mutableIntStateOf(0) }
     val act by rememberUpdatedState(actions)
     // A gotten row has nothing to check: swipe right does not move it, so the GOT IT hint never shows (D10, item 117).
     val checkedNow by rememberUpdatedState(row.checked)
@@ -193,7 +205,11 @@ internal fun TrayRow(
     // fallen (she folds the aisle, scrolls it away, switches list, a chain folds the tray), the delete is made at once.
     val tear = remember { TearCommit() }
     DisposableEffect(row.id) {
-        onDispose { if (tear.pending) tear.commit { act.onDelete(row.id) } }
+        onDispose {
+            if (tear.closing) act.onSlotClosing(false)
+            tear.closing = false
+            if (tear.pending) tear.commit { act.onDelete(row.id) }
+        }
     }
     val thresholdPx = with(density) { SWIPE_THRESHOLD.toPx() }
     val minH = rowMinHeight()
@@ -210,15 +226,24 @@ internal fun TrayRow(
             }
         }
     }
+    val shut = closing
     Box(
         modifier
             .fillMaxWidth()
-            .heightIn(min = minH)
+            .then(
+                if (shut == null) {
+                    Modifier.heightIn(min = minH).onSizeChanged { fullHeight = it.height }
+                } else {
+                    Modifier.height(with(density) { (fullHeight * (1f - shut)).toDp() })
+                },
+            )
             .testTag(ListTags.rowSlot(row.id))
             // The torn halves tumble over the rows and the cap below (§8.6).
             .zIndex(if (tearT0 != null) 1f else if (ringed) 0.5f else 0f)
             .traySlice(TrayPart.Row, section.look, ring, shadows.color, c.pad, c.rule, first = first, last = last),
     ) {
+        // The slot closing: only the tray's slice (its paper) shows, shrinking to nothing.
+        if (shut != null) return@Box
         val inset = TrayMetrics.panelInset
         val slotShape = RoundedCornerShape(topStart = if (first) 8.dp else 0.dp, topEnd = if (first) 8.dp else 0.dp, bottomStart = if (last) 8.dp else 0.dp, bottomEnd = if (last) 8.dp else 0.dp)
         val tearing = tearT0 != null
@@ -229,8 +254,8 @@ internal fun TrayRow(
                 .then(if (offset != 0f || tearing) Modifier.clip(slotShape) else Modifier),
         ) {
             if (tearing) {
-                // The slot left behind shows the backing paper while the halves tumble off (§8.6).
-                Box(Modifier.matchParentSize().background(c.backing))
+                // The slot left behind is the tray's own paper while the halves tumble off (§8.6): no hole in the tray.
+                Box(Modifier.matchParentSize().background(c.pad))
             } else if (offset != 0f) {
                 SwipeBand(right = offset > 0f, progress = abs(offset) / thresholdPx, Modifier.matchParentSize())
             }
@@ -282,8 +307,26 @@ internal fun TrayRow(
                                                         tearNow = n - start
                                                         if (n - start >= TEAR_TOTAL) break
                                                     }
+                                                    // The slot closes on the tray's paper, the rows below following it.
+                                                    // (The list stays snapped until the row has left it: onDispose
+                                                    // releases, or the wait below if a failed save keeps it.)
+                                                    tear.closing = true
+                                                    act.onSlotClosing(true)
+                                                    closing = 0f
+                                                    val from = withFrameMillis { it }
+                                                    while (true) {
+                                                        val n = withFrameMillis { it }
+                                                        val f = ((n - from).toFloat() / SLOT_CLOSE).coerceIn(0f, 1f)
+                                                        closing = PicnicMotion.standard.easing.transform(f)
+                                                        if (f >= 1f) break
+                                                    }
                                                 }
                                                 tear.commit { act.onDelete(row.id) }
+                                                withContext(FixedMotionScale) { repeat(SNAP_RELEASE_FRAMES) { withFrameMillis { } } }
+                                                if (tear.closing) {
+                                                    tear.closing = false
+                                                    act.onSlotClosing(false)
+                                                }
                                             }
                                         }
                                     }
@@ -334,7 +377,9 @@ internal fun TrayRow(
                         alpha = 1f - f * 0.6f
                         transformOrigin = TransformOrigin(0.31f, 0.5f)
                     }
-                    .drawBehind { drawOutline(slotShape.createOutline(size, layoutDirection, this), paper) },
+                    .drawBehind { drawOutline(slotShape.createOutline(size, layoutDirection, this), paper) }
+                    // The words leave first, so no half ever carries text over another strip's label (§8.6).
+                    .graphicsLayer { alpha = tearWordsAlpha(f) },
             )
             content(
                 Modifier
@@ -350,17 +395,30 @@ internal fun TrayRow(
                         alpha = 1f - f * 0.6f
                         transformOrigin = TransformOrigin(0.81f, 0.5f)
                     }
-                    .drawBehind { drawOutline(slotShape.createOutline(size, layoutDirection, this), paper) },
+                    .drawBehind { drawOutline(slotShape.createOutline(size, layoutDirection, this), paper) }
+                    .graphicsLayer { alpha = tearWordsAlpha(f) },
             )
-            // Printed on the paper, and left on the backing where the row was.
-            Perforation(e, Modifier.matchParentSize().padding(horizontal = inset))
+            // Printed on the paper; the row tears along it, so it leaves with the halves.
+            if (e < TEAR_PERFORATE) Perforation(e, Modifier.matchParentSize().padding(horizontal = inset))
         }
     }
 }
 
-/** A released tear-off's delete, made exactly once: when the halves have fallen, or at once if the row goes first. */
+/**
+ * The torn halves' words fade out over the first quarter of the fall, before the halves can reach the strip below the
+ * tray, so text never passes over text (§8.6); the halves' paper fades as before.
+ */
+internal fun tearWordsAlpha(fall: Float): Float = 1f - (fall / TEAR_WORDS_FADE).coerceIn(0f, 1f)
+
+/** The share of the fall over which the halves' words fade. */
+internal const val TEAR_WORDS_FADE: Float = 0.25f
+
+/** A released tear-off's delete, made exactly once: when the slot has closed, or at once if the row goes first. */
 private class TearCommit {
     var pending = false
+
+    /** The slot is closing (the list's layout snaps meanwhile). */
+    var closing = false
     private var done = false
 
     fun commit(delete: () -> Unit) {
@@ -378,10 +436,19 @@ private fun Modifier.swallowTouches(): Modifier = pointerInput(Unit) {
     }
 }
 
+/** A row's check column from the panel's right edge: the 48 dp target and the row's 4 dp end padding (§4.11). */
+internal val ROW_CHECK_COLUMN: androidx.compose.ui.unit.Dp = 52.dp
+
 /** The tear-off's beats (§8.6), ms. */
 internal const val TEAR_PERFORATE: Long = 120
 internal const val TEAR_FALL: Long = 600
 internal const val TEAR_TOTAL: Long = TEAR_PERFORATE + TEAR_FALL
+
+/** A torn row kept by a failed save releases the list's snapped layout after this many frames. */
+private const val SNAP_RELEASE_FRAMES: Int = 30
+
+/** Then the slot closes (§8.6), ms. */
+internal const val SLOT_CLOSE: Long = 380
 private val TearEasing = CubicBezierEasing(0.5f, 0f, 0.7f, 1f)
 
 /** One half of a torn row: the left 62 % or the right 38 %. */

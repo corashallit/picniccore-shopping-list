@@ -81,6 +81,27 @@ object ListFixture {
     }
 
     /**
+     * Produce, the first stop, with six more things (eleven rows, a tray taller than the viewport), all got but Limes,
+     * and open: finishing it while its plate is pinned (§8.4, item 87).
+     */
+    fun longProduce(): AppState {
+        val extra = listOf(
+            Triple("blueberries", "Blueberries", "blueberries"), Triple("lemons", "Lemons", "lemon"),
+            Triple("avocados", "Avocados", "avocado"), Triple("onions", "Red onions", "onion"),
+            Triple("spinach", "Baby spinach", "spinach"), Triple("limes", "Limes", "lime"),
+        )
+        var s = state()
+        extra.forEachIndexed { i, (id, name, icon) ->
+            val item = GroceryItem(id = id, name = name, quantity = "1 bag", aisleId = "produce", icon = icon, iconFit = IconFit.EXACT, addedAt = MotionFixture.WRITTEN + 40 + i)
+            s = s.addItems(LIST_ID, listOf(item), item.addedAt).first
+        }
+        for (id in listOf("strawberries", "apples", "blueberries", "lemons", "avocados", "onions", "spinach")) {
+            s = s.toggleChecked(LIST_ID, id, TRIP_START + 30 * MIN)
+        }
+        return s.setOpenAisle(LIST_ID, "produce")
+    }
+
+    /**
      * Breakfast open with every row state (§4.11): coffee beans checked (favourite), maple syrup shiny, and three more
      * added this trip: a long name that wraps, a sticker still being drawn (Matcha powder, busy) and honey.
      */

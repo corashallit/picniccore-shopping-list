@@ -391,6 +391,15 @@ class ListViewModel(
             val tripReopened = !tripHandled && sameTrip && TripRules.isComplete(before) && !TripRules.isComplete(list)
             if (completed.isNotEmpty() || reopened.isNotEmpty() || tripDone || tripReopened) {
                 val next = if (tripDone || TripRules.isComplete(list)) null else completed.firstOrNull()?.let { nextStop(grouped, it) }
+                // A row this change brought back into an aisle it re-opened (an Undo of a tear-off): the list shows it
+                // (§8.4, item 176).
+                val revealed = if (completed.isEmpty()) {
+                    list.items.asSequence().filter { it.id !in beforeById }.firstNotNullOfOrNull { item ->
+                        grouped.sections.firstOrNull { s -> s.id in reopened && s.rows.any { it.id == item.id } }?.let { item.id to it.id }
+                    }
+                } else {
+                    null
+                }
                 change = ListChange(
                     aisleCompleted = completed,
                     aisleReopened = reopened,
@@ -400,6 +409,8 @@ class ListViewModel(
                     cause = causeOf(before, list, prev.state, app),
                     openSectionId = prev.grouped.openSectionId,
                     finaleShown = list.trip?.finaleShownAt != null,
+                    revealItemId = revealed?.first,
+                    revealSectionId = revealed?.second,
                 )
                 if (next != null) openTo = next
                 if (tripDone) foldAll = true

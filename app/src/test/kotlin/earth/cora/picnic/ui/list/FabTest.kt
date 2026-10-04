@@ -2,7 +2,9 @@ package earth.cora.picnic.ui.list
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performTouchInput
@@ -100,5 +102,65 @@ class FabTest {
         assertFalse("not the FAB", compose.exists(ADD_FAB_TAG))
         assertEquals("the full app bar", 72f, compose.boundsOf(ListTags.TOP_STACK).height / dp, 1f)
         compose.onNodeWithText(ListFixture.ui().storeName, substring = true).assertExists()
+    }
+
+    /** A quick add's answer: one named thing for Household (§6.2 rule 4). */
+    private fun ListRig.answers(name: String, icon: String, aisle: String = "household") {
+        assistant.ingest = { _, _ ->
+            earth.cora.picnic.ui.common.FakeAssistant.result(
+                listOf(earth.cora.picnic.core.assistant.ProposedItem(name, "1 pack", null, aisle, icon, earth.cora.picnic.core.model.IconFit.EXACT, named = true)),
+            )
+        }
+    }
+
+    private fun send(text: String) {
+        compose.onNodeWithTag(ADD_FIELD_TAG).performClick()
+        compose.onNodeWithTag(ADD_FIELD_TAG).performTextInput(text)
+        compose.onNodeWithContentDescription("Send").performClick()
+        compose.waitForIdle()
+    }
+
+    private fun fieldFocused(): Boolean =
+        compose.onNodeWithTag(ADD_FIELD_TAG).fetchSemanticsNode().config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Focused) { false }
+
+    /**
+     * Item 116, D11: once a send has committed, the field lets go (and the keyboard goes down), so the bar folds into the
+     * FAB as she scrolls down the aisles, as the collapse rules say.
+     */
+    @Test
+    fun afterSendTheBarFolds() {
+        val rig = ListRig(ListFixture.longAisle())
+        // Into Produce, on screen at the top: the list has no reason to move (whose scroll the bar would ignore).
+        rig.answers("Lemons", "lemon", aisle = "produce")
+        compose.show(rig)
+        send("lemons")
+        assertTrue("committed", rig.app.items().any { it.name == "Lemons" })
+        assertFalse("the field let go after the send", fieldFocused())
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput { swipeUp(startY = centerY + 120 * dp, endY = top + 10 * dp, durationMillis = 500) }
+        compose.waitForIdle()
+        assertTrue("scrolled down past 140 dp: the FAB", compose.exists(ADD_FAB_TAG))
+    }
+
+    /**
+     * §6.2: a quick add into a folded aisle below the add bar brings that aisle's strip into view (the add bar ignores
+     * the scroll), so the new row's place is seen; nothing moves when it already shows.
+     */
+    @Test
+    fun commitBringsTheNewRowIntoView() {
+        val rig = ListRig()
+        rig.answers("Rubber gloves", "dish_soap")
+        compose.show(rig)
+        val dockTop = compose.boundsOf(ADD_BAR_TAG).top
+        assertTrue("Household starts below the add bar", !compose.exists(ListTags.strip("household")) || compose.boundsOf(ListTags.strip("household")).bottom > dockTop)
+        send("rubber gloves")
+        compose.waitForIdle()
+        val strip = compose.boundsOf(ListTags.strip("household"))
+        assertTrue("Household's strip shows above the add bar ($strip vs $dockTop)", strip.bottom <= compose.boundsOf(ADD_BAR_TAG).top + 1f && strip.top >= compose.boundsOf(ListTags.LIST).top - 1f)
+        assertTrue("the add bar stays docked", compose.exists(ADD_BAR_TAG) && !compose.exists(ADD_FAB_TAG))
+        // A second add into Household, now on screen: the list stays where it is.
+        rig.answers("Sponges", "sponge")
+        send("sponges")
+        compose.waitForIdle()
+        assertEquals("nothing moved", strip.top, compose.boundsOf(ListTags.strip("household")).top, 1f)
     }
 }

@@ -57,7 +57,8 @@ class TearOffTest {
         assertTrue("the perforation prints first: still on the list at 100 ms", rig.app.items().any { it.id == "bananas" })
         compose.advanceMs(560)
         assertTrue("the halves are still tumbling at 660 ms", rig.app.items().any { it.id == "bananas" })
-        assertTrue("torn by 900 ms", compose.framesUntil(240) { rig.app.items().none { it.id == "bananas" } })
+        // Then the slot closes (380 ms), and only then is the row gone (§8.6).
+        assertTrue("torn once its slot has closed, by 1300 ms", compose.framesUntil(640) { rig.app.items().none { it.id == "bananas" } })
         assertEquals("peel + tick", 1, rig.feedback.count(Cue.TEAR_OFF))
 
         // The note: "Bananas torn out" + Undo, held still for at least 4 s.
@@ -88,9 +89,9 @@ class TearOffTest {
         // The note holds on the frame clock: hold the clock so the second tear-off lands inside the first one's hold.
         compose.mainClock.autoAdvance = false
         tear("strawberries")
-        compose.advanceMs(1000)
+        compose.advanceMs(1300)
         tear("apples")
-        compose.advanceMs(1000)
+        compose.advanceMs(1300)
         assertFalse(rig.app.items().any { it.id == "strawberries" || it.id == "apples" })
         compose.onNodeWithText("2 items torn out", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Undo").performClick()
@@ -98,6 +99,48 @@ class TearOffTest {
         compose.waitForIdle()
         assertEquals("both back where they were", order, rig.app.items().map { it.id })
         assertEquals(24, rig.app.list(ListFixture.LIST_ID)!!.items.size)
+    }
+
+    /**
+     * The slot closes on the tray's own paper (§8.6): after the halves have fallen (720 ms) its height shrinks to nothing
+     * over 380 ms while the rows below follow it, so no hole ever opens in the tray; the halves' words are gone before
+     * the halves can reach the strip below.
+     */
+    @Test
+    fun slotClosesOnPaper() {
+        val rig = ListRig(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, "produce"))
+        compose.show(rig)
+        val full = compose.boundsOf(ListTags.rowSlot("apples")).height
+        val below = compose.boundsOf(ListTags.rowSlot("carrots")).top
+        compose.mainClock.autoAdvance = false
+        tear("apples")
+        compose.advanceMs(700)
+        assertEquals("the slot keeps its height while the halves fall", full, compose.boundsOf(ListTags.rowSlot("apples")).height, 1f)
+        var last = full
+        var shrank = 0
+        repeat(20) {
+            compose.frames(1)
+            if (!compose.exists(ListTags.rowSlot("apples"))) return@repeat
+            val slot = compose.boundsOf(ListTags.rowSlot("apples"))
+            val next = compose.boundsOf(ListTags.rowSlot("carrots"))
+            assertTrue("the slot only shrinks", slot.height <= last + 0.5f)
+            if (slot.height < last - 0.5f) shrank++
+            last = slot.height
+            // The row below follows the slot's edge frame by frame: no gap between them.
+            assertEquals("the row below meets the closing slot", slot.bottom, next.top, 1.5f)
+        }
+        assertTrue("the slot closed over several frames ($shrank)", shrank >= 10)
+        assertTrue("then the row is gone", compose.framesUntil(300) { rig.app.items().none { it.id == "apples" } })
+        compose.frames(2)
+        assertEquals("the row below took its place", below - full, compose.boundsOf(ListTags.rowSlot("carrots")).top, 1.5f)
+        compose.mainClock.autoAdvance = true
+    }
+
+    @Test
+    fun tornWordsLeaveFirst() {
+        assertEquals(1f, tearWordsAlpha(0f), 0f)
+        assertEquals(0f, tearWordsAlpha(TEAR_WORDS_FADE), 0f)
+        assertEquals(0f, tearWordsAlpha(0.6f), 0f)
     }
 
     /**

@@ -8,6 +8,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -149,6 +151,7 @@ import earth.cora.picnic.ui.theme.PicnicMotion
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.ToastHostState
 import earth.cora.picnic.ui.theme.ToastMessage
+import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.WashiPattern
 import earth.cora.picnic.ui.theme.holdOnFrameClock
 import kotlinx.coroutines.launch
@@ -260,6 +263,28 @@ class ListScreenState(
     /** Her last tap that opened a folded strip: its tray scrolls into view once it is laid out (§6.1). */
     internal var openTap by mutableStateOf<OpenTap?>(null)
     private var openTaps = 0
+
+    /**
+     * A commit's first new row, brought into view once it is laid out (§6.2: the highlighter flash and the sticker pop
+     * happen where she can see them), unless she is scrolling or it already shows.
+     */
+    internal var revealTap by mutableStateOf<RevealTap?>(null)
+    private var reveals = 0
+
+    internal data class RevealTap(val itemId: String, val n: Int)
+
+    /** Brings [itemId] into view (its row, or the strip of its folded aisle) once the list shows it. */
+    internal fun reveal(itemId: String) {
+        revealTap = RevealTap(itemId, ++reveals)
+    }
+
+    /**
+     * While above 0, the list's rows and strips take their new places at once instead of sliding (item 87): a tray
+     * folding under the pinned plate (the list keeps its place on the strip that replaces it, so the strips below appear
+     * where they belong rather than sliding up from below the viewport), and a torn row's slot closing (the rows below
+     * follow its shrinking height frame by frame, so no gap opens in the tray).
+     */
+    internal var layoutSnaps by mutableIntStateOf(0)
 
     /** She opened [sectionId] herself (a tap on its strip, Enter, or TalkBack's "Expand"). */
     internal fun openedByHer(sectionId: String) {
@@ -417,6 +442,8 @@ fun ListRoute(
         // eggs 3, 6, 9 and 17 fire once per commit.
         onCommitted = { commit ->
             screen.pop(commit)
+            // The first new row comes into view, so its pop and highlighter flash are seen (§6.2).
+            commit.added.firstOrNull()?.let { screen.reveal(it.id) }
             commit.newBook?.let { vm.addStartedNewBook(commit.listId, it) }
         },
     )
@@ -647,6 +674,25 @@ fun ListScreen(
     // The lazy items (one plan for the list and for the eggs' scrolls to a section, §12.2 eggs 3, 5 and 8).
     val openId = p.openSection(state.openSectionId)
     val entries = remember(state.sections, openId) { planEntries(state.sections, openId) }
+    // A tray folding under its pinned plate keeps the list's place on its strip (§8.4 L + 1100, item 87), in the same
+    // frame as the swap: no frame shows an empty viewport or a jump to the list's end.
+    val planned = remember { arrayOfNulls<Planned>(1) }
+    val anchorGen = remember { IntArray(1) }
+    if (keepPlace(planned[0], state.listId, entries, lazyState)) {
+        anchorGen[0]++
+        screen.layoutSnaps++
+    }
+    planned[0] = Planned(state.listId, entries, lazyState)
+    LaunchedEffect(anchorGen[0]) {
+        if (anchorGen[0] == 0) return@LaunchedEffect
+        try {
+            // The swap's frame and the next: the strips below take their places, then sliding resumes.
+            withFrameMillis { }
+            withFrameMillis { }
+        } finally {
+            screen.layoutSnaps--
+        }
+    }
     val latestEntries by rememberUpdatedState(entries)
     val indexOfSection = remember { { id: String -> latestEntries.indexOfFirst { it.sectionId == id && (it is Entry.Strip || it is Entry.Header) } } }
     val host: @Composable EggListScope.() -> Unit = {
@@ -881,6 +927,34 @@ private sealed interface Entry {
     }
 }
 
+/** The list's last plan: its entries for [listId] on [state]. */
+private class Planned(val listId: String, val entries: List<Entry>, val state: LazyListState)
+
+/**
+ * The list keeps its place by the first visible item's key. When a tray folds while its rows are under the pinned plate
+ * (the first visible item is one of its rows, its cap or its band scrolled under), that key is gone and the list would
+ * keep only the index, which now points far down the list (the strips after it, or the list's end). Instead the strip
+ * that replaced the tray is put at the top of the viewport, in the same remeasure as the swap
+ * ([LazyListState.requestScrollToItem]); the next stop's scroll then continues from there (§8.4, §10). Returns whether
+ * it re-anchored.
+ */
+private fun keepPlace(before: Planned?, listId: String, entries: List<Entry>, list: LazyListState): Boolean {
+    if (before == null || before.listId != listId || before.state !== list || before.entries === entries) return false
+    val (index, offset) = androidx.compose.runtime.snapshots.Snapshot.withoutReadObservation {
+        list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset
+    }
+    val first = before.entries.getOrNull(index) ?: return false
+    if (first !is Entry.Header && first !is Entry.RowItem && first !is Entry.Cap && first !is Entry.End) return false
+    if (entries.any { it.key == first.key }) return false
+    val id = first.sectionId ?: return false
+    val strip = entries.indexOfFirst { it is Entry.Strip && it.sectionId == id }
+    if (strip < 0) return false
+    // A band at the very top whose strip takes its very index needs nothing (another tray opening above moves it).
+    if (first is Entry.Header && offset == 0 && strip == index) return false
+    list.requestScrollToItem(strip, 0)
+    return true
+}
+
 /** The lazy items for [sections] with [openId] open: strips, or the tray's band, rows, cap and end marker; gaps; the end note. */
 private fun planEntries(sections: List<SectionUi>, openId: String?): List<Entry> = buildList {
     for (s in sections) {
@@ -933,8 +1007,28 @@ private fun AisleList(
     val ladybugStrip = LocalListEggs.current.ladybug?.sectionId
     val scope = rememberCoroutineScope()
     val act by rememberUpdatedState(actions)
-    val rowActions = remember(actions) {
-        RowActions(onToggle = actions.onToggle, onDelete = actions.onDelete, onEdit = actions.onOpenEdit, onTearCue = { actions.onCue(Cue.TEAR_OFF) })
+    val rowActions = remember(actions, screen) {
+        RowActions(
+            onToggle = actions.onToggle,
+            onDelete = actions.onDelete,
+            onEdit = actions.onOpenEdit,
+            onTearCue = { actions.onCue(Cue.TEAR_OFF) },
+            // Released a few frames after the row has left the list, so the rows below never start a placement
+            // animation in the very pass where their index changes (they would slide in from below the viewport).
+            onSlotClosing = { closing ->
+                if (closing) {
+                    screen.layoutSnaps++
+                } else {
+                    scope.launch {
+                        try {
+                            repeat(3) { withFrameMillis { } }
+                        } finally {
+                            screen.layoutSnaps--
+                        }
+                    }
+                }
+            },
+        )
     }
 
     // Focus after her own folds and unfolds (§15, item 193): the chevron when it opened, the strip when it folded.
@@ -945,20 +1039,176 @@ private fun AisleList(
         }
     }
 
-    // The next stop opening behind the Next card scrolls into view (§10); the add bar ignores it (item 116).
+    val latestEntries by rememberUpdatedState(entries)
+    val latestSections by rememberUpdatedState(state.sections)
+    val dockPx by rememberUpdatedState(with(density) { dockHeight.roundToPx() })
+    val snap by rememberUpdatedState(reduced)
+    val gapPx = with(density) { REVEAL_MARGIN.roundToPx() }
+    val topPadPx = with(density) { LIST_TOP_PAD.roundToPx() }
+    // Room added after the list's end so a stop's band can land flush at the top, or a plate be pushed off whole, when
+    // the list ends too soon after it (items 178, 313). It goes when another section opens.
+    var endRoom by remember(openId) { mutableIntStateOf(0) }
+    // Her own drag or fling moved the list since it last came to rest (programmatic scrolls never pass the nested
+    // scroll connection).
+    val userScrolled = remember { BooleanArray(1) }
+    val platePx = with(density) { PLATE_FALLBACK.roundToPx() }
+
+    /**
+     * Runs a programmatic scroll: the add bar ignores it (item 116), and the rows keep still while it runs and as it
+     * lands (the scroll's last remeasure would otherwise start every row's placement animation from where the scroll
+     * left it, so the rows would drop below the plate and slide back up).
+     */
+    suspend fun programmatic(scroll: suspend () -> Unit) {
+        collapse?.ignoreProgrammaticScroll()
+        screen.layoutSnaps++
+        try {
+            scroll()
+            withFrameMillis { }
+            withFrameMillis { }
+        } finally {
+            screen.layoutSnaps--
+        }
+    }
+
+    /** A programmatic scroll to [index]: a jump under reduced motion (§8.8), else smooth. */
+    suspend fun scrollTo(index: Int, offset: Int = 0) = programmatic {
+        if (snap) listState.scrollToItem(index, offset) else listState.animateScrollToItem(index, offset)
+    }
+
+    suspend fun scrollBy(px: Float) {
+        if (px == 0f) return
+        programmatic {
+            if (snap) listState.scrollBy(px) else listState.animateScrollBy(px, tween(PicnicMotion.standard.durationMillis, easing = PicnicMotion.standard.easing))
+        }
+    }
+
+    /**
+     * Scrolls [index] flush with the viewport's top edge (past the 11 dp top padding, where the plate pins), so no
+     * sliver of the strip before it shows above it (items 178, 313). A stop near the list's end may not have enough list
+     * after it to get there: the end first gains a viewport's height of room (out of sight below), the scroll lands flush
+     * in one move (one jump under reduced motion), and the room is then trimmed to exactly what the landing needs, which
+     * moves nothing. So no frame ever shows the strip above sliced.
+     */
+    suspend fun scrollFlush(index: Int) {
+        val base = endRoom
+        val view = listState.layoutInfo.let { it.viewportEndOffset - it.viewportStartOffset }
+        endRoom = base + view
+        try {
+            withFrameMillis { }
+            programmatic {
+                if (snap) listState.scrollToItem(index, topPadPx) else listState.animateScrollToItem(index, topPadPx)
+            }
+        } finally {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.maxByOrNull { it.index }
+            endRoom = if (last == null || last.index != info.totalItemsCount - 1) {
+                base
+            } else {
+                val surplus = last.offset + last.size + info.afterContentPadding - info.viewportEndOffset
+                (endRoom - surplus).coerceIn(base, base + view)
+            }
+        }
+    }
+
+    /**
+     * Brings [itemId] into view, clear of the pinned plate above and the dock below (§6.1, §6.2, §8.4): its row, or the
+     * strip of its folded aisle. It waits (bounded) until the list lays it out, scrolls no further than it must when it
+     * is partly on screen, and does nothing when it already shows.
+     */
+    suspend fun reveal(itemId: String, rowOnly: Boolean) {
+        fun row() = latestEntries.indexOfFirst { it is Entry.RowItem && it.key == itemId }
+        fun strip(): Int {
+            val id = latestSections.firstOrNull { s -> s.rows.any { it.id == itemId } }?.id ?: return -1
+            return latestEntries.indexOfFirst { it is Entry.Strip && it.sectionId == id }
+        }
+        // [rowOnly]: its aisle is opening (the change re-opened it), so the row itself is awaited, not the strip.
+        var waited = 0
+        while (row() < 0 && (rowOnly || strip() < 0) && waited++ < OPEN_WAIT_FRAMES) withFrameMillis { }
+        // One more frame: the layout with it in has run.
+        withFrameMillis { }
+        val row = row()
+        val target = if (row >= 0) row else strip()
+        if (target < 0) return
+        val sectionId = latestEntries[target].sectionId
+        val header = if (row >= 0) latestEntries.indexOfFirst { it is Entry.Header && it.sectionId == sectionId } else -1
+
+        /** Where [target] sits now: null when it is clear of the plate and the dock, else what it needs. */
+        fun need(): Need? {
+            val info = listState.layoutInfo
+            val plate = info.visibleItemsInfo.firstOrNull { it.index == header }
+            // What may cover it at the top: its own tray's band when pinned there, else nothing.
+            val clearTop = maxOf(info.viewportStartOffset, if (plate != null && plate.index != target) plate.offset + plate.size else info.viewportStartOffset)
+            val clearBottom = info.viewportEndOffset - dockPx
+            val item = info.visibleItemsInfo.firstOrNull { it.index == target } ?: return Need.Away(plate?.size ?: platePx)
+            return when {
+                item.offset < clearTop -> Need.Away(plate?.size ?: platePx)
+                item.offset + item.size > clearBottom -> Need.Lift(minOf(item.offset + item.size - clearBottom + gapPx, item.offset - clearTop))
+                else -> null
+            }
+        }
+
+        // Each placement is absolute (by index), so a layout still settling (an aisle opening, the list keeping its
+        // place) never leaves it short; then one more look, in case it is still under the plate or the dock.
+        repeat(2) { pass ->
+            when (val n = need()) {
+                null -> return
+                is Need.Lift -> scrollBy(n.px.toFloat())
+                is Need.Away -> when {
+                    // A row near the top of its tray: the whole tray from its band, so she sees where it came back.
+                    pass == 0 && row >= 0 && target - header <= OPEN_ROWS_IN_VIEW -> scrollFlush(header)
+                    // A row further down lands right under its pinned plate (the row above it wholly under the plate).
+                    row >= 0 -> scrollTo(target, -(n.plate - topPadPx))
+                    else -> scrollTo(target)
+                }
+            }
+        }
+    }
+
+    // The next stop opening behind the Next card scrolls into view (§10), or a row an Undo brought back (§8.4).
     LaunchedEffect(p.scroll?.t0) {
         val req = p.scroll ?: return@LaunchedEffect
-        val index = entries.indexOfFirst { it.sectionId == req.sectionId && (it is Entry.Header || it is Entry.Strip) }
+        req.itemId?.let {
+            reveal(it, rowOnly = true)
+            return@LaunchedEffect
+        }
+        // The scroll lands on the layout after the fold: it waits (bounded) until no tray but the stop's is laid out,
+        // then a frame, so the stop's band lands flush at the top (item 178).
+        var waited = 0
+        while (latestEntries.any { it is Entry.Header && it.sectionId != req.sectionId } && waited++ < OPEN_WAIT_FRAMES) withFrameMillis { }
+        withFrameMillis { }
+        val index = latestEntries.indexOfFirst { it.sectionId == req.sectionId && (it is Entry.Header || it is Entry.Strip) }
         if (index < 0) return@LaunchedEffect
-        collapse?.ignoreProgrammaticScroll()
-        listState.animateScrollToItem(index)
+        // Flush with the viewport's top edge (past the 11 dp top padding), where the plate pins: no sliver of the strip
+        // before it shows above it.
+        scrollFlush(index)
+    }
+    // A commit's first new row comes into view (§6.2), unless she is scrolling.
+    LaunchedEffect(screen.revealTap) {
+        val tap = screen.revealTap ?: return@LaunchedEffect
+        if (listState.isScrollInProgress) return@LaunchedEffect
+        reveal(tap.itemId, rowOnly = false)
+    }
+    // A plate never rests partly pushed (R6, item 313): when the list comes to rest at its end with the open tray's band
+    // half pushed off by the tray's end, the list's end gains the room to push it off whole, and the list moves there.
+    LaunchedEffect(listState, openId) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            // Only where her own scroll came to rest: the list's own scrolls land where they mean to (and one of them may
+            // be about to start).
+            if (scrolling || !userScrolled[0]) return@collect
+            userScrolled[0] = false
+            val info = listState.layoutInfo
+            val end = info.visibleItemsInfo.firstOrNull { (it.key as? String) == "end:$openId" } ?: return@collect
+            val plate = info.visibleItemsInfo.firstOrNull { (it.key as? String) == "header:$openId" } ?: return@collect
+            val shown = end.offset - info.viewportStartOffset
+            if (shown <= 0 || shown >= plate.size || listState.canScrollForward) return@collect
+            endRoom += shown + 1
+            withFrameMillis { }
+            scrollBy((shown + 1).toFloat())
+        }
     }
     // Her own open scrolls the tray into view (§6.1: smooth, programmatic; the add bar ignores it, item 116) unless its
     // band and its first three rows already show above the add bar. It waits for the tray to be laid out: a bounded
     // number of frames, as the engine may hold another aisle open a moment.
-    val latestEntries by rememberUpdatedState(entries)
-    val dockPx by rememberUpdatedState(with(density) { dockHeight.roundToPx() })
-    val snap by rememberUpdatedState(reduced)
     LaunchedEffect(screen.openTap) {
         val tap = screen.openTap ?: return@LaunchedEffect
         fun headerIndex() = latestEntries.indexOfFirst { it is Entry.Header && it.sectionId == tap.sectionId }
@@ -974,8 +1224,7 @@ private fun AisleList(
         val last = info.visibleItemsInfo.firstOrNull { it.index == minOf(index + OPEN_ROWS_IN_VIEW, cap - 1).coerceAtLeast(index) }
         val inView = header != null && header.offset >= info.viewportStartOffset && last != null && last.offset + last.size <= info.viewportEndOffset - dockPx
         if (inView) return@LaunchedEffect
-        collapse?.ignoreProgrammaticScroll()
-        if (snap) listState.scrollToItem(index) else listState.animateScrollToItem(index)
+        scrollTo(index)
     }
     // At the top, the bar and the book come back (§4.2, §6.1).
     LaunchedEffect(listState) {
@@ -1024,6 +1273,7 @@ private fun AisleList(
             }
 
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (consumed.y != 0f) userScrolled[0] = true
                 // The scroll collapses the app bar and the book (and expands them on the way back).
                 if (consumed.y < -COLLAPSE_SLOP * density.density) screen.scrolledDown = true
                 if (consumed.y > COLLAPSE_SLOP * density.density) screen.scrolledDown = false
@@ -1095,7 +1345,12 @@ private fun AisleList(
                 .nestedScroll(connection)
                 .semantics { customActions = listOf(CustomAccessibilityAction(refreshLabel) { refresh(); true }) }
                 .graphicsLayer { translationY = if (reduced) 0f else screen.pull },
-            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp, bottom = if (umbrella) UMBRELLA_END_GAP else bottomPadding),
+            contentPadding = PaddingValues(
+                start = 8.dp,
+                end = 8.dp,
+                top = LIST_TOP_PAD,
+                bottom = (if (umbrella) UMBRELLA_END_GAP else bottomPadding) + with(density) { endRoom.toDp() },
+            ),
         ) {
             entries.forEachIndexed { index, e ->
                 when (e) {
@@ -1125,9 +1380,10 @@ private fun AisleList(
                             ambient = beat,
                             ambientClock = ambient.clock,
                             modifier = Modifier
-                                .itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis)
-                                // A peeked basket, or egg 2's ladybug walking under this strip, draws over the strip below.
-                                .zIndex(if (screen.peek == s.id || ladybugStrip == s.id) 1f else 0f)
+                                .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis)
+                                // A peeked basket, or egg 2's ladybug walking under this strip, draws over the strip below
+                                // (and over the open tray's band beside it).
+                                .zIndex(if (screen.peek == s.id || ladybugStrip == s.id) Z_LIFTED else 0f)
                                 .onGloballyPositioned { screen.stripBounds[s.id] = it.boundsInWindow() }
                                 .unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
                         )
@@ -1154,7 +1410,9 @@ private fun AisleList(
                                 screen.toggles.bump(s.id)
                                 act.onFoldAll()
                             },
-                            modifier = Modifier.unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
+                            // The band draws over its tray's rows when it pins (R6), and over the strips that slide
+                            // past the tray as it opens or closes (§4.10).
+                            modifier = Modifier.zIndex(Z_PLATE).unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
                         )
                     }
                     is Entry.RowItem -> item(key = e.key, contentType = "row") {
@@ -1174,13 +1432,32 @@ private fun AisleList(
                             ambientClock = ambient.clock,
                             current = e.s.id == currentId,
                             modifier = Modifier
-                                .itemMotion(this, reduced, placementMs = SLOT_CLOSE_MS)
+                                .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = SLOT_CLOSE_MS)
+                                // The open tray draws over the folded strips that slide past it as it opens (the strip
+                                // below never covers its rows or its cap, §4.10).
+                                .zIndex(Z_TRAY)
                                 .unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced)
-                                .trayCurl(curl, clock, flap = e.s.look.family.pastel, shadow = PicnicTheme.shadows.color, reduced = reduced),
+                                // The curl starts at the panel's inner corner and stays in the row's check column (§8.4).
+                                .trayCurl(
+                                    curl, clock,
+                                    flap = e.s.look.family.pastel,
+                                    shadow = PicnicTheme.shadows.color,
+                                    reduced = reduced,
+                                    inset = TrayMetrics.panelInset,
+                                    maxLeg = ROW_CHECK_COLUMN,
+                                    under = PicnicTheme.colors.backing,
+                                ),
                         )
                     }
                     is Entry.Cap -> item(key = e.key, contentType = "cap") {
-                        TrayCap(e.s, current = e.s.id == currentId, modifier = Modifier.itemMotion(this, reduced, placementMs = SLOT_CLOSE_MS).unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced))
+                        TrayCap(
+                            e.s,
+                            current = e.s.id == currentId,
+                            modifier = Modifier
+                                .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = SLOT_CLOSE_MS)
+                                .zIndex(Z_TRAY)
+                                .unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced),
+                        )
                     }
                     // One pixel tall: the list ignores zero-size items when it picks the header to pin; this pushes the
                     // plate off as its tray ends.
@@ -1188,10 +1465,10 @@ private fun AisleList(
                         Spacer(Modifier.fillMaxWidth().height(with(LocalDensity.current) { 1.toDp() }))
                     }
                     is Entry.Gap -> item(key = e.key, contentType = "gap") {
-                        Spacer(Modifier.itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis).fillMaxWidth().height(7.dp))
+                        Spacer(Modifier.itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis).fillMaxWidth().height(7.dp))
                     }
                     Entry.Note -> item(key = e.key, contentType = "note") {
-                        EndNote(state.total, Modifier.itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis), anchors = anchors)
+                        EndNote(state.total, Modifier.itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis), anchors = anchors)
                     }
                 }
             }
@@ -1242,6 +1519,30 @@ private val PULL_MAX: Dp = 70.dp
 private val PULL_TRIGGER: Dp = 40.dp
 private const val PULL_FOLLOW: Float = 0.6f
 private const val COLLAPSE_SLOP: Float = 4f
+
+/** What a row brought into view needs: to come back from under the plate or off screen, or to rise [px] above the dock. */
+private sealed interface Need {
+    data class Away(val plate: Int) : Need
+
+    data class Lift(val px: Int) : Need
+}
+
+/** The list's top padding (§6.1). */
+private val LIST_TOP_PAD: Dp = 11.dp
+
+/** A row brought into view keeps this far from the plate above it and the dock below it. */
+private val REVEAL_MARGIN: Dp = 8.dp
+
+/** The pinned plate's height when its band is not laid out yet (§4.10: 53 dp, its ring and shadow). */
+private val PLATE_FALLBACK: Dp = 56.dp
+
+/**
+ * Draw order in the list: the folded strips, then the open tray's rows and cap (the strips sliding past the tray as it
+ * opens or closes go under it), then the band (pinned, it hides the rows, R6), then a peeked basket or egg 2's strip.
+ */
+private const val Z_TRAY: Float = 1f
+private const val Z_PLATE: Float = 2f
+private const val Z_LIFTED: Float = 3f
 
 /** How long her open waits for its tray to be laid out (frames, about 1.5 s), and the rows it brings into view. */
 private const val OPEN_WAIT_FRAMES: Int = 90

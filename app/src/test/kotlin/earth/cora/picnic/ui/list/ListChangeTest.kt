@@ -6,6 +6,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.setOpenAisle
+import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.list.motion.MotionEvent
@@ -82,6 +84,50 @@ class ListChangeTest {
         assertTrue("the card 1000 ms after the lid (${card.t0 - lid})", card.t0 - lid in 970L..1040L)
         assertTrue(lid >= start)
         assertEquals("breakfast", rig.app.list(ListFixture.LIST_ID)!!.openAisle)
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * Item 176, §8.4, §6.1: tearing off Bakery's last thing to get completes it (the lid shuts, the Next card names
+     * Baking); Undo well after the chain has played (L + 2200) re-opens Bakery: the card pointing past it exits at once
+     * (300 ms), and the restored row comes into view clear of the pinned plate, with no scroll of hers.
+     */
+    @Test
+    fun undoTearAfterChain() {
+        val rig = ListRig(ListFixture.state().toggleChecked(ListFixture.LIST_ID, "sourdough", ListFixture.TRIP_START + 7 * ListFixture.MIN).setOpenAisle(ListFixture.LIST_ID, "bakery"))
+        compose.show(rig)
+        val item = rig.item("baguette")
+        val index = rig.app.items().indexOfFirst { it.id == "baguette" }
+        compose.mainClock.autoAdvance = false
+        // The TalkBack "Delete" (the tear-off's own beats are TearOffTest's): Bakery completes without a tap.
+        compose.runOnIdle { rig.vm.delete("baguette") }
+        val chain = compose.sample(rig, 2400)
+        val card = chain.lastOrNull { it.p.nextCard != null }?.p?.nextCard
+        assertNotNull("the Next card is up", card)
+        assertEquals("aisle-2-baking", card!!.sectionId)
+        assertTrue("well after the chain (card at ${card.t0})", rig.engine.time - card.t0 >= 900)
+        assertTrue("the card still holds", rig.engine.current.value.nextCard?.exitT0 == null)
+        // Undo: the row is back and Bakery has something to get again.
+        compose.runOnIdle { rig.vm.undoDelete(item, index, ListFixture.LIST_ID) }
+        val undo = compose.sample(rig, 600)
+        val reopened = undo.first { it.p.nextCard?.exitT0 != null || it.p.nextCard == null }
+        val exit = reopened.p.nextCard?.exitT0
+        assertTrue("the card leaves at once", exit == null || exit - undo.first().time <= 34)
+        assertTrue("gone within its 300 ms exit", undo.last().p.nextCard == null)
+        assertEquals("Bakery is open again", "bakery", rig.app.list(ListFixture.LIST_ID)!!.openAisle)
+        // The restored row comes into view, clear of the plate and above the add bar (bounded wait).
+        val list = compose.boundsOf(ListTags.LIST)
+        val dock = compose.boundsOf(earth.cora.picnic.ui.add.ADD_BAR_TAG)
+        var seen = ""
+        val clear = compose.framesUntil(1500) {
+            compose.exists(ListTags.rowSlot("baguette")) && run {
+                val row = compose.boundsOf(ListTags.rowSlot("baguette"))
+                val plate = compose.boundsOf(ListTags.header("bakery"))
+                seen = "row $row, plate $plate, list $list, dock $dock"
+                row.top >= plate.bottom - 1f && row.top >= list.top && row.bottom <= dock.top + 1f
+            }
+        }
+        assertTrue("Baguette shows clear of the plate ($seen)", clear)
         compose.mainClock.autoAdvance = true
     }
 }

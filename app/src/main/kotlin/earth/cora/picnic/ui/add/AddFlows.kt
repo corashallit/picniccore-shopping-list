@@ -10,7 +10,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
@@ -41,6 +43,7 @@ class AddFlows internal constructor(
     val collapse: AddBarCollapseState,
     val focusRequester: FocusRequester,
     private val keyboard: SoftwareKeyboardController?,
+    private val focusManager: FocusManager? = null,
 ) {
     /** The field takes focus as soon as the bar is on screen ([AddDock] does it; the FAB unfolds the bar first). */
     internal var focusPending by mutableStateOf(false)
@@ -74,6 +77,17 @@ class AddFlows internal constructor(
         focusPending = true
     }
 
+    /**
+     * The field lets go once a send has committed or opened the sheet, and again when the sheet closes (D11, item 116):
+     * the keyboard goes down and the bar is free to fold into the FAB as she scrolls down the aisles.
+     */
+    fun releaseField() {
+        focusPending = false
+        collapse.fieldFocused = false
+        focusManager?.clearFocus(force = true)
+        keyboard?.hide()
+    }
+
     /** Called by [AddDock] once the bar is composed. */
     internal fun focusNow() {
         try {
@@ -104,11 +118,12 @@ fun rememberAddFlows(vm: AddViewModel, sources: AddSources? = null): AddFlows {
     val collapse = rememberAddBarCollapseState()
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val activity = LocalActivity.current
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (activity?.isChangingConfigurations != true) vm.onStop()
     }
-    return remember(vm, sources, collapse, focus, keyboard) { AddFlows(vm, sources, collapse, focus, keyboard) }
+    return remember(vm, sources, collapse, focus, keyboard, focusManager) { AddFlows(vm, sources, collapse, focus, keyboard, focusManager) }
 }
 
 /**
@@ -132,6 +147,8 @@ fun AddEventsEffect(
         flows.vm.events.collect { event ->
             when (event) {
                 is AddEvent.Committed -> {
+                    // The send is done: the field lets go, so the bar can fold again (item 116).
+                    flows.releaseField()
                     committed(event.commit)
                     toasts.show(notes.toast(event.commit))
                 }

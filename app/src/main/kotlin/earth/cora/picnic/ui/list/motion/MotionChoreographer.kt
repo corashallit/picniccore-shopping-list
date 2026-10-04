@@ -506,7 +506,11 @@ class MotionChoreographer(
         val home = check != null && check.resumeFrom == null && (t < check.hopAt || (check.reduced && t < check.land))
         unchecks[e.itemId] = UncheckChain(e, t, reduced, peelTwin = twinShown, flight = flight, wobble = inBasket, home = home)
         cue(Cue.UNCHECK)
-        if (e.aisleCompleted) reopenAisle(e.sectionId, t)
+        if (e.aisleCompleted) {
+            reopenAisle(e.sectionId, t)
+            // Its aisle is the one to finish again (the list re-opens it): a card naming a later stop is moot.
+            dropCardsAwayFrom(setOf(e.sectionId), t)
+        }
         if (e.tripCompleted) reopenTrip(t)
     }
 
@@ -897,6 +901,33 @@ class MotionChoreographer(
     /** A card waiting for the one before it to leave (two aisles done in a row). */
     private var queuedCard: NextCardPresentation? = null
 
+    /**
+     * An aisle in [reopened] has something to get again and opens (§8.4): a Next card pointing anywhere else exits at
+     * once (300 ms, or the 120 ms fade under reduced motion), a card still waiting to rise never does, and a scroll to
+     * that stop is dropped, whenever the re-opening comes, during the chain or long after it (item 176, §8.3).
+     */
+    private fun dropCardsAwayFrom(reopened: Set<String>, t: Long) {
+        nextCard?.let { if (it.sectionId !in reopened) exitNextCard(t) }
+        queuedCard?.let {
+            if (it.sectionId !in reopened) {
+                timeline.cancel(nextGroup(it.t0))
+                queuedCard = null
+            }
+        }
+        scroll?.let {
+            if (it.itemId == null && it.sectionId !in reopened) {
+                scroll = null
+                timeline.cancel(SCROLL)
+            }
+        }
+    }
+
+    /** The list brings [itemId] (in [sectionId]) into view, clear of the plate (a row an Undo brought back, §8.4). */
+    private fun reveal(sectionId: String, itemId: String, at: Long) {
+        scroll = ScrollRequest(sectionId, at, itemId)
+        timeline.at(at + SCROLL_HOLD, REVEAL) { if (scroll?.t0 == at && scroll?.itemId == itemId) scroll = null }
+    }
+
     // =============================================================================================
     // ListChange: the in-place form (§8.4).
     // =============================================================================================
@@ -904,6 +935,9 @@ class MotionChoreographer(
     private fun startChange(c: ListChange, t: Long) {
         if (c.cause == ChangeCause.NEW_BOOK_UNDO) startBookTurnBack(c.slot, t)
         for (s in c.aisleReopened) reopenAisle(s, t, inPlace = true)
+        // A re-opened aisle is current again: a card pointing past it goes, also after the chain has played out.
+        if (c.aisleReopened.isNotEmpty() && c.aisleCompleted.isEmpty()) dropCardsAwayFrom(c.aisleReopened, t)
+        if (c.revealItemId != null && c.revealSectionId != null) reveal(c.revealSectionId, c.revealItemId, t)
         if (c.tripReopened) reopenTrip(t)
         if (c.finaleStale) {
             // Owed but too old to play (§7.1): marked shown, PERFECT pressed in place.
@@ -1301,6 +1335,7 @@ class MotionChoreographer(
         const val PERFECT = "perfect"
         const val CELEBRATION = "celebration"
         const val SCROLL = "scroll"
+        const val REVEAL = "reveal"
 
         /** A scroll request stays in the presentation this long (the list runs each request once). */
         const val SCROLL_HOLD: Long = 1200

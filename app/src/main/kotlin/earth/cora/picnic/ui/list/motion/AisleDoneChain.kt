@@ -517,12 +517,28 @@ fun StampCircle(
  * ------------------------------------------------------------------------------------------------ */
 
 /**
- * The tray curling away like a page from its bottom-right corner (4 frames, 300 ms): the corner is cut away (the ground
- * shows through) and the flap, its back in [flap] with a periwinkle edge and a hard shadow in [shadow] (the theme's,
+ * The tray curling away like a page from its bottom-right corner (4 frames, 300 ms): the corner of the row panel is cut
+ * away and the flap, its back in [flap] with a periwinkle edge and a hard shadow in [shadow] (the theme's,
  * `PicnicTheme.shadows.color`, so Glow gets its own), folds over it. Draws nothing extra when [curlT0] is null or under
  * reduced motion.
+ *
+ * The curl stays inside the tray: its corner is the panel's inner corner, [inset] in from the row's right edge (the
+ * tray's white border and side band, so the ring and the shadow are never cut and nothing reaches the screen's edge),
+ * where the cut shows [under] (the backing under the panel; null: the ground). Its legs are at most
+ * min(64 dp, 18 % of the tray, [maxLeg]): [maxLeg] is the row's check column, so the flap never covers the row's words
+ * however large the text (§8.4, item 259).
  */
-fun Modifier.trayCurl(curlT0: Long?, clock: MotionClock, flap: Color, shadow: Color, edge: Color = Families.periwinkle.mid, reduced: Boolean = false): Modifier =
+fun Modifier.trayCurl(
+    curlT0: Long?,
+    clock: MotionClock,
+    flap: Color,
+    shadow: Color,
+    edge: Color = Families.periwinkle.mid,
+    reduced: Boolean = false,
+    inset: Dp = 0.dp,
+    maxLeg: Dp = Dp.Infinity,
+    under: Color? = null,
+): Modifier =
     drawWithContent {
         val t0 = curlT0
         if (t0 == null || reduced) {
@@ -530,29 +546,45 @@ fun Modifier.trayCurl(curlT0: Long?, clock: MotionClock, flap: Color, shadow: Co
             return@drawWithContent
         }
         val f = CurlMotion.at(clock.now - t0)
-        val leg = min(size.width, size.height) * f
+        val corner = Offset(size.width - inset.toPx(), size.height)
+        val cap = minOf(CURL_MAX_LEG.toPx(), size.width * CURL_TRAY_SHARE, if (maxLeg == Dp.Infinity) Float.MAX_VALUE else maxLeg.toPx())
+        val leg = minOf(min(corner.x, size.height), cap) * f
         val content = this
-        drawCurl(leg, flap, edge, shadow) { content.drawContent() }
+        drawCurl(leg, flap, edge, shadow, corner = corner, under = under) { content.drawContent() }
     }
 
+/** The tray curl's largest leg (§8.4): 64 dp, and never more than 18 % of the tray's width. */
+val CURL_MAX_LEG: Dp = 64.dp
+const val CURL_TRAY_SHARE: Float = 0.18f
+
 /**
- * Draws [content] with its bottom-right corner folded back by [leg] px (a right triangle with two [leg] legs): the
- * corner is clipped away and the flap (the triangle mirrored over the fold line) is drawn on top.
+ * Draws [content] with the corner at [corner] (default: the bottom-right) folded back by [leg] px (a right triangle with
+ * two [leg] legs): the corner is clipped away (showing [under] when given) and the flap (the triangle mirrored over the
+ * fold line) is drawn on top.
  */
-fun DrawScope.drawCurl(leg: Float, flap: Color, edge: Color, shadow: Color, content: DrawScope.() -> Unit) {
+fun DrawScope.drawCurl(
+    leg: Float,
+    flap: Color,
+    edge: Color,
+    shadow: Color,
+    corner: Offset = Offset(size.width, size.height),
+    under: Color? = null,
+    content: DrawScope.() -> Unit,
+) {
     if (leg <= 0.5f) {
         content()
         return
     }
-    val w = size.width
-    val h = size.height
-    val corner = Path().apply {
+    val w = corner.x
+    val h = corner.y
+    val cut = Path().apply {
         moveTo(w - leg, h)
         lineTo(w, h)
         lineTo(w, h - leg)
         close()
     }
-    clipPath(corner, ClipOp.Difference) { this.content() }
+    clipPath(cut, ClipOp.Difference) { this.content() }
+    if (under != null) drawPath(cut, under)
     // The flap: the corner reflected across the fold line (w − leg, h) – (w, h − leg) lands at (w − leg, h − leg).
     val flapPath = Path().apply {
         moveTo(w - leg, h)

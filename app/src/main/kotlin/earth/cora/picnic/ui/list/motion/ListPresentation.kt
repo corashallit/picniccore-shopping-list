@@ -292,9 +292,12 @@ data class AislePresentation(
 @Immutable
 data class OpenOverride(val sectionId: String?)
 
-/** A programmatic scroll to [sectionId] (smooth), requested at [t0]; the list runs each request once. */
+/**
+ * A programmatic scroll to [sectionId] (smooth; a jump under reduced motion), requested at [t0]; the list runs each
+ * request once. With [itemId], to that row of the section, clear of the pinned plate (a row an Undo brought back).
+ */
 @Immutable
-data class ScrollRequest(val sectionId: String, val t0: Long)
+data class ScrollRequest(val sectionId: String, val t0: Long, val itemId: String? = null)
 
 /** The book turning to [toPage] before a twin appears there (3 frames, 240 ms, §7.6). */
 @Immutable

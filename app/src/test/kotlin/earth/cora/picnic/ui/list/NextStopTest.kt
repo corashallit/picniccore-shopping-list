@@ -1,6 +1,8 @@
 package earth.cora.picnic.ui.list
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performClick
@@ -72,5 +74,74 @@ class NextStopTest {
         compose.waitForIdle()
         assertEquals("aisle-2-baking", rig.app.list(ListFixture.LIST_ID)!!.openAisle)
         assertTrue(compose.exists(ListTags.header("aisle-2-baking")))
+    }
+
+    /**
+     * Produce, long and pinned under its plate, finishes (item 87, §8.4, §10): at the fold (L + 1100) the list keeps its
+     * place on Produce's strip, at the top of the viewport, in the same frame as the swap; no frame between the fold and
+     * the Next card has an empty viewport or jumps to the list's end; then the next stop's band lands flush at the top.
+     */
+    @Test
+    fun foldUnderPinnedPlateKeepsItsPlace() {
+        val rig = ListRig(ListFixture.longProduce())
+        compose.show(rig)
+        compose.onNodeWithTag(ListTags.LIST).performScrollToKey("limes")
+        compose.waitForIdle()
+        compose.onNodeWithTag(ListTags.LIST).performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, -110f * compose.density.density) }
+        compose.waitForIdle()
+        val list = compose.boundsOf(ListTags.LIST)
+        assertTrue("Produce's plate is pinned", kotlin.math.abs(compose.boundsOf(ListTags.header("produce")).top - list.top) < 1f)
+        assertFalse("its first rows are under the plate", compose.exists(ListTags.rowSlot("strawberries")))
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(ListTags.row("limes")).performClick()
+        var tap = -1L
+        var checked = 0
+        repeat(130) {
+            compose.frames(1)
+            val p = rig.engine.current.value
+            if (tap < 0) p.rowStarts["limes"]?.let { tap = it }
+            if (tap < 0) return@repeat
+            val l = landTime(rig, "limes", tap)
+            val t = rig.engine.time
+            if (t >= l + 1100 + 17 && t < l + 1300) {
+                checked++
+                assertFalse("folded at $t", compose.exists(ListTags.header("produce")))
+                val strip = compose.boundsOf(ListTags.strip("produce"))
+                assertTrue("Produce's strip at the top at ${t - l} (${strip.top} vs ${list.top})", strip.top >= list.top - 1f && strip.top <= list.top + 16f * compose.density.density)
+                assertTrue("the next strips show at once at ${t - l}", compose.exists(ListTags.strip("bakery")) && compose.boundsOf(ListTags.strip("bakery")).bottom < list.bottom)
+            }
+        }
+        assertTrue("frames between the fold and the card were checked ($checked)", checked >= 8)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        val header = compose.boundsOf(ListTags.header("bakery"))
+        assertEquals("the next stop lands flush at the viewport's top", list.top, header.top, 1.5f)
+    }
+
+    /**
+     * Item 178 under reduced motion: the next stop is a jump (no smooth scroll), and it lands flush, never with the strip
+     * before it sliced at the top, even when the list ends soon after it (Breakfast, two stops from the end).
+     */
+    @Test
+    fun reducedMotionLandsFlush() {
+        val rig = ListRig()
+        compose.show(rig, reducedMotion = true)
+        val list = compose.boundsOf(ListTags.LIST)
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(ListTags.row("baking-powder")).performClick()
+        val tops = ArrayList<Float>()
+        repeat(160) {
+            compose.frames(1)
+            if (compose.exists(ListTags.strip("aisle-2-baking"))) {
+                val strip = compose.boundsOf(ListTags.strip("aisle-2-baking"))
+                assertFalse("the Baking strip is never sliced at the top (${strip.top}..${strip.bottom} vs ${list.top})", strip.top < list.top - 1f && strip.bottom > list.top + 1f)
+            }
+            if (compose.exists(ListTags.header("breakfast"))) tops += compose.boundsOf(ListTags.header("breakfast")).top
+        }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertEquals("Breakfast lands flush", list.top, compose.boundsOf(ListTags.header("breakfast")).top, 1.5f)
+        // One jump: Breakfast's band takes at most two places (where it opened, then the top), never a glide between.
+        assertTrue("a jump, not a glide (${tops.distinct()})", tops.map { kotlin.math.round(it) }.distinct().size <= 2)
     }
 }

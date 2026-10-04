@@ -720,6 +720,13 @@ fun BoxScope.AddDock(
         }
     }
     LaunchedEffect(state.sheetOpen, otherSheetOpen) { collapse.sheetOpen = state.sheetOpen || otherSheetOpen }
+    // A send that opened the Add sheet lets go of the field, and so does the sheet as it closes (item 116): the field
+    // never keeps the bar docked (and the keyboard up) through the shop.
+    val sheetSeen = remember { BooleanArray(1) }
+    LaunchedEffect(state.sheetOpen) {
+        if (state.sheetOpen || sheetSeen[0]) flows.releaseField()
+        if (state.sheetOpen) sheetSeen[0] = true
+    }
     val c = PicnicTheme.colors
     val density = LocalDensity.current
     val bottomInsets = WindowInsets.ime.union(WindowInsets.navigationBars)
