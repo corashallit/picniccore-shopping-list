@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.boundsInRoot as layoutBoundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -44,7 +46,6 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
-import kotlin.math.hypot
 
 /**
  * WP4 polish (§4.6, §4.7, §4.8, §4.3, §15): the fixed-size pieces grow with the font instead of clipping it, at font
@@ -54,16 +55,22 @@ import kotlin.math.hypot
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w360dp-h760dp-xxhdpi")
-class LargeTextComponentsTest {
+open class LargeTextComponentsTest {
     @get:Rule
     val compose = createComposeRule()
 
     private val screen by lazy { SwappableContent(compose) }
     private val px = 3f
 
+    /**
+     * The density the pieces are shown at for [fontScale]: Compose's linear one here; [LargeTextPlatformScaleTest] runs
+     * every test again under Android's own non-linear font scaling (what a phone at 130 % or 200 % uses).
+     */
+    protected open fun densityAt(density: Float, fontScale: Float): Density = Density(density, fontScale)
+
     private fun show(fontScale: Float, density: Float = px, content: @Composable () -> Unit) {
         screen.show {
-            CompositionLocalProvider(LocalDensity provides Density(density, fontScale)) {
+            CompositionLocalProvider(LocalDensity provides densityAt(density, fontScale)) {
                 PicnicTheme(ThemeVariant.Day) {
                     Box(Modifier.background(Color.White).padding(12.dp)) { content() }
                 }
@@ -133,42 +140,104 @@ class LargeTextComponentsTest {
     }
 
     /**
-     * The least distance (px) from the numeral's ink to the inside of the ring of the circle at [b] in [img]: over every
-     * pixel inside the ring's inner edge (half a px in, clear of the ring's own anti-aliasing) at least half-way from
-     * white to [trace]. Null when there is no ink.
+     * The index tab's number circle is the kit's (§2.7 "the circle grows when a large font needs it", §4.10, item 337):
+     * on strip and tray tabs, for every numeral 1 to 24 at 1.0, 1.3 and 2.0 and at 2.625 and 3 px per dp, its ink keeps
+     * 0.75 dp from the ring (read off the pixels as [numberCircleGrowsWithItsNumeral] does). At 1.0 the circle is its
+     * drawn 24 dp; at 2.0 it has grown beside the name, which keeps its whole word.
      */
-    private fun numeralRingGap(img: android.graphics.Bitmap, b: androidx.compose.ui.geometry.Rect, density: Float, trace: Int): Float? {
-        val cx = b.center.x
-        val cy = b.center.y
-        val inner = b.width / 2f - 2f * density
-        val lum = { c: Int -> (((c shr 16) and 0xFF) + ((c shr 8) and 0xFF) + (c and 0xFF)) / 3f }
-        val threshold = (255f + lum(trace)) / 2f
-        val left = b.left.toInt()
-        val top = b.top.toInt()
-        val w = b.width.toInt()
-        val h = b.height.toInt()
-        val px = IntArray(w * h)
-        img.getPixels(px, 0, w, left, top, w, h)
-        var gap: Float? = null
-        for (y in 0 until h) for (x in 0 until w) {
-            val dist = hypot(left + x + 0.5f - cx, top + y + 0.5f - cy)
-            if (dist >= inner - 0.5f) continue
-            if (lum(px[y * w + x]) <= threshold) gap = minOf(gap ?: Float.MAX_VALUE, inner - dist)
+    @Test
+    @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
+    fun tabNumbersGrowWithTheirName() {
+        val bounds = HashMap<Int, androidx.compose.ui.geometry.Rect>()
+        val failures = mutableListOf<String>()
+        var checked = 0
+        for (density in listOf(3f, 2.625f)) for (scale in listOf(1f, 1.3f, 2f)) for (size in TabSize.entries) {
+            bounds.clear()
+            show(scale, density) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    for (n in 1..24) Box(Modifier.testTag("tab$n")) {
+                        IndexTab(n, "Tea", AisleLooks.of(n), size, ballpoint = size == TabSize.Tray, numberModifier = Modifier.onGloballyPositioned { bounds[n] = it.layoutBoundsInRoot() })
+                    }
+                }
+            }
+            val img = compose.onRoot().captureToImage().asAndroidBitmap()
+            val drawn = Density(density).run { 24.dp.roundToPx() }
+            for (n in 1..24) {
+                val what = "$n on a $size tab at $scale, ${density}x"
+                val b = bounds.getValue(n)
+                if (scale == 1f && (abs(b.width - drawn) > 0.5f || abs(b.height - drawn) > 0.5f)) failures += "$what: drawn size not kept (${b.width} px for $drawn)"
+                if (scale == 2f && b.width <= drawn + 0.5f) failures += "$what: the circle never grew (${b.width} px)"
+                if (abs(b.width - b.height) > 0.5f) failures += "$what: not a circle (${b.width} × ${b.height})"
+                val gap = numeralRingGap(img, b, density, AisleLooks.of(n).family.trace.toArgb())
+                if (gap == null) failures += "$what: no numeral ink"
+                else if (gap < 0.75f * density - 0.5f) failures += "$what: ink ${"%.2f".format(gap / density)} dp from the ring"
+                if (walkAll(node("tab$n")).any { it.config.getOrNull(TextOverflowed) == true }) failures += "$what: \"Tea\" cut"
+                checked++
+            }
         }
-        return gap
+        assertEquals(24 * 3 * 2 * TabSize.entries.size, checked)
+        assertTrue("tab number circles: ${failures.joinToString("\n")}", failures.isEmpty())
+    }
+
+    /**
+     * The tab's circle gives way to its name (§4.10: the name is what she reads, the number repeats it). "Produce" on
+     * strip tabs from 150 to 340 dp wide, at 1.3 and 2.0, 2.625 and 3 px per dp, numerals 1, 20 and 24: the circle is
+     * never under its 24 dp and grows (never shrinks) as the tab widens; it holds back from its full growth only while
+     * the whole name needs the room, so the name is cut only where even a 24 dp circle leaves it too little; and however
+     * far it holds back, the numeral's ink keeps 0.75 dp from the ring (read off the pixels). The widest tab draws the
+     * circle at its full growth.
+     */
+    @Test
+    @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
+    fun tabCircleGivesWayToTheName() {
+        val widths = (150..340 step 10).toList()
+        val bounds = HashMap<Int, androidx.compose.ui.geometry.Rect>()
+        val failures = mutableListOf<String>()
+        for (density in listOf(3f, 2.625f)) for (scale in listOf(1.3f, 2f)) for (n in listOf(1, 20, 24)) {
+            bounds.clear()
+            var full = 0f
+            show(scale, density) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    for (w in widths) Box(Modifier.testTag("w$w")) {
+                        IndexTab(n, "Produce", AisleLooks.of(n), TabSize.Strip, ballpoint = false, maxWidth = w.dp, numberModifier = Modifier.onGloballyPositioned { bounds[w] = it.layoutBoundsInRoot() })
+                    }
+                    Box(Modifier.testTag("alone")) { NumberCircle(n, AisleLooks.of(n), Modifier.onGloballyPositioned { full = it.size.width.toFloat() }, size = 24.dp) }
+                }
+            }
+            val img = compose.onRoot().captureToImage().asAndroidBitmap()
+            val least = Density(density).run { 24.dp.roundToPx() }
+            var last = 0f
+            for (w in widths) {
+                val what = "$n in a $w dp tab at $scale, ${density}x"
+                val b = bounds.getValue(w)
+                val cut = walkAll(node("w$w")).any { it.config.getOrNull(TextOverflowed) == true }
+                if (b.width < least - 0.5f) failures += "$what: circle ${b.width} px, under 24 dp"
+                if (b.width < last - 0.5f) failures += "$what: circle shrank as the tab widened (${b.width} < $last px)"
+                if (cut && b.width > least + 0.5f) failures += "$what: \"Produce\" cut beside a ${b.width} px circle that could give way"
+                if (b.width > full + 0.5f) failures += "$what: circle ${b.width} px, past its full growth $full"
+                val gap = numeralRingGap(img, b, density, AisleLooks.of(n).family.trace.toArgb())
+                if (gap == null) failures += "$what: no numeral ink"
+                else if (gap < 0.75f * density - 0.5f) failures += "$what: ink ${"%.2f".format(gap / density)} dp from the ring"
+                last = b.width
+            }
+            if (abs(last - full) > 0.5f) failures += "$n at $scale, ${density}x: the widest tab's circle $last px is not its full $full px"
+        }
+        assertTrue("tab circles giving way: ${failures.joinToString("\n")}", failures.isEmpty())
     }
 
     /**
      * Chips (§4.7) and pills (§4.6): at 1.0 the label chip's face is 32 dp, the store chip 22 dp and the primary pill
      * 52 dp; at larger scales they grow and no label is cut (by its own box or a clip), up to 3.0. The two small chips
-     * keep their label's place as they grow: the gap under the letters keeps its share of the gap over them. Squeezed
-     * into a slot narrower than its word (a crowded row at a large font), the rarity chip draws the whole word smaller
-     * instead of cutting it ("shin" for "shiny!").
+     * keep their label's place as they grow: the gap under the letters keeps its share of the gap over them, and the
+     * store chip's basket glyph keeps its size beside its label (§4.7: the chip keeps its 1.0 proportions). A chip in a
+     * slot too narrow for it: [smallChipsNeverDrawTheirWordUnder13sp].
      */
     @Test
     @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
     fun chipsAndPillsGrowInsteadOfClipping() {
         val placeAtOne = mutableMapOf<String, Float>()
+        var bareAtOne = 0f
+        var glyphShareAtOne = 0f
         for (scale in listOf(1f, 1.3f, 2f, 3f)) {
             show(scale) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -178,7 +247,6 @@ class LargeTextComponentsTest {
                     Box(Modifier.testTag("source")) { SourceChip("pancake recipe", onClick = {}) }
                     Box(Modifier.testTag("storeChip")) { StoreAisleChip(12) }
                     Box(Modifier.testTag("rarity")) { RarityChip(jackpot = true) }
-                    Box(Modifier.width(56.dp)) { RarityChip(jackpot = true, modifier = Modifier.testTag("rarityNarrow")) }
                     // The two chips' words drawn on their own, to compare their ink with.
                     Box(Modifier.testTag("storeBare").background(Color.White)) {
                         Text("A12", style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp), maxLines = 1)
@@ -213,7 +281,11 @@ class LargeTextComponentsTest {
                 val skip = (skipLeftDp * px).toInt()
                 return inkBox(img, android.graphics.Rect(skip, 0, img.width, img.height), dark)
             }
-            for ((chip, bare, skip) in listOf(Triple("storeChip", "storeBare", 2f + 7f + 13f + 2.5f), Triple("rarity", "rarityBare", 0f))) {
+            // The store chip's glyph scales as its label's text box grew from 1.0 (the bare "A12" box is that text box).
+            val bareBox = node("storeBare").boundsInRoot.height
+            if (scale == 1f) bareAtOne = bareBox
+            val glyphDp = 13f * bareBox / bareAtOne
+            for ((chip, bare, skip) in listOf(Triple("storeChip", "storeBare", 2f + 7f + glyphDp + 2.5f), Triple("rarity", "rarityBare", 0f))) {
                 val inChip = requireNotNull(inkOf(chip, skip)) { "$chip at $scale: no letters" }
                 val alone = requireNotNull(inkOf(bare, 0f)) { "$bare at $scale: no letters" }
                 assertTrue("$chip at $scale: letters cut (${inChip.width()}×${inChip.height()} for ${alone.width()}×${alone.height()})", inChip.width() >= alone.width() - 1 && inChip.height() >= alone.height() - 1)
@@ -223,13 +295,13 @@ class LargeTextComponentsTest {
                 if (scale == 1f) placeAtOne[chip] = place
                 assertTrue("$chip at $scale: letters sink (gap under / over ${"%.2f".format(place)}, at 1.0 ${"%.2f".format(placeAtOne[chip])})", place >= placeAtOne.getValue(chip) * 0.85f)
             }
-            val narrow = node("rarityNarrow").boundsInRoot
-            assertTrue("narrow rarity chip stays in its 56 dp slot at $scale (${narrow.width / px} dp)", narrow.width <= 56f * px + 0.5f)
-            val squeezed = requireNotNull(inkOf("rarityNarrow", 0f)) { "rarityNarrow at $scale: no letters" }
-            val word = requireNotNull(inkOf("rarityBare", 0f))
-            val shape = squeezed.width().toFloat() / squeezed.height()
-            val whole = word.width().toFloat() / word.height()
-            assertTrue("narrow rarity chip at $scale shows the whole word (ink ${"%.2f".format(shape)} wide per tall, the word ${"%.2f".format(whole)})", abs(shape - whole) <= whole * 0.08f)
+            // The basket glyph keeps its share of the chip beside its label: its ink as tall, against the label's, as at 1.0.
+            val storeImg = compose.onNodeWithTag("storeChip", useUnmergedTree = true).captureToImage().asAndroidBitmap()
+            val glyphInk = requireNotNull(inkBox(storeImg, android.graphics.Rect(((2f + 7f - 1f) * px).toInt(), 0, ((2f + 7f + glyphDp + 1f) * px).toInt(), storeImg.height), dark)) { "store glyph at $scale: no ink" }
+            val labelInk = requireNotNull(inkOf("storeChip", 2f + 7f + glyphDp + 2.5f))
+            val glyphShare = glyphInk.height().toFloat() / labelInk.height()
+            if (scale == 1f) glyphShareAtOne = glyphShare
+            assertEquals("store glyph beside its label at $scale (glyph ink ${glyphInk.height()} px, label ${labelInk.height()} px)", glyphShareAtOne, glyphShare, glyphShareAtOne * 0.12f)
             if (scale == 1f) {
                 assertEquals("label chip face 32 dp", 32f * px, node("face").boundsInRoot.height, 0.5f)
                 assertEquals("store chip 22 dp", 22f * px, store.height, 0.5f)
@@ -419,28 +491,150 @@ class LargeTextComponentsTest {
         val note = "pancakes\nmaple syrup\nberries\nflour"
         for (scale in listOf(1f, 1.3f, 2f)) {
             show(scale) { PicnicTextField(note, {}, minLines = 4, modifier = Modifier.width(300.dp)) }
-            val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode()
-            val results = mutableListOf<TextLayoutResult>()
-            field.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
-            val layout = results.single()
-            assertEquals(4, layout.lineCount)
-            val img = compose.onRoot().captureToImage().asAndroidBitmap()
-            val rule = DayColors.rule.toArgb()
-            val left = field.boundsInRoot.left.toInt() + 4
-            val right = field.boundsInRoot.right.toInt() - 4
-            // Rows where the rule colour runs across most of the field (letters interrupt it a little).
-            val rows = (field.boundsInRoot.top.toInt() until field.boundsInRoot.bottom.toInt()).filter { y ->
-                (left until right).count { x -> near(img.getPixel(x, y), rule, 16) } > (right - left) * 0.6f
+            assertRulesFollowLines(4, "default field at $scale")
+        }
+    }
+
+    /**
+     * §4.8 with the caller's own line height: a photo transcript (Klee One 15 sp on 22 sp lines, §2.7) keeps its 22 sp
+     * lines in a ruled field, and the rules follow them at 1.0, 1.3 and 2.0 (not the default 24 sp pitch).
+     */
+    @Test
+    fun ruledFieldFollowsTheCallersLineHeight() {
+        val note = "two lemons\nfeta, 300 g\noat milk\neggs"
+        for (scale in listOf(1f, 1.3f, 2f)) {
+            show(scale) { PicnicTextField(note, {}, minLines = 4, textStyle = PicnicTheme.type.transcript, modifier = Modifier.width(300.dp)) }
+            val layout = assertRulesFollowLines(4, "transcript field at $scale")
+            val pitch = layout.getLineBottom(2) - layout.getLineBottom(1)
+            val expected = densityAt(px, scale).lineHeightPx(22.sp, 15.sp)
+            assertEquals("transcript lines at $scale are its own 22 sp apart", expected, pitch, 1f)
+            val default = densityAt(px, scale).lineHeightPx(RULED_LINE_PITCH, 15.sp)
+            assertTrue("not the default 24 sp pitch at $scale ($pitch px, 24 sp is $default px)", abs(pitch - default) > 1f)
+        }
+    }
+
+    /** The field on screen draws a rule at each of its [lines] lines' bottom edge, and none through a line's letters. */
+    private fun assertRulesFollowLines(lines: Int, what: String): TextLayoutResult {
+        val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode()
+        val results = mutableListOf<TextLayoutResult>()
+        field.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        val layout = results.single()
+        assertEquals(what, lines, layout.lineCount)
+        val img = compose.onRoot().captureToImage().asAndroidBitmap()
+        val rule = DayColors.rule.toArgb()
+        val left = field.boundsInRoot.left.toInt() + 4
+        val right = field.boundsInRoot.right.toInt() - 4
+        // Rows where the rule colour runs across most of the field (letters interrupt it a little).
+        val rows = (field.boundsInRoot.top.toInt() until field.boundsInRoot.bottom.toInt()).filter { y ->
+            (left until right).count { x -> near(img.getPixel(x, y), rule, 16) } > (right - left) * 0.6f
+        }
+        assertTrue("$what: rules drawn", rows.isNotEmpty())
+        val top = field.boundsInRoot.top
+        for (i in 0 until layout.lineCount) {
+            val lineTop = top + layout.getLineTop(i)
+            val lineBottom = top + layout.getLineBottom(i)
+            assertTrue("$what: line $i has its rule at its bottom ($lineBottom; rules $rows)", rows.any { it >= lineBottom - 1.5f * px - 1 && it <= lineBottom + 1 })
+            assertTrue("$what: a rule cuts line $i ($lineTop..$lineBottom; rules $rows)", rows.none { it > lineTop + 1 && it < lineBottom - 1.5f * px - 1 })
+        }
+        return layout
+    }
+
+    /**
+     * §2.7's 13 sp floor and §4.7 (item 337): the store-aisle and rarity chips are never drawn smaller than at font scale
+     * 1.0, so their words are never under 13 sp. Each chip in slots from 40 to 160 dp at 1.0, 1.3 and 2.0, read off
+     * the pixels against the same chip laid out freely at 1.0 and at the scale under test: at 1.0 a chip never shrinks
+     * (its ink is the free chip's); above 1.0 a chip in a slot narrower than it is drawn smaller to fit (filling its
+     * slot), never smaller than its 1.0 self, and in a slot narrower even than that it keeps its 1.0 size, running past
+     * the slot's end with its whole word. The rarity chip's word is also checked against "jackpot!" set at 13 sp at 1.0.
+     */
+    @Test
+    @Config(qualifiers = "w360dp-h1600dp-xxhdpi")
+    fun smallChipsNeverDrawTheirWordUnder13sp() {
+        val slots = listOf(40, 56, 72, 96, 128, 160)
+        val dark: (Int) -> Boolean = { argb ->
+            (0.299 * ((argb shr 16) and 0xFF) + 0.587 * ((argb shr 8) and 0xFF) + 0.114 * (argb and 0xFF)) < 110
+        }
+        val chips: List<Pair<String, @Composable () -> Unit>> = listOf("rarity" to { RarityChip(jackpot = true) }, "store" to { StoreAisleChip(12) })
+        var shrunk = 0
+        var floored = 0
+        for (scale in listOf(1f, 1.3f, 2f)) {
+            show(scale) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // References, each alone on its row (ink is read to the row's end): the free chips at 1.0 and
+                    // here, and the word at 13 sp at 1.0.
+                    CompositionLocalProvider(LocalDensity provides densityAt(px, 1f)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            for ((name, chip) in chips) Box(Modifier.testTag("${name}AtOne")) { chip() }
+                            Box(Modifier.testTag("wordAtOne").background(Color.White)) {
+                                Text("jackpot!", style = PicnicTheme.type.counter.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp), maxLines = 1)
+                            }
+                        }
+                    }
+                    for ((name, chip) in chips) Box(Modifier.testTag("${name}Free")) { chip() }
+                    for ((name, chip) in chips) for (slot in slots) {
+                        androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth()) { Box(Modifier.width(slot.dp).testTag("$name$slot")) { chip() } }
+                    }
+                }
             }
-            assertTrue("rules drawn at $scale", rows.isNotEmpty())
-            val top = field.boundsInRoot.top
-            for (i in 0 until layout.lineCount) {
-                val lineTop = top + layout.getLineTop(i)
-                val lineBottom = top + layout.getLineBottom(i)
-                assertTrue("line $i at $scale has its rule at its bottom ($lineBottom; rules $rows)", rows.any { it >= lineBottom - 1.5f * px - 1 && it <= lineBottom + 1 })
-                assertTrue("a rule cuts line $i at $scale ($lineTop..$lineBottom; rules $rows)", rows.none { it > lineTop + 1 && it < lineBottom - 1.5f * px - 1 })
+            val img = compose.onRoot().captureToImage().asAndroidBitmap()
+            // A chip's ink from its slot's start to the screen's edge (a chip held at its 1.0 size runs past its slot).
+            fun ink(tag: String): android.graphics.Rect {
+                val b = node(tag).boundsInRoot
+                return requireNotNull(inkBox(img, android.graphics.Rect(b.left.toInt(), b.top.toInt(), img.width, b.bottom.toInt()), dark)) { "$tag at $scale: no ink" }
+            }
+            val word = ink("wordAtOne")
+            // The word alone: for the store chip, the ink after the gap that follows its basket glyph (the glyph and
+            // the gap are part of the chip, not of its 13 sp word).
+            fun wordInk(name: String, r: android.graphics.Rect): android.graphics.Rect {
+                if (name != "store") return r
+                val cols = (r.left until r.right).map { x -> (r.top until r.bottom).any { y -> dark(img.getPixel(x, y)) } }
+                var x = cols.indexOfFirst { it }
+                while (x < cols.size && cols[x]) x++
+                var gap = 0
+                while (x < cols.size && !cols[x]) { x++; gap++ }
+                assertTrue("store chip: a gap after its glyph ($gap px)", gap >= 6)
+                return requireNotNull(inkBox(img, android.graphics.Rect(r.left + x, r.top, r.right, r.bottom), dark))
+            }
+            for ((name, _) in chips) {
+                val atOne = ink("${name}AtOne")
+                val free = ink("${name}Free")
+                val freeWidth = node("${name}Free").boundsInRoot.width
+                // The least a chip is drawn at: its 13 sp word's size at 1.0 over its size here.
+                val floor = with(densityAt(px, scale)) { 13f * px / 13.sp.toPx() }
+                fun shapeOf(r: android.graphics.Rect) = r.width().toFloat() / r.height()
+                for (slot in slots) {
+                    val what = "$name in $slot dp at $scale"
+                    val drawn = ink("$name$slot")
+                    val box = node("$name$slot").boundsInRoot
+                    // Its word's letters as tall as at 1.0 (a px for anti-aliasing: the size itself); as wide within
+                    // 5 %, since a word set at 16.9 sp and drawn at 13/16.9 of that size advances a little differently
+                    // from one set at 13 sp ("A12": 57 px for 59).
+                    val drawnWord = wordInk(name, drawn)
+                    val wordAtOne = wordInk(name, atOne)
+                    assertTrue("$what: its word drawn under its 1.0 size (ink ${drawnWord.width()}×${drawnWord.height()}, at 1.0 ${wordAtOne.width()}×${wordAtOne.height()})", drawnWord.width() >= wordAtOne.width() * 0.95f && drawnWord.height() >= wordAtOne.height() - 1)
+                    // The whole chip, never a cut one: its ink keeps the shape of the free chip (or of its 1.0 self).
+                    val off = minOf(abs(shapeOf(drawn) - shapeOf(free)) / shapeOf(free), abs(shapeOf(drawn) - shapeOf(atOne)) / shapeOf(atOne))
+                    assertTrue("$what: its ink is not the whole chip's shape (${"%.2f".format(shapeOf(drawn))} for ${"%.2f".format(shapeOf(free))})", off <= 0.06f)
+                    if (name == "rarity") assertTrue("$what: 'jackpot!' under 13 sp (ink ${drawn.height()} px tall, 13 sp at 1.0 is ${word.height()} px)", drawn.height() >= word.height() - 1)
+                    val slotPx = slot * px
+                    when {
+                        freeWidth <= slotPx + 0.5f -> assertEquals("$what: fits, drawn at its full size", free.height().toFloat(), drawn.height().toFloat(), 1f)
+                        scale == 1f -> assertEquals("$what: at 1.0 a chip never shrinks", free.height().toFloat(), drawn.height().toFloat(), 1f)
+                        freeWidth * floor > slotPx + 0.5f -> {
+                            assertEquals("$what: held at its 1.0 size", wordAtOne.height().toFloat(), drawnWord.height().toFloat(), 1f)
+                            floored++
+                        }
+                        else -> {
+                            assertTrue("$what: drawn smaller to fit its slot (ink ${drawn.height()} px tall, free ${free.height()} px)", drawn.height() < free.height() - 1)
+                            assertTrue("$what: inside its slot (ink to ${drawn.right}, slot to ${box.right})", drawn.right <= box.right + 1)
+                            assertEquals("$what: fills its slot", slotPx, box.width, 1f)
+                            shrunk++
+                        }
+                    }
+                }
             }
         }
+        assertTrue("some chips were drawn smaller ($shrunk) and some held at their 1.0 size ($floored)", shrunk >= 4 && floored >= 2)
     }
 
     /**

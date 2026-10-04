@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawOutline
@@ -66,6 +67,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
@@ -81,6 +84,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
@@ -91,6 +95,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.constrainHeight
@@ -1095,7 +1100,7 @@ fun ChipFace(
             .background(fill)
             .padding(horizontal = horizontal, vertical = if (grows) CHIP_LABEL_ROOM else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalArrangement = Arrangement.spacedBy(CHIP_GAP),
         content = content,
     )
 }
@@ -1155,7 +1160,7 @@ internal fun numeralInk(layout: TextLayoutResult, ink: Color, paper: Color): Flo
 }
 
 /** Where a [len] px numeral box sits in a [d] px circle (centred, rounded as Compose's Alignment.Center rounds). */
-private fun numeralOffset(d: Int, len: Int): Int = ((d - len) / 2f).roundToInt()
+internal fun numeralOffset(d: Int, len: Int): Int = ((d - len) / 2f).roundToInt()
 
 /**
  * The aisle number circle's diameter (px): [min]; at a large font at least its numeral's [textW] × [textH] px text box
@@ -1199,16 +1204,21 @@ internal fun numberCircleDiameter(min: Int, textW: Int, textH: Int, ink: FloatAr
  * keeps [NUMBER_RING_CLEARANCE] from the numeral's ink (its glyphs: a two-digit numeral's corners reach past its box's
  * circle), so a numeral never touches or crosses the ring (§15, font scale 2.0). At 1.0 every numeral 1 to 24 already
  * clears it, so the circle keeps its drawn size. The numeral is drawn over the circle, never clipped by it.
+ *
+ * [maxSize] caps the growth (never under [size]) for a caller whose words need the room (the index tab, whose name the
+ * circle gives way to, §4.10): held smaller than it would grow, the circle keeps the numeral clear of its ring by setting
+ * it smaller instead ([fitNumeral]), never by letting it touch.
  */
 @Composable
-fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, size: Dp = 24.dp, ring: Dp = 2.dp) {
-    val style = if (size <= 20.dp) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
+fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, size: Dp = 24.dp, ring: Dp = 2.dp, maxSize: Dp = Dp.Infinity) {
+    val style = numberCircleStyle(size)
     val ink = rememberNumeralInk(number, style, look.family.trace)
+    val fitted = rememberNumeralFit(number.takeIf { maxSize != Dp.Infinity }, look, style, size, maxSize, ring)
     androidx.compose.ui.layout.Layout(
         content = {
             Box(Modifier.clip(CircleShape).background(PicnicTheme.colors.stickerWhite).ringStroke(ring, look.family.trace))
             if (number != null) {
-                Text(number.toString(), style = style.copy(color = look.family.trace), maxLines = 1, softWrap = false)
+                Text(number.toString(), style = (fitted?.style ?: style).copy(color = look.family.trace), maxLines = 1, softWrap = false)
             } else {
                 CapsuleMark(look.family, Modifier.size(size * 0.6f))
             }
@@ -1216,7 +1226,7 @@ fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, s
         modifier = modifier.clearAndSetSemantics { },
     ) { measurables, constraints ->
         val mark = measurables[1].measure(androidx.compose.ui.unit.Constraints())
-        val d = numberCircleDiameter(size.roundToPx(), mark.width, mark.height, ink, ring.toPx(), NUMBER_RING_CLEARANCE.toPx())
+        val d = fitted?.diameter ?: numberCircleDiameter(size.roundToPx(), mark.width, mark.height, ink, ring.toPx(), NUMBER_RING_CLEARANCE.toPx())
         val w = constraints.constrainWidth(d)
         val h = constraints.constrainHeight(d)
         val circle = measurables[0].measure(androidx.compose.ui.unit.Constraints.fixed(w, h))
@@ -1227,12 +1237,63 @@ fun NumberCircle(number: Int?, look: AisleLook, modifier: Modifier = Modifier, s
     }
 }
 
+/** The numeral style of a [size] number circle: the chip's 11 sp at 20 dp and under, the tab's 14 sp above. */
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
+private fun numberCircleStyle(size: Dp): TextStyle = if (size <= 20.dp) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
+
+/** A numeral fitted to a capped number circle: its [style] and the circle's [diameter] (px). */
+@Immutable
+internal class NumeralFit(val style: TextStyle, val diameter: Int)
+
+/** The least a capped circle sets its numeral, as drawn (dp, at any font scale): a 24 dp circle holds 1 to 24 well above it. */
+private val NUMERAL_FLOOR: Dp = 6.dp
+
+/**
+ * [number] in [style] in a circle of [min] to [max] px with a [ringPx] ring (§2.7, item 337): the diameter
+ * [numberCircleDiameter] asks for, capped at [max]. When the cap holds the circle smaller than that, the numeral is set
+ * 0.5 sp smaller each step (its line height in proportion) until the ring keeps [NUMBER_RING_CLEARANCE] from its ink in
+ * the capped circle. Measured on [ink] over [paper], as the circle draws it.
+ */
+internal fun Density.fitNumeral(measurer: TextMeasurer, number: Int, style: TextStyle, ink: Color, paper: Color, min: Int, max: Int, ringPx: Float): NumeralFit {
+    val clear = NUMBER_RING_CLEARANCE.toPx()
+    fun needs(s: TextStyle): Int {
+        val layout = measurer.measure(number.toString(), s, maxLines = 1, softWrap = false)
+        return numberCircleDiameter(min, layout.size.width, layout.size.height, numeralInk(layout, ink, paper), ringPx, clear)
+    }
+    val cap = max.coerceAtLeast(min)
+    val natural = needs(style)
+    if (natural <= cap) return NumeralFit(style, natural)
+    val from = style.fontSize.value
+    val lineRatio = if (style.lineHeight.isSp && style.fontSize.isSp) style.lineHeight.value / from else null
+    var sp = from
+    var s = style
+    while (sp.sp.toPx() > NUMERAL_FLOOR.toPx()) {
+        sp -= 0.5f
+        s = style.copy(fontSize = sp.sp, lineHeight = lineRatio?.let { (sp * it).sp } ?: style.lineHeight)
+        if (needs(s) <= cap) break
+    }
+    return NumeralFit(s, cap)
+}
+
+/** [fitNumeral] for [number] (null: no cap, or the capsule) in a [size] circle capped at [maxSize] here. */
+@Composable
+private fun rememberNumeralFit(number: Int?, look: AisleLook, style: TextStyle, size: Dp, maxSize: Dp, ring: Dp): NumeralFit? {
+    val measurer = rememberTextMeasurer(cacheSize = 1)
+    val density = LocalDensity.current
+    val paper = PicnicTheme.colors.stickerWhite
+    return remember(number, look, style, size, maxSize, ring, density, measurer, paper) {
+        if (number == null || maxSize == Dp.Infinity) return@remember null
+        with(density) { fitNumeral(measurer, number, style, look.family.trace, paper, size.roundToPx(), maxSize.roundToPx(), ring.toPx()) }
+    }
+}
+
 /**
  * A circle's ring exactly [width] wide, drawn as Modifier.border draws a circle's (a stroke half its width inside the
  * edge). Modifier.border rounds its stroke up to whole px: at 2.625 px per dp a 2 dp ring would draw 2.29 dp and crowd
  * the numeral the circle was sized for. At whole-px widths (3 px per dp) the two draw the same pixels.
  */
-private fun Modifier.ringStroke(width: Dp, color: Color): Modifier = drawWithContent {
+internal fun Modifier.ringStroke(width: Dp, color: Color): Modifier = drawWithContent {
     drawContent()
     val w = width.toPx()
     val half = w / 2f
@@ -1255,7 +1316,7 @@ private fun rememberNumeralInk(number: Int?, style: TextStyle, ink: Color): Floa
 /** How big a [NumberCircle] of [number] and [size] draws here (it grows with a large font, [numberCircleDiameter]). */
 @Composable
 internal fun rememberNumberCircleSize(number: Int?, look: AisleLook, size: Dp, ring: Dp = 2.dp): Dp {
-    val style = if (size <= 20.dp) PicnicTheme.type.chipNumber else PicnicTheme.type.tabNumber
+    val style = numberCircleStyle(size)
     val measurer = rememberTextMeasurer(cacheSize = 1)
     val density = LocalDensity.current
     val paper = PicnicTheme.colors.stickerWhite
@@ -1302,45 +1363,91 @@ fun AisleChip(
 }
 
 /**
- * The store's own aisle number chip "A2" (§4.7): a 22 dp lemon-pastel pill (taller when a large font needs it), 2 dp
- * white border, hs, a basket glyph; TalkBack "store aisle 2".
+ * The store's own aisle number chip "A2" (§4.7): a 22 dp lemon-pastel pill, 2 dp white border, hs, a 13 dp basket glyph
+ * and "A2" (Zen Maru 700 13 sp); TalkBack "store aisle 2". Under a large font the face, the glyph and the label all
+ * scale with the label's text box, so the chip keeps its 1.0 proportions. It fits its slot as [fitChipToSlot] says: never
+ * drawn under its 1.0 size, so its label never under 13 sp.
  */
 @Composable
 fun StoreAisleChip(number: Int, modifier: Modifier = Modifier) {
     val label = stringResource(R.string.theme_store_aisle, number)
-    val style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp)
+    val style = storeChipStyle()
+    val text = "A$number"
     ChipFace(
         fill = Families.lemon.pastel,
-        modifier = modifier.clearAndSetSemantics { contentDescription = label },
-        height = labelChipHeight(22.dp, "A$number", style, border = 2.dp),
-        border = 2.dp,
-        horizontal = 7.dp,
+        modifier = modifier.fitChipToSlot(style.fontSize).clearAndSetSemantics { contentDescription = label },
+        height = labelChipHeight(22.dp, text, style, border = 2.dp),
+        border = STORE_CHIP_BORDER,
+        horizontal = STORE_CHIP_PADDING,
         grows = false,
     ) {
-        Glyph(PicnicGlyph.Basket, null, tint = PicnicTheme.colors.ballpoint, size = 13.dp)
-        Text("A$number", style = style, maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFitWidth())
+        Glyph(PicnicGlyph.Basket, null, tint = PicnicTheme.colors.ballpoint, size = STORE_CHIP_GLYPH * labelBoxGrowth(text, style))
+        Text(text, style = style, maxLines = 1, softWrap = false)
+    }
+}
+
+/** The store-aisle chip's label style: Zen Maru 700 13 sp on 15 sp lines, ballpoint. */
+@Composable
+private fun storeChipStyle(): TextStyle = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp)
+
+private val STORE_CHIP_BORDER = 2.dp
+private val STORE_CHIP_PADDING = 7.dp
+private val STORE_CHIP_GLYPH = 13.dp
+
+/** The gap between a chip's leading glyph and its label ([ChipFace]'s row). */
+private val CHIP_GAP = 5.dp
+
+/**
+ * The store-aisle chip's natural width for [number] here, as [StoreAisleChip] lays it out (its border, padding, the
+ * scaled glyph and the gap round "A[number]"): for a caller that plans its row round the chip (the Next card, §10).
+ */
+@Composable
+internal fun storeAisleChipWidth(number: Int): Dp {
+    val style = storeChipStyle()
+    val text = "A$number"
+    val measurer = rememberTextMeasurer(cacheSize = 2)
+    val density = LocalDensity.current
+    val growth = labelBoxGrowth(text, style)
+    return remember(text, style, density, growth) {
+        with(density) {
+            val label = measurer.measure(text, style, maxLines = 1, softWrap = false).size.width.toDp()
+            STORE_CHIP_BORDER * 2 + STORE_CHIP_PADDING * 2 + STORE_CHIP_GLYPH * growth + CHIP_GAP + label
+        }
     }
 }
 
 /**
  * A small chip's height for its one-line [label] in [style]: [min] at font scale 1.0, and under a larger font [min]
- * scaled as the label's text box grew from 1.0, so the face keeps its drawn proportions and the label its place in it
- * (never sinking onto the border). It is always at least that text box (Zen Maru's and DynaPuff's ascent and descent,
- * taller than these chips' 15 sp line) inside [border], so the box is never cut; at 1.0 the box may overhang the
- * face's inside by up to [CHIP_LEADING] of blank leading, as it always has.
+ * scaled as the label's text box grew from 1.0 ([labelBoxGrowth]), so the face keeps its drawn proportions and the
+ * label its place in it (never sinking onto the border). It is always at least that text box (Zen Maru's and DynaPuff's
+ * ascent and descent, taller than these chips' 15 sp line) inside [border], so the box is never cut; at 1.0 the box may
+ * overhang the face's inside by up to [CHIP_LEADING] of blank leading, as it always has.
  */
 @Composable
 internal fun labelChipHeight(min: Dp, label: String, style: TextStyle, border: Dp): Dp {
     val measurer = rememberTextMeasurer(cacheSize = 4)
     val density = LocalDensity.current
-    return remember(label, style, density, measurer, min, border) {
-        fun box(at: Density) = measurer.measure(label, style, maxLines = 1, softWrap = false, density = at).size.height.toFloat()
-        val now = box(density)
-        val atOne = box(Density(density.density, 1f))
+    val growth = labelBoxGrowth(label, style)
+    return remember(label, style, density, measurer, min, border, growth) {
+        val now = measurer.measure(label, style, maxLines = 1, softWrap = false).size.height.toFloat()
         with(density) {
-            val needed = maxOf(min.toPx() * now / atOne, now + border.toPx() * 2)
+            val needed = maxOf(min.toPx() * growth, now + border.toPx() * 2)
             if (needed <= (min + CHIP_LEADING).toPx()) min else needed.toDp()
         }
+    }
+}
+
+/**
+ * How much [label]'s one-line text box in [style] has grown from font scale 1.0 here (1 at 1.0; under Android's
+ * non-linear scaling, what the platform's converter gave this size): a small chip's face and glyph scale by it.
+ */
+@Composable
+internal fun labelBoxGrowth(label: String, style: TextStyle): Float {
+    val measurer = rememberTextMeasurer(cacheSize = 4)
+    val density = LocalDensity.current
+    return remember(label, style, density, measurer) {
+        fun box(at: Density) = measurer.measure(label, style, maxLines = 1, softWrap = false, density = at).size.height.toFloat()
+        (box(density) / box(Density(density.density, 1f))).coerceAtLeast(1f)
     }
 }
 
@@ -1349,7 +1456,8 @@ private val CHIP_LEADING = 1.dp
 
 /**
  * The "shiny!" / "jackpot!" chip (§4.7): DynaPuff 13 sp ballpoint on a holo pill with a 1.5 dp white border, 22 dp tall
- * at least (it grows with a large font instead of clipping). Decorative.
+ * at least (it scales with its label's text box under a large font instead of clipping). It fits its slot as
+ * [fitChipToSlot] says: never drawn under its 1.0 size, so its word never under 13 sp. Decorative.
  */
 @Composable
 fun RarityChip(jackpot: Boolean, modifier: Modifier = Modifier) {
@@ -1358,6 +1466,7 @@ fun RarityChip(jackpot: Boolean, modifier: Modifier = Modifier) {
     val style = PicnicTheme.type.counter.copy(color = PicnicTheme.colors.ballpoint, fontSize = 13.sp, lineHeight = 15.sp)
     Box(
         modifier
+            .fitChipToSlot(style.fontSize)
             .height(labelChipHeight(22.dp, text, style, border = 1.5.dp))
             .clearAndSetSemantics { }
             .clip(shape)
@@ -1368,28 +1477,49 @@ fun RarityChip(jackpot: Boolean, modifier: Modifier = Modifier) {
             .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = style, maxLines = 1, softWrap = false, modifier = Modifier.shrinkToFitWidth())
+        Text(text, style = style, maxLines = 1, softWrap = false)
     }
 }
 
 /**
- * Lays its content out at its natural width and, when the slot is narrower (a large font in a crowded row), draws it
- * scaled down, centred, to the slot's width: a badge's word stays whole instead of being cut ("shin" for "shiny!").
+ * How a small decorative chip (store aisle, shiny / jackpot) whose word is set at [wordSize] fits its slot (§2.7, §4.7):
+ * at its natural width when it fits. In a narrower slot under a large font (a crowded row) the whole chip is drawn
+ * smaller, face and word together, but never smaller than its font scale 1.0 size, so its word is never under the
+ * 13 sp floor; at 1.0 it never shrinks. The floor is the word's own growth from 1.0 (under Android's non-linear font
+ * scaling a 13 sp word grows less than the font scale). In a slot narrower even than that it keeps that size and runs on
+ * past the slot's end, uncut: a caller whose slot can be that narrow gives the chip a line of its own (a FlowRow, as the
+ * recipe card does) or the row's whole width.
  */
-internal fun Modifier.shrinkToFitWidth(): Modifier = layout { measurable, constraints ->
+/**
+ * The least scale [fitChipToSlot] draws a chip at, for a word set at [wordSize]: the word's size at 1.0 over its size
+ * here (1 / fontScale when text scales linearly, a little more under Android's non-linear scaling; 1 at 1.0). A caller
+ * that plans a row round a store-aisle chip (the tray header) never offers it less than its natural width times this.
+ */
+internal fun Density.chipFloorScale(wordSize: TextUnit = 13.sp): Float =
+    if (wordSize.isSp) min(1f, wordSize.value * density / wordSize.toPx()) else 1f
+
+internal fun Modifier.fitChipToSlot(wordSize: TextUnit): Modifier = layout { measurable, constraints ->
     val p = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
-    if (!constraints.hasBoundedWidth || p.width <= constraints.maxWidth) {
-        layout(constraints.constrainWidth(p.width), constraints.constrainHeight(p.height)) {
-            p.place(0, (constraints.constrainHeight(p.height) - p.height) / 2)
-        }
-    } else {
-        val w = constraints.maxWidth
-        val h = constraints.constrainHeight(p.height)
-        val scale = w.toFloat() / p.width
-        layout(w, h) {
-            p.placeWithLayer((w - p.width) / 2, (h - p.height) / 2) {
+    val floor = chipFloorScale(wordSize)
+    val scale = if (!constraints.hasBoundedWidth || p.width <= constraints.maxWidth) 1f
+    else max(floor, constraints.maxWidth.toFloat() / p.width)
+    val w = (p.width * scale).roundToInt()
+    val h = (p.height * scale).roundToInt()
+    val lw = constraints.constrainWidth(w)
+    val lh = constraints.constrainHeight(h)
+    val y = (lh - h) / 2
+    val baseline = p[FirstBaseline]
+    val lines: Map<AlignmentLine, Int> = if (baseline == AlignmentLine.Unspecified) emptyMap() else mapOf(FirstBaseline to y + (baseline * scale).roundToInt())
+    layout(lw, lh, lines) {
+        if (scale == 1f) {
+            p.placeRelative(0, y)
+        } else {
+            // Shrunk about its start edge, so it keeps its place in the row (its end edge in a right-to-left row).
+            val origin = TransformOrigin(if (layoutDirection == LayoutDirection.Ltr) 0f else 1f, 0f)
+            p.placeRelativeWithLayer(0, y) {
                 scaleX = scale
                 scaleY = scale
+                transformOrigin = origin
             }
         }
     }
@@ -1426,8 +1556,9 @@ fun SourceChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
  * ballpointSoft), the value Zen Maru 700 16 sp ballpoint, 56 dp tall. Focus: a 3 dp strawberry-trace underline with a
  * 13 dp puffy heart at its left end. Error: a hanko underline and helper text in hanko 13 sp with a 16 dp torn-paper
  * glyph (key / network wording, never proxy wording). Disabled: a dotted underline, the value ballpointSoft.
- * Multi-line: rule lines continue under every line, one per text line (24 sp pitch, [RULED_LINE_PITCH]: the rules
- * scale with the text). [example] is the add bar's example line under the
+ * Multi-line: rule lines continue under every line, one per text line: the pitch is the text's own line height, the
+ * caller's [textStyle] line height when it sets one (the aisles text's 24 sp, a transcript's 22 sp) and
+ * [RULED_LINE_PITCH] otherwise, so the rules scale with the text. [example] is the add bar's example line under the
  * placeholder. The visible label is announced by the editable node itself ("Note, pancakes, edit box").
  */
 @Composable
@@ -1457,9 +1588,9 @@ fun PicnicTextField(
     val focused by interaction.collectIsFocusedAsState()
     val valueStyle = (textStyle ?: t.fieldValue).let { if (enabled) it.copy(color = c.ink) else it.copy(color = c.inkSoft) }
     val multi = !singleLine && (minLines > 1 || maxLines > 1)
-    // The rules sit one per line: their pitch IS the text's line height (24 sp), so both scale with the font together
-    // and a rule never cuts through a line at a large font scale.
-    val pitchSp = RULED_LINE_PITCH
+    // The rules sit one per line: their pitch IS the text's line height (the caller's, else 24 sp), so both scale with
+    // the font together and a rule never cuts through a line at a large font scale.
+    val pitchSp = textStyle?.lineHeight?.takeIf { it.isSp } ?: RULED_LINE_PITCH
     val pitch = with(LocalDensity.current) { lineHeightPx(pitchSp, valueStyle.fontSize).toDp() }
     Column(modifier) {
         if (label != null) {
@@ -1517,7 +1648,7 @@ fun PicnicTextField(
     }
 }
 
-/** A multi-line ruled field's line height and rule pitch (§4.8: 24 at font scale 1.0, scaling with the font). */
+/** A multi-line ruled field's line height and rule pitch when its text style sets none (§4.8: 24 sp, scaling with the font). */
 val RULED_LINE_PITCH: androidx.compose.ui.unit.TextUnit = 24.sp
 
 /**

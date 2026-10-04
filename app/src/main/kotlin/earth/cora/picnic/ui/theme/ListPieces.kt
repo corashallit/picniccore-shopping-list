@@ -123,10 +123,13 @@ private class ProbeNode(var probe: PieceProbe, var key: String, var fontSp: Floa
     override fun onDetach() = probe.gone(key)
 }
 
-/** The tab's height (§2.9): 38 dp in a tray header, 32 dp on a folded strip; both with the 24 dp circle and 14 sp numeral (§4.10, item 75). */
-enum class TabSize(val height: Dp, val circle: Dp, val numeralSp: Float) {
-    Tray(38.dp, 24.dp, 14f),
-    Strip(32.dp, 24.dp, 14f),
+/**
+ * The tab's height (§2.9): 38 dp in a tray header, 32 dp on a folded strip; both with the 24 dp number circle and its
+ * 14 sp numeral (§4.10, item 75). Both are minimums: under a large font the circle grows with its numeral (item 337).
+ */
+enum class TabSize(val height: Dp, val circle: Dp) {
+    Tray(38.dp, 24.dp),
+    Strip(32.dp, 24.dp),
 }
 
 /**
@@ -175,9 +178,15 @@ private fun TabFace(
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 8)
     val base = PicnicTheme.type.aisleTab.copy(color = if (ballpoint) c.ballpoint else look.family.trace)
-    val end = tabEnd(look)
+    // The number circle grows with a large font (the kit's NumberCircle, §2.7), but gives way to the name: it takes only
+    // what leaves the whole name room at 16 sp, down to its drawn 24 dp (its numeral then set to clear the ring). The name
+    // is what she reads (§4.10); the number repeats it.
+    val number = position.takeIf { it > 0 }
+    val grown = rememberNumberCircleSize(number, look, size.circle)
+    val nameLeast = rememberTabNameLeast(displayName, density)
+    val circle = if (maxWidth == Dp.Infinity) grown else (maxWidth - tabChrome(look, 0.dp) - nameLeast).coerceIn(size.circle, grown.coerceAtLeast(size.circle))
     // What the name may take: the tab's width less its border, padding, circle and gap.
-    val fixed = 3.dp * 2 + 6.dp + size.circle + 6.dp + end
+    val fixed = tabChrome(look, circle)
     val room = if (maxWidth == Dp.Infinity) Int.MAX_VALUE else with(density) { (maxWidth - fixed).roundToPx().coerceAtLeast(1) }
     val fit = remember(displayName, base, room) { fitTabName(measurer, displayName, base, room) }
     Row(
@@ -197,11 +206,11 @@ private fun TabFace(
             .background(look.family.pastel)
             .tabPattern(look, width = 26.dp, alpha = 0.5f)
             .heightIn(min = size.height - 6.dp)
-            .padding(start = 6.dp, end = end, top = 1.dp, bottom = 1.dp),
+            .padding(start = 6.dp, end = tabEnd(look), top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        TabNumber(position.takeIf { it > 0 }, look, size, numberModifier)
+        TabNumber(number, look, size, maxSize = if (circle >= grown) Dp.Infinity else circle, numberModifier)
         Text(
             displayName,
             style = base.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp),
@@ -213,32 +222,47 @@ private fun TabFace(
     }
 }
 
+/** An index tab's width round its name: border 3 + 3, start 6, the number [circle] as drawn, the 6 dp gap and [tabEnd]. */
+private fun tabChrome(look: AisleLook, circle: Dp): Dp = 3.dp * 2 + 6.dp + circle + 6.dp + tabEnd(look)
+
+/**
+ * The narrowest an [IndexTab] for [position] can be and still show its whole [displayName] (at its smallest fitted
+ * size, 16 sp), its number circle as drawn here (it grows with a large font): for a row that gives way to the name
+ * before the name is cut (the tray header's store chip, §4.10).
+ */
+@Composable
+fun indexTabLeastWidth(position: Int, displayName: String, look: AisleLook, size: TabSize): Dp {
+    val density = LocalDensity.current
+    val circle = rememberNumberCircleSize(position.takeIf { it > 0 }, look, size.circle)
+    return rememberTabNameLeast(displayName, density) + tabChrome(look, circle)
+}
+
+/**
+ * The room [displayName] needs whole on one line at its smallest fitted size (16 sp) here, two px over its width, so
+ * the tab's own fit (name width <= its room, rounded to px) takes it whole.
+ */
+@Composable
+private fun rememberTabNameLeast(displayName: String, density: androidx.compose.ui.unit.Density): Dp {
+    val measurer = rememberTextMeasurer(cacheSize = 2)
+    val base = PicnicTheme.type.aisleTab
+    return remember(displayName, base, density) {
+        val name = measurer.measure(displayName, base.copy(fontSize = 16.sp, lineHeight = (16f * 1.2f).sp), softWrap = false, maxLines = 1).size.width
+        with(density) { (name + 2).toDp() }
+    }
+}
+
 /** The tab's right padding: the 26 dp pattern strip plus 6 dp; a plain tab ("Everything else") closes at 12 dp. */
 private fun tabEnd(look: AisleLook): Dp = if (look.pattern == TabPattern.Plain) 12.dp else 32.dp
 
-/** The tab's number circle: white, a 2 dp trace ring, the DynaPuff numeral (the capsule for "Everything else"). */
+/**
+ * The tab's number circle (§2.7): the kit's [NumberCircle] at [TabSize.circle] (24 dp white, a 2 dp trace ring, DynaPuff
+ * 14 sp in the trace; the capsule for "Everything else"). Under a large font the numeral scales with the name beside it
+ * and the circle grows until its ring clears the numeral's ink by 0.75 dp (item 337), up to [maxSize] where the name
+ * needs the room; the tab grows round it.
+ */
 @Composable
-private fun TabNumber(number: Int?, look: AisleLook, size: TabSize, modifier: Modifier = Modifier) {
-    val fontScale = LocalDensity.current.fontScale
-    // The numeral repeats the label's number: it grows with the font only as far as its circle holds it.
-    val sp = minOf(size.numeralSp * fontScale, size.circle.value * 0.62f) / fontScale
-    Box(
-        modifier
-            .size(size.circle)
-            .clip(androidx.compose.foundation.shape.CircleShape)
-            .background(Color.White)
-            .drawBehind {
-                val w = 2.dp.toPx()
-                drawCircle(look.family.trace, this.size.minDimension / 2f - w / 2f, style = Stroke(w))
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        if (number != null) {
-            Text(number.toString(), style = PicnicTheme.type.tabNumber.copy(color = look.family.trace, fontSize = sp.sp, lineHeight = (sp * 1.1f).sp), maxLines = 1)
-        } else {
-            CapsuleMark(look.family, Modifier.size(size.circle * 0.6f))
-        }
-    }
+private fun TabNumber(number: Int?, look: AisleLook, size: TabSize, maxSize: Dp, modifier: Modifier = Modifier) {
+    NumberCircle(number, look, modifier, size = size.circle, maxSize = maxSize)
 }
 
 /* ------------------------------------------------------------------------------------------------
