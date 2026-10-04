@@ -146,16 +146,29 @@ fun IndexTab(
     maxWidth: Dp = Dp.Infinity,
     modifier: Modifier = Modifier,
     probeKey: String? = null,
+    /** On the tab's words only (its name, its numeral's circle): the eggs' `text:` keep-outs (§12.1), not its sticker edge. */
+    nameModifier: Modifier = Modifier,
+    numberModifier: Modifier = Modifier,
 ) {
     // The room is the smaller of [maxWidth] and what the parent offers (a strip's text column, a band's tab slot).
     androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
         val offered = if (constraints.hasBoundedWidth) this.maxWidth else Dp.Infinity
-        TabFace(position, displayName, look, size, ballpoint, minOf(maxWidth, offered), probeKey)
+        TabFace(position, displayName, look, size, ballpoint, minOf(maxWidth, offered), probeKey, nameModifier, numberModifier)
     }
 }
 
 @Composable
-private fun TabFace(position: Int, displayName: String, look: AisleLook, size: TabSize, ballpoint: Boolean, maxWidth: Dp, probeKey: String?) {
+private fun TabFace(
+    position: Int,
+    displayName: String,
+    look: AisleLook,
+    size: TabSize,
+    ballpoint: Boolean,
+    maxWidth: Dp,
+    probeKey: String?,
+    nameModifier: Modifier = Modifier,
+    numberModifier: Modifier = Modifier,
+) {
     val probe = LocalPieceProbe.current
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
@@ -188,13 +201,14 @@ private fun TabFace(position: Int, displayName: String, look: AisleLook, size: T
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        TabNumber(position.takeIf { it > 0 }, look, size)
+        TabNumber(position.takeIf { it > 0 }, look, size, numberModifier)
         Text(
             displayName,
             style = base.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp),
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis,
+            modifier = nameModifier,
         )
     }
 }
@@ -204,12 +218,12 @@ private fun tabEnd(look: AisleLook): Dp = if (look.pattern == TabPattern.Plain) 
 
 /** The tab's number circle: white, a 2 dp trace ring, the DynaPuff numeral (the capsule for "Everything else"). */
 @Composable
-private fun TabNumber(number: Int?, look: AisleLook, size: TabSize) {
+private fun TabNumber(number: Int?, look: AisleLook, size: TabSize, modifier: Modifier = Modifier) {
     val fontScale = LocalDensity.current.fontScale
     // The numeral repeats the label's number: it grows with the font only as far as its circle holds it.
     val sp = minOf(size.numeralSp * fontScale, size.circle.value * 0.62f) / fontScale
     Box(
-        Modifier
+        modifier
             .size(size.circle)
             .clip(androidx.compose.foundation.shape.CircleShape)
             .background(Color.White)

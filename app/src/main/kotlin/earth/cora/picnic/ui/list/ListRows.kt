@@ -117,6 +117,9 @@ import kotlinx.coroutines.withContext
  * New rows and duplicates pop only their sticker, with a 400 ms highlighter flash on the text band. Owner: WP5.
  */
 
+/** Egg 13's stamp reaches this far left of the checkbox column (12 dp) and a hair more: a jackpot row's words end before it. */
+private val JACKPOT_ROOM: Dp = 14.dp
+
 /** What a row can ask for. */
 internal class RowActions(
     val onToggle: (String) -> Unit,
@@ -576,6 +579,9 @@ internal fun RowContent(
         Column(
             Modifier
                 .weight(1f)
+                // Egg 13: JACK / POT! is stamped over the checkbox column and 12 dp to its left (§12.2); a jackpot row's
+                // words keep out of that band, so its name and "jackpot!" chip are never under the stamp.
+                .padding(end = if (row.rarity == earth.cora.picnic.core.model.Rarity.JACKPOT) JACKPOT_ROOM else 0.dp)
                 .padding(vertical = 6.dp)
                 .highlighterBand(true, c.pressedBand) { if (pressed) 1f else flash.value },
         ) {

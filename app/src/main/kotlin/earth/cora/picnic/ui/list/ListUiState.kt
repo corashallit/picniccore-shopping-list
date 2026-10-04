@@ -456,7 +456,8 @@ internal fun buildListUiState(
             receipt = null,
         )
         // PER-FECT! shows once the finale is over (§7.5); a printed receipt shows once it is tucked in (§13.2).
-        snapshot.copy(perfect = book.perfect, receipt = snapshot.receipt.takeIf { book.receiptSaved })
+        // The nap cat (egg 8) shows on a FILED book's page only (§12.2): the open trip's cat sleeps in the list's basket.
+        snapshot.copy(perfect = book.perfect, receipt = snapshot.receipt.takeIf { book.receiptSaved }, napAisleId = null)
     }
     return ListUiState(
         loading = false,

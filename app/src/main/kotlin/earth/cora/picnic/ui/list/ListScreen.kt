@@ -413,12 +413,12 @@ fun ListRoute(
         screen = screen,
         dockHeight = addFlows.dockHeight,
         collapse = addFlows.collapse,
-        dock = {
+        dock = { bar ->
             AddDock(
                 addFlows, addState, tape = tape, otherSheetOpen = sheetUp,
                 // Egg 16: the umbrella stands at the bar's left end; the washi moves along after the doodle.
                 tapeAfterDoodle = surprises.umbrella,
-                modifier = dockAnchors(vm.engine.anchors),
+                modifier = bar,
             )
         },
         surprises = vm.surpriseEngine,
@@ -505,8 +505,9 @@ fun ListScreen(
     listState: LazyListState? = null,
     dockHeight: Dp = 84.dp,
     collapse: AddBarCollapseState? = null,
-    dock: @Composable BoxScope.() -> Unit = {
-        StaticDock(tape = AddRules.addBarTape(SurpriseState(season = state.book?.season)), modifier = dockAnchors(engine.anchors))
+    /** The docked add bar; [bar] goes on it (the eggs' `addbar` anchor, its words' keep-out, its measured height). */
+    dock: @Composable BoxScope.(bar: Modifier) -> Unit = { bar ->
+        StaticDock(tape = AddRules.addBarTape(SurpriseState(season = state.book?.season)), modifier = bar)
     },
     /** WP9's engine: [EggListHost] mounts its overlays, shake, keyboard observer and scene scrolls on this list (§19.2). */
     surprises: SurpriseEngine = NoOpSurpriseEngine,
@@ -582,7 +583,7 @@ private fun EggListScope.ListScreenContent(
     entries: List<Entry>,
     dockHeight: Dp,
     collapse: AddBarCollapseState?,
-    dock: @Composable BoxScope.() -> Unit,
+    dock: @Composable BoxScope.(bar: Modifier) -> Unit,
     bookCollapsed: Boolean,
 ) {
     Box(modifier.fillMaxSize()) {
@@ -612,12 +613,15 @@ private fun EggListScope.ListScreenContent(
                         else -> AisleList(
                             state, p, engine, actions, screen, lazyState, entries, dockHeight, collapse,
                             topExtra = listTopExtra, bottomPadding = listBottomPadding(dockHeight),
+                            // Egg 16: the list keeps out of the umbrella's band above the docked bar (not while it is
+                            // folded into the FAB: the umbrella stands on the bar).
+                            umbrellaBand = if (eggs.umbrella && collapse?.collapsed != true) barHeight + UMBRELLA_BAND else null,
                         )
                     }
                 }
             }
         }
-        dock()
+        dock(dockAnchors(engine.anchors).eggAddBar())
         // The toasts sit 20 dp above the bar's top (above the umbrella's canopy while it rains); the eggs' overlays ride
         // in the overlay's `eggs` slot (§12, §19.2).
         MotionOverlay(engine, p, toasts, bottomInset = overlayInset(dockHeight), eggs = overlays)
@@ -787,6 +791,8 @@ private fun AisleList(
     topExtra: Dp = 0.dp,
     /** The add bar + 26 dp, + the umbrella's room while it rains (EggListScope.listBottomPadding). */
     bottomPadding: Dp = dockHeight + 26.dp,
+    /** Egg 16: while the umbrella shows, the viewport ends this far above the screen's bottom (the bar + its band). */
+    umbrellaBand: Dp? = null,
 ) {
     val reduced = LocalReducedMotion.current
     val density = LocalDensity.current
@@ -918,10 +924,15 @@ private fun AisleList(
         }
     }
 
+    // Egg 16: while the umbrella stands on the add bar's shoulder, its canopy rises above the bar (42 dp at the top of its
+    // pop). The list's words keep out of that band: the viewport ends above it, so no row or strip ever lies under the
+    // canopy at any scroll position, and the list's end needs only a small gap then (§12.2).
+    val umbrella = umbrellaBand != null
     // Clipped to the viewport: the bunting starts above it (−34 dp) and comes out from under the top stack (R6).
     Box(
         Modifier
             .fillMaxSize()
+            .padding(bottom = umbrellaBand ?: 0.dp)
             .clipToBounds()
             .onGloballyPositioned { screen.listBounds = it.boundsInWindow() }
             .pointerInput(connection) {
@@ -946,7 +957,7 @@ private fun AisleList(
                 .nestedScroll(connection)
                 .semantics { customActions = listOf(CustomAccessibilityAction(refreshLabel) { refresh(); true }) }
                 .graphicsLayer { translationY = if (reduced) 0f else screen.pull },
-            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp + topExtra, bottom = bottomPadding),
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp + topExtra, bottom = if (umbrella) UMBRELLA_END_GAP else bottomPadding),
         ) {
             entries.forEachIndexed { index, e ->
                 when (e) {
@@ -1040,7 +1051,7 @@ private fun AisleList(
                         Spacer(Modifier.itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis).fillMaxWidth().height(7.dp))
                     }
                     Entry.Note -> item(key = e.key, contentType = "note") {
-                        EndNote(state.total, Modifier.itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis))
+                        EndNote(state.total, Modifier.itemMotion(this, reduced, placementMs = PicnicMotion.layout.durationMillis), anchors = anchors)
                     }
                 }
             }
@@ -1049,6 +1060,15 @@ private fun AisleList(
         if (screen.pull > 0f && !reduced) Bunting(screen.pull / pullPx, Modifier.align(Alignment.TopCenter))
     }
 }
+
+/**
+ * The umbrella's band above the docked bar (egg 16): its 44 dp sticker centred 13 dp above the bar's top reaches 35 dp up,
+ * 42 dp at the top of its pop (×1.3).
+ */
+private val UMBRELLA_BAND: Dp = 44.dp
+
+/** While it rains the viewport already ends above the umbrella's canopy: the list's end keeps this small gap (§6.1). */
+private val UMBRELLA_END_GAP: Dp = 12.dp
 
 /** Whether a finger is on the list (the pull to refresh follows only her own drags). */
 private interface PullGate {

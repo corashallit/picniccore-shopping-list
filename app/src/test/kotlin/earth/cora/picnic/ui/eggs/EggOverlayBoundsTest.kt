@@ -47,8 +47,12 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
         16 to 1_000L, 17 to 6_100L, 18 to 2_400L,
     )
 
-    /** Clipped clear of words as well as kept to their lanes. */
-    private val clipped = listOf("ant", "shiny")
+    /**
+     * Clipped clear of words as well as kept to their lanes. Egg 1's six-star burst is one of the bursts drawn inside the
+     * text keep-outs (EggOverlays' KeepOut): on WP5's binder top the LCD stands right beside the sun, so the half ring on
+     * the moon's right reaches it and is cut clear of its digits (integration of part 3).
+     */
+    private val clipped = listOf("ant", "shiny", "dusk")
 
     @Test
     fun neverOverText() {

@@ -2,6 +2,8 @@ package earth.cora.picnic.ui.list
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -96,5 +98,31 @@ class TripBookSheetTest {
         assertTrue(actions().isEmpty())
         assertFalse(compose.exists(TripBookTags.NEXT))
         assertFalse(compose.exists(TripBookTags.PAGE_OF))
+    }
+
+    /**
+     * Egg 8 on a filed book (§12.2, item 245; integration of part 3): a trip closed with a basket still empty files the
+     * aisle the nap cat slept in (TripBook.napAisleId), and the book's stamp page shows the cat by that aisle's stamp,
+     * matched by the aisle's id ("aisle-2-baking" for the shown name "Baking"); none on a book without one.
+     */
+    @Test
+    fun theNapCatSleepsOnItsFiledStamp() {
+        val stamps = listOf(
+            BookStamp(1, "Produce", "strawberry", "gingham", "strawberry", done = true),
+            BookStamp(4, "Baking", "lemon", "dots", "flower", done = false),
+        )
+        val napped = book(4).copy(stamps = stamps, napAisleId = "aisle-2-baking")
+        assertEquals(1, napped.napStampIndex())
+        assertEquals(null, napped.copy(napAisleId = null).napStampIndex())
+        assertEquals(null, napped.copy(napAisleId = "frozen").napStampIndex())
+        assertEquals(0, napped.copy(napAisleId = "produce").napStampIndex())
+        var shown by androidx.compose.runtime.mutableStateOf(napped)
+        compose.setContent { PicnicTheme { Box(Modifier.fillMaxSize()) { TripBookSheet(shown, dateLabel = "Sat 3 Oct", onClose = {}) } } }
+        compose.waitForIdle()
+        assertTrue("the cat on the filed book's page", compose.exists(TripBookTags.NAP_CAT, unmerged = true))
+        assertTrue("decorative: TalkBack reads the stamps, not the cat", compose.onNodeWithTag(TripBookTags.NAP_CAT, useUnmergedTree = true).fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription) == null)
+        compose.runOnIdle { shown = napped.copy(napAisleId = null) }
+        compose.waitForIdle()
+        assertFalse("no cat without one", compose.exists(TripBookTags.NAP_CAT, unmerged = true))
     }
 }

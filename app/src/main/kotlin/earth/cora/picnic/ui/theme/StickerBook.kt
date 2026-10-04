@@ -147,6 +147,11 @@ fun StickerBook(
     turnKey: Int = 0,
     onOpen: () -> Unit = {},
     onStampTap: (position: Int) -> Unit = {},
+    /**
+     * The page number hanging under the book (§7.3). False while egg 3's sticker bumps a basket at the list's top edge,
+     * right under it: the number steps aside for the roll (3.3 s), as a check spot does for JACK / POT! (§12.2).
+     */
+    pageNumber: Boolean = true,
     onNameTag: ((String?) -> Unit)? = null,
 ) {
     val c = PicnicTheme.colors
@@ -228,8 +233,10 @@ fun StickerBook(
         }
         // The page number (§7.3) clips onto the page's bottom edge at the right: inside the page it would sit on the
         // last spot of a full page. It hangs into the 8 dp under the book and ends where the list's viewport begins.
-        if (layout.pages > 1 && showPages) {
-            PageLcd("${page + 1}/${layout.pages}", Modifier.align(Alignment.BottomEnd).offset(x = (-8).dp, y = PAGE_LCD_DROP).graphicsLayer { alpha = 1f - folded })
+        if (layout.pages > 1 && showPages && pageNumber) {
+            // The page LCD's digits are words too (the eggs' `text:` keep-out, §12.1).
+            val pageLcdAnchor = if (anchors != null) with(anchors) { Modifier.anchor(BOOK_PAGE_LCD_TEXT) } else Modifier
+            PageLcd("${page + 1}/${layout.pages}", Modifier.align(Alignment.BottomEnd).offset(x = (-8).dp, y = PAGE_LCD_DROP).then(pageLcdAnchor).graphicsLayer { alpha = 1f - folded })
         }
     }
 }
@@ -998,3 +1005,6 @@ private val PAGE_LCD_DROP = 8.dp
 
 /** The book's date as the eggs' keep-out (EggAnchors.TEXT_PREFIX + "date"). */
 private const val BOOK_DATE_TEXT: String = "text:date"
+
+/** The page LCD as the eggs' keep-out (EggAnchors.TEXT_PREFIX + "pagelcd"). */
+private const val BOOK_PAGE_LCD_TEXT: String = "text:pagelcd"

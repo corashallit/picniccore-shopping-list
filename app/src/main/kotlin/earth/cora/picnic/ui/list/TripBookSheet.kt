@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -105,6 +106,8 @@ object TripBookTags {
     const val PREVIOUS: String = "picnic_trip_book_previous"
     const val NEXT: String = "picnic_trip_book_next"
     const val PAGE_OF: String = "picnic_trip_book_page_of"
+    /** Egg 8's nap cat on a filed book's stamp page. */
+    const val NAP_CAT: String = "picnic_trip_book_nap_cat"
     fun sticker(slot: Int): String = "picnic_trip_book_sticker_$slot"
 }
 
@@ -167,8 +170,10 @@ fun TripBookSheet(
                 ) {
                     // A PERFECT page is holo foil: its stamps keep their Day inks in every variant (§7.3, §5.3).
                     earth.cora.picnic.ui.theme.HoloInks(book.perfect) {
+                    // Egg 8 on a filed book: the nap cat curls up by the stamp of the aisle whose basket stayed empty (§12.2).
+                    val nap = remember(book) { book.napStampIndex() }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        book.stamps.forEach { s ->
+                        book.stamps.forEachIndexed { index, s ->
                             val name = s.aisleName
                             val desc = if (s.done) stringResource(R.string.book_sheet_stamped, name) else stringResource(R.string.book_sheet_not_yet, name)
                             Column(
@@ -178,6 +183,13 @@ fun TripBookSheet(
                             ) {
                                 Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                                     StampCircle(lookOf(s), s.position.takeIf { it > 0 }, s.done, now = false, phase = null, clock = clock, size = 32.dp)
+                                    if (index == nap) {
+                                        earth.cora.picnic.ui.theme.DecorSticker(
+                                            "cat",
+                                            size = 22.dp,
+                                            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp).testTag(TripBookTags.NAP_CAT).decorative(),
+                                        )
+                                    }
                                 }
                                 Text(
                                     name,
@@ -231,6 +243,19 @@ fun TripBookSheet(
             FullReceipt(slip.lines, spoken, onClose = { fullReceipt = false })
         }
     }
+}
+
+/**
+ * The stamp of the aisle the nap cat slept in ([TripBook.napAisleId], egg 8), or null. A stamp keeps its aisle's shown
+ * name; the aisle's id is the slug of its whole name ("Aisle 2 - Baking" → "aisle-2-baking"), so the stamp's own slug is
+ * the id or its tail.
+ */
+internal fun TripBook.napStampIndex(): Int? {
+    val id = napAisleId ?: return null
+    return stamps.indexOfFirst { s ->
+        val slug = earth.cora.picnic.core.model.slugify(s.aisleName)
+        s.position > 0 && slug.isNotEmpty() && (slug == id || id.endsWith("-$slug"))
+    }.takeIf { it >= 0 }
 }
 
 /** A filed stamp's look from its stored names (colour + pattern + pictogram, §7.2). */

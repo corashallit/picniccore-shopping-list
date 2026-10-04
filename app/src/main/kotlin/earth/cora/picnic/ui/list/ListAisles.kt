@@ -229,8 +229,10 @@ internal fun FoldedStrip(
                         ballpoint = false,
                         modifier = Modifier
                             .testTag(ListTags.stripTab(section.id))
-                            .then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)).anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) }),
+                            .then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)) }),
                         probeKey = "tab:${section.id}",
+                        nameModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) },
+                        numberModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "num:" + section.id) },
                     )
                 },
                 meta = {
@@ -337,7 +339,10 @@ internal fun FoldedStrip(
         val fits = bandX <= basketX - px(22.dp)
         val ribbon = if (fits) ribbonMeasurable?.measure(Constraints()) else null
         val bow = if (!fits) bowMeasurable?.measure(Constraints()) else null
-        val ladybug = measurables.firstOrNull { it.layoutId == "ladybug" }?.measure(Constraints.fixed(w, h))
+        // Egg 2's lane: StripLadybug walks 2 dp below the bottom of the box it is given. The strip's words sit close to its
+        // bottom edge and the next strip's tab 7 dp below it, so the 15 dp bug walks a little lower, in the gap between
+        // the two, clear of this strip's meta line and the next one's tab words (§12.2 "never crossing item text").
+        val ladybug = measurables.firstOrNull { it.layoutId == "ladybug" }?.measure(Constraints.fixed(w, h + px(LADYBUG_LANE_DROP)))
         layout(w, h) {
             face.place(0, 0)
             text.place(start, ((h - text.height) / 2).coerceAtLeast(px(3.dp)))
@@ -431,8 +436,10 @@ internal fun TrayHeader(
                 modifier = Modifier.layoutId("tab").testTag(ListTags.headerTab(section.id)).semantics {
                     contentDescription = heading
                     heading()
-                }.then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)).anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) }),
+                }.then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)) }),
                 probeKey = "trayTab:${section.id}",
+                nameModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) },
+                numberModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "num:" + section.id) },
             )
             section.storeAisle?.let {
                 // The chip's face is 22 dp; with large text its "A2" line outgrows that, so the chip grows with it.
@@ -527,6 +534,9 @@ internal fun TrayHeader(
     }
 }
 
+/** How far below the strip's bottom edge egg 2's ladybug walks, past StripLadybug's own 2 dp (the centre of its lane). */
+private val LADYBUG_LANE_DROP: Dp = 2.5.dp
+
 /** The room between the tray tab's end and the store chip (§4.10): 8 dp. */
 private val CHIP_GAP: Dp = 8.dp
 
@@ -604,10 +614,12 @@ private fun Ladybug(modifier: Modifier) {
 
 /** The end note (§6.1): "♡ end of the list · 24 stickers" in Hachi Maru on a pad patch, centred. */
 @Composable
-internal fun EndNote(total: Int, modifier: Modifier = Modifier) {
+internal fun EndNote(total: Int, modifier: Modifier = Modifier, anchors: AnchorRegistry? = null) {
     val text = androidx.compose.ui.res.pluralStringResource(R.plurals.list_end_note, total, total)
+    // Its words are the eggs' keep-out too (§12.1).
+    val words = if (anchors != null) with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "endnote") } else Modifier
     Box(modifier.fillMaxWidth().padding(top = 14.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
-        PadPatch(Modifier.testTag(ListTags.END_NOTE)) {
+        PadPatch(Modifier.testTag(ListTags.END_NOTE).then(words)) {
             PicnicText(text, style = PicnicTheme.type.doodle.copy(color = PicnicTheme.colors.doodle, fontSize = 14.sp))
         }
     }

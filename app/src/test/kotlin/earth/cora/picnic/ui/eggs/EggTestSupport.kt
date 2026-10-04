@@ -180,8 +180,16 @@ class EggListUnderTest(private val name: String, val content: @Composable (EggRi
             PracticeList(r.model, feedback = r.feedback, talkBack = r.talkBack, imeVisible = r.ime.value)
         }
 
+        /**
+         * WP5's real List screen (ListScreen) drawing the same sandbox: its state built from the sandbox's store by the
+         * list's own mapping (buildListUiState, with the eggs' hankos, pixel stickers, holo stamps and seasonal sheet),
+         * WP6's chains from the sandbox's choreographer (the practice model hands it the check-offs, as the lab does) and
+         * WP9's engine through the screen's own EggListHost (integration of part 3).
+         */
+        val Real: EggListUnderTest = EggListUnderTest("list") { r -> RealListUnderTest(r) }
+
         /** Every list the list-agnostic egg tests run on. */
-        val all: List<EggListUnderTest> get() = listOf(Practice)
+        val all: List<EggListUnderTest> get() = listOf(Practice, Real)
     }
 }
 
@@ -235,8 +243,59 @@ fun textBoxes(compose: ComposeContentTestRule): List<Pair<String, Rect>> {
  */
 fun wordBoxes(compose: ComposeContentTestRule, anchors: AnchorRegistry): List<Pair<String, Rect>> {
     val barTop = anchors.bounds(AnchorRegistry.ADD_BAR)?.top ?: Float.MAX_VALUE
+    // The list's viewport hides what scrolls past its end, as the opaque bar does (WP5's list ends above the umbrella's
+    // band while it rains): words below it are not on screen. The top stack's words lie above the viewport.
+    val floor = minOf(barTop, anchors.bounds(EggAnchors.LIST)?.bottom ?: Float.MAX_VALUE)
     val keepOuts = anchors.keys().filter { it.startsWith(EggAnchors.TEXT_PREFIX) && it != EggAnchors.TEXT_PREFIX + "addbar" }
-        .mapNotNull { key -> anchors.bounds(key)?.let { b -> key to Rect(b.left, b.top, b.right, minOf(b.bottom, barTop)) } }
+        .mapNotNull { key -> anchors.bounds(key)?.let { b -> key to Rect(b.left, b.top, b.right, minOf(b.bottom, floor)) } }
         .filter { (_, b) -> b.width > 0f && b.height > 0f }
     return textBoxes(compose) + keepOuts
+}
+
+/** [EggListUnderTest.Real]: WP5's ListScreen over [r]'s sandbox (no add flows: the sandbox adds what the eggs need). */
+@Composable
+private fun RealListUnderTest(r: EggRig) {
+    val app by r.sandbox.store.states.collectAsState()
+    val eggs by r.engine.state.collectAsState()
+    val catalog = r.model.catalog
+    // The Next card's and TalkBack's name for "Everything else" (the practice list sets it the same way).
+    val everythingElse = androidx.compose.ui.res.stringResource(earth.cora.picnic.R.string.egg_practice_everything_else)
+    androidx.compose.runtime.SideEffect { r.model.everythingElse = everythingElse }
+    val ui = androidx.compose.runtime.remember(app, eggs) {
+        earth.cora.picnic.ui.list.buildListUiState(
+            state = app,
+            busy = emptySet(),
+            hasToken = false,
+            editingId = null,
+            catalog = catalog,
+            now = r.clock.now(),
+            eggs = eggs.enabled,
+            season = eggs.season.takeIf { eggs.enabled },
+            bonusStage = eggs.pixelStickers,
+            perfectWeek = eggs.enabled && eggs.perfectWeek,
+            hankoFor = { eggs.hankoFor(it, catalog) },
+        )
+    }
+    val actions = androidx.compose.runtime.remember(r) {
+        earth.cora.picnic.ui.list.ListActions(
+            onToggle = { id -> r.model.toggle(id) },
+            onOpenSection = { id -> r.model.open(id) },
+            onFoldAll = { r.model.open("") },
+            onSunTap = r.engine::onSunTap,
+            onMoonTap = r.engine::onMoonTap,
+            onStampTap = r.engine::onStampTap,
+            onLcdHold = r.engine::onLcdHold,
+            onBasketHold = r.engine::onBasketHold,
+        )
+    }
+    earth.cora.picnic.ui.list.ListScreen(
+        state = ui,
+        actions = actions,
+        engine = r.model.motion,
+        toasts = r.model.toasts,
+        surprises = r.engine,
+        feedback = r.feedback,
+        imeVisible = r.ime.value,
+        talkBackOverride = r.talkBack,
+    )
 }

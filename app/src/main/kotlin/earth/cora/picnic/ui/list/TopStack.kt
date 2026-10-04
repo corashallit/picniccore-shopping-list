@@ -129,6 +129,7 @@ internal fun TopStack(
                             turnKey = state.bookTurn,
                             onOpen = onOpenBook,
                             onStampTap = actions.onStampTap,
+                            pageNumber = LocalListEggs.current.rolling == null,
                             onNameTag = if (dateOnPage) null else { text -> captionTag = text },
                         )
                     },
