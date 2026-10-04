@@ -57,7 +57,7 @@ class ResponsesOutputTest {
     fun refusalPart() {
         val e = assertFailsWith<LlmError.Refusal> { ResponsesOutput.finalTexts(result("refusal.json")) }
         assertTrue(e.refusal.contains("can't help"))
-        assertEquals("The assistant couldn't help with that one.", e.friendlyMessage)
+        assertEquals("The assistant couldn’t help with that one.", e.friendlyMessage)
     }
 
     @Test

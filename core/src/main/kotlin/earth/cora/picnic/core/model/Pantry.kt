@@ -16,15 +16,18 @@ const val PANTRY_IN_CONTEXT: Int = 200
 fun AppState.pantryText(): String = pantry.joinToString("\n") { it.name }
 
 /**
- * Commits the "Pantry as text" field (§6.13, PantryOpsTest): splits on new lines, commas, semicolons and " and "
- * (PantryNames.split), drops quantities and bullets ("2 kg flour" -> "Flour"), capitalises like an item name,
- * dedupes by normalizeName (the first one stays), keeps the text's order, and keeps the icon and addedAt of names
- * that were already there (new ones get [now], no icon yet). Same state when nothing changed.
+ * Commits the "Pantry as text" field (§6.13, PantryOpsTest): one entry per line, split and cleaned by
+ * [PantryNames.split] (commas and semicolons; " and " only inside a list; quantities and bullets dropped, "2 kg flour"
+ * -> "Flour"; capitalised like an item name). A line, or a piece of one, that is the whole name of an entry already on
+ * the shelves stays that one entry with its sticker and date: the Edit sheet keeps names such as "Mac and cheese" or
+ * "Milk, 2 %" whole on purpose, and editing another line must never split them. Dedupes by normalizeName (the first
+ * one stays), keeps the text's order, and keeps the icon and addedAt of names that were already there (new ones get
+ * [now], no icon yet). Same state when nothing changed. The screen's 400 ms preview runs this too.
  */
 fun AppState.setPantryText(text: String, now: Long): AppState {
     val existing = pantry.associateBy { normalizeName(it.name) }
     val seen = HashSet<String>()
-    val entries = PantryNames.split(text).mapNotNull { name ->
+    val entries = PantryNames.split(text) { normalizeName(it) in existing }.mapNotNull { name ->
         val key = normalizeName(name)
         if (!seen.add(key)) return@mapNotNull null
         existing[key]?.copy(name = name) ?: PantryEntry(name = name, icon = null, addedAt = now)
@@ -73,11 +76,34 @@ fun AppState.inPantry(name: String): Boolean {
 
 /** How pantry text becomes entry names (§6.13). */
 object PantryNames {
-    private val SEPARATORS = Regex("""\r?\n|;|(?<!\d),|,(?!\d)|\s+(?:and|et|&)\s+""", RegexOption.IGNORE_CASE)
+    private val LINE_BREAK = Regex("""\r?\n""")
+    private val SEPARATORS = Regex(""";|(?<!\d),|,(?!\d)""")
+    private val AND = Regex("""\s+(?:and|et|&)\s+""", RegexOption.IGNORE_CASE)
     private val BULLET = Regex("""^(?:[-*•·+–—]|\[[ xX✓]?]|[☐☑✓✔□■]|\d{1,2}[.)](?=\s))\s*""")
+    private val SPACES = Regex("""\s+""")
 
-    /** "2 kg flour, salt and pepper\n- spices" -> ["Flour", "Salt", "Pepper", "Spices"]. Blank pieces go. */
-    fun split(text: String): List<String> = text.split(SEPARATORS).mapNotNull(::clean)
+    /**
+     * "2 kg flour, salt and pepper\n- spices" -> ["Flour", "Salt", "Pepper", "Spices"]. One entry per line; a line
+     * splits on commas and semicolons, and on " and ", "&" and "et" only when it is such a list ("flour, salt and
+     * pepper"): a name written alone stays whole ("Half and half", "Pork & beans", "Mac and cheese"). A line or a piece
+     * that [whole] accepts (an entry already on the shelves) is kept as one name. Blank pieces go.
+     */
+    fun split(text: String, whole: (String) -> Boolean = { false }): List<String> = text.split(LINE_BREAK).flatMap { line ->
+        val oneLine = line.replace(SPACES, " ").trim()
+        if (oneLine.isNotEmpty() && whole(oneLine)) return@flatMap listOf(capitalised(oneLine))
+        val pieces = line.split(SEPARATORS)
+        val listed = pieces.size > 1
+        pieces.flatMap { piece ->
+            val one = piece.replace(SPACES, " ").trim()
+            when {
+                one.isNotEmpty() && whole(one) -> listOf(capitalised(one))
+                listed -> piece.split(AND).mapNotNull(::clean)
+                else -> listOfNotNull(clean(piece))
+            }
+        }
+    }
+
+    private fun capitalised(name: String): String = name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 
     /** One piece: bullets and quantities dropped, spaces collapsed, capitalised; null when nothing is left. */
     fun clean(piece: String): String? {

@@ -176,12 +176,13 @@ class RecipeCardTest {
         assertEquals(f.stateWithPantry.pantry, runBlocking { h.rig.store.current().pantry })
     }
 
+    /** A recipe with an empty pantry still shows the way to My pantry: that is when salt, flour and oil fill the card. */
     @Test
-    fun noPantryRowsNoEditButton() {
+    fun aRecipeShowsTheWayToThePantry() {
         val h = compose.setHarness(FakeAssistant(ingest = { _, _ -> f.pancakes() }))
         review(h)
         compose.onNodeWithTag(RECIPE_CARD_TAG).assertExists()
-        compose.onNodeWithTag(EDIT_PANTRY_TAG).assertDoesNotExist()
+        compose.onNodeWithTag(EDIT_PANTRY_TAG).performScrollTo().assert(hasText("Edit my pantry"))
     }
 
     /**

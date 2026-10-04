@@ -452,6 +452,6 @@ class OpenAiGroceryAssistantTest {
         assertEquals("/v1/models/gpt-5.6-terra", api.take().url.encodedPath)
         api.enqueueFixture(404, "errors/404_model_not_found.json")
         val e = assertFailsWith<LlmError.BadResponse> { assistant.testConnection() }
-        assertTrue(e.friendlyMessage.contains("can't use one of the AI models"))
+        assertTrue(e.friendlyMessage.contains("can’t use one of the AI models"))
     }
 }

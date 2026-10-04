@@ -77,14 +77,39 @@ class PantryOpsTest {
         assertTrue(s.setPantryText("  \n", 30).pantry.isEmpty())
     }
 
+    /** Names kept whole on the shelf (the Edit sheet's toggle) survive an edit of another line in "Pantry as text". */
+    @Test
+    fun setPantryTextKeepsWholeNamesWhole() {
+        val s = base.copy(
+            pantry = listOf(
+                PantryEntry("Mac and cheese", IconRef("mac_cheese"), addedAt = 1),
+                PantryEntry("Milk, 2 %", addedAt = 2),
+                PantryEntry("Salt", addedAt = 3),
+            ),
+        )
+        val edited = s.setPantryText(s.pantryText() + "\nRice", 10)
+        assertEquals(listOf("Mac and cheese", "Milk, 2 %", "Salt", "Rice"), edited.pantry.map { it.name })
+        assertEquals(IconRef("mac_cheese"), edited.pantry[0].icon, "it keeps its sticker")
+        assertEquals(listOf(1L, 2L, 3L, 10L), edited.pantry.map { it.addedAt })
+    }
+
     @Test
     fun addToPantryIgnoresNamesAlreadyThere() {
         val s = base.addToPantry(listOf("Salt"), 1)
         assertEquals(listOf("Salt"), s.pantry.map { it.name })
         assertSame(s, s.addToPantry(listOf("salt", "SALT"), 2))
-        val more = s.addToPantry(listOf("pepper and oil", "Pepper"), 3)
+        val more = s.addToPantry(listOf("pepper, oil", "Pepper"), 3)
         assertEquals(listOf("Salt", "Pepper", "Oil"), more.pantry.map { it.name }, "added at the end of the shelves")
         assertEquals(3L, more.pantry.last().addedAt)
+    }
+
+    /** " and " splits a list ("flour, salt and pepper"); a name written alone stays whole. */
+    @Test
+    fun andSplitsOnlyInsideAList() {
+        assertEquals(listOf("Half and half"), PantryNames.split("half and half"))
+        assertEquals(listOf("Pork & beans"), PantryNames.split("pork & beans"))
+        assertEquals(listOf("Flour", "Salt", "Pepper"), PantryNames.split("flour, salt and pepper"))
+        assertEquals(listOf("Half and half", "Rice"), PantryNames.split("half and half\nrice"), "one thing per line")
     }
 
     @Test

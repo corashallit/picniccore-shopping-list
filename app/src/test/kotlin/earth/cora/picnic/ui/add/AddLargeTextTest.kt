@@ -140,7 +140,7 @@ class AddLargeTextTest {
             "snap popped" to base.copy(sheetOpen = true, mode = AddMode.SNAP, phase = AddPhase.Preview, photo = photo(), review = photoReview),
             "speak" to base.copy(sheetOpen = true, mode = AddMode.SPEAK),
             "speak recording" to base.copy(sheetOpen = true, mode = AddMode.SPEAK, phase = AddPhase.Recording(12_400, 0.72f, LEVELS)),
-            "speak transcribing" to base.copy(sheetOpen = true, mode = AddMode.SPEAK, phase = AddPhase.Transcribing),
+            "speak transcribing" to base.copy(sheetOpen = true, mode = AddMode.SPEAK, phase = AddPhase.Transcribing(12_000)),
             "speak heard" to base.copy(
                 sheetOpen = true, mode = AddMode.SPEAK, phase = AddPhase.Preview, transcript = f.TRANSCRIPT,
                 review = f.review(5, f.voice(), ItemSource.VOICE, f.TRANSCRIPT),

@@ -270,9 +270,15 @@ fun PoppedTray(rows: List<ReviewRow>, order: List<Int>, clock: RevealClock?, onT
     val byKey = rows.associateBy { it.key }
     val ordered = order.mapNotNull(byKey::get)
     val popped = ordered.count { clock?.rowShown(it.key) ?: true }
+    // "4 of 7" while the lines pop; once they all have, the count she acts on ("5 kept", as "Stick all 5" says).
+    val revealed = popped == ordered.size && clock?.done != false
     StickerTray(
         title = stringResource(R.string.add_snap_popped),
-        count = stringResource(R.string.add_snap_popped_count, popped, ordered.size),
+        count = if (revealed) {
+            stringResource(R.string.add_snap_kept, ordered.count { it.keep })
+        } else {
+            stringResource(R.string.add_snap_popped_count, popped, ordered.size)
+        },
         family = Families.periwinkle,
         rows = ordered,
         clock = clock,

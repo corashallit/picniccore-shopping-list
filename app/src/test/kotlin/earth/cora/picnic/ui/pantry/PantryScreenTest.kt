@@ -219,7 +219,7 @@ class PantryScreenTest {
         // The shelves keep previewing her text.
         idle(450)
         assertEquals(listOf("Salt", "Pepper", "Oats"), shelves())
-        compose.onNodeWithText("Couldn't save", substring = true).assertExists()
+        compose.onNodeWithText("Couldn’t save", substring = true).assertExists()
     }
 
     /** "Pantry as text" also commits when the field loses focus (§6.13), not only on Done. */

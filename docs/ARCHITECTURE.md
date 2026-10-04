@@ -552,7 +552,7 @@ Every operation is main-safe and cancellable, and throws only `LlmError` (plus `
   2. A developer message with the aisles in walking order (`id: name`), the learned corrections (`name -> aisle id`), the names already on the list and (art pass) the pantry line.
   3. The user message.
 - **Text input:** `tools: [{type: "web_search", search_context_size, user_location}]`, `tool_choice: "auto"` and `include: ["web_search_call.action.sources"]` (from `ModelDefaults.WEB_SEARCH`; always on).
-- **Image input:** `[input_text "Photo of a handwritten shopping list. Add its items.", input_image data:image/jpeg;base64,…, detail "high"]`, with **no tools**. The app sends a JPEG with long edge ≤ 1600 px at q≈85.
+- **Image input:** `[input_text "Photo of a shopping list or a recipe. Add what to buy.", input_image data:image/jpeg;base64,…, detail "high"]`, with **no tools**. The app sends a JPEG with long edge ≤ 1600 px at q≈85.
 - **Transcript input:** `"Voice note transcript: <text>"`, with the same tools as text input.
 - **Parsing:**
   - `status == "incomplete"` (any `incomplete_details.reason`) → `BadResponse`, even if a partial message exists. A response with **no message item at all** (seen live: only a reasoning item, 0 usage) → `BadResponse`. Never parse partial JSON.

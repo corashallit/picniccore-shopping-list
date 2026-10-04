@@ -114,6 +114,30 @@ class SettingsUseMyAreaTest {
 
     }
 
+    /** Android stopped asking (denied for good): the rationale's button opens Android settings, never a prompt that fails at once. */
+    @Test
+    fun deniedForGoodOffersAndroidSettings() {
+        var opened = 0
+        var requests = 0
+        val permission = object : LocationPermission {
+            override fun granted() = false
+            override fun blocked() = true
+            override fun request(onResult: (Boolean) -> Unit) {
+                requests++
+                onResult(false)
+            }
+            override fun openSettings() {
+                opened++
+            }
+        }
+        launch(permission)
+        compose.onNodeWithText("Use my area", substring = true).performScrollTo().performClick()
+        compose.onNodeWithText("Continue").assertDoesNotExist()
+        compose.onNodeWithText("Open Android settings").performClick()
+        assertEquals(1, opened)
+        assertEquals(0, requests)
+    }
+
     /**
      * The switch stays on but the permission was taken back in Android's settings: the place the surprises get is Toronto,
      * no fix is asked for, and the stored area is deleted (§0.4: nothing about location is kept without it).

@@ -115,7 +115,8 @@ class SnapFlowTest {
         says("Reading… 5 of 7")
         compose.mainClock.advanceTimeBy(1_000)
         says("Stick all 5 on my list")
-        says("7 of 7")
+        // Once every line has popped, the tray counts what "Stick all" adds, not "7 of 7".
+        says("5 kept")
         compose.onNodeWithText("Reading your list…").assertDoesNotExist()
         // After the photo, Speak can add more (D19).
         compose.onNodeWithText("Anything else? Say it out loud.").assertExists()
@@ -129,7 +130,7 @@ class SnapFlowTest {
         h.rig.photos.bytes = { throw java.io.IOException("gone") }
         h.vm.onPhoto(Uri.parse("content://test/gone.jpg"))
         compose.waitForIdle()
-        compose.onNodeWithText("Couldn't open that photo. Try another one?").assertExists()
+        compose.onNodeWithText("Couldn’t open that photo. Try another one?").assertExists()
         compose.onNodeWithTag(CHOOSE_PHOTO_CHIP_TAG).performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals(1, h.sources.picks)
@@ -167,7 +168,7 @@ class SnapFlowTest {
         val h = compose.setHarness()
         h.vm.cameraUnavailable()
         compose.waitForIdle()
-        compose.onNodeWithText("There's no camera app on this phone. Choose a photo instead.").assertExists()
+        compose.onNodeWithText("There’s no camera app on this phone. Choose a photo instead.").assertExists()
         compose.onNode(hasText("Take a photo")).assertDoesNotExist()
         compose.onNodeWithTag(CHOOSE_PHOTO_CHIP_TAG).performClick()
         compose.waitForIdle()

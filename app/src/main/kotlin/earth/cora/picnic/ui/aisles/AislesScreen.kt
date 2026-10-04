@@ -83,6 +83,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
@@ -165,6 +166,15 @@ fun AislesRoute(vm: AislesViewModel, onBack: () -> Unit) {
             when (event) {
                 AislesEvent.SaveFailed -> toasts.show(ToastMessage(resources.getString(R.string.screens_save_failed), kind = "notice"))
                 is AislesEvent.Synced -> toasts.show(ToastMessage(resortSummary(resources, event.report), kind = "resort"))
+                // "Aisles as text" removed aisles: say so, with Undo (their colours, baskets and numbers come back).
+                is AislesEvent.Removed -> toasts.show(
+                    ToastMessage(
+                        resources.getQuantityString(R.plurals.aisles_removed, event.count, event.count),
+                        kind = "aisles-removed",
+                        actionLabel = resources.getString(R.string.screens_undo),
+                        onAction = { vm.undoRemoved(event.before) },
+                    ),
+                )
             }
         }
     }
@@ -200,7 +210,8 @@ fun AislesRoute(vm: AislesViewModel, onBack: () -> Unit) {
 /** "Sorted 6 items · 2 left in Everything else" (§6.7), or the friendly error. */
 internal fun resortSummary(resources: android.content.res.Resources, report: AisleSyncReport): String {
     report.saveError?.let { return resources.getString(R.string.screens_save_failed) }
-    report.error?.let { if (report.recategorized == 0) return it.friendlyMessage }
+    // A failed call moved nothing: say what went wrong, never "Sorted n items".
+    report.error?.let { return it.friendlyMessage }
     if (report.recategorized == 0 && report.leftUnsorted == 0) return resources.getString(R.string.aisles_report_nothing)
     val sorted = resources.getQuantityString(R.plurals.aisles_report_sorted, report.recategorized, report.recategorized)
     if (report.leftUnsorted == 0) return sorted
@@ -467,7 +478,8 @@ private fun StickerSheet(
                 Text(
                     stringResource(R.string.aisles_resorting),
                     style = PicnicTheme.type.caption.copy(color = c.ballpoint),
-                    modifier = Modifier.padding(start = 6.dp, top = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
                 )
             }
         }
@@ -483,12 +495,13 @@ private fun ResortButton(syncing: Boolean, onClick: () -> Unit, modifier: Modifi
     val reduced = LocalReducedMotion.current
     val loop by rememberLoopTime(enabled = syncing && !reduced)
     Box(modifier, contentAlignment = Alignment.Center) {
+        // While it works the pill keeps its face (a disabled face would vanish into the sheet behind it, leaving faded
+        // words in the ladybug's ring); a tap meanwhile does nothing.
         PicnicButton(
             stringResource(R.string.aisles_resort),
-            onClick = onClick,
+            onClick = { if (!syncing) onClick() },
             style = PicnicButtonStyle.Secondary,
             glyph = PicnicGlyph.Refresh,
-            enabled = !syncing,
         )
         if (syncing) {
             val dash = Families.periwinkle.mid

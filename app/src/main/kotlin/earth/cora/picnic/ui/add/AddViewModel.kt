@@ -31,6 +31,7 @@ import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.core.model.ItemSource
+import earth.cora.picnic.core.model.PantryMatch
 import earth.cora.picnic.core.model.addItems
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.displayName
@@ -145,6 +146,30 @@ class AddViewModel(
                 savedState[KEY_SHEET] = saved.sheetOpen
             }
         }
+        // Back from My pantry (the recipe card's "Edit my pantry"): the open review is checked against the pantry as it
+        // is now.
+        viewModelScope.launch {
+            store.states.map { st -> st.pantry.map { it.name } }.distinctUntilChanged().collect(::recheckPantry)
+        }
+    }
+
+    /**
+     * The pantry changed while a review is open: a worked-out row the pantry now covers is switched off and reads "in
+     * your pantry", as the answer would have marked it (§4.17; she can switch it back on). Rows she named are never
+     * skipped for the pantry, and rows already skipped (a pantry row she switched on by hand included) stay as they are.
+     */
+    private fun recheckPantry(pantry: List<String>) {
+        _state.update { s ->
+            val review = s.review?.takeIf { !s.committing } ?: return@update s
+            var changed = false
+            val rows = review.rows.map { row ->
+                if (row.item.named || row.item.skipReason != SkipReason.NONE) return@map row
+                val entry = PantryMatch.coveringEntry(pantry, row.item.name) ?: return@map row
+                changed = true
+                row.copy(item = row.item.copy(skipReason = SkipReason.IN_PANTRY, pantryEntry = entry), keep = false)
+            }
+            if (changed) s.copy(review = review.copy(rows = rows)) else s
+        }
     }
 
     private val _events = Channel<AddEvent>(Channel.BUFFERED)
@@ -174,11 +199,21 @@ class AddViewModel(
     /* ---------------- the target list and the sheet ---------------- */
 
     /**
+     * The list the List screen shows now. [AddUiState.listId] is where the add in flight goes; it follows this one as soon
+     * as the flows are idle again ([withShownList]), so a list switched while a note was being read never keeps every
+     * later add aimed at the old list.
+     */
+    @Volatile
+    private var shownListId: String = ""
+
+    /**
      * The List screen shows [listId]: the bar adds there. Non-destructive: while something runs or a review is up, the
-     * target stays (a camera result may already be being read after process death).
+     * target stays (a camera result may already be being read after process death), and the flows move to [listId] once
+     * that is done.
      */
     fun showList(listId: String) {
         if (listId.isEmpty()) return
+        shownListId = listId
         _state.update { s ->
             val idle = !s.phase.busy && s.review == null && !s.committing
             if (s.listId.isEmpty() || (idle && s.listId != listId)) s.copy(listId = listId) else s
@@ -249,10 +284,11 @@ class AddViewModel(
             return
         }
         retryAction = null
+        _state.update { it.withShownList() }
         work = viewModelScope.launch {
             if (!hasKey()) {
                 // Rule 2: no key, so the text goes on as typed, with the toast that says how to get smart sorting.
-                commitTyped(text, noKey = true)
+                commitTyped(text, noKey = true, fromBar = origin == AddOrigin.BAR)
                 return@launch
             }
             runTextIngest(text, origin)
@@ -297,6 +333,7 @@ class AddViewModel(
         val text = s.text.trim()
         if (text.isEmpty() || s.phase.busy || s.committing || s.review != null || work?.isActive == true) return
         retryAction = null
+        _state.update { it.withShownList() }
         commitTyped(text, noKey = false)
     }
 
@@ -424,7 +461,8 @@ class AddViewModel(
         meter?.cancel()
         meter = null
         feedback.cue(Cue.CASSETTE)
-        _state.update { it.copy(phase = AddPhase.Transcribing) }
+        // The LCD keeps the recording's length while the words are written down.
+        _state.update { it.copy(phase = AddPhase.Transcribing((it.phase as? AddPhase.Recording)?.elapsedMs ?: 0L)) }
         work = viewModelScope.launch {
             val file = r.stop()
             if (file == null) {
@@ -453,7 +491,7 @@ class AddViewModel(
     /** Cancel while busy: stops the call or the recording; a review that was already there stays. */
     fun cancel() {
         stopWork()
-        _state.update { it.copy(phase = it.restingPhase(), committing = false) }
+        _state.update { it.copy(phase = it.restingPhase(), committing = false).withShownList() }
     }
 
     /** A keep switch (§4.17): a pantry row switched on is added this time only; the pantry never changes. */
@@ -619,7 +657,8 @@ class AddViewModel(
             feedback.cue(Cue.CAPSULE_POP)
             _state.update { it.copy(committing = true, phase = AddPhase.Idle) }
             val listId = targetListId()
-            appScope.launch { commitItems(listId, listOf(ItemSource.AI_TEXT to result.items), noKey = false, clearsText = true) }
+            val fromBar = origin == AddOrigin.BAR
+            appScope.launch { commitItems(listId, listOf(ItemSource.AI_TEXT to result.items), noKey = false, clearsText = true, fromBar = fromBar) }
             return
         }
         // Rule 5: review in the sheet's Write tab, the thinking box first.
@@ -641,7 +680,7 @@ class AddViewModel(
     }
 
     private suspend fun transcribe(bytes: ByteArray) {
-        _state.update { it.copy(phase = AddPhase.Transcribing) }
+        _state.update { it.copy(phase = it.phase as? AddPhase.Transcribing ?: AddPhase.Transcribing()) }
         val transcript = try {
             assistant.transcribe(AudioClip(bytes), keywords())
         } catch (e: LlmError) {
@@ -707,13 +746,13 @@ class AddViewModel(
      * Rules 2 and "As typed": the offline parse commits at once (duplicates included, so they pop, rule 7), in [appScope]:
      * nothing she does next (a new note, closing the sheet, a photo) can cancel the save or the aisle sort after it.
      */
-    private fun commitTyped(text: String, noKey: Boolean) {
+    private fun commitTyped(text: String, noKey: Boolean, fromBar: Boolean = false) {
         _state.update { it.copy(committing = true) }
         appScope.launch {
             val listId = targetListId()
             val ctx = store.current().ingestContext(listId).copy(existingNames = emptyList())
             val items = OfflineParser.parse(text, catalog, ctx)
-            commitItems(listId, listOf(ItemSource.TYPED to items), noKey = noKey, clearsText = true)
+            commitItems(listId, listOf(ItemSource.TYPED to items), noKey = noKey, clearsText = true, fromBar = fromBar)
         }
     }
 
@@ -723,7 +762,13 @@ class AddViewModel(
      * the new rows (eggs 3, 9, 17), the icon cascade, and typed rows without an aisle are placed in the background (a
      * network call with a key). The add flows are free again as soon as the rows are saved: the sort never holds them.
      */
-    private suspend fun commitItems(listId: String, batches: List<Pair<ItemSource, List<ProposedItem>>>, noKey: Boolean, clearsText: Boolean) {
+    private suspend fun commitItems(
+        listId: String,
+        batches: List<Pair<ItemSource, List<ProposedItem>>>,
+        noKey: Boolean,
+        clearsText: Boolean,
+        fromBar: Boolean = false,
+    ) {
         val now = clock()
         val items = batches.flatMap { (source, proposed) -> proposed.map { it.toGroceryItem(newId(), now, source) } }
         var outcome = AddOutcome.NONE
@@ -761,7 +806,7 @@ class AddViewModel(
         } catch (e: IOException) {
             retryAction = {
                 _state.update { it.copy(committing = true) }
-                appScope.launch { commitItems(listId, batches, noKey, clearsText) }
+                appScope.launch { commitItems(listId, batches, noKey, clearsText, fromBar) }
             }
             _state.update { it.copy(committing = false, phase = AddPhase.Failed(AddProblem.SAVE_FAILED, retryable = true)) }
             _events.send(AddEvent.SaveFailed)
@@ -792,6 +837,8 @@ class AddViewModel(
             revived = revived,
             aisleTitle = aisleTitle,
             asTypedNoKey = noKey && added.isNotEmpty(),
+            fromBar = fromBar,
+            otherList = shownListId.let { it.isNotEmpty() && it != listId },
             newBook = newBook,
         )
         _state.update {
@@ -834,7 +881,7 @@ class AddViewModel(
     private fun failAi(e: LlmError, canUsePlainLines: Boolean, mode: AddMode) {
         val settingsError = e is LlmError.NotConfigured || e is LlmError.Unauthorized
         _state.update {
-            it.copy(
+            it.withShownList().copy(
                 sheetOpen = true,
                 mode = mode,
                 committing = false,
@@ -872,10 +919,21 @@ class AddViewModel(
         retryAction = null
     }
 
-    /** Back to the start: no review, photo, transcript or failure (the draft text and the tab stay). */
+    /**
+     * Back to the start: no review, photo, transcript or failure (the draft text and the tab stay), and the next add goes
+     * to the list on screen.
+     */
     private fun AddUiState.cleared() = copy(
         phase = AddPhase.Idle, review = null, photo = null, transcript = null, sentText = null, committing = false,
+        listId = shownListId.ifEmpty { listId },
     )
+
+    /**
+     * With no review waiting, the next add goes to the list on screen ([showList] keeps the old target while a note is
+     * read; a failure, a Stop or a new send lets it go). A review keeps its list: its rows were checked against it.
+     */
+    private fun AddUiState.withShownList(): AddUiState =
+        if (review == null && shownListId.isNotEmpty() && shownListId != listId) copy(listId = shownListId) else this
 
     /** The phase to rest in when nothing runs: the review if there is one. */
     private fun AddUiState.restingPhase(): AddPhase = if (review != null) AddPhase.Preview else AddPhase.Idle

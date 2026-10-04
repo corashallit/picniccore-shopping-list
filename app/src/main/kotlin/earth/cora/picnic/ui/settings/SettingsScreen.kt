@@ -1,8 +1,12 @@
 package earth.cora.picnic.ui.settings
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ScrollState
@@ -13,6 +17,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -32,15 +37,19 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -107,6 +116,15 @@ interface LocationPermission {
     /** Shows the system prompt for ACCESS_COARSE_LOCATION only; [onResult] gets whether it was granted. */
     fun request(onResult: (Boolean) -> Unit)
 
+    /**
+     * Android no longer shows its prompt (denied twice, or "Don't allow" for good): asking again would fail at once, so
+     * the only way is the app's page in Android settings ([openSettings]).
+     */
+    fun blocked(): Boolean = false
+
+    /** Opens the app's page in Android settings, where location can be allowed. */
+    fun openSettings() {}
+
     /** Always denied, never prompts (previews, screenshots). */
     object Denied : LocationPermission {
         override fun granted() = false
@@ -114,26 +132,53 @@ interface LocationPermission {
     }
 }
 
-/** The phone's coarse-location permission through the activity-result API. */
+/**
+ * The phone's coarse-location permission through the activity-result API. A request that comes back denied while
+ * Android would no longer explain it (shouldShowRequestPermissionRationale false) means Android stopped asking: that is
+ * remembered on this phone (never backed up), so the rationale offers "Open Android settings" instead of a prompt that
+ * would fail at once.
+ */
 @Composable
 fun rememberCoarseLocationPermission(): LocationPermission {
     val context = LocalContext.current
+    val activity = LocalActivity.current
     var pending by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         pending?.invoke(granted)
         pending = null
     }
-    return remember(context, launcher) {
+    return remember(context, activity, launcher) {
+        val prefs = context.getSharedPreferences(LOCATION_PREFS, Context.MODE_PRIVATE)
         object : LocationPermission {
             override fun granted() = context.hasCoarseLocation()
 
+            override fun blocked() = !context.hasCoarseLocation() && prefs.getBoolean(KEY_BLOCKED, false)
+
             override fun request(onResult: (Boolean) -> Unit) {
-                pending = onResult
+                pending = { ok ->
+                    val stopped = !ok && activity != null &&
+                        !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_COARSE_LOCATION)
+                    prefs.edit().putBoolean(KEY_BLOCKED, stopped).apply()
+                    onResult(ok)
+                }
                 launcher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+            }
+
+            override fun openSettings() {
+                val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+                if (activity == null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    (activity ?: context).startActivity(intent)
+                } catch (e: ActivityNotFoundException) {
+                    // A phone without that page: the toast's words still say where the switch is.
+                }
             }
         }
     }
 }
+
+private const val LOCATION_PREFS = "location_permission"
+private const val KEY_BLOCKED = "coarse_blocked"
 
 private fun Context.hasCoarseLocation(): Boolean =
     ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -193,6 +238,7 @@ fun SettingsScreen(
 ) {
     val resources = LocalResources.current
     var showRationale by rememberSaveable { mutableStateOf(initialRationale) }
+    var confirmRemove by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
 
     // The permission can change in Android settings while we are away: look again on every resume.
@@ -247,40 +293,81 @@ fun SettingsScreen(
             )
         },
         overlay = {
+            // Android stopped showing its prompt: the way on is the app's page in Android settings (the resume check above
+            // picks up the permission when she comes back).
+            val blocked = showRationale && location.blocked()
             LetterSetSheet(
                 visible = showRationale,
                 onDismissRequest = { showRationale = false },
                 footer = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         PicnicButton(stringResource(R.string.settings_area_not_now), onClick = { showRationale = false }, style = PicnicButtonStyle.Text)
                         PicnicButton(
-                            stringResource(R.string.settings_area_continue),
+                            stringResource(if (blocked) R.string.settings_area_open_settings else R.string.settings_area_continue),
                             onClick = {
                                 showRationale = false
-                                location.request { ok ->
-                                    granted = ok
-                                    if (ok) {
-                                        actions.onSurpriseChange(Surprise.UseMyArea, true)
-                                    } else {
-                                        actions.onAreaDenied()
-                                        toasts.show(ToastMessage(resources.getString(R.string.settings_area_denied), kind = "area"))
+                                if (blocked) {
+                                    location.openSettings()
+                                } else {
+                                    location.request { ok ->
+                                        granted = ok
+                                        if (ok) {
+                                            actions.onSurpriseChange(Surprise.UseMyArea, true)
+                                        } else {
+                                            actions.onAreaDenied()
+                                            val words = if (location.blocked()) R.string.settings_area_denied_for_good else R.string.settings_area_denied
+                                            toasts.show(ToastMessage(resources.getString(words), kind = "area"))
+                                        }
                                     }
                                 }
                             },
+                            glyph = if (blocked) PicnicGlyph.Settings else null,
                         )
                     }
                 },
             ) {
-                Text(stringResource(R.string.settings_area_rationale_title), style = PicnicTheme.type.cardTitle.copy(color = PicnicTheme.colors.ink))
+                Text(
+                    stringResource(R.string.settings_area_rationale_title),
+                    style = PicnicTheme.type.cardTitle.copy(color = PicnicTheme.colors.ink),
+                    modifier = Modifier.semantics { heading() },
+                )
                 Spacer(Modifier.height(10.dp))
                 Text(stringResource(R.string.settings_area_rationale), style = PicnicTheme.type.body.copy(color = PicnicTheme.colors.ink))
                 // Room above the sticky footer's fade, so the last line is never washed out.
                 Spacer(Modifier.height(28.dp))
             }
+            // "Remove key" asks first: the key is never shown again, so a stray tap would mean asking for a new one.
+            LetterSetSheet(
+                visible = confirmRemove,
+                onDismissRequest = { confirmRemove = false },
+                footer = {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        PicnicButton(stringResource(R.string.settings_remove_key_no), onClick = { confirmRemove = false }, style = PicnicButtonStyle.Text)
+                        PicnicButton(
+                            stringResource(R.string.settings_remove_key),
+                            onClick = {
+                                confirmRemove = false
+                                actions.onClearToken()
+                            },
+                            glyph = PicnicGlyph.Delete,
+                            modifier = Modifier.testTag(REMOVE_KEY_CONFIRM_TAG),
+                        )
+                    }
+                },
+            ) {
+                Text(
+                    stringResource(R.string.settings_remove_key_title),
+                    style = PicnicTheme.type.cardTitle.copy(color = PicnicTheme.colors.ink),
+                    modifier = Modifier.semantics { heading() },
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(stringResource(R.string.settings_remove_key_body), style = PicnicTheme.type.body.copy(color = PicnicTheme.colors.ink))
+                Spacer(Modifier.height(28.dp))
+            }
         },
     ) {
         ScreenColumn(state = scroll) {
-            KeyCard(state, actions)
+            KeyCard(state, actions, onRemove = { confirmRemove = true })
             PadCard(title = stringResource(R.string.settings_stickers), glyph = PicnicGlyph.Sparkle, glyphTint = accentInk(Families.grape)) {
                 SwitchRow(
                     label = stringResource(R.string.settings_draw_icons),
@@ -309,6 +396,9 @@ fun SettingsScreen(
     }
 }
 
+/** The confirm sheet's "Remove key" (SettingsScreenTest). */
+const val REMOVE_KEY_CONFIRM_TAG: String = "settings_remove_key_confirm"
+
 /** "Back to Saturday shop" (§4.24), or "Back to your list" before the title is known. */
 @Composable
 internal fun backToListLabel(title: String): String =
@@ -322,12 +412,13 @@ internal fun savedMask(hint: String, dots: Int = 10): String = hint.replace("…
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun KeyCard(state: SettingsUiState, actions: SettingsActions) {
+private fun KeyCard(state: SettingsUiState, actions: SettingsActions, onRemove: () -> Unit) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val failed = state.test as? ConnectionTestUi.Failed
     PadCard(title = stringResource(R.string.settings_key_title), glyph = PicnicGlyph.Key, glyphTint = accentInk(Families.strawberry)) {
-        Text(stringResource(R.string.settings_key_intro), style = t.body.copy(color = c.ink))
+        // Balanced lines: the intro never ends on one word alone.
+        Text(stringResource(R.string.settings_key_intro), style = t.body.copy(color = c.ink, lineBreak = LineBreak.Heading))
         KeyField(
             value = state.tokenInput,
             onValueChange = actions.onTokenChange,
@@ -342,13 +433,17 @@ private fun KeyCard(state: SettingsUiState, actions: SettingsActions) {
                 ?: stringResource(if (state.hasToken) R.string.settings_key_saved else R.string.settings_key_missing),
             enabled = !state.loading,
         )
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            PicnicButton(stringResource(R.string.settings_save), onClick = actions.onSave, enabled = state.canSave)
-            if (state.hasToken) HankoTextButton(stringResource(R.string.settings_remove_key), onClick = actions.onClearToken)
+        // With a key saved, Save shows only once a new key is typed (a grey pill that does nothing helps no one).
+        val showSave = state.canSave || !state.hasToken
+        if (showSave || state.hasToken) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (showSave) PicnicButton(stringResource(R.string.settings_save), onClick = actions.onSave, enabled = state.canSave)
+                if (state.hasToken) HankoTextButton(stringResource(R.string.settings_remove_key), onClick = onRemove)
+            }
         }
         SectionDivider()
         FlowRow(
@@ -419,14 +514,17 @@ private fun SurprisesCard(state: SettingsUiState, actions: SettingsActions, gran
                 }
                 ),
         )
+        val needsEggs = stringResource(R.string.settings_needs_eggs)
         rows.forEachIndexed { i, (surprise, text) ->
             if (i > 0) RowRule()
+            // Weather and Use my area only feed the eggs (§2.5): with Easter eggs off they rest, their values kept.
+            val resting = !s.eggs && (surprise == Surprise.Weather || surprise == Surprise.UseMyArea)
             SwitchRow(
                 label = stringResource(text.first),
-                hint = text.second,
+                hint = if (resting) needsEggs else text.second,
                 checked = s.allows(surprise),
                 onCheckedChange = { on -> if (surprise == Surprise.UseMyArea) onArea(on) else actions.onSurpriseChange(surprise, on) },
-                enabled = !state.loading,
+                enabled = !state.loading && !resting,
             )
         }
         RowRule()

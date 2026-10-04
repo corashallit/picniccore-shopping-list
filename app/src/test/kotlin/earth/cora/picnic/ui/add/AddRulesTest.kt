@@ -42,8 +42,17 @@ class AddRulesTest {
         assertFalse("a pantry row (item 324)", AddRules.isQuickAdd(answer(f.proposed("Salt", "salt", null, skip = SkipReason.IN_PANTRY)), "x"))
         // §6.2 rule 4 / item 201: no skipped rows at all; a name already on her list is one (§4.17), so it shows in review.
         assertFalse(
-            "a row already on the list",
+            "a worked-out row already on the list",
             AddRules.isQuickAdd(answer(f.proposed("Milk", "milk_bag", "dairy-eggs", skip = SkipReason.ALREADY_ON_LIST)), "milk"),
+        )
+        // Rule 7: a name she wrote that is already there pops on the list, as it does without a key; the model's note
+        // about the duplicate does not hold it up.
+        assertTrue(
+            "a named row already on the list",
+            AddRules.isQuickAdd(
+                answer(f.proposed("Milk", "milk_bag", "dairy-eggs", skip = SkipReason.ALREADY_ON_LIST, named = true), message = "Milk is already on your list."),
+                "milk",
+            ),
         )
         assertFalse("a message worth showing", AddRules.isQuickAdd(answer(f.proposed("Milk", "milk_bag", null), message = "Bags are 4 L."), "milk"))
         // Nothing to add is never a quick add: it would commit nothing and wipe her note (it opens the review's "OK").

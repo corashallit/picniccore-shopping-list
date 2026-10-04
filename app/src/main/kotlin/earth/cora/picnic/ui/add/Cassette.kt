@@ -62,6 +62,8 @@ import earth.cora.picnic.ui.theme.LoaderKind
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.LocalThemeVariant
 import earth.cora.picnic.ui.theme.ThemeVariant
+import earth.cora.picnic.ui.theme.PicnicButton
+import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicLoader
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -84,6 +86,7 @@ import kotlin.math.sin
 const val CASSETTE_TAG: String = "add_cassette"
 const val STOP_STICKER_TAG: String = "add_stop_recording"
 const val RECORD_STICKER_TAG: String = "add_record"
+const val RECORD_PILL_TAG: String = "add_record_pill"
 const val EQUALISER_TAG: String = "add_equaliser"
 const val REC_DOT_TAG: String = "add_rec_dot"
 const val HEARD_TRAY_TAG: String = "add_heard_tray"
@@ -310,8 +313,10 @@ fun RecDot(size: Dp = 10.dp, modifier: Modifier = Modifier) {
 /**
  * The Speak section (§4.20, §6.2 "Speak"): the prompt ("Anything else? Say it out loud." once a review is open: after a
  * photo, D19, a note or an earlier voice note), the cassette with its corner sticker, the REC dot + LCD timer over the
- * equaliser while recording; the bee loop while the words are written down; then the transcript in quotes (Klee One 16
- * sp, the heard items on a highlighter band).
+ * equaliser while recording; the bee loop while the words are written down (the LCD keeps the recording's length, and
+ * Stop stops it, as in the thinking state); then the transcript in quotes (Klee One 16 sp, the heard items on a
+ * highlighter band). With a review open, a labelled "Record a voice note" pill sits under the cassette (the sheet's
+ * footer is the review's "Stick all" then; with no review the footer carries the same label).
  */
 @Composable
 fun SpeakSection(
@@ -322,6 +327,7 @@ fun SpeakSection(
     onRecord: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
+    onCancel: () -> Unit = {},
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
@@ -343,7 +349,8 @@ fun SpeakSection(
                 onRecord = if (!busy) onRecord else null,
             )
             Column(horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val elapsed = formatElapsed(recording?.elapsedMs ?: 0L)
+                // While the words are written down the LCD keeps the length just recorded (it never jumps to 0:00).
+                val elapsed = formatElapsed(recording?.elapsedMs ?: (phase as? AddPhase.Transcribing)?.elapsedMs ?: 0L)
                 val timerLabel = stringResource(R.string.add_speak_recording, elapsed)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (recording != null) RecDot() else Spacer(Modifier.size(14.dp))
@@ -358,8 +365,18 @@ fun SpeakSection(
                 DotEqualiser(columns)
             }
         }
+        if (afterReview && !busy) {
+            PicnicButton(
+                stringResource(R.string.add_speak_record),
+                onClick = onRecord,
+                style = PicnicButtonStyle.Secondary,
+                glyph = PicnicGlyph.Cassette,
+                modifier = Modifier.testTag(RECORD_PILL_TAG),
+            )
+        }
         if (phase is AddPhase.Transcribing) {
             PicnicLoader(LoaderKind.BeeLoop, label = stringResource(R.string.add_speak_transcribing), modifier = Modifier.fillMaxWidth())
+            PicnicButton(stringResource(R.string.add_stop), onClick = onCancel, style = PicnicButtonStyle.Text, glyph = PicnicGlyph.Close)
         }
         if (transcript != null && phase !is AddPhase.Recording) Transcript(transcript, heardNames)
         if (recording != null) {
@@ -368,11 +385,15 @@ fun SpeakSection(
     }
 }
 
-/** The transcript in quotes (Klee One 16 sp on ruled lines), the heard items on a highlighter band (§4.20). */
+/**
+ * The transcript in quotes (Klee One 16 sp on ruled lines), the heard items on a highlighter band (§4.20). Klee One is
+ * a Japanese face that draws "…" as three dots at mid-height, so the ellipsis is shown as three full stops.
+ */
 @Composable
-fun Transcript(text: String, names: List<String>, modifier: Modifier = Modifier) {
+fun Transcript(transcript: String, names: List<String>, modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
+    val text = transcript.replace("\u2026", "...")
     val quoted = stringResource(R.string.add_speak_quoted, text)
     val offset = quoted.indexOf(text).coerceAtLeast(0)
     val ranges = remember(text, names) { AddRules.keywordRanges(text, names) }

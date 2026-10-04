@@ -181,7 +181,7 @@ class EditSheetTest {
                 }
             }
         }
-        compose.onNodeWithText("Drawing a new sticker needs an OpenAI key (Settings).").performScrollTo().assertExists()
+        compose.onNodeWithText("Add your OpenAI key in Settings to draw new stickers.").performScrollTo().assertExists()
     }
 
     @Test

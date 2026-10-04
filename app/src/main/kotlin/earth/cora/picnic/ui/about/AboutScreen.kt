@@ -181,7 +181,8 @@ private fun LicenceRow(licence: Licence, expanded: Boolean, onToggle: () -> Unit
         ) {
             Column(Modifier.weight(1f)) {
                 Text(licence.family, style = t.fieldValue.copy(color = c.ink))
-                Text(stringResource(R.string.about_licence_use, licence.licence, licence.use), style = t.caption.copy(color = c.inkSoft))
+                // The intro names the licence once; each row says what the font is used for.
+                Text(licence.use, style = t.caption.copy(color = c.inkSoft))
             }
             Glyph(if (expanded) PicnicGlyph.Collapse else PicnicGlyph.Expand, contentDescription = null, tint = c.inkSoft, size = 22.dp)
         }

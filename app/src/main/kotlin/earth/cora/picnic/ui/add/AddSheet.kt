@@ -556,6 +556,7 @@ private fun SpeakAfterReview(state: AddUiState, actions: AddActions, reveals: Re
         heardNames = heardNames(review),
         onRecord = actions.onRecord,
         onStop = actions.onStopRecording,
+        onCancel = actions.onCancel,
     )
     HeardPart(state, actions, reveals)
 }
@@ -614,6 +615,7 @@ private fun SpeakTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
         heardNames = review?.let(::heardNames).orEmpty(),
         onRecord = actions.onRecord,
         onStop = actions.onStopRecording,
+        onCancel = actions.onCancel,
     )
     HeardPart(state, actions, reveals)
 }
@@ -684,6 +686,9 @@ private sealed interface FooterKind {
 
     /** Snap with no photo yet, or after a photo that could not be read: "Take a photo". */
     data object TakePhoto : FooterKind
+
+    /** Speak with nothing recorded yet, or after a voice note that failed: "Record a voice note" (the corner sticker's twin). */
+    data object Record : FooterKind
 }
 
 private fun footerFor(state: AddUiState, reveals: Reveals): FooterKind? {
@@ -712,7 +717,12 @@ private fun footerFor(state: AddUiState, reveals: Reveals): FooterKind? {
             state.phase is AddPhase.Thinking -> FooterKind.Stick(0, 0, revealing = true, reading = true)
             else -> null
         }
-        AddMode.SPEAK -> null
+        AddMode.SPEAK -> when (val phase = state.phase) {
+            AddPhase.Idle -> FooterKind.Record
+            // A key problem: "Open Settings" is the way on; recording again would only be refused.
+            is AddPhase.Failed -> if (phase.needsSettings) null else FooterKind.Record
+            else -> null
+        }
     }
 }
 
@@ -773,6 +783,13 @@ private fun AddFooter(kind: FooterKind, state: AddUiState, actions: AddActions) 
                 stringResource(R.string.add_snap_take),
                 onClick = actions.onTakePhoto,
                 glyph = PicnicGlyph.Polaroid,
+                modifier = Modifier.weight(1f),
+            )
+            FooterKind.Record -> PicnicButton(
+                stringResource(R.string.add_speak_record),
+                onClick = actions.onRecord,
+                enabled = !busy,
+                glyph = PicnicGlyph.Cassette,
                 modifier = Modifier.weight(1f),
             )
         }

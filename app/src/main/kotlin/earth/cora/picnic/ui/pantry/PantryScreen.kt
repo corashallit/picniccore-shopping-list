@@ -241,6 +241,7 @@ fun PantryScreen(
                     value = state.text,
                     onValueChange = actions.onText,
                     label = stringResource(R.string.pantry_text_label),
+                    placeholder = stringResource(R.string.pantry_text_hint),
                     minLines = 4,
                     textStyle = t.aislesText,
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -258,33 +259,47 @@ fun PantryScreen(
     }
 }
 
-/** "Add to pantry:" with the 48 dp strawberry Add sticker button (a 56 dp target); Enter adds too. */
+/**
+ * "Add to pantry:" with the 48 dp strawberry Add sticker button (a 56 dp target); Enter adds too. The same pad card as
+ * "Pantry as text:" below it (punch holes, the same inset), so the two fields start at the same x. From font scale 1.5
+ * the field takes the card's whole width and the Add sticker sits under its end, so the hint "flour, salt, spices…"
+ * is never cut short beside it.
+ */
 @Composable
 private fun AddCard(state: PantryUiState, actions: PantryActions) {
-    PicnicSurface(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.padding(start = 16.dp, end = 6.dp, top = 12.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            PicnicTextField(
-                value = state.addInput,
-                onValueChange = actions.onAddInput,
-                label = stringResource(R.string.pantry_add_label),
-                placeholder = stringResource(R.string.pantry_add_hint),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { actions.onAdd() }),
-                modifier = Modifier.weight(1f),
-            )
-            RoundStickerButton(
-                PicnicGlyph.Add,
-                stringResource(R.string.pantry_add_action),
-                onClick = actions.onAdd,
-                enabled = state.addInput.isNotBlank(),
-                kind = ButtonKind.AddBarSend,
-                faceSize = 48.dp,
-            )
+    val stacked = LocalDensity.current.fontScale >= 1.5f
+    val field = @Composable { modifier: Modifier ->
+        PicnicTextField(
+            value = state.addInput,
+            onValueChange = actions.onAddInput,
+            label = stringResource(R.string.pantry_add_label),
+            placeholder = stringResource(R.string.pantry_add_hint),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { actions.onAdd() }),
+            modifier = modifier,
+        )
+    }
+    val add = @Composable { modifier: Modifier ->
+        RoundStickerButton(
+            PicnicGlyph.Add,
+            stringResource(R.string.pantry_add_action),
+            onClick = actions.onAdd,
+            modifier = modifier,
+            enabled = state.addInput.isNotBlank(),
+            kind = ButtonKind.AddBarSend,
+            faceSize = 48.dp,
+        )
+    }
+    PadCard(spacing = 4.dp) {
+        if (stacked) {
+            field(Modifier.fillMaxWidth())
+            add(Modifier.align(Alignment.End))
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                field(Modifier.weight(1f))
+                add(Modifier)
+            }
         }
     }
 }
@@ -323,6 +338,8 @@ private fun Shelves(
                         ),
                         onDismissRequest = { onPopCard(null) },
                         width = 208.dp,
+                        // The card names the sticker it belongs to.
+                        title = sticker.name,
                     )
                 },
             ) { sticker ->

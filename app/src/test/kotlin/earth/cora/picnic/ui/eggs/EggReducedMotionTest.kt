@@ -180,7 +180,7 @@ class EggReducedMotionLabTest {
             compose.mainClock.advanceTimeByFrame()
         }
         Snapshot.sendApplyNotifications()
-        assertEquals(4, compose.onAllNodesWithText("needs animations on").fetchSemanticsNodes().size)
+        assertEquals(4, compose.onAllNodesWithText("needs animations on", substring = true).fetchSemanticsNodes().size)
         assertEquals(14, compose.onAllNodesWithText("Try it").fetchSemanticsNodes().size)
         lab.close()
     }

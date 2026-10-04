@@ -8,6 +8,7 @@ import earth.cora.picnic.core.assistant.IngestResult
 import earth.cora.picnic.core.assistant.SkipReason
 import earth.cora.picnic.core.assistant.Transcript
 import earth.cora.picnic.core.llm.LlmError
+import earth.cora.picnic.core.model.GroceryList
 import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.list
@@ -17,6 +18,7 @@ import earth.cora.picnic.ui.common.FakeRecorder
 import earth.cora.picnic.ui.common.MainDispatcherRule
 import earth.cora.picnic.ui.common.testAppScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -697,7 +699,57 @@ class AddViewModelTest {
         assertFalse(r.vm.state.value.waiting)
     }
 
+    /**
+     * A list switched while a bar Send is being read: that add lands on the list it was sent to (its toast names that
+     * list), and the next one goes to the list she is looking at now, not the old one for good.
+     */
+    @Test
+    fun aListSwitchedWhileThinkingTakesTheNextAdd() = runTest {
+        val costco = GroceryList("list-costco", "Costco", f.NOW, emptyList())
+        val assistant = FakeAssistant(ingest = { input, _ ->
+            delay(2_000)
+            val name = (input as IngestInput.Text).text.replaceFirstChar { it.uppercase() }
+            answer(f.proposed(name, "dish_soap", "household", "1 pack", named = true))
+        })
+        val r = addRig(testAppScope(), f.state.copy(lists = f.state.lists + costco), assistant)
+        val events = events(r.vm)
+        r.vm.setText("paper towels")
+        r.vm.send(AddOrigin.BAR)
+        advanceTimeBy(500)
+        runCurrent()
+        assertTrue(r.vm.state.value.waiting)
+        r.vm.showList(costco.id)
+        advanceUntilIdle()
+        val first = (events.filterIsInstance<AddEvent.Committed>().single()).commit
+        assertEquals("the add in flight keeps its list", f.LIST_ID, first.listId)
+        assertTrue("its toast names that list", first.otherList)
+
+        r.vm.setText("sponges")
+        r.vm.send(AddOrigin.BAR)
+        advanceUntilIdle()
+        val second = events.filterIsInstance<AddEvent.Committed>().last().commit
+        assertEquals("the next add goes to the list on screen", costco.id, second.listId)
+        assertFalse(second.otherList)
+        assertTrue(r.store.current().list(costco.id)!!.items.any { it.name == "Sponges" })
+        assertTrue(r.store.current().list(f.LIST_ID)!!.items.none { it.name == "Sponges" })
+    }
+
     // ---- rule 4: a row already on the list is a skipped row ----
+
+    /** §6.2 rule 7: a name she wrote that is already unchecked on the list pops there, as it does without a key. */
+    @Test
+    fun aNamedDuplicatePopsWithoutTheSheet() = runTest {
+        val r = rig(answer(f.proposed("Milk, 2 %", "milk_bag", "dairy-eggs", skip = SkipReason.ALREADY_ON_LIST, named = true), message = "Milk is already on your list."))
+        val events = events(r.vm)
+        r.vm.setText("milk")
+        r.vm.send(AddOrigin.BAR)
+        advanceUntilIdle()
+        assertFalse("no review for one name already there", r.vm.state.value.sheetOpen)
+        val commit = (events.single { it is AddEvent.Committed } as AddEvent.Committed).commit
+        assertTrue(commit.added.isEmpty())
+        assertEquals(listOf("i-milk"), commit.alreadyThere.map { it.id })
+        assertEquals(f.items.size, r.store.current().list(f.LIST_ID)!!.items.size)
+    }
 
     @Test
     fun aNameAlreadyOnTheListShowsInReview() = runTest {
@@ -707,7 +759,7 @@ class AddViewModelTest {
         r.vm.send(AddOrigin.BAR)
         advanceUntilIdle()
         val s = r.vm.state.value
-        assertTrue("item 201: no skipped rows, so a duplicate is not a quick add", s.sheetOpen)
+        assertTrue("item 201: a worked-out row already there is not a quick add", s.sheetOpen)
         assertTrue("nothing can be switched on: the footer offers OK", s.review!!.nothingToKeep)
         assertTrue(events.none { it is AddEvent.Committed })
 

@@ -101,7 +101,8 @@ class OpenAiClientTest {
         api.enqueueFixture(401, "errors/401_missing_scopes.json")
         val e = assertFailsWith<LlmError.Unauthorized> { api.client.model("gpt-5.6-terra") }
         assertEquals(listOf("api.model.read"), e.missingScopes)
-        assertTrue(e.friendlyMessage.contains("missing a permission the app needs (api.model.read)"))
+        assertEquals("This key can’t do everything the app needs. Ask the person who made it to allow List models (Read).", e.friendlyMessage)
+        assertTrue(e.message!!.contains("api.model.read"), "the scope id stays in the log line")
         assertFalse(e.friendlyMessage.contains("Reader"), "nothing else from the server's text")
 
         // Several scopes, and the variant without a "Missing scopes" list.
@@ -113,7 +114,7 @@ class OpenAiClientTest {
         api.enqueue(401, """{"error":{"message":"You have insufficient permissions for this operation.","type":"invalid_request_error","param":null,"code":null}}""")
         val unnamed = assertFailsWith<LlmError.Unauthorized> { api.client.responses(body()) }
         assertEquals(emptyList(), unnamed.missingScopes)
-        assertTrue(unnamed.friendlyMessage.contains("missing a permission"))
+        assertTrue(unnamed.friendlyMessage.contains("Ask the person who made it to check its permissions"))
         assertEquals(3, api.server.requestCount, "never retried")
     }
 
@@ -136,7 +137,7 @@ class OpenAiClientTest {
         assertEquals("model_not_found", e.code)
         assertEquals(403, e.httpStatus)
         assertFalse(e.retryable)
-        assertTrue(e.friendlyMessage.contains("can't use one of the AI models"))
+        assertTrue(e.friendlyMessage.contains("can’t use one of the AI models"))
         assertFalse(e.message!!.contains("proj_"), "the project id stays out of the log line")
     }
 
