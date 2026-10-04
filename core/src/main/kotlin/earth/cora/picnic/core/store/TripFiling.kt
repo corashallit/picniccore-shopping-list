@@ -1,10 +1,15 @@
 package earth.cora.picnic.core.store
 
 import earth.cora.picnic.core.catalog.IconCatalog
+import earth.cora.picnic.core.model.AddOutcome
+import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.AutoNewBook
+import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.NewTripMode
+import earth.cora.picnic.core.model.addItemsStartingNewBook
 import earth.cora.picnic.core.model.deleteList
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.newBookStands
 import earth.cora.picnic.core.model.newTrip
 import earth.cora.picnic.core.model.toggleCheckedStartingNewBook
 import earth.cora.picnic.core.model.undoNewBook
@@ -99,18 +104,75 @@ object TripFiling {
         return Toggle(result, if (result != null) before else null)
     }
 
+    /** What an add did: the committed [state], what became of each item, and [newBook] when it started one (§0.4 Q9). */
+    data class Add(val state: AppState, val outcome: AddOutcome, val newBook: Toggle?)
+
+    /**
+     * An add (the add flows' commit, §6.2): the idle rule's add-side twin (addItemsStartingNewBook, §0.4 Q9) files the
+     * old book first when it applies, then the add is saved. [then] runs inside the same update on the added state
+     * (the commit's rarity rolls); it gets the state before the add too. Keep [Add.newBook] for the toast's Undo
+     * ([undoNewBook]).
+     */
+    suspend fun addItems(
+        store: StateStore,
+        album: AlbumStore,
+        listId: String,
+        items: List<GroceryItem>,
+        now: Long,
+        then: (before: AppState, after: AppState, outcome: AddOutcome) -> AppState = { _, after, _ -> after },
+    ): Add {
+        val (_, _, preview) = store.current().addItemsStartingNewBook(listId, items, now)
+        var before: Album? = null
+        if (preview != null) {
+            album.update { a ->
+                before = a
+                a.file(preview.book)
+            }
+            album.flush()
+        }
+        var auto: AutoNewBook? = null
+        var outcome = AddOutcome.NONE
+        val state = store.update { s ->
+            val (next, o, a) = s.addItemsStartingNewBook(listId, items, now)
+            auto = a
+            outcome = o
+            then(s, next, o)
+        }
+        val result = auto
+        if (result != null && result.book != preview?.book) {
+            album.update { a ->
+                if (before == null) before = a
+                a.file(result.book)
+            }
+            album.flush()
+        }
+        return Add(state, outcome, result?.let { Toggle(it, before) })
+    }
+
     /**
      * Undo of an automatic new book (§0.4 Q9): the state first ([undoNewBook]: the old trip and its stickers come
      * back, the tapped item goes into the old book), then the book leaves the album with the counters as they were
-     * ([Album.unfile]). A crash between the two leaves the book filed under the old trip's id, and the next New trip
-     * replaces it, so nothing is lost.
+     * ([Album.unfile]). Only while the new book still stands ([newBookStands], checked inside the same update): after
+     * a New trip, a deleted list or a later book nothing changes, so a late Undo never rolls the album back past a
+     * newer filing. Returns whether it undid. A crash between the two writes leaves the book filed under the old
+     * trip's id, and the next New trip replaces it, so nothing is lost.
      */
-    suspend fun undoNewBook(store: StateStore, album: AlbumStore, toggle: Toggle, now: Long) {
-        val auto = toggle.autoNewBook ?: return
-        store.update { it.undoNewBook(auto.undo, now) }
-        val before = toggle.albumBefore ?: return
+    suspend fun undoNewBook(store: StateStore, album: AlbumStore, toggle: Toggle, now: Long): Boolean {
+        val auto = toggle.autoNewBook ?: return false
+        var undone = false
+        store.update { s ->
+            if (s.newBookStands(auto)) {
+                undone = true
+                s.undoNewBook(auto.undo, now)
+            } else {
+                s
+            }
+        }
+        if (!undone) return false
+        val before = toggle.albumBefore ?: return true
         album.update { it.unfile(auto.book, before) }
         album.flush()
+        return true
     }
 
     /**

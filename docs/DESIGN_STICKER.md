@@ -296,7 +296,7 @@ The status and navigation bar icon styles follow the resolved variant (dark icon
 | Toast | Zen Maru 700 | 14 sp | ballpoint | — |
 | Stamp numerals | DynaPuff 700 | 12 sp (11 sp in 20 dp circles) | ballpointSoft; current stop: strawberry trace | exempt from the 13 sp floor because it repeats the tab number |
 
-**13 sp floor.** No text is smaller than 13 sp except two numerals that repeat a number shown at ≥13 sp elsewhere: the stamp numerals and the aisle chip's number circle (11 sp). `MinTextSizeTest` walks every screen fixture.
+**13 sp floor.** No text is smaller than 13 sp except two numerals that repeat a number shown at ≥13 sp elsewhere: the stamp numerals and the aisle chip's number circle (11 sp). The book's "+n" stop counters (the stamp page's "+n" circle above 24 stops, the collapsed strip's "+n" pill) are stamp numerals too: they count stops whose tabs the list shows at full size, and are set at the stamp numerals' 11 sp, never smaller (the pill's grows with the font; `BookCountersTest`). `MinTextSizeTest` walks every screen fixture.
 
 **Three families per surface.** DynaPuff + Zen Maru + **one** of Klee One / Hachi Maru Pop. LCD text is vector, so it never counts. A bottom sheet is its own surface. The list uses Hachi Maru (doodles); the Add sheet uses Klee One (transcripts) and no doodles. `FontFamilyBudgetTest` walks every screen's text nodes and fails on a fourth family.
 
@@ -589,6 +589,7 @@ TalkBack: "Strawberries, 1 litre basket" + state ("not checked" / "got it"); cus
 - Motion: drops in 220 ms `cubic-bezier(.3, 1.3, .5, 1)` from −30 dp at −9°, overshoots +4 dp at −1°, settles at −2°; stays still for its **hold**; lifts off upward (260 ms). A swipe dismisses it.
 - **Hold**: max(4000 ms, readHold(words)), then passed through Android's "Time to take action" setting: `AccessibilityManager.getRecommendedTimeoutMillis(hold, FLAG_CONTENT_TEXT | FLAG_CONTENT_CONTROLS)` for a toast with an action, `FLAG_CONTENT_TEXT` alone otherwise (§9).
 - **Queue and merge**: an Undo toast is never cut short. Another Undo of the same kind during its hold **merges** into it ("2 items torn out" + Undo, which restores both; the hold restarts). Any other toast waits in a queue (at most 2; a newer info toast of the same kind replaces a queued one) and shows when the current one has had its hold and left.
+- **Retired** (`ToastHostState.dismiss(kind)`): a toast whose offer no longer holds goes at once, Undo or not: the queued ones of its kind are dropped and the one showing lifts off now (its normal 260 ms lift). The List retires the nudge when a New trip, an automatic new book or another list makes it moot, and an automatic new book's Undo note when a New trip or another list does (§6.1, §0.4 Q9).
 - **Stacking**: a toast and the Next card never overlap. Whichever arrives second sits 8 dp above the first (on a 360 dp phone the toast spans x 14–234 dp and the card x 62–298 dp, at the same height).
 - `role=status` (polite live region). Copy in §16.
 
@@ -642,7 +643,7 @@ A 168 dp lemon-pastel sticky note rotated −2°, 3 dp white border, hs2, 54 dp 
 
 ### 4.24 Overflow menu
 
-A kiss-cut pad card (radius 10, hs2) dropping from the More button (pop 220 ms `cubic-bezier(.3, 1.5, .5, 1)` from 90 % 0). Items, each 48 dp with a glyph: **New trip** (disabled at 50 %, state "No trip yet", while the list has no trip), **Switch list…**, **Refresh** (the same re-sync as pull to refresh, for TalkBack, keyboard and switch access), **My store & aisles**, **Sticker album**, **Settings**. Album and Settings screens show **Back to <list>**, **My store & aisles**, **Settings** / **Sticker album**.
+A kiss-cut pad card (radius 10, hs2) dropping from the More button (pop 220 ms `cubic-bezier(.3, 1.5, .5, 1)` from 90 % 0). It ends at least 8 dp above the window's bottom edge (and the navigation bar); when its items need more room (landscape, a short multi-window pane, large text) its rows scroll, and where less than about three rows would fit under the button it rises instead, ending 8 dp above the bottom, so every item can always be reached (§15). Items, each 48 dp with a glyph: **New trip** (disabled at 50 %, state "No trip yet", while the list has no trip), **Switch list…**, **Refresh** (the same re-sync as pull to refresh, for TalkBack, keyboard and switch access), **My store & aisles**, **Sticker album**, **Settings**. Album and Settings screens show **Back to <list>**, **My store & aisles**, **Settings** / **Sticker album**.
 
 ### 4.25 Album pieces
 
@@ -733,7 +734,7 @@ Z order: list < add bar < overlay (hops, toasts, Next card, peek, eggs) < sheets
 
 **Collapsed add bar (FAB)**: scrolling down ≥70 dp accumulated past 140 dp from the top folds the add bar into the 64 dp FAB at the bottom-right; scrolling up 40 dp, reaching the top, or tapping the FAB brings the bar back (tap also focuses the field). Programmatic scrolls (auto-open of the next aisle) are ignored for 1.2 s. Never collapses while the field is focused or a sheet is open. Transition: the bar slides down 220 ms `cubic-bezier(.3, 1.2, .5, 1)`, the FAB pops in (0 → 1.4 → 1, 3 steps).
 
-**Nudge:** if the list opens with an open trip idle for more than 12 h, a toast says "New shop? Start a fresh sticker book" with the action "New trip"; it holds max(6000 ms, readHold, the recommended timeout) (§4.15). If she ignores it, nothing happens until she checks something off; that first check-off never asks a question: it starts a new sticker book on its own, with an Undo toast (§0.4 Q9, §7.1).
+**Nudge:** if the list opens with an open trip idle for more than 12 h, a toast says "New shop? Start a fresh sticker book" with the action "New trip"; it holds max(6000 ms, readHold, the recommended timeout) (§4.15). If she ignores it, nothing happens until she checks something off; that first check-off never asks a question: it starts a new sticker book on its own, with an Undo toast (§0.4 Q9, §7.1). The nudge goes as soon as it has nothing left to offer: a New trip from the menu, an automatic new book, or another list retires it at once (§4.15), and its "New trip" only ever opens the sheet over a list that still has a trip.
 
 ### 6.2 Add bar and the Add flows
 
@@ -777,7 +778,7 @@ A small letter-set sheet: title "Start a new trip?", the closing book drawn smal
 
 ### 6.6 Trip book sheet (new in this spec)
 
-Opened by tapping the book's right page (or a trip-book row in the album). The book at 2×: the stamp page with 32 dp stamps in 48 dp targets and the aisle names under them (13 sp); the sticker pages with 40 dp stickers, swipeable page by page (page dots + LCD "2/3"); a header with the date and "10 of 24 stickers · 1 of 8 aisles stamped"; for a finished trip, "41 min" and the PER-FECT! hanko; the receipt slip if saved (tap → the receipt sticker full size). Read-only.
+Opened by tapping the book's right page or its collapsed strip (or a trip-book row in the album). From the list it opens on the page holding the book's next free spot, or on the page she swiped the book to; from the album on the first page. The book at 2×: the stamp page with 32 dp stamps in 48 dp targets and the aisle names under them (13 sp); the sticker pages with 40 dp stickers, swipeable page by page (page dots + LCD "2/3"); a header with the date and "10 of 24 stickers · 1 of 8 aisles stamped"; for a finished trip, "41 min" and the PER-FECT! hanko; the receipt slip if saved (tap → the receipt sticker full size). Read-only.
 
 ### 6.7 My store (aisle editor)
 
@@ -866,7 +867,8 @@ The new keepsake. Like the Firefly direction's charm bracelet, but a 90s sticker
 | **Belongs to** | one list. Each list has at most one open trip; switching lists switches the book. |
 | **Complete** (an invariant) | `completedAt` is non-null exactly when the list has at least one item and every item is checked. It is not set by the check-off gesture: `TripRules.reconcile(list, now)` runs at the end of **every** StateOp that touches items (`toggleChecked`, `addItems`, `removeItem`, `restoreItem`, `moveItemToAisle`, `applyAisleAssignments`, `setAislesText` / `commitAislesText`, `renameAisle`, `newTrip`). So a trip also completes when she tears off or deletes the last unchecked item, moves it, a re-sort or an aisle-text edit changes what is left, or she undoes a quick add. Un-checking or adding clears it; re-completing sets it again. Aisle completion is derived the same way (`AisleSection.complete`). |
 | **Finale** | plays when the trip first becomes complete (`finaleShownAt == null`), once per trip, whatever the cause: a check-off tap plays the full chain; any other cause plays the in-place form (§8.4). If the app dies between completion and the finale, the next time the list opens with `completedAt != null && finaleShownAt == null`: within 30 min of `completedAt` the finale plays then; later, it is marked shown and the book's PERFECT is pressed in place. After an un-check and a re-completion the book's PERFECT is pressed again at L + 1800 (the same moment it would follow a skipped celebration) without replaying the scene. |
-| **Idle trip** | never asks (§0.4 Q9). The first check-off on a trip whose `lastActivityAt` is more than 12 h old (`TripRules.startsNewBook`) starts a new book on its own: the old book is filed in the album, what was got last time is cleared (as with "Clear what I got"), and the tapped item is checked onto a fresh trip, all in one tap (`TripFiling.toggle`, through `toggleCheckedStartingNewBook`). The toast "New sticker book for today ✦ your last shop is in the album" offers **Undo** (`TripFiling.undoNewBook`): the old book and its checked items come back and the tapped item goes into the old book. So items added a week later never merge into last week's book, a stray check at home on Tuesday doesn't own Saturday's shop, and she is never interrupted in the store. |
+| **Idle trip** | never asks (§0.4 Q9). The first check-off on a trip whose `lastActivityAt` is more than 12 h old (`TripRules.startsNewBook`) starts a new book on its own: the old book is filed in the album, what was got last time is cleared (as with "Clear what I got"), and the tapped item is checked onto a fresh trip, all in one tap (`TripFiling.toggle`, through `toggleCheckedStartingNewBook`). The toast "New sticker book for today ✦ your last shop is in the album" offers **Undo** (`TripFiling.undoNewBook`): the old book and its checked items come back and the tapped item goes into the old book. **The first add works the same way** (her week: build the list over the week, shop once): an add that changes the list on a trip idle for more than 12 h (`TripFiling.addItems`, through `addItemsStartingNewBook`) first files the old book exactly as it stands and clears what was got, then the new items go onto the fresh list (a name that was got last time becomes a new row, never a sticker peeled out of last week's book); the next book opens at the next check-off. The toast "Fresh sticker book ✦ your last shop is in the album" offers **Undo** (the old book and its stickers come back, the new rows stay, out of the finished book). An Undo applies only while that new book stands (`newBookStands`): after a New trip, a deleted list or a later book it changes nothing, and its note is retired (§4.15). So items added a week later never merge into last week's book, a stray check at home on Tuesday doesn't own Saturday's shop, and she is never interrupted in the store. |
+| **The book's items** | the book counts the trip's own items (`TripRules.bookItems`): every checked item, and every unchecked one except those added after the trip's finale was shown. What she writes down the evening after a finished shop is for the next one: the list has more to get (its LCD counts it, its strips un-stamp), but the shop's book keeps its spots, its stamps, PERFECT and its receipt, and is filed that way (§7.8). Before the finale every item counts (an item added mid-shop is a spot at once). |
 | **Empty again** | when a trip's last checked item is un-checked or deleted (0 stickers), the trip closes **without filing** (`trip = null`; a hatched pet leaves with it). |
 | **Closes** | on **New trip** (overflow menu, or the New trip sheet §6.5; disabled while there is no trip), when its list is deleted (§6.4), or at the first check-off after 12 h idle (the automatic new book above): the book is archived to the album, the checked items are cleared (or un-checked, by choice; a deleted list just goes), `trip = null` (or the fresh trip of the tapped item), `lastClosedAt = now`, the open aisle resets to automatic. Never on a timer: an idle trip with no check-off only gets the nudge toast (§6.1). |
 | **Date** | the book's date label and the receipt's date are the day of the **first check-off of the last session** (sessions break at any gap over 45 min between check-offs); before the trip opens, today. |
@@ -983,7 +985,7 @@ Examples (asserted in `BookLayoutTest`; each rechecked against the formula): W 3
 - **N = 0** (an empty list): no book; the empty state takes the screen (§4.21). Every item belongs to a stop ("Everything else" included), so S = 0 only when N = 0 and needs no layout.
 
 - **Font scale > 1.3**: the date label leaves the left page and becomes a caption row above the book (Zen Maru 700 13 sp × f); the pages keep their size (stickers are art and do not scale); the page LCD scales its pitch up to 1.6×.
-- **Collapsed (40 dp)** when the IME is open, when the window is under 600 dp tall (or landscape under 480 dp), or on scroll-down together with the app bar (§4.2; it expands again on scroll-up or at the top). Height changes animate (`standard`, 200 ms). Collapsed: one strip with the date tag, the stamps as 12 dp dots (stamped dots filled in the aisle trace), and the newest stickers at 22 dp right-aligned with a "+n" pearl before them. The magic appear lands in the newest position.
+- **Collapsed (40 dp)** when the IME is open, when the window is under 600 dp tall (or landscape under 480 dp), or on scroll-down together with the app bar (§4.2; it expands again on scroll-up or at the top). Height changes animate (`standard`, 200 ms). Collapsed: one strip with the date tag, the stamps as 12 dp dots (stamped dots filled in the aisle trace; stops the dots leave out are counted in a "+n" pill, its numeral the stamp numerals' 11 sp, growing with the font and the pill round it), and the newest stickers at 22 dp right-aligned with a "+n" pearl before them. The magic appear lands in the newest position. The whole strip is one tap target: it opens the Trip book sheet (§7.7).
 - **Paging**: the right page shows `shownPage`. A horizontal swipe on it flips pages (3-frame turn); after 6 s idle it returns to `shownPage`. Before a twin appears on another page, the book turns to it first.
 
 ### 7.5 States
@@ -1020,17 +1022,17 @@ Nothing ever flies to the book: twins only appear and disappear in place, even w
 
 ### 7.7 Interaction and accessibility
 
-- Tap the **right page** → Trip book sheet (§6.6). Swipe it → turn pages.
+- Tap the **right page** → Trip book sheet (§6.6), opened on the page the book shows. Swipe it → turn pages. Collapsed, a tap anywhere on the strip opens the sheet.
 - Tap the **left page** → the nearest stamp does a 2-frame boing and a small lemon name tag ("4 · Baking · 1 left" / "3 · Deli & meat · stamped"; the display name, §4.10) is clipped onto the book's **right page**, next to the spine, over the release paper: it never leaves the book, so it never covers the pinned plate's tab or any other text. It holds max(2600 ms, readHold(words), the recommended timeout for text) (§9). Stamp taps also feed egg 10. The left page as a whole is the ≥48 dp target; the nearest-centre rule picks the stamp.
 - TalkBack: the book is **one** node: "Trip sticker book, Sat 3 Oct: 10 of 24 stickers, 1 of 8 aisles stamped" with the action "Open trip book"; the stickers are decorative twins with no nodes. One polite announcement per magic appear, merged with the check-off: "Strawberries added to today's sticker book". Un-check: "Strawberries peeled out of today's sticker book". In the Trip book sheet every stamp is its own node ("Produce: stamped" / "Bakery: not yet").
 - The book is part of the top stack: solid ground behind it, nothing scrolls above or around it (R6).
 
 ### 7.8 Filing into the album
 
-On New trip (or deleting a list with a non-empty book): a `TripBook` snapshot (stickers with slots, icons and rarity; stamps with position, pattern and pictogram; total; frozen minutes; perfect; receipt, saved if it was printed; bonus sticker; nap aisle) is prepended to `Album.books` (album first, idempotent by trip id, §7.2); `finishedTrips` and the perfect streak update (egg 14); the album's trip-book row appears with a magic appear the next time the album is opened. The current book resets.
+On New trip, an automatic new book (§7.1, at a check-off or an add), or deleting a list with a non-empty book: a `TripBook` snapshot over the trip's own items (`TripRules.bookItems`, §7.1: items added after the finale stay out) (stickers with slots, icons and rarity; stamps with position, pattern and pictogram; total; frozen minutes; perfect; completedAt, kept when only next week's items re-opened the list; receipt, saved if it was printed; bonus sticker; nap aisle) is prepended to `Album.books` (album first, idempotent by trip id, §7.2); `finishedTrips` and the perfect streak update (egg 14); the album's trip-book row appears with a magic appear the next time the album is opened. The current book resets.
 
 - A **finished trip** is any trip filed with at least one sticker, complete or not; `finishedTrips` counts them across all lists (egg 14's back pocket opens at ten).
-- A **complete** trip is one filed with every item checked. The **perfect streak** runs across all lists in filing order: each complete trip adds one, a finished-but-incomplete trip resets it to 0, and an empty trip (closed without filing, §7.1) does not count either way.
+- A **complete** trip is one filed with every one of its items checked (its own items, §7.1: a Saturday shop finished and filed on Tuesday's first add, or at next Saturday's first check-off, is complete whatever was written down after it). The **perfect streak** runs across all lists in filing order: each complete trip adds one, a finished-but-incomplete trip resets it to 0, and an empty trip (closed without filing, §7.1) does not count either way.
 
 ---
 
@@ -1481,7 +1483,7 @@ Canadian spelling (colour, favourite), metric only (g, kg, mL, L) in detail line
 | Recipe card | "<Title>", "from the kitchen of ♡ the web", "web search", "3 recipes · 5 of 10 kept", tray "Baking · 3 of 6 kept", reasons "already on your list" / "in your pantry" / "optional · skipped", "Edit my pantry", button "★ Stick all 5 on my list" |
 | Snap | "Reading your list…", caption "fridge list · Sat", "Popped into stickers · 4 of 7", "Reading… 6 of 9" → "Stick all 9 on my list", chip and action "Choose a photo" |
 | Speak | "Anything else? Say it out loud.", "Heard · 2 more stickers", "Stop recording" |
-| Toasts | "Added 5 items to Saturday shop ♡" · "Added Milk to Dairy & eggs ♡" · "Milk is already on your list" · "Milk is back on your list" · "Oat cereal torn out" · "2 items torn out" · "Added as typed · add your OpenAI key for smart sorting" · "New trip · a fresh sticker book ♡" · "New shop? Start a fresh sticker book" · "Receipt saved to your sticker book ♡" · "Rain on the way · bring the tote!" · "BONUS STAGE! ♪" · "Sorted 6 items · 2 left in Everything else" · "Couldn't save. Try again." · "Surprise lab unlocked ★" · "Your album's back pocket opened!" ; action chips "Undo", "New trip", "Look" |
+| Toasts | "Added 5 items to Saturday shop ♡" · "Added Milk to Dairy & eggs ♡" · "Milk is already on your list" · "Milk is back on your list" · "Oat cereal torn out" · "2 items torn out" · "Added as typed · add your OpenAI key for smart sorting" · "New trip · a fresh sticker book ♡" · "New sticker book for today ✦ your last shop is in the album" · "Fresh sticker book ✦ your last shop is in the album" (the same at the first add after 12 h, §7.1) · "New shop? Start a fresh sticker book" · "Receipt saved to your sticker book ♡" · "Rain on the way · bring the tote!" · "BONUS STAGE! ♪" · "Sorted 6 items · 2 left in Everything else" · "Couldn't save. Try again." · "Surprise lab unlocked ★" · "Your album's back pocket opened!" ; action chips "Undo", "New trip", "Look" |
 | Empty state | "A brand-new sticker sheet!" / "Nothing on <list> yet. Type it, snap your paper list, or just say it out loud." / "♡ let's go shopping ♡" / "Start my list" / sheet caption "sticker sheet 1 of 2" |
 | Overflow menu | "New trip" (state "No trip yet" when disabled), "Switch list…", "Refresh", "My store & aisles", "My pantry", "Sticker album", "Settings"; list action "Refresh stickers and aisles" |
 | Next card | "NEXT" + tab |
@@ -1592,15 +1594,28 @@ fun AppState.toggleCheckedStartingNewBook(listId: String, itemId: String, now: L
     // §0.4 Q9, never asks: CHECKING an item on a trip idle > 12 h (TripRules.startsNewBook, IDLE_MILLIS) files the old
     // book (newTrip(CLEAR_GOTTEN)) and checks the item onto a fresh trip; AutoNewBook carries the filed book and the
     // NewBookUndo. Any other tap is toggleChecked with no AutoNewBook.
+fun AppState.addItemsStartingNewBook(listId: String, items: List<GroceryItem>, now: Long): Triple<AppState, AddOutcome, AutoNewBook?>
+    // (+ item 315) the add-side twin: an add that changes a list whose trip is idle > 12 h files the old book as it
+    // stands (newTrip(CLEAR_GOTTEN)), then adds to the fresh list (no trip until the next check-off); NewBookUndo.itemId
+    // is null. Any other add is addItems with no AutoNewBook.
 data class AutoNewBook(val book: TripBook, val undo: NewBookUndo)
 fun AppState.undoNewBook(undo: NewBookUndo, now: Long): AppState
     // the old trip and its cleared items come back (old indices and spots); everything checked since goes into the
-    // old book; items added meanwhile stay
+    // old book; items added meanwhile stay; an add's undo keeps the old trip's lastActivityAt
+fun AppState.newBookStands(auto: AutoNewBook): Boolean   // (+) the list still carries the fresh book (its trip, or none
+    // yet) and nothing was filed since: the only time an Undo applies
+// model/TripRules.kt (+ item 315)
+fun TripRules.bookItems(list: GroceryList): List<GroceryItem>   // the book's own items: checked ones, and unchecked ones
+    // not added after the finale was shown (every item before the finale); tripBook files these
+fun TripRules.bookComplete(list: GroceryList): Boolean          // every one of bookItems checked
 // store/TripFiling.kt: the two-file order (§7.2), what ViewModels call
 object TripFiling {
     suspend fun toggle(store, album, catalog, listId, itemId, now): Toggle   // files an idle trip's book FIRST, then
         // saves the toggle, then collects the sticker; Toggle(autoNewBook, albumBefore) feeds the toast's Undo
-    suspend fun undoNewBook(store, album, toggle: Toggle, now: Long)         // the state first, then Album.unfile
+    suspend fun addItems(store, album, listId, items, now, then: (before, after, outcome) -> AppState): Add
+        // (+) the add-side twin, album first; Add(state, outcome, newBook: Toggle?); then runs in the same update
+    suspend fun undoNewBook(store, album, toggle: Toggle, now: Long): Boolean   // the state first (only while
+        // newBookStands, checked in the same update), then Album.unfile; false (nothing changed) once a newer book stands
     suspend fun newTrip(store, album, listId, mode, now): TripBook?
     suspend fun deleteList(store, album, listId, now): TripBook?
 }
@@ -1736,6 +1751,10 @@ enum class ThemeVariant { Day, Glow, Dusk, Golden }
     onTextLayout: ((TextLayoutResult) -> Unit)? = null)      // (+ WP6) a caller that hides it from TalkBack still reports a cut
 class ToastHostState { …; var paused: Boolean }              // (+ WP6) true while something covers the toasts (the celebration):
     // the current hold waits and, once uncovered, runs whole again (§4.15: an Undo toast is never cut short)
+    fun dismiss(kind: String)                                // (+ WP5) retires a kind whose offer no longer holds: the
+    // queued ones go, the one showing lifts off now (§4.15)
+@Composable fun OverflowMenu(items: List<MenuItem>, onDismissRequest: () -> Unit, modifier: Modifier = Modifier,
+    width: Dp = 224.dp, maxHeight: Dp = Dp.Unspecified)    // (+ WP5) the card stops at maxHeight and its rows scroll (§4.24)
 @Composable fun ChipFace(fill: Color, modifier: Modifier = Modifier, height: Dp = 32.dp, border: Dp, horizontal: Dp = 11.dp,
     grows: Boolean = true, press: Float = 0f, leadingHeight: Dp = 0.dp, focused: Boolean = false,
     content: @Composable RowScope.() -> Unit)   // (polish) height is a minimum: the face grows
@@ -1800,6 +1819,12 @@ fun buildListUiState(…, perfectWeek: Boolean = false, hankoFor: (GroceryItem) 
 @Composable fun IndexTab(…, nameModifier: Modifier = Modifier, numberModifier: Modifier = Modifier)   // (+) the tab's words only
     // (the eggs' `text:` keep-outs, not the sticker's edge)
 @Composable fun StickerBook(…, pageNumber: Boolean = true)   // (+) false while egg 3's roll bumps a basket at the list's top edge
+@Composable fun StickerBook(…, onOpenAt: (slot: Int) -> Unit = { onOpen() })   // (+ WP5) opens the Trip book sheet at the
+    // spot the book shows (the next free one, or the first of the page she swiped to); collapsed, the strip opens it too
+fun TripBookSheet(book: TripBook?, dateLabel: String, onClose: () -> Unit, …, initialSlot: Int = 0)   // (+ WP5) the
+    // sticker pages open on the page holding initialSlot (the list passes its book's; the album 0)
+data class ListUiState(…, val season: Season? = null)   // (+ WP5) the seasonal sheet with or without a book (the empty
+    // list's add bar wears its tape)
 
 // ui/list/motion (owner WP6)
 interface Choreographer {
@@ -1848,7 +1873,10 @@ sealed interface AddEvent {                 // redesigned: one-off events for th
     data class SortFailed(val friendlyMessage: String, val leftUnsorted: Int); data object FocusField }
 data class AddCommit(val id: Long, val listId: String, val listTitle: String, val added: List<GroceryItem>,
     val alreadyThere: List<GroceryItem>, val revived: List<GroceryItem>, val aisleTitle: String? = null,
-    val asTypedNoKey: Boolean = false) { val canUndo: Boolean; val empty: Boolean; val shiny: Boolean; fun popDelayMillis(index: Int): Long }
+    val asTypedNoKey: Boolean = false,
+    val newBook: TripFiling.Toggle? = null)   // (+ item 315) the add filed an idle trip's book first (TripFiling.addItems,
+    // through AddViewModel(album = …)); the List turns the book and offers its Undo
+    { val canUndo: Boolean; val empty: Boolean; val shiny: Boolean; fun popDelayMillis(index: Int): Long }
 class AddViewModel {
     fun requireKey(mode: AddMode, capture: () -> Unit)   // (+) Snap and Speak need the key before anything is captured: without
         // one the sheet opens on [mode] with "Add your OpenAI key in Settings first." and capture never runs
@@ -2072,8 +2100,8 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 117. **[WP5]** A swipe right past 56 dp checks with the full chain; a swipe left past 56 dp tears; each shows its own hint; the TalkBack actions remain. — *Test:* `SwipeTest.rightChecksLeftTears` (Robolectric)
 118. **[WP5]** The tear-off plays (perforation 120 ms, halves 600 ms, slot 380 ms) and Undo restores the row exactly (checked state, slot, icon) with the toast held 4 s. — *Test:* `TearOffTest.undoRestoresExactly` (Robolectric), strip `tearoff_strip`
 119. **[WP5]** Pull to refresh sags the bunting, spins the sun, shows SYNC for 1500 ms, runs `resumePending` and `sortItems`, and never mentions prices; the overflow item "Refresh" and the list's custom action do the same without the gesture. — *Test:* `PullToRefreshTest.resyncsIconsAndAisles`, `PullToRefreshTest.refreshAction` (Robolectric)
-120. **[WP5]** An open trip idle for more than 12 h gets the nudge toast with "New trip"; nothing is cleared automatically. — *Test:* `TripNudgeTest` (Robolectric, fake clock)
-121. **[WP5]** The overflow menu offers New trip (disabled without a trip), Switch list, Refresh, My store & aisles, My pantry, Sticker album and Settings, and each works. — *Test:* `ListInteractionTest.overflowMenuActions` (Robolectric)
+120. **[WP5]** An open trip idle for more than 12 h gets the nudge toast with "New trip"; nothing is cleared automatically. A New trip from the menu, an automatic new book or another list retires it at once, and its "New trip" never opens the sheet over a list without a trip (nor leaves a request waiting that would open it later or keep the add bar from folding). — *Test:* `TripNudgeTest` (Robolectric, fake clock)
+121. **[WP5]** The overflow menu offers New trip (disabled without a trip), Switch list, Refresh, My store & aisles, My pantry, Sticker album and Settings, and each works; in a short window (landscape, at font scale 1.0 and 2.0) the card ends inside the window and scrolls, so every item can be reached. — *Test:* `ListInteractionTest.overflowMenuActions`, `OverflowMenuFitTest` (Robolectric)
 
 ### 20.8 The check-off chain (R5)
 
@@ -2114,7 +2142,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 153. **[WP6 · BOOK]** 450 ms after the celebration closes, the stamp page turns holo and PER-FECT! is pressed across the spine. — *Test:* `CelebrationTest.bookPerfectAfterClose` (Robolectric)
 154. **[WP6 · BOOK · WORKS]** On opening a list with `completedAt` set and `finaleShownAt` null, the finale plays (within 30 min of completion) or is marked shown with PERFECT pressed in place. — *Test:* `CelebrationTest.resumesAfterProcessDeath` (Robolectric)
 155. **[WP6 · BOOK]** Under reduced motion the twin fades in or out over 120 ms at the same beat time (940 ms), with no bloom, sparks, lift or turn. — *Test:* `BookMagicTest.reducedMotion` (Robolectric)
-156. **[WP5 · BOOK]** Tapping the right page opens the Trip book sheet; swiping it turns pages; it returns to the current page after 6 s idle. — *Test:* `BookInteractionTest.openSheetAndPaging` (Robolectric)
+156. **[WP5 · BOOK]** Tapping the right page (or, collapsed, the strip) opens the Trip book sheet, on the page the book shows; swiping it turns pages; it returns to the current page after 6 s idle. — *Test:* `BookInteractionTest.openSheetAndPaging`, `BookInteractionTest.sheetOpensOnTheBooksPage`, `BookInteractionTest.collapsedTapOpensSheet` (Robolectric)
 157. **[WP5 · BOOK]** Tapping the left page boings the nearest stamp, clips its name tag onto the book's right page (never over text, never outside the book) for its hold, and feeds egg 10. — *Test:* `BookInteractionTest.stampTagAndEggFeed` (Robolectric)
 158. **[WP5 · BOOK]** TalkBack sees one book node with its summary and an "Open trip book" action; the stickers have no nodes. — *Test:* `BookA11yTest.singleSummaryNode` (Robolectric)
 159. **[WP5 · BOOK]** One polite announcement per twin: "<Name> added to today's sticker book" / "peeled out of today's sticker book". — *Test:* `BookA11yTest.announcements` (Robolectric, FakeAnnouncer)
@@ -2180,7 +2208,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 210. **[WP7]** Speak asks for the permission, turns the reels at 8 fps, drives the EQ from the level in whole dots, shows the LCD timer and REC dot, cues clunk + KEYBOARD_TAP, and fills the Heard tray. — *Test:* `SpeakFlowTest` (Robolectric), goldens `speak_recording`, `speak_transcribing`, `speak_heard`
 211. **[WP7]** Speak after Snap appends to the same preview, merged and de-duplicated. — *Test:* `AddViewModelTest.snapThenSpeakMerges` (unit)
 212. **[WP7]** Committing pops the new rows in 80 ms apart, closes the sheet, shows the toast and emits the commit event to the SurpriseEngine. — *Test:* `AddViewModelTest.commitEmitsEvents` (unit)
-213. **[WP3 · WP7]** A duplicate of an unchecked item never creates a second row (its sticker pops; "already on your list"); a duplicate of a checked item un-checks it ("back on your list"; Undo checks it again). — *Test:* `AddBarTest.duplicatePopsExisting`, `AddBarTest.duplicateOfCheckedRevives` (Robolectric), `StateOpsTest.addItemsRevivesChecked` (core unit)
+213. **[WP3 · WP7 · WP5]** A duplicate of an unchecked item never creates a second row (its sticker pops; "already on your list"); a duplicate of a checked item un-checks it ("back on your list"; Undo checks it again). A pop plays once, at the commit: the row never flashes again when it comes back on screen, and a row first shown long after (a folded aisle opened later) never flashes. — *Test:* `PopTest` (Robolectric), `AddBarTest.duplicatePopsExisting`, `AddBarTest.duplicateOfCheckedRevives` (Robolectric), `StateOpsTest.addItemsRevivesChecked` (core unit)
 214. **[WP3]** The metric normaliser converts lb, oz, fl oz, qt and gal in model output and typed text. — *Test:* `MetricNormaliserTest` (core unit)
 215. **[WP7]** Failures show the friendly message with Try again and Add as plain lines; NotConfigured offers Open Settings. — *Test:* `AddViewModelTest.failures` (unit), golden `add_error`
 216. **[WP7]** "As typed" in the Write tab commits the offline parse. — *Test:* `AddViewModelTest.asTyped` (unit)
@@ -2226,7 +2254,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 250. **[WP9 · WORKS]** Egg 12: in the 30 minutes before Toronto sunset the list turns Golden, shadows lengthen and the sun sinks 0.5 dp per minute. — *Test:* `EggGoldenTest` (Robolectric, fake clock), golden `list_golden_day`
 251. **[WP3]** `SunClock` gives Toronto sunsets within ±3 min of a reference table. — *Test:* `SunClockTest` (core unit)
 252. **[WP9 · WORKS]** Egg 13: 1 in 100 finished live drawings come out gold, wobble, pop and stamp JACK / POT! (held 1.8 s), and the sticker is holo everywhere. — *Test:* `EggJackpotTest` (Robolectric, seeded Random)
-253. **[WP9 · WORKS]** Egg 14: four complete trips in a row (across lists, in filing order; an incomplete one resets the streak) make the stamp page holo for 7 days and unlock the sakura sheet; ten finished trips (filed with ≥1 sticker) open the back pocket ("sticker sheet 2 of 2"). — *Test:* `PerfectWeekTest` (unit + Robolectric)
+253. **[WP9 · WORKS]** Egg 14: four complete trips in a row (across lists, in filing order; an incomplete one resets the streak) make the stamp page holo for 7 days and unlock the sakura sheet; ten finished trips (filed with ≥1 sticker) open the back pocket ("sticker sheet 2 of 2"). A complete trip counts its own items (§7.1, §7.8): what was written down after the shop never breaks the streak. — *Test:* `PerfectWeekTest` (unit + Robolectric)
 254. **[WP9 · WORKS]** Egg 15: holding the LCD for the hold threshold before completion hatches the pet ("FED" 1.5 s), which chomps at every landing and dances in the finale; with no trip the bee only visits and nothing persists. — *Test:* `LcdHoldTest.holdBeforeCompleteHatchesPet`, `LcdHoldTest.holdWithNoTripPersistsNothing`, `LcdPetTest.feedsAndDances` (Robolectric)
 255. **[WP9 · WORKS]** Egg 16: with Weather surprises on and rain forecast, the umbrella, raindrop tape and "bring the tote!" toast appear; offline or switched off, nothing happens and nothing is requested. — *Test:* `EggRainTest` (Robolectric, fake WeatherSource)
 256. **[WP9]** The weather source fetches the §12.4 feed only with the switch on, parses it, caches 3 h in DataStore across restarts, toasts rain at most once a day, keeps the first-snow date, and stays silent offline. — *Test:* `WeatherSourceTest` (core unit, MockWebServer + recorded feeds), `WeatherCacheTest` (Robolectric)
@@ -2274,7 +2302,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 289. **[WP10]** Aisles stay distinguishable in greyscale by pattern, number and name. — *Test:* golden `strips_greyscale`
 290. **[WP10]** Action toasts, the nudge, the Next card and the stamp name tag hold at least `getRecommendedTimeoutMillis`; the LCD and peek thresholds follow "Touch & hold delay", and the ladybug fires 560 ms after the threshold. — *Test:* `TimeoutsTest` (Robolectric, shadowed AccessibilityManager at 10 s and long-press timeout at 1.5 s)
 291. **[WP10]** No information text sits straight on a pattern: the app-bar, album and My store subtitles and the end note sit on pad patches. — *Test:* `TextOnPatternTest` (Robolectric walker)
-292. **[WP10]** No text is under 13 sp except the stamp numerals and the aisle chip's number circle. — *Test:* `MinTextSizeTest` (Robolectric walker over every screen fixture)
+292. **[WP10 · WP5]** No text is under 13 sp except the stamp numerals (with the book's "+n" stop counters, set at their 11 sp) and the aisle chip's number circle. — *Test:* `MinTextSizeTest` (Robolectric walker over every screen fixture), `BookCountersTest` (Robolectric)
 
 ### 20.18 Copy, IP and units
 
@@ -2312,7 +2340,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 
 313. **[WP5]** A pinned current-aisle plate carries the lemon ring and offset shadow, unbroken into the tray below, in Day and Glow; no row shows above or beside it. — *Test:* golden `tray_current_pinned_day`, `tray_current_pinned_glow` (rows mid-scroll under the plate)
 314. **[WP6]** The celebration summary shows a progress bar that fills over the summary hold, labelled "Closing… tap to keep it"; tapping the summary keeps it open (with a Done button), tapping elsewhere or Back closes it; under TalkBack there is no countdown. — *Test:* `CelebrationTest.progressBarAndKeep` (Robolectric, fake clock), golden `celebration_summary_closing`
-315. **[WP3 · WP5]** The first check-off more than 12 h after the trip's last activity files the old book, clears what was got, starts a new book with the tapped item and shows the "New sticker book for today" toast with Undo; Undo restores everything and checks the item into the old book; nothing asks a question. — *Test:* `TripRulesTest.autoNewBookAfterIdle`, `TripRulesTest.autoNewBookUndo` (unit), `ListInteractionTest.autoNewBookToast` (Robolectric)
+315. **[WP3 · WP5 · WP7]** The first check-off more than 12 h after the trip's last activity files the old book, clears what was got, starts a new book with the tapped item and shows the "New sticker book for today" toast with Undo; Undo restores everything and checks the item into the old book; nothing asks a question. The first add that changes such a list files the book the same way first (its own items: a finished shop stays PERFECT, the streak counts it) and the new items go onto the fresh list ("Fresh sticker book" with Undo); items written down after a finished shop never count in its book. A late Undo (after a New trip, a list switch or a later book) changes nothing and its note is retired. — *Test:* `TripRulesTest.autoNewBookAfterIdle`, `TripRulesTest.autoNewBookUndo`, `TripRulesTest.autoNewBookOnAdd`, `TripRulesTest.itemsAddedAfterTheFinaleStayOutOfTheBook`, `TripRulesTest.weeklyFlow`, `TripRulesTest.newBookStandsUntilSomethingNewer`, `TripFilingTest.addAfterIdleFilesFirstAndUndoTakesItBack`, `TripFilingTest.aLateUndoAfterNewTripChangesNothing` (unit), `ListInteractionTest.autoNewBookToast`, `NewBookTest` (Robolectric)
 316. **[WP8 · WP9]** "Use my area" (off by default) asks only for approximate location after the rationale. With it on, sunset and forecast use the rounded point and the nearest city feed. With it off or denied, they use Toronto. The manifest has `ACCESS_COARSE_LOCATION` and no fine or background location. — *Test:* `PlaceSourceTest` (unit: rounding, fallback, 6 h refresh), `SettingsUseMyAreaTest` (Robolectric: rationale, permission denied → Toronto), `ManifestPermissionsTest`
 317. **[WP10]** PRIVACY.md describes the approximate-area option exactly as §0.4 says. — *Test:* review gate
 318. **[Retired]** ~~**[WP10]** The mockup carries the §0.4 changes: the unbroken pinned ring, the celebration progress bar and Keep, no idle-trip question with the auto new book toast instead, and the Use my area switch.~~ Retired on 2 October: the mockup is reference only (§0.4).

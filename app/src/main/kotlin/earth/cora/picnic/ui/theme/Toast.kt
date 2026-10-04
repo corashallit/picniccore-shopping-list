@@ -4,6 +4,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -68,6 +71,10 @@ data class ToastMessage(
     val actionLabel: String? = null,
     val onAction: (() -> Unit)? = null,
     val undo: Boolean = actionLabel != null && onAction != null,
+    /**
+     * How this toast folds with another of its kind on screen: an Undo toast's merges the next Undo into it (§4.15); an
+     * info note's, on the incoming note, folds it into the one still up ([ToastHostState.show]).
+     */
     val merge: ((current: ToastMessage, incoming: ToastMessage) -> ToastMessage)? = null,
     val id: Long = ToastIds.next(),
     /** A higher reading floor than the toast's 4000 ms (the nudge holds max(6000, readHold), §6.1, §9). */
@@ -113,10 +120,17 @@ class ToastHostState {
     var restingTop: Float? by mutableStateOf(null)
         internal set
 
+    /** The current toast's id once [dismiss] retired it: the host lifts it off now, whatever its hold had left. */
+    internal var retiring: Long? by mutableStateOf(null)
+        private set
+
     private val waiting = mutableStateListOf<ToastMessage>()
 
     /** What waits, oldest first. */
     val queue: List<ToastMessage> get() = waiting.toList()
+
+    /** The current toast stays up for its hold and may still take a merge (it is neither leaving nor retired). */
+    private val settled: Boolean get() = !leaving && current?.id != retiring
 
     /** Shows [message] now, merges it into the current Undo, or queues it. */
     fun show(message: ToastMessage) {
@@ -127,8 +141,16 @@ class ToastHostState {
             generation++
             return
         }
-        if (!leaving && cur.undo && message.undo && cur.kind == message.kind) {
+        if (settled && cur.undo && message.undo && cur.kind == message.kind) {
             current = cur.merge?.invoke(cur, message) ?: defaultMerge(cur, message)
+            generation++
+            return
+        }
+        // An info note that knows how to fold itself into the one of its kind still up does (a refresh's stickers drawn
+        // after its sorting, §6.1): one note, its hold starting again.
+        val fold = message.merge
+        if (settled && fold != null && !cur.undo && !message.undo && cur.kind == message.kind) {
+            current = fold(cur, message)
             generation++
             return
         }
@@ -142,7 +164,19 @@ class ToastHostState {
         if (current?.id != id) return
         current = waiting.removeFirstOrNull()
         leaving = false
+        retiring = null
         if (current != null) generation++
+    }
+
+    /**
+     * Retires every toast of [kind] whose offer no longer holds (§4.15; the list's nudge once a New trip has started a
+     * fresh book, an automatic new book's Undo once a later book was filed): the queued ones go at once, and the one on
+     * screen lifts off now, Undo or not, however long its hold had left.
+     */
+    fun dismiss(kind: String) {
+        waiting.removeAll { it.kind == kind }
+        val cur = current ?: return
+        if (cur.kind == kind && !leaving) retiring = cur.id
     }
 
     private fun defaultMerge(cur: ToastMessage, incoming: ToastMessage): ToastMessage {
@@ -179,10 +213,12 @@ fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset:
                 drop.animateTo(1f, if (reduced) tween(PicnicMotion.rmFade.durationMillis) else tween(PicnicMotion.toastIn.durationMillis, easing = PicnicMotion.toastIn.easing))
                 dropped = m.id
             }
-            // The hold, on the frame clock; a pause (a cover over the toast) waits, then the full hold starts again.
+            // The hold, on the frame clock; a pause (a cover over the toast) waits, then the full hold starts again. A
+            // toast retired meanwhile (ToastHostState.dismiss) cuts its hold short, paused or not.
             val hold = toastHold(m, timeouts)
-            while (!holdUnlessPaused(hold) { state.paused }) {
-                snapshotFlow { state.paused }.first { !it }
+            val retired = { state.retiring == m.id }
+            while (!retired() && !holdUnlessPaused(hold) { state.paused || retired() }) {
+                snapshotFlow { state.paused && !retired() }.first { !it }
             }
             state.leaving = true
             lift.animateTo(1f, if (reduced) tween(PicnicMotion.rmFade.durationMillis) else tween(PicnicMotion.toastOut.durationMillis, easing = PicnicMotion.toastOut.easing))
@@ -285,14 +321,19 @@ fun StickyNote(
         ) {
             PicnicText(message, style = PicnicTheme.type.toast)
             if (actionLabel != null) {
+                // Pressed, the chip sticker drops onto its shadow in 2 steps like the kit's chips (never a ripple, §0.2,
+                // §4.7); focused, it wears their 2 dp ring.
+                val interaction = remember { MutableInteractionSource() }
+                val pressed by interaction.collectIsPressedAsState()
+                val focused by interaction.collectIsFocusedAsState()
                 Box(
                     Modifier
                         .align(Alignment.End)
                         .minimumInteractiveComponentSize()
-                        .clickable(role = Role.Button, onClick = onAction),
+                        .clickable(interaction, indication = null, role = Role.Button, onClick = onAction),
                     contentAlignment = Alignment.Center,
                 ) {
-                    ChipFace(fill = c.stickerWhite, height = 32.dp, border = 0.dp, horizontal = 12.dp) {
+                    ChipFace(fill = c.stickerWhite, height = 32.dp, border = 0.dp, horizontal = 12.dp, press = rememberPressFraction(pressed), focused = focused) {
                         Glyph(PicnicGlyph.Undo, null, tint = c.ballpoint, size = 16.dp)
                         Text(actionLabel, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
                     }

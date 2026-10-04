@@ -42,7 +42,9 @@ import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.core.model.setRarity
 import earth.cora.picnic.core.model.restoreItem
 import earth.cora.picnic.core.model.storeAisleNumber
+import earth.cora.picnic.core.store.AlbumStore
 import earth.cora.picnic.core.store.StateStore
+import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.R
 import earth.cora.picnic.icons.IconRepository
 import earth.cora.picnic.platform.Announcer
@@ -117,6 +119,11 @@ class AddViewModel(
     private val announcer: Announcer = NoOpAnnouncer,
     /** The app's words for [announcer] (a string resource id to its text). */
     private val words: (Int) -> String = { "" },
+    /**
+     * The album: an add more than 12 h after a trip's last activity files that trip's book first (§0.4 Q9's add-side
+     * twin, TripFiling.addItems). Null (tests that only add) adds straight to the list.
+     */
+    private val album: AlbumStore? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         AddUiState(
@@ -724,14 +731,31 @@ class AddViewModel(
         // Egg 6: only a new sticker rolls (optional and pantry rows she switched on too); a revived row or one already
         // there keeps its own. Remembered per id, so the roll is the same however often the update runs.
         val rolled = HashMap<String, Rarity>()
+        val roll = { next: AppState, o: AddOutcome ->
+            o.added.fold(next) { acc, id ->
+                val rarity = rolled.getOrPut(id) { surprises.rollRarity() }
+                if (rarity == Rarity.NONE) acc else acc.setRarity(listId, id, rarity)
+            }
+        }
+        // §0.4 Q9's add-side twin: the first add more than 12 h after the trip's last activity files its book first
+        // (the album before the state, §7.2) and the items go onto a fresh list; the List turns the book and offers Undo.
+        var newBook: TripFiling.Toggle? = null
         val after = try {
-            store.update { st ->
-                before = st.list(listId)?.items.orEmpty()
-                val (next, o) = st.addItems(listId, items, now)
-                outcome = o
-                o.added.fold(next) { acc, id ->
-                    val rarity = rolled.getOrPut(id) { surprises.rollRarity() }
-                    if (rarity == Rarity.NONE) acc else acc.setRarity(listId, id, rarity)
+            val albumStore = album
+            if (albumStore != null) {
+                val add = TripFiling.addItems(store, albumStore, listId, items, now) { st, next, o ->
+                    before = st.list(listId)?.items.orEmpty()
+                    outcome = o
+                    roll(next, o)
+                }
+                newBook = add.newBook
+                add.state
+            } else {
+                store.update { st ->
+                    before = st.list(listId)?.items.orEmpty()
+                    val (next, o) = st.addItems(listId, items, now)
+                    outcome = o
+                    roll(next, o)
                 }
             }
         } catch (e: IOException) {
@@ -768,6 +792,7 @@ class AddViewModel(
             revived = revived,
             aisleTitle = aisleTitle,
             asTypedNoKey = noKey && added.isNotEmpty(),
+            newBook = newBook,
         )
         _state.update {
             it.cleared().copy(
@@ -891,6 +916,7 @@ class AddViewModel(
                     feedback = c.feedback,
                     announcer = c.announcer,
                     words = { id -> app?.getString(id).orEmpty() },
+                    album = c.album,
                 )
             }
         }

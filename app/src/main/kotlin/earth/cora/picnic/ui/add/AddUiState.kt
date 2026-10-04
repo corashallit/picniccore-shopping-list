@@ -10,6 +10,7 @@ import earth.cora.picnic.core.assistant.WebSource
 import earth.cora.picnic.core.model.AisleStyle
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconRef
+import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.core.model.ItemSource
 
 /*
@@ -218,6 +219,11 @@ data class AddCommit(
     val aisleTitle: String? = null,
     /** Rule 2: no key, so the text went on as typed ("Added as typed · add your OpenAI key for smart sorting"). */
     val asTypedNoKey: Boolean = false,
+    /**
+     * The add came more than 12 h after the trip's last activity, so it filed that trip's book first and the items went
+     * onto a fresh list (§0.4 Q9's add-side twin): the List turns the book and offers Undo with it. Null otherwise.
+     */
+    val newBook: TripFiling.Toggle? = null,
 ) {
     val canUndo: Boolean get() = added.isNotEmpty() || revived.isNotEmpty()
 

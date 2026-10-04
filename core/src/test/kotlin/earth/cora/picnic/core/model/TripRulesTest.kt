@@ -155,4 +155,136 @@ class TripRulesTest {
         assertTrue(TripRules.startsNewBook(l, 6 + TripRules.IDLE_MILLIS))
         assertFalse(TripRules.startsNewBook(list(item("a")), Long.MAX_VALUE), "no trip, nothing to file")
     }
+
+    /** A shop of [n] items, all checked between [start] and [start] + n min, finale shown a minute after. */
+    private fun finishedShop(start: Long, vararg names: String): AppState {
+        val base = AppState(
+            lists = listOf(GroceryList("l1", "Groceries", 0, names.map { item(it) })),
+            currentListId = "l1",
+            store = StoreProfile(name = "Hillcrest Market"),
+        )
+        val done = names.foldIndexed(base) { i, s, n -> s.toggleChecked("l1", n, start + i * min) }
+        return done.markFinaleShown("l1", start + names.size * min)
+    }
+
+    /**
+     * §7.1, §7.8 (item 315): items she writes down after a finished shop are for the next one. The book keeps its
+     * spots, stamps and PERFECT; the list has more to get.
+     */
+    @Test
+    fun itemsAddedAfterTheFinaleStayOutOfTheBook() {
+        val start = 1_000_000L
+        val shop = finishedShop(start, "bread", "milk", "eggs")
+        val evening = start + 9 * hour
+        val more = shop.addItems("l1", listOf(item("salt", addedAt = evening), item("tea", addedAt = evening)), evening).first
+        val list = more.list("l1")!!
+        assertFalse(TripRules.isComplete(list), "the list has more to get")
+        assertTrue(TripRules.bookComplete(list), "the shop's book is still complete")
+        assertEquals(listOf("bread", "milk", "eggs"), TripRules.bookItems(list).map { it.id })
+        val book = more.tripBook("l1", evening)!!
+        assertEquals(3, book.total)
+        assertTrue(book.perfect)
+        assertEquals(start + 2 * min, book.completedAt, "when the shop was completed")
+        assertTrue(book.stamps.all { it.done })
+        // Before the finale every item counts: an item added mid-shop is a spot at once.
+        val midShop = AppState(
+            lists = listOf(GroceryList("l1", "Groceries", 0, listOf(item("bread"), item("milk")))),
+            currentListId = "l1",
+        ).toggleChecked("l1", "bread", start).addItems("l1", listOf(item("tea", addedAt = start + min)), start + min).first
+        assertEquals(3, TripRules.bookItems(midShop.list("l1")!!).size)
+        // Un-checking one of the shop's own items still costs the book its PERFECT.
+        val oops = more.toggleChecked("l1", "milk", evening + min).list("l1")!!
+        assertFalse(TripRules.bookComplete(oops))
+    }
+
+    /** §0.4 Q9's add-side twin (item 315): the first add more than 12 h after the trip's last activity files the book. */
+    @Test
+    fun autoNewBookOnAdd() {
+        val start = 1_000_000L
+        val shop = finishedShop(start, "bread", "milk", "eggs")
+        val old = shop.list("l1")!!.trip!!
+
+        // Within 12 h: the add joins the list; nothing is filed.
+        val soon = old.lastActivityAt + TripRules.IDLE_MILLIS
+        val (same, sameOutcome, none) = shop.addItemsStartingNewBook("l1", listOf(item("salt", addedAt = soon)), soon)
+        assertNull(none)
+        assertEquals(listOf("salt"), sameOutcome.added)
+        assertEquals(old.id, same.list("l1")!!.trip!!.id)
+
+        // Tuesday: the book is filed as it stands (PERFECT), what was got is cleared, and "milk" is a new row, not a
+        // sticker peeled out of last week's book.
+        val tuesday = start + 3 * 24 * hour
+        val (after, outcome, auto) = shop.addItemsStartingNewBook("l1", listOf(item("milk-2").copy(name = "milk", addedAt = tuesday), item("jam", addedAt = tuesday)), tuesday)
+        assertNotNull(auto)
+        assertEquals(old.id, auto.book.id)
+        assertTrue(auto.book.perfect)
+        assertEquals(3, auto.book.total)
+        assertEquals(listOf("milk-2", "jam"), outcome.added)
+        assertTrue(outcome.revived.isEmpty())
+        val list = after.list("l1")!!
+        assertEquals(listOf("milk-2", "jam"), list.items.map { it.id })
+        assertNull(list.trip, "the next book opens at the next check-off")
+        assertEquals(tuesday, list.lastClosedAt)
+        assertEquals(NewBookUndo("l1", null, old, shop.list("l1")!!.items.withIndex().toList(), null, null), auto.undo)
+        assertTrue(after.newBookStands(auto))
+
+        // An add that changes nothing (a row already on the list) files nothing.
+        val waiting = shop.toggleChecked("l1", "eggs", start + 10 * min)
+        val (unchanged, dup, nothing) = waiting.addItemsStartingNewBook("l1", listOf(item("eggs-again").copy(name = "eggs")), tuesday)
+        assertNull(nothing)
+        assertSame(waiting, unchanged)
+        assertEquals(listOf("eggs"), dup.alreadyThere)
+
+        // Undo: the old book and its stickers come back; the new rows stay, out of the finished book, and the trip
+        // keeps its old activity time (an add checks nothing).
+        val undone = after.undoNewBook(auto.undo, tuesday + min).list("l1")!!
+        assertEquals(listOf("bread", "milk", "eggs", "milk-2", "jam"), undone.items.map { it.id })
+        assertEquals(old.id, undone.trip!!.id)
+        assertEquals(old.lastActivityAt, undone.trip!!.lastActivityAt)
+        assertTrue(TripRules.bookComplete(undone))
+    }
+
+    /**
+     * Cora's week (§0.4 Q9: build the list over the week, shop once; item 315). Saturday's finished shop, an add that
+     * evening, more on Tuesday, the next Saturday's shop: last week's book is filed PERFECT and the new shop has its
+     * own book.
+     */
+    @Test
+    fun weeklyFlow() {
+        val saturday = 1_000_000L
+        val shop = finishedShop(saturday, "bread", "milk", "eggs")
+        val evening = saturday + 8 * hour
+        val (sat, _, none) = shop.addItemsStartingNewBook("l1", listOf(item("salt", addedAt = evening)), evening)
+        assertNull(none)
+        val tuesday = saturday + 3 * 24 * hour
+        val (tue, _, auto) = sat.addItemsStartingNewBook("l1", listOf(item("tea", addedAt = tuesday), item("milk-2").copy(name = "milk", addedAt = tuesday)), tuesday)
+        assertNotNull(auto)
+        assertTrue(auto.book.perfect, "the evening's salt never joined Saturday's book")
+        assertEquals(3, auto.book.total)
+        assertEquals(3, auto.book.stickers.size)
+        assertEquals(listOf("salt", "tea", "milk-2"), tue.list("l1")!!.items.map { it.id })
+        val next = saturday + 7 * 24 * hour
+        val (shopping, again) = tue.toggleCheckedStartingNewBook("l1", "tea", next)
+        assertNull(again, "the old book is filed already: the first check-off just opens the new one")
+        val trip = shopping.list("l1")!!.trip!!
+        assertEquals(TripRules.tripId("l1", next), trip.id)
+        assertEquals(1, shopping.tripBook("l1", next)!!.stickers.size)
+    }
+
+    /** The automatic new book's Undo applies only while that book stands (§0.4 Q9). */
+    @Test
+    fun newBookStandsUntilSomethingNewer() {
+        val start = 1_000_000L
+        val s = finishedShop(start, "bread", "milk").addItems("l1", listOf(item("eggs", addedAt = start + hour)), start + hour).first
+        val later = start + 2 * 24 * hour
+        val (fresh, auto) = s.toggleCheckedStartingNewBook("l1", "eggs", later)
+        assertNotNull(auto)
+        assertTrue(fresh.newBookStands(auto))
+        assertTrue(fresh.toggleChecked("l1", "eggs", later + min).newBookStands(auto), "the tapped item un-checked: still the same book")
+        assertFalse(fresh.newTrip("l1", NewTripMode.CLEAR_GOTTEN, later + min).first.newBookStands(auto), "a New trip filed the fresh book")
+        val closed = fresh.toggleChecked("l1", "eggs", later + min)
+        assertFalse(closed.toggleChecked("l1", "eggs", later + 2 * min).newBookStands(auto), "a later book")
+        val twoLists = fresh.copy(lists = fresh.lists + GroceryList("l2", "Party", 0))
+        assertFalse(twoLists.deleteList("l1", later + min).first.newBookStands(auto), "the list is gone")
+    }
 }

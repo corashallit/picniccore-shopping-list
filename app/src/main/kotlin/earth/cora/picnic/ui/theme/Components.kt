@@ -405,14 +405,26 @@ internal fun rememberPressFraction(pressed: Boolean): Float {
 
 /**
  * A 2 dp focus ring 3 dp outside [shape] (keyboard / switch access): flat, never a glow. Every kit control draws it in
- * the page's ink (ballpoint in Day, white in Glow), so it shows on the navy page too.
+ * the page's ink (ballpoint in Day, white in Glow), so it shows on the navy page too. The list's own pieces (rows,
+ * strips, the tray's chevron, the sticker book) wear the same ring through [showsFocusRing] (§4.4).
  */
-internal fun Modifier.focusRing(shape: Shape, color: Color, visible: Boolean): Modifier = if (!visible) this else drawBehind {
+fun Modifier.focusRing(shape: Shape, color: Color, visible: Boolean): Modifier = if (!visible) this else drawBehind {
     val gap = 3.dp.toPx()
     val w = 2.dp.toPx()
     val grow = gap + w / 2f
     val outline = shape.createOutline(Size(size.width + grow * 2, size.height + grow * 2), layoutDirection, this)
     translate(-grow, -grow) { drawOutline(outline, color, style = Stroke(w)) }
+}
+
+/**
+ * Whether a piece focused through [interaction] wears its focus ring (§4.4, §15): while it has focus and the keyboard
+ * (or a switch acting as one) is driving focus. A piece that also takes focus in touch mode, so a fold can hand focus
+ * to it (§8.5), shows no ring after a tap: a ring is a keyboard user's cursor, not a touch mark.
+ */
+@Composable
+fun showsFocusRing(interaction: androidx.compose.foundation.interaction.InteractionSource): Boolean {
+    val focused by interaction.collectIsFocusedAsState()
+    return focused && androidx.compose.ui.platform.LocalInputModeManager.current.inputMode == androidx.compose.ui.input.InputMode.Keyboard
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -1768,16 +1780,20 @@ fun PicnicSwitch(
     val shape = PicnicTheme.shapes.pill
     val shadows = PicnicTheme.shadows
     val c = PicnicTheme.colors
+    // No ripple (§0.2): the knob's move is the switch's feedback; focus wears the kit's ring round the pill.
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Box(
         modifier
             .minimumInteractiveComponentSize()
-            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .toggleable(value = checked, interactionSource = interaction, indication = null, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
             .alpha(if (enabled) 1f else 0.5f),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
                 .size(width = 40.dp, height = 24.dp)
+                .focusRing(shape, c.ink, focused)
                 .hardShadow(shape, shadows)
                 .clip(shape)
                 .background(c.stickerWhite)
@@ -1827,14 +1843,17 @@ fun KeepSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: M
             }
         }
     }
+    // No ripple (§0.2): the star pressed onto the spot is the switch's feedback; focus wears the kit's ring round the spot.
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Box(
         modifier
             .size(48.dp)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .toggleable(value = checked, interactionSource = interaction, indication = null, role = Role.Switch, onValueChange = onCheckedChange)
             .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        StickerSpot(size = 30.dp)
+        StickerSpot(Modifier.focusRing(CircleShape, PicnicTheme.colors.ink, focused), size = 30.dp)
         if (checked) {
             DecorSticker(
                 "star",

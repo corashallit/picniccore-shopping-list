@@ -12,6 +12,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -108,6 +110,7 @@ import earth.cora.picnic.ui.add.AddDock
 import earth.cora.picnic.ui.add.AddEventsEffect
 import earth.cora.picnic.ui.add.AddRules
 import earth.cora.picnic.ui.add.AddSheetHost
+import earth.cora.picnic.ui.common.NoMaterialPress
 import earth.cora.picnic.ui.add.AddViewModel
 import earth.cora.picnic.ui.add.rememberAddFlows
 import earth.cora.picnic.ui.edit.EditItemSheet
@@ -221,6 +224,9 @@ class ListScreenState(
     var newTripOpen by mutableStateOf(newTripOpen)
     var tripBookOpen by mutableStateOf(tripBookOpen)
 
+    /** The book spot the Trip book sheet opens at (§6.6): where the list's book was when she opened it. */
+    var tripBookSlot by mutableIntStateOf(0)
+
     /** The folded strip whose basket is held open (§5.3), or null. */
     var peek by mutableStateOf(peek)
 
@@ -236,9 +242,17 @@ class ListScreenState(
     /** The scroll collapsed the app bar and the book. */
     var scrolledDown by mutableStateOf(false)
 
-    /** Item id -> its pop (a new row or a duplicate, §6.2). */
+    /**
+     * Item id -> its pop (a new row or a duplicate, §6.2). A pop plays once: the row hands it back when it has played
+     * ([popped]), and one whose row was not on screen in time (a folded aisle, a row scrolled away) lapses
+     * ([expirePops]), so no row ever flashes again when it comes back, or for the first time hours later.
+     */
     val pops = mutableStateMapOf<String, PopRequest>()
-    private var popGen = 0
+
+    /** The latest commit's pops (bumped by [pop]); the list lets them lapse [PopRequest.window] ms on. */
+    internal var popGeneration by mutableIntStateOf(0)
+        private set
+    private val popsStarted = HashSet<String>()
 
     /** Her own fold and unfold taps (FoldFocusEffect). */
     val toggles = FoldToggles()
@@ -263,9 +277,27 @@ class ListScreenState(
 
     /** Pops the stickers of a commit's rows, the new ones 80 ms apart (§6.2), the ones already there at once. */
     fun pop(commit: AddCommit) {
-        popGen++
-        commit.added.forEachIndexed { i, item -> pops[item.id] = PopRequest(popGen, commit.popDelayMillis(i)) }
-        commit.alreadyThere.forEach { pops[it.id] = PopRequest(popGen, 0) }
+        val gen = popGeneration + 1
+        commit.added.forEachIndexed { i, item -> pops[item.id] = PopRequest(gen, commit.popDelayMillis(i)) }
+        commit.alreadyThere.forEach { pops[it.id] = PopRequest(gen, 0) }
+        popGeneration = gen
+    }
+
+    /** [itemId]'s pop of [generation] has started to play (it is no longer lapsed by [expirePops]). */
+    internal fun popStarted(itemId: String, generation: Int) {
+        popsStarted += "$itemId:$generation"
+    }
+
+    /** [itemId]'s pop of [generation] has played: it never plays again. */
+    internal fun popped(itemId: String, generation: Int) {
+        popsStarted -= "$itemId:$generation"
+        if (pops[itemId]?.generation == generation) pops.remove(itemId)
+    }
+
+    /** The pops up to [generation] that have not started by now lapse: their rows were not on screen in time. */
+    internal fun expirePops(generation: Int) {
+        val lapsed = pops.filter { (id, p) -> p.generation <= generation && "$id:${p.generation}" !in popsStarted }.keys
+        lapsed.forEach { pops.remove(it) }
     }
 
     internal fun focusOf(sectionId: String): Pair<FocusRequester, FocusRequester> = focus.getOrPut(sectionId) { FocusRequester() to FocusRequester() }
@@ -287,8 +319,13 @@ class ListScreenState(
          * scroll had folded the bar and the book (the list keeps its own scroll).
          */
         val Saver: Saver<ListScreenState, Any> = listSaver(
-            save = { listOf(it.menuOpen, it.newTripOpen, it.tripBookOpen, it.scrolledDown) },
-            restore = { ListScreenState(menuOpen = it[0], newTripOpen = it[1], tripBookOpen = it[2]).apply { scrolledDown = it[3] } },
+            save = { listOf(it.menuOpen, it.newTripOpen, it.tripBookOpen, it.scrolledDown, it.tripBookSlot) },
+            restore = {
+                ListScreenState(menuOpen = it[0] as Boolean, newTripOpen = it[1] as Boolean, tripBookOpen = it[2] as Boolean).apply {
+                    scrolledDown = it[3] as Boolean
+                    tripBookSlot = it[4] as Int
+                }
+            },
         )
     }
 }
@@ -307,6 +344,8 @@ fun ListRoute(
     onOpenAisles: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    // Back from the background (maybe hours later): today's date on a fresh book, the idle trip's nudge (§6.1, §7.1).
+    androidx.lifecycle.compose.LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResumed() }
     val state by vm.state.collectAsStateWithLifecycle()
     val addState by addVm.state.collectAsStateWithLifecycle()
     val surprises by vm.surprisesState.collectAsStateWithLifecycle()
@@ -330,27 +369,42 @@ fun ListRoute(
                 is ListEvent.Deleted -> toasts.show(tears.toast(event))
                 is ListEvent.NewBook -> {
                     // The nudge asked for exactly this; once the fresh book has started it has nothing left to offer.
-                    toasts.current?.takeIf { it.kind == NUDGE_KIND }?.let { toasts.finished(it.id) }
+                    toasts.dismiss(NUDGE_KIND)
                     toasts.show(
                         ToastMessage(
-                            resources.getString(R.string.list_toast_new_book),
-                            kind = "book",
+                            resources.getString(if (event.byAdd) R.string.list_toast_new_book_add else R.string.list_toast_new_book),
+                            kind = BOOK_KIND,
                             actionLabel = resources.getString(R.string.list_undo),
                             onAction = event.undo,
                         ),
                     )
                 }
-                ListEvent.NewTrip -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_new_trip), kind = "trip"))
+                ListEvent.NewTrip -> {
+                    // A New trip filed the book: the nudge has nothing left to offer, and an earlier automatic book's
+                    // Undo no longer applies (§6.1, §6.5, §0.4 Q9).
+                    toasts.dismiss(NUDGE_KIND)
+                    toasts.dismiss(BOOK_KIND)
+                    toasts.show(ToastMessage(resources.getString(R.string.list_toast_new_trip), kind = "trip"))
+                }
+                is ListEvent.Switched -> {
+                    // Another list: the last one's nudge and new-book Undo are about a book no longer on screen (§6.4).
+                    toasts.dismiss(NUDGE_KIND)
+                    toasts.dismiss(BOOK_KIND)
+                }
                 is ListEvent.Nudge -> toasts.show(
                     ToastMessage(
                         resources.getString(R.string.list_toast_nudge),
                         kind = NUDGE_KIND,
                         actionLabel = resources.getString(R.string.list_toast_nudge_action),
-                        onAction = { screen.newTripOpen = true },
+                        // Only while the list it was offered on still has a trip to close: never a sheet left waiting.
+                        onAction = {
+                            val now = vm.state.value
+                            if (now.listId == event.listId && now.canStartNewTrip) screen.newTripOpen = true
+                        },
                         minHoldMs = NUDGE_FLOOR,
                     ),
                 )
-                is ListEvent.Refreshed -> refreshedText(resources, event)?.let { toasts.show(ToastMessage(it, kind = "sync")) }
+                is ListEvent.Refreshed -> refreshedToast(resources, event)?.let { toasts.show(it) }
                 is ListEvent.Message -> toasts.show(ToastMessage(event.text, kind = "save"))
             }
         }
@@ -359,8 +413,12 @@ fun ListRoute(
         addFlows,
         toasts,
         // The add flows tell the eggs about the commit themselves (AddViewModel → SurpriseEngine.onCommitted, §19.2):
-        // the list only pops the rows, so eggs 3, 6, 9 and 17 fire once per commit.
-        onCommitted = { commit -> screen.pop(commit) },
+        // the list pops the rows, and turns the book when the add started a new one (§0.4 Q9, its add-side twin), so
+        // eggs 3, 6, 9 and 17 fire once per commit.
+        onCommitted = { commit ->
+            screen.pop(commit)
+            commit.newBook?.let { vm.addStartedNewBook(commit.listId, it) }
+        },
     )
     // The add flows send to the list on screen.
     LaunchedEffect(state.listId) {
@@ -430,14 +488,33 @@ fun ListRoute(
         feedback = vm.feedback,
     )
     // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet.
-    AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry)
+    NoMaterialPress { AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry) }
 }
 
 /** The nudge's toast kind. */
-private const val NUDGE_KIND: String = "nudge"
+internal const val NUDGE_KIND: String = "nudge"
+
+/** The automatic new book's toast kind (its Undo, §0.4 Q9). */
+internal const val BOOK_KIND: String = "book"
 
 /** The nudge's reading floor (§6.1, §9: it carries an action): 6 s. */
 private const val NUDGE_FLOOR: Long = 6000
+
+/** The refresh notes' toast kind. */
+internal const val SYNC_KIND: String = "sync"
+
+/**
+ * The refresh's sticky note (§6.1), or null when nothing changed. One refresh says it all on one note: the stickers it
+ * drew arrive after the sorting (their event carries both counts), and fold into the sorting's note while that is still
+ * up ("Sorted 2 items · 1 new sticker drawn", its hold starting again); once that note has gone, a note of their own
+ * says only what is new ("1 new sticker drawn").
+ */
+internal fun refreshedToast(resources: Resources, e: ListEvent.Refreshed): ToastMessage? {
+    val full = refreshedText(resources, e) ?: return null
+    if (e.drawn == 0 || e.sorted == 0) return ToastMessage(full, kind = SYNC_KIND)
+    val alone = refreshedText(resources, e.copy(sorted = 0, left = 0)) ?: return null
+    return ToastMessage(alone, kind = SYNC_KIND, merge = { current, _ -> ToastMessage(full, kind = SYNC_KIND, id = current.id) })
+}
 
 /** "Sorted 2 items · 1 new sticker drawn" (§6.1), or null when nothing changed. */
 internal fun refreshedText(resources: Resources, e: ListEvent.Refreshed): String? {
@@ -512,10 +589,11 @@ fun ListScreen(
     collapse: AddBarCollapseState? = null,
     /** The docked add bar; [bar] goes on it (the eggs' `addbar` anchor, its words' keep-out, its measured height). */
     dock: @Composable BoxScope.(bar: Modifier) -> Unit = { bar ->
-        // The bar wears the eggs' tape (the season's, the rain's) when the eggs run here, else the season the book shows.
+        // The bar wears the eggs' tape (the season's, the rain's) when the eggs run here, else the list's season (the
+        // same on an empty list, which has no book to show it, §4.14).
         val eggs = LocalListEggs.current
         StaticDock(
-            tape = AddRules.addBarTape(if (eggs.enabled) eggs else SurpriseState(season = state.book?.season)),
+            tape = AddRules.addBarTape(if (eggs.enabled) eggs else SurpriseState(season = state.season)),
             modifier = bar,
             tapeAfterDoodle = eggs.umbrella,
         )
@@ -534,6 +612,15 @@ fun ListScreen(
 ) {
     MotionEngineHost(engine, nextStopCard = state.nextStopCard, celebration = state.celebration, eggs = state.eggs, talkBackOverride = talkBackOverride)
     val p = engine.current.value
+    // A commit's pops play while their rows are on screen; the ones whose rows were not (a folded aisle, a row scrolled
+    // away) lapse once the last would have finished, on the frame clock (§6.2: a pop belongs to the commit's moment).
+    LaunchedEffect(screen.popGeneration) {
+        val gen = screen.popGeneration
+        if (gen == 0) return@LaunchedEffect
+        val window = screen.pops.values.filter { it.generation == gen }.maxOfOrNull { it.window } ?: 0L
+        withContext(FixedMotionScale) { holdOnFrameClock(window) }
+        screen.expirePops(gen)
+    }
     // SYNC holds on the LCD for the LCD-word floor after each refresh, on the frame clock (§6.1, §9).
     LaunchedEffect(screen.sunSpin) {
         if (!screen.syncing) return@LaunchedEffect
@@ -564,11 +651,15 @@ fun ListScreen(
     val indexOfSection = remember { { id: String -> latestEntries.indexOfFirst { it.sectionId == id && (it is Entry.Strip || it is Entry.Header) } } }
     val host: @Composable EggListScope.() -> Unit = {
         CompositionLocalProvider(LocalListEggs provides eggs, LocalListSurprises provides surprises) {
-            ListScreenContent(
-                state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
-                // Egg 18: while a printed receipt waits for its tap, a scroll leaves the book open under it (§13.2).
-                bookCollapsed = (screen.scrolledDown && !receiptWaits) || ime || shortWindow,
-            )
+            // No Material default survives (§0.2): anything on the list that falls back on LocalIndication (inside
+            // PicnicTheme that is Material's ripple) shows no ripple here; the kit draws its own pressed states.
+            NoMaterialPress {
+                ListScreenContent(
+                    state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
+                    // Egg 18: while a printed receipt waits for its tap, a scroll leaves the book open under it (§13.2).
+                    bookCollapsed = (screen.scrolledDown && !receiptWaits) || ime || shortWindow,
+                )
+            }
         }
     }
     if (imeVisible != null) {
@@ -606,6 +697,12 @@ private fun EggListScope.ListScreenContent(
     dock: @Composable BoxScope.(bar: Modifier) -> Unit,
     bookCollapsed: Boolean,
 ) {
+    // The New trip sheet is only ever up over a trip it can file: once the list has none (a New trip from the menu, the
+    // last sticker peeled), a request still pending is dropped, so the sheet never opens unasked later and the add bar
+    // is free to fold (§6.5, item 116).
+    LaunchedEffect(state.canStartNewTrip, state.loading) {
+        if (!state.loading && !state.canStartNewTrip) screen.newTripOpen = false
+    }
     Box(modifier.fillMaxSize()) {
         PicnicBackground(Modifier.fillMaxSize()) {
             // Egg 1: the ground being left fades out over the new one, beneath everything else.
@@ -625,7 +722,10 @@ private fun EggListScope.ListScreenContent(
                     actions = actions,
                     onMore = { screen.menuOpen = true },
                     onMoreBounds = { screen.moreBounds = it },
-                    onOpenBook = { screen.tripBookOpen = true },
+                    onOpenBook = { slot ->
+                        screen.tripBookSlot = slot
+                        screen.tripBookOpen = true
+                    },
                 )
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when {
@@ -687,6 +787,7 @@ private fun EggListScope.ListScreenContent(
             book = if (screen.tripBookOpen) state.tripBook else null,
             dateLabel = state.book?.dateLabel.orEmpty(),
             onClose = { screen.tripBookOpen = false },
+            initialSlot = screen.tripBookSlot,
         )
         CelebrationHost(engine, p)
     }
@@ -1068,6 +1169,7 @@ private fun AisleList(
                             anchors = anchors,
                             actions = rowActions,
                             pop = screen.pops[e.row.id],
+                            onPop = { generation, done -> if (done) screen.popped(e.row.id, generation) else screen.popStarted(e.row.id, generation) },
                             sweepT0 = beat?.sweepT0.takeIf { beat?.sweepItem == e.row.id },
                             ambientClock = ambient.clock,
                             current = e.s.id == currentId,
@@ -1270,20 +1372,39 @@ private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScree
         MenuItem(stringResource(R.string.menu_album), PicnicGlyph.Album, actions.onOpenAlbum),
         MenuItem(stringResource(R.string.menu_settings), PicnicGlyph.Settings, actions.onOpenSettings),
     )
-    Box(Modifier.fillMaxSize()) {
+    val density = LocalDensity.current
+    val navBottom = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    val statusTop = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // It drops from the More button and stops 8 dp above the window's bottom (and the navigation bar); its rows
+        // scroll when they need more room. Where less than about three rows would fit under the button (landscape, a
+        // short pane), it rises instead so that it ends 8 dp above the bottom (§4.24, §15: every item reachable).
+        val top = with(density) { ((anchor?.bottom ?: 0f) - origin.y).toDp() }
+        val room = maxHeight - navBottom - MENU_MARGIN - top
+        val rises = room < MENU_MIN_ROOM
         OverflowMenu(
             items,
             onDismissRequest = close,
+            maxHeight = if (rises) (maxHeight - navBottom - statusTop - MENU_MARGIN * 2).coerceAtLeast(MENU_MIN_ROOM) else room,
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset {
-                    val top = ((anchor?.bottom ?: 0f) - origin.y).roundToInt()
-                    IntOffset(-8.dp.roundToPx(), top)
-                }
+                .align(if (rises) Alignment.BottomEnd else Alignment.TopEnd)
+                .then(
+                    if (rises) {
+                        Modifier.padding(end = 8.dp, bottom = navBottom + MENU_MARGIN)
+                    } else {
+                        Modifier.offset { IntOffset(-8.dp.roundToPx(), top.roundToPx()) }
+                    },
+                )
                 .testTag(LIST_MENU_TAG),
         )
     }
 }
+
+/** The overflow menu keeps this far from the window's bottom edge (and from the top when it rises). */
+private val MENU_MARGIN: Dp = 8.dp
+
+/** Under the More button the menu needs room for about three rows, else it rises to fit (§4.24). */
+private val MENU_MIN_ROOM: Dp = 156.dp
 
 /** The overflow menu's test tag. */
 const val LIST_MENU_TAG: String = "picnic_list_menu"

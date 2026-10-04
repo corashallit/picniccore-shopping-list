@@ -10,7 +10,7 @@
     </plurals>
 
     <!-- A folded strip (§4.10): "A3 · 2 left of 5" / "5 of 5 in the basket"; TalkBack "Aisle 1, Produce: 2 left of 5". -->
-    <string name="list_strip_store_prefix">"A%1$d · "</string>
+    <string name="list_strip_after_chip">"· "</string>
     <string name="list_strip_left_count">%1$d left</string>
     <string name="list_strip_left_tail">" of %1$d"</string>
     <string name="list_strip_done_count">%1$d of %2$d</string>
@@ -99,6 +99,9 @@
         <item quantity="other">%1$d items torn out</item>
     </plurals>
     <string name="list_toast_new_book">New sticker book for today ✦ your last shop is in the album</string>
+    <!-- §0.4 Q9's add-side twin: the first add after 12 h idle filed the last shop's book; the next book opens at the
+         next check-off, so this one names no day. -->
+    <string name="list_toast_new_book_add">Fresh sticker book ✦ your last shop is in the album</string>
     <string name="list_toast_new_trip">New trip · a fresh sticker book ♡</string>
     <string name="list_toast_nudge">New shop? Start a fresh sticker book</string>
     <string name="list_toast_nudge_action">New trip</string>

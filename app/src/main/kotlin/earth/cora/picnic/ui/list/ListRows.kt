@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -103,11 +104,14 @@ import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
 import earth.cora.picnic.ui.theme.hankoAngle
+import earth.cora.picnic.ui.theme.focusRing
 import earth.cora.picnic.ui.theme.highlighterBand
+import earth.cora.picnic.ui.theme.showsFocusRing
 import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.traySlice
 import kotlin.math.abs
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -130,7 +134,18 @@ internal class RowActions(
 )
 
 /** A pop asked for by a commit (§6.2): the sticker pops and the text band flashes, [delayMs] after [generation] changed. */
-data class PopRequest(val generation: Int, val delayMs: Long)
+data class PopRequest(val generation: Int, val delayMs: Long) {
+    /** How long after the commit the pop may still start: its delay, its 400 ms and a little grace for the layout. */
+    val window: Long get() = delayMs + POP_MS + POP_GRACE_MS
+
+    companion object {
+        /** The pop itself (§6.2): the sticker's .9 → 1.1 → 1 and the band's flash. */
+        const val POP_MS: Long = 400
+
+        /** A row laid out a beat after the commit (the tray opening to show it) still pops. */
+        const val POP_GRACE_MS: Long = 600
+    }
+}
 
 /** How far a swipe must go to act (§4.11): 56 dp. */
 internal val SWIPE_THRESHOLD: Dp = 56.dp
@@ -155,6 +170,8 @@ internal fun TrayRow(
     sweepT0: Long? = null,
     ambientClock: MotionClock? = null,
     current: Boolean = true,
+    /** The pop of a generation started (false) or has played (true): the list never plays it again. */
+    onPop: (generation: Int, done: Boolean) -> Unit = { _, _ -> },
 ) {
     val c = PicnicTheme.colors
     val shadows = PicnicTheme.shadows
@@ -180,6 +197,10 @@ internal fun TrayRow(
     }
     val thresholdPx = with(density) { SWIPE_THRESHOLD.toPx() }
     val minH = rowMinHeight()
+    // The row's press and focus: its focus ring (§4.4) reaches 1 dp past a 56 dp row, so a focused row draws over the
+    // rows around it.
+    val interaction = remember { MutableInteractionSource() }
+    val ringed = showsFocusRing(interaction)
     fun home(ms: Int) {
         settling?.cancel()
         settling = scope.launch {
@@ -195,7 +216,7 @@ internal fun TrayRow(
             .heightIn(min = minH)
             .testTag(ListTags.rowSlot(row.id))
             // The torn halves tumble over the rows and the cap below (§8.6).
-            .zIndex(if (tearT0 != null) 1f else 0f)
+            .zIndex(if (tearT0 != null) 1f else if (ringed) 0.5f else 0f)
             .traySlice(TrayPart.Row, section.look, ring, shadows.color, c.pad, c.rule, first = first, last = last),
     ) {
         val inset = TrayMetrics.panelInset
@@ -220,12 +241,14 @@ internal fun TrayRow(
         val content: @Composable (Modifier) -> Unit = { m ->
             RowContent(
                 row = row,
+                interaction = interaction,
                 twinkleIndex = twinkleIndex,
                 presentation = presentation,
                 clock = clock,
                 anchors = anchors,
                 actions = actions,
                 pop = pop,
+                onPop = onPop,
                 sweepT0 = sweepT0,
                 ambientClock = ambientClock,
                 modifier = m
@@ -450,10 +473,14 @@ internal fun RowContent(
     actions: RowActions,
     modifier: Modifier = Modifier,
     pop: PopRequest? = null,
+    /** The pop of a generation started (false) or has played (true). */
+    onPop: (generation: Int, done: Boolean) -> Unit = { _, _ -> },
     sweepT0: Long? = null,
     ambientClock: MotionClock? = null,
     /** Egg 7: the row's place in its tray (each sticker twinkles 60 ms after the one before). */
     twinkleIndex: Int = 0,
+    /** The row's press and focus (its slot hoists it to lift a focused row over its neighbours). */
+    interaction: MutableInteractionSource = remember { MutableInteractionSource() },
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
@@ -461,8 +488,9 @@ internal fun RowContent(
     val eggs = LocalListEggs.current
     val phase = presentation.rows[row.id]
     val start = presentation.rowStarts[row.id]
-    val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    // Keyboard / switch access: the 2 dp ballpoint ring 3 dp outside the 48 dp checkbox target (§4.4, R2).
+    val ringed = showsFocusRing(interaction)
     val gotIt = stringResource(R.string.list_row_got_it)
     val notChecked = stringResource(R.string.list_row_not_checked)
     val checkLabel = stringResource(if (row.checked) R.string.list_row_uncheck else R.string.list_row_check)
@@ -473,22 +501,36 @@ internal fun RowContent(
     val popScale = remember { Animatable(1f) }
     val flash = remember { Animatable(0f) }
     val probe = LocalPieceProbe.current
+    val popEvents by rememberUpdatedState(onPop)
     LaunchedEffect(pop?.generation) {
         val p = pop ?: return@LaunchedEffect
-        withContext(FixedMotionScale) {
-            if (p.delayMs > 0) kotlinx.coroutines.delay(p.delayMs)
-            if (reduced) {
-                flash.snapTo(1f)
-                flash.animateTo(0f, tween(400))
-            } else {
-                launch {
+        var started = false
+        try {
+            withContext(FixedMotionScale) {
+                if (p.delayMs > 0) kotlinx.coroutines.delay(p.delayMs)
+                started = true
+                popEvents(p.generation, false)
+                if (reduced) {
                     flash.snapTo(1f)
-                    flash.animateTo(0f, tween(400))
+                    flash.animateTo(0f, tween(PopRequest.POP_MS.toInt()))
+                } else {
+                    launch {
+                        flash.snapTo(1f)
+                        flash.animateTo(0f, tween(PopRequest.POP_MS.toInt()))
+                    }
+                    popScale.snapTo(0.9f)
+                    popScale.animateTo(1.1f, tween(160))
+                    popScale.animateTo(1f, tween(240))
                 }
-                popScale.snapTo(0.9f)
-                popScale.animateTo(1.1f, tween(160))
-                popScale.animateTo(1f, tween(240))
             }
+        } finally {
+            // Cut short (the row left the screen), it comes to rest: never a band left half lit.
+            withContext(NonCancellable) {
+                flash.snapTo(0f)
+                popScale.snapTo(1f)
+            }
+            // Played (or cut short once started): handed back, so the row never flashes again when it comes back.
+            if (started) popEvents(p.generation, true)
         }
     }
     Row(
@@ -610,7 +652,15 @@ internal fun RowContent(
             }
         }
         with(anchors) {
-            Box(Modifier.size(48.dp).anchor(AnchorRegistry.checkKey(row.id)).testTag(ListTags.check(row.id)).probe(probe, "check:${row.id}"), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .anchor(AnchorRegistry.checkKey(row.id))
+                    .testTag(ListTags.check(row.id))
+                    .probe(probe, "check:${row.id}")
+                    .focusRing(CircleShape, c.ink, ringed),
+                contentAlignment = Alignment.Center,
+            ) {
                 val lifting = RowMotion.liftsHanko(phase)
                 // Egg 13: the empty spot steps aside while JACK / POT! is stamped over its column (1.8 s).
                 if ((!row.checked || lifting) && !eggs.hidesCheckSpot(row.id)) StickerSpot()

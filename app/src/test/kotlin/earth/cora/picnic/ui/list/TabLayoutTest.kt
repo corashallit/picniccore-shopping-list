@@ -94,33 +94,87 @@ class TabLayoutTest {
         }
     }
 
-    private fun ribbons(state: earth.cora.picnic.core.model.AppState) {
+    /** What [ribbons] found: finished strips tied with the full ribbon, and with the bow alone. */
+    private data class Tied(val bands: Int, val bows: Int)
+
+    private fun ribbons(state: earth.cora.picnic.core.model.AppState, fontScale: Float? = null): Tied {
         val rig = ListRig(state)
         val probe = RecordingProbe()
-        compose.show(rig, probe)
-        var done = 0
+        compose.show(rig, probe, fontScale = fontScale)
+        var bands = 0
+        var bows = 0
+        val at = "fs ${fontScale ?: 1f}"
         visit(rig) { s, open ->
             if (!s.complete || open) return@visit
-            done++
             val ribbon = probe.bounds["ribbon:${s.id}"]
             val bow = probe.bounds["bow:${s.id}"]
-            assertTrue("${s.displayName}: tied with a ribbon or a bow", ribbon != null || bow != null)
-            val text = listOf(probe["tab:${s.id}"], probe["meta:${s.id}"])
-            for (r in listOfNotNull(ribbon, bow)) {
-                for (t in text) assertTrue("${s.displayName}: the ribbon $r is over text $t", !r.overlaps(t))
-                assertTrue("${s.displayName}: the ribbon stays left of the basket's right edge", r.left < probe["basket:${s.id}"].right)
+            assertTrue("$at, ${s.displayName}: tied with a ribbon or a bow", ribbon != null || bow != null)
+            val text = listOfNotNull(probe["tab:${s.id}"], probe["meta:${s.id}"], probe.bounds["stripChip:${s.id}"])
+            val basket = probe["basket:${s.id}"]
+            // The bow sticker is drawn 12 dp above its box (StripRibbon): check where it shows, not only its box.
+            val drawnBow = bow?.translate(0f, -12 * dp)
+            for (r in listOfNotNull(ribbon, bow, drawnBow)) {
+                for (t in text) assertTrue("$at, ${s.displayName}: the ribbon $r is over text $t", !r.overlaps(t))
+                assertTrue("$at, ${s.displayName}: the ribbon stays left of the basket's right edge", r.left < basket.right)
+            }
+            val strip = compose.boundsOf(ListTags.strip(s.id))
+            if (ribbon != null) {
+                bands++
+                // §4.10, §15: the band runs the strip's whole height, however tall large text makes the strip.
+                assertEquals("$at, ${s.displayName}: the ribbon starts at the strip's top", strip.top, ribbon.top, 1f)
+                assertEquals("$at, ${s.displayName}: the ribbon ends at the strip face's bottom (${ribbon.bottom / dp} vs ${strip.bottom / dp} dp)", strip.bottom, ribbon.bottom, 1f)
+            }
+            if (drawnBow != null) {
+                bows++
+                // The bow alone ties at the basket's left shoulder: it overlaps the basket's top-left quadrant.
+                val quadrant = Rect(basket.left, basket.top, basket.center.x, basket.center.y)
+                assertTrue("$at, ${s.displayName}: the bow $drawnBow sits on the basket's left shoulder $quadrant", drawnBow.overlaps(quadrant))
+                assertTrue("$at, ${s.displayName}: the bow does not float above the basket (${drawnBow.bottom / dp} > ${basket.top / dp} dp)", drawnBow.bottom > basket.top + 6 * dp)
             }
         }
-        assertTrue("finished strips to check", done > 0)
+        assertTrue("$at: finished strips to check", bands + bows > 0)
+        return Tied(bands, bows)
     }
 
     /** Item 79: the default aisles' long names (three finished aisles). */
     @Test
-    fun ribbonNeverOverText() = ribbons(ListFixture.everyDefaultAisle())
+    fun ribbonNeverOverText() {
+        ribbons(ListFixture.everyDefaultAisle())
+    }
 
-    /** Item 79: the fixture's Deli & meat, a short name: the full ribbon from the end of the text. */
+    /** Item 79: the fixture's Deli & meat (its meta line runs close to the basket, so the bow ties alone). */
     @Test
-    fun ribbonNeverOverTextShortName() = ribbons(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, ""))
+    fun ribbonNeverOverTextShortName() {
+        ribbons(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, ""))
+    }
+
+    /**
+     * Item 79 at large text (§4.10, §15): the strips grow taller, the ribbon's band still runs from the strip's top to the
+     * face's bottom, and a bow tied alone sits on its basket's left shoulder (the basket stands on the strip's bottom
+     * edge), never floating above it; never over text. At 1.3 the default aisles show both forms (Produce keeps its band,
+     * the long names tie bows); at 2.0 every finished strip ties the bow alone.
+     */
+    @Test
+    fun ribbonFollowsTheStripAtFs130() {
+        assertTrue(ribbons(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, ""), 1.3f).bows > 0)
+    }
+
+    @Test
+    fun ribbonFollowsTheStripAtFs200() {
+        assertTrue(ribbons(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, ""), 2f).bows > 0)
+    }
+
+    @Test
+    fun ribbonFollowsLongNamesAtFs130() {
+        val tied = ribbons(ListFixture.everyDefaultAisle(), 1.3f)
+        assertTrue("a full band at 1.3 ($tied)", tied.bands > 0)
+        assertTrue("a bow alone at 1.3 ($tied)", tied.bows > 0)
+    }
+
+    @Test
+    fun ribbonFollowsLongNamesAtFs200() {
+        assertTrue(ribbons(ListFixture.everyDefaultAisle(), 2f).bows > 0)
+    }
 
     /**
      * Item 107 (§4.12): the badge overhangs its basket by 12 dp and, with large text or a long count, grows to the right

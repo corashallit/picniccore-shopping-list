@@ -2,7 +2,10 @@ package earth.cora.picnic.ui.list
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.click
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -32,7 +35,13 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = PHONE_360)
 class BookInteractionTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
+
+    /** Back, as the system's Back closes a sheet. */
+    private fun back() {
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+    }
 
     private val dp get() = compose.density.density
 
@@ -68,6 +77,62 @@ class BookInteractionTest {
         compose.onNodeWithTag(BookTags.BOOK).performTouchInput { click(Offset(right.center.x - book.left, right.center.y - book.top)) }
         compose.waitForIdle()
         compose.onNodeWithTag(TripBookTags.SHEET).assertExists()
+    }
+
+    /**
+     * Items 156 and 163 (§6.6): the Trip book sheet opens on the page the book shows: the next free spot's (26, page 2),
+     * or the page she swiped to (page 1).
+     */
+    @Test
+    fun sheetOpensOnTheBooksPage() {
+        val rig = ListRig(ListFixture.stops(stops = 8, perAisle = 4, checked = 26))
+        val probe = RecordingProbe()
+        compose.show(rig, probe)
+        val right = probe["bookRight"]
+        val book = compose.boundsOf(BookTags.BOOK)
+        fun openSheet() {
+            compose.onNodeWithTag(BookTags.BOOK).performTouchInput { click(Offset(right.center.x - book.left, right.center.y - book.top)) }
+            if (compose.mainClock.autoAdvance) compose.waitForIdle() else compose.advanceMs(600)
+            compose.onNodeWithTag(TripBookTags.SHEET).assertExists()
+        }
+        openSheet()
+        assertTrue("the sheet shows spot 25 (page 2)", compose.exists(TripBookTags.sticker(25), unmerged = true))
+        assertTrue("not spot 0", !compose.exists(TripBookTags.sticker(0), unmerged = true))
+        compose.onNodeWithContentDescription("Page 2 of 2", useUnmergedTree = true).assertExists()
+        back()
+        // She swipes the book back to page 1, then opens it: the sheet opens there too.
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(BookTags.BOOK).performTouchInput {
+            val y = right.center.y - book.top
+            down(Offset(right.left - book.left + 30 * dp, y))
+            repeat(5) { moveBy(Offset(16 * dp, 0f)) }
+            up()
+        }
+        compose.advanceMs(300)
+        assertTrue("turned to page 1", "pageLcd:1/2" in probe.bounds)
+        // (The clock stays held: the book goes back to its own page after 6 s idle.)
+        openSheet()
+        assertTrue("the sheet shows spot 0 (page 1)", compose.exists(TripBookTags.sticker(0), unmerged = true))
+        compose.onNodeWithContentDescription("Page 1 of 2", useUnmergedTree = true).assertExists()
+        compose.mainClock.autoAdvance = true
+    }
+
+    /** Items 156 and 161 (§7.4, §7.7): collapsed to its 40 dp strip, a tap anywhere on the book opens the Trip book sheet. */
+    @Test
+    @Config(qualifiers = "w360dp-h560dp-xxhdpi")
+    fun collapsedTapOpensSheet() {
+        val rig = ListRig()
+        compose.show(rig)
+        assertEquals("collapsed", 40f, compose.boundsOf(BookTags.BOOK).height / dp, 1f)
+        val strip = compose.boundsOf(BookTags.COLLAPSED, unmerged = true)
+        val book = compose.boundsOf(BookTags.BOOK)
+        for (fx in listOf(0.1f, 0.5f, 0.9f)) {
+            compose.onNodeWithTag(BookTags.BOOK).performTouchInput { click(Offset(strip.left - book.left + strip.width * fx, strip.center.y - book.top)) }
+            compose.waitForIdle()
+            compose.onNodeWithTag(TripBookTags.SHEET).assertExists()
+            assertTrue("the sheet is up ($fx)", compose.onAllNodesWithText("aisles stamped", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+            back()
+        }
     }
 
     /**

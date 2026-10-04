@@ -30,9 +30,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,8 +57,10 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.R
 import earth.cora.picnic.core.model.Rarity
@@ -82,11 +84,13 @@ import earth.cora.picnic.ui.theme.HankoText
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LcdText
 import earth.cora.picnic.ui.theme.LetterSetSheet
+import earth.cora.picnic.ui.theme.LocalPieceProbe
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.Pictogram
 import earth.cora.picnic.ui.theme.TabPattern
 import earth.cora.picnic.ui.theme.drawDashedCircle
 import earth.cora.picnic.ui.theme.hardShadow
+import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.holoBrush
 import java.time.LocalDate
 
@@ -109,11 +113,18 @@ object TripBookTags {
     /** Egg 8's nap cat on a filed book's stamp page. */
     const val NAP_CAT: String = "picnic_trip_book_nap_cat"
     fun sticker(slot: Int): String = "picnic_trip_book_sticker_$slot"
+    /** The probe key of the name under stamp [index] (its text layout and bounds, for the large-text tests). */
+    fun stampName(index: Int): String = "tripBookStampName:$index"
 }
+
+/** The width in px of the widest single word of [text] in [style] (words split at spaces). */
+internal fun widestWordPx(text: String, style: androidx.compose.ui.text.TextStyle, measurer: androidx.compose.ui.text.TextMeasurer): Int =
+    text.split(' ').filter { it.isNotEmpty() }.maxOfOrNull { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width } ?: 0
 
 /**
  * The read-only sheet of [book] (null = closed). [dateLabel] is the trip's date ("Sat 3 Oct"); [date] prints on the
- * receipt. Same call shape as the album's former FiledBookSheet, so the album swaps one for the other.
+ * receipt. Same call shape as the album's former FiledBookSheet, so the album swaps one for the other. The sticker pages
+ * open on the page holding [initialSlot] (from the list, the spot its book shows; from the album, the first page).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -124,6 +135,7 @@ fun TripBookSheet(
     modifier: Modifier = Modifier,
     date: LocalDate? = null,
     initialFullReceipt: Boolean = false,
+    initialSlot: Int = 0,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
@@ -172,33 +184,48 @@ fun TripBookSheet(
                     earth.cora.picnic.ui.theme.HoloInks(book.perfect) {
                     // Egg 8 on a filed book: the nap cat curls up by the stamp of the aisle whose basket stayed empty (§12.2).
                     val nap = remember(book) { book.napStampIndex() }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        book.stamps.forEachIndexed { index, s ->
-                            val name = s.aisleName
-                            val desc = if (s.done) stringResource(R.string.book_sheet_stamped, name) else stringResource(R.string.book_sheet_not_yet, name)
-                            Column(
-                                Modifier.width(64.dp).semantics(mergeDescendants = true) { contentDescription = desc },
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                    StampCircle(lookOf(s), s.position.takeIf { it > 0 }, s.done, now = false, phase = null, clock = clock, size = 32.dp)
-                                    if (index == nap) {
-                                        earth.cora.picnic.ui.theme.DecorSticker(
-                                            "cat",
-                                            size = 22.dp,
-                                            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp).testTag(TripBookTags.NAP_CAT).decorative(),
-                                        )
+                    val probe = LocalPieceProbe.current
+                    val nameStyle = t.caption.copy(color = PicnicTheme.colors.ink, lineBreak = LineBreak.Heading, hyphens = Hyphens.None, textAlign = TextAlign.Center)
+                    val measurer = rememberTextMeasurer()
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        // Names wrap only between words and are never cut (§6.6, §15): a cell is at least 64 dp and
+                        // at least the widest single word on the page (+ 2 dp), so a long word at a large font scale
+                        // takes fewer stamps a row instead of breaking; the row's cells then share the page's width.
+                        val gap = 4.dp
+                        val cell = with(LocalDensity.current) {
+                            val widest = book.stamps.maxOf { s -> widestWordPx(s.aisleName, nameStyle, measurer) }
+                            val least = maxOf(64.dp.roundToPx(), widest + 2.dp.roundToPx())
+                            val room = constraints.maxWidth
+                            val gapPx = gap.roundToPx()
+                            val cols = ((room + gapPx) / (least + gapPx)).coerceAtLeast(1)
+                            ((room - gapPx * (cols - 1)) / cols).coerceAtLeast(minOf(least, room)).toDp()
+                        }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            book.stamps.forEachIndexed { index, s ->
+                                val name = s.aisleName
+                                val desc = if (s.done) stringResource(R.string.book_sheet_stamped, name) else stringResource(R.string.book_sheet_not_yet, name)
+                                Column(
+                                    Modifier.width(cell).semantics(mergeDescendants = true) { contentDescription = desc },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                        StampCircle(lookOf(s), s.position.takeIf { it > 0 }, s.done, now = false, phase = null, clock = clock, size = 32.dp)
+                                        if (index == nap) {
+                                            earth.cora.picnic.ui.theme.DecorSticker(
+                                                "cat",
+                                                size = 22.dp,
+                                                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 6.dp, y = 4.dp).testTag(TripBookTags.NAP_CAT).decorative(),
+                                            )
+                                        }
                                     }
+                                    Text(
+                                        name,
+                                        style = nameStyle,
+                                        onTextLayout = { probe?.text(TripBookTags.stampName(index), it) },
+                                        modifier = Modifier.fillMaxWidth().probe(probe, TripBookTags.stampName(index)).clearAndSetSemantics { },
+                                    )
                                 }
-                                Text(
-                                    name,
-                                    style = t.caption.copy(color = PicnicTheme.colors.ink),
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.clearAndSetSemantics { },
-                                )
                             }
                         }
                     }
@@ -212,7 +239,7 @@ fun TripBookSheet(
                     style = t.label.copy(color = c.ink),
                     modifier = Modifier.padding(top = 16.dp, bottom = 6.dp).semantics { heading() },
                 )
-                StickerPages(book.total, stickers.associateBy { it.slot }, full = stickers.size >= book.total || book.perfect)
+                StickerPages(book.total, stickers.associateBy { it.slot }, full = stickers.size >= book.total || book.perfect, initialSlot = initialSlot)
             }
             book.bonus?.let { bonus ->
                 Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -275,10 +302,11 @@ internal fun lookOf(s: BookStamp): AisleLook {
  * (nothing needs the gesture, §15); the dots and LCD say "Page 2 of 3", politely, when the page changes.
  */
 @Composable
-private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.store.BookSticker>, full: Boolean) {
+private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.store.BookSticker>, full: Boolean, initialSlot: Int = 0) {
     val c = PicnicTheme.colors
     val book = c.book
-    var page by remember { mutableIntStateOf(0) }
+    // Null until she turns a page: the page holding [initialSlot] (worked out once the page size is known).
+    var turned by remember { mutableStateOf<Int?>(null) }
     val nextLabel = stringResource(R.string.list_trip_book_next)
     val previousLabel = stringResource(R.string.list_trip_book_previous)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -287,8 +315,12 @@ private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.sto
         val rows = 4
         val perPage = cols * rows
         val pages = ((total + perPage - 1) / perPage).coerceAtLeast(1)
+        val page = turned ?: (initialSlot.coerceAtLeast(0) / perPage)
         val shown = page.coerceIn(0, pages - 1)
-        val turn = { to: Int -> page = to.coerceIn(0, pages - 1) }
+        val turn = { to: Int -> turned = to.coerceIn(0, pages - 1) }
+        // The swipe's handler outlives a composition: it reads the page shown now.
+        val shownState = rememberUpdatedState(shown)
+        val shownNow = { shownState.value }
         val pageLabel = stringResource(R.string.list_trip_book_page, shown + 1, pages)
         Column(Modifier.fillMaxWidth()) {
             Box(
@@ -312,8 +344,8 @@ private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.sto
                     .pointerInput(pages) {
                         var dx = 0f
                         detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = {
-                            if (dx < -40 * density) page = (page.coerceIn(0, pages - 1) + 1).coerceAtMost(pages - 1)
-                            if (dx > 40 * density) page = (page.coerceIn(0, pages - 1) - 1).coerceAtLeast(0)
+                            if (dx < -40 * density) turned = (shownNow() + 1).coerceAtMost(pages - 1)
+                            if (dx > 40 * density) turned = (shownNow() - 1).coerceAtLeast(0)
                         }) { _, a -> dx += a }
                     }
                     .padding(horizontal = 9.dp, vertical = 8.dp),

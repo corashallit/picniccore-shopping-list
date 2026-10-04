@@ -100,7 +100,8 @@ internal fun TopStack(
     actions: ListActions,
     onMore: () -> Unit,
     onMoreBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
-    onOpenBook: () -> Unit,
+    /** Opens the Trip book sheet at the book's [slot] (§6.6: the page the book shows). */
+    onOpenBook: (slot: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val fontScale = LocalDensity.current.fontScale
@@ -130,7 +131,7 @@ internal fun TopStack(
                             anchors = engine.anchors,
                             dateOnPage = dateOnPage,
                             turnKey = state.bookTurn,
-                            onOpen = onOpenBook,
+                            onOpenAt = onOpenBook,
                             onStampTap = actions.onStampTap,
                             pageNumber = LocalListEggs.current.rolling == null,
                             onNameTag = if (dateOnPage) null else { text -> captionTag = text },
@@ -260,7 +261,7 @@ private fun AppBar(
                 title,
                 style = titleStyle,
                 fill = c.ink,
-                stroke = 6.dp,
+                stroke = TITLE_STROKE,
                 minFontSize = 20.sp,
                 // One line at every font scale (§4.2, item 24): it shrinks 24 → 20 sp, then ellipsizes with its stroke
                 // whole (item 334); at large text the bar grows to two rows, and TalkBack reads the whole title.
@@ -342,21 +343,55 @@ private fun AppBar(
         }
     }
     if (large) {
-        // Large text (§4.2): the title and More on the first row, the subtitle (wrapping) and the LCD under them.
-        Column(
-            Modifier
+        // Large text (§4.2, §15): the bar grows to two rows, and the subtitle keeps the whole width, wrapping only when it
+        // must. The LCD sits on the title row before More when the title fits there at full size beside it; else beside
+        // the subtitle when the two fit side by side; else on a line of its own at the right, under the subtitle.
+        val titleMeasurer = rememberTextMeasurer(cacheSize = 2)
+        val titleNeed = with(LocalDensity.current) {
+            remember(title, titleStyle, this) {
+                titleMeasurer.measure(title, titleStyle, maxLines = 1, softWrap = false).size.width + (TITLE_STROKE * 2).roundToPx() + SUN_ROOM_W.roundToPx()
+            }
+        }
+        Layout(
+            content = {
+                Box(Modifier.layoutId("title")) { titleRow(Modifier) }
+                Box(Modifier.layoutId("more")) { more() }
+                Box(Modifier.layoutId("lcd").testTag(ListTags.LCD_SLOT)) { lcdChip() }
+                Box(Modifier.layoutId("subtitle")) { subtitleRow(Modifier) }
+            },
+            modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = minHeight)
                 .padding(start = 8.dp, end = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                titleRow(Modifier.weight(1f))
-                more()
+        ) { measurables, constraints ->
+            val w = constraints.maxWidth
+            val gap = 2.dp.roundToPx()
+            val loose = Constraints(maxWidth = w)
+            val moreP = measurables.first { it.layoutId == "more" }.measure(loose)
+            val lcdP = measurables.first { it.layoutId == "lcd" }.measure(loose)
+            val lcdW = if (lcdP.width > 0) lcdP.width else 0
+            val lcdOnTitle = lcdW > 0 && titleNeed + lcdW + moreP.width <= w
+            val titleMax = (w - moreP.width - if (lcdOnTitle) lcdW else 0).coerceAtLeast(0)
+            val titleP = measurables.first { it.layoutId == "title" }.measure(Constraints(maxWidth = titleMax))
+            val subtitleP = measurables.first { it.layoutId == "subtitle" }.measure(loose)
+            val row1 = maxOf(titleP.height, moreP.height, if (lcdOnTitle) lcdP.height else 0)
+            val row2Top = row1 + gap
+            val beside = !lcdOnTitle && lcdW > 0 && subtitleP.width + lcdW <= w
+            val ownLine = !lcdOnTitle && lcdW > 0 && !beside
+            val row2 = if (beside) maxOf(subtitleP.height, lcdP.height) else subtitleP.height
+            val lcdTop = when {
+                lcdOnTitle -> (row1 - lcdP.height) / 2
+                beside -> row2Top
+                else -> row2Top + subtitleP.height + if (subtitleP.height > 0) gap else 0
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                Box(Modifier.weight(1f)) { subtitleRow(Modifier) }
-                lcdChip()
+            val bottom = maxOf(row2Top + row2, if (ownLine) lcdTop + lcdP.height else 0)
+            val h = maxOf(constraints.minHeight, bottom)
+            layout(w, h) {
+                titleP.place(0, (row1 - titleP.height) / 2)
+                moreP.place(w - moreP.width, (row1 - moreP.height) / 2)
+                subtitleP.place(0, row2Top)
+                val lcdX = if (lcdOnTitle) w - moreP.width - lcdW else w - lcdW
+                lcdP.place(lcdX, lcdTop)
             }
         }
     } else {
@@ -430,6 +465,9 @@ private fun Modifier.revealHeight(fraction: Float): Modifier =
                 layout(p.width, h) { p.place(0, 0) }
             }
     }
+
+/** The puffy title's stroke (§2.7): the room its outline takes on each side of the words. */
+private val TITLE_STROKE = 6.dp
 
 /** The sun's layout room by the title (its face is 22 dp, its target 48 dp). */
 private val SUN_ROOM_W = 30.dp

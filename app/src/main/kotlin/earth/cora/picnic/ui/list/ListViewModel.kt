@@ -155,15 +155,20 @@ class ListViewModel(
     /** Taps in flight: item id -> the checked state the tap asked for. */
     private val pending = HashMap<String, Boolean>()
 
-    /** Set by [undoNewBook] until the state that restores the old book arrives. */
+    /** Set by [undoNewBook] until the state that restores the old book arrives (main thread only). */
     private var hint: NewBookUndoHint? = null
 
     /** The last automatic new book (§0.4 Q9), for its toast's Undo. */
     private var lastToggle: TripFiling.Toggle? = null
 
-    /** Lists the finale was owed on and the nudge was offered for, this session (once each). */
+    /** Lists the finale was owed on, this session (once each). */
     private val resumed = HashSet<String>()
+
+    /** The idle periods the nudge was offered for (once each): "<list id>:<the trip's last activity>". */
     private val nudged = HashSet<String>()
+
+    /** The inputs of the last state built, so a return to the list can build it again on the current clock. */
+    private var lastInputs: Inputs? = null
 
     init {
         engine.celebrationSource = {
@@ -192,14 +197,18 @@ class ListViewModel(
 
     private class Seen(val listId: String, val state: AppState, val list: GroceryList, val grouped: GroupedList)
 
-    /** The automatic new book's Undo (§0.4 Q9) is on its way: the change that brings the old book back plays the turn back. */
-    private data class NewBookUndoHint(val itemId: String)
+    /**
+     * The automatic new book's Undo (§0.4 Q9) is on its way: the change on [listId] that brings back [oldTripId] (and
+     * only that change) plays the turn back, [itemId] (the tapped item, null after an add) landing in its old spot.
+     */
+    private class NewBookUndoHint(val listId: String, val itemId: String?, val oldTripId: String)
 
     // =============================================================================================
     // The one place states arrive (§8.3, §8.4).
     // =============================================================================================
 
     private fun onStates(input: Inputs) {
+        lastInputs = input
         val app = input.state
         val list = app.currentList()
         val grouped = groupedOf(app, list, catalog)
@@ -228,7 +237,11 @@ class ListViewModel(
             prev == null || prev.listId != list.id -> {
                 // A list shown for the first time, or another list: the old chains are moot (§6.4: switching lists
                 // switches the book). Nothing plays for what is already there.
-                if (prev != null) engine.finishAll()
+                if (prev != null) {
+                    engine.finishAll()
+                    // Sent before this list's own nudge (opened), so the screen retires only the last list's notes.
+                    viewModelScope.launch { _events.send(ListEvent.Switched(list.id)) }
+                }
                 pending.clear()
                 hint = null
                 opened(list, grouped, now)
@@ -255,9 +268,30 @@ class ListViewModel(
                 ),
             )
         }
-        if (nudged.add(list.id) && TripRules.startsNewBook(list, now)) {
+        nudgeIfIdle(list, now)
+    }
+
+    /**
+     * The nudge (§6.1, item 120): an open trip idle for more than 12 h gets "New shop? Start a fresh sticker book", once
+     * per idle period (a check-off starts a new period, so a later idle stretch is offered again).
+     */
+    private fun nudgeIfIdle(list: GroceryList, now: Long) {
+        val trip = list.trip ?: return
+        if (TripRules.startsNewBook(list, now) && nudged.add("${list.id}:${trip.lastActivityAt}")) {
             viewModelScope.launch { _events.send(ListEvent.Nudge(list.id)) }
         }
+    }
+
+    /**
+     * The List is back in front (its ON_RESUME; §6.1, §7.1, items 120 and 143). The app may have waited in the
+     * background for hours: the state is built again on the current clock, so a fresh book's date and the season roll
+     * over to today, and an open trip that has gone idle since gets its nudge (once per idle period).
+     */
+    fun onResumed() {
+        val inputs = lastInputs ?: return
+        onStates(inputs)
+        val s = seen ?: return
+        nudgeIfIdle(s.list, clock())
     }
 
     /** Compares two successive states of the same list and tells the engine what changed (§8.3, §8.4). */
@@ -267,8 +301,9 @@ class ListViewModel(
         val tripReplaced = before.trip?.id != list.trip?.id
         val currentHint = hint
 
-        // The automatic new book's Undo (§0.4 Q9): the old book comes back as it was; only the turn back plays.
-        if (currentHint != null && tripReplaced) {
+        // The automatic new book's Undo (§0.4 Q9): the old book comes back as it was; only the turn back plays. Only the
+        // change that restores that very book counts: another list's, or a later New trip's, plays as itself.
+        if (currentHint != null && tripReplaced && currentHint.listId == list.id && list.trip?.id == currentHint.oldTripId) {
             hint = null
             engine.onChange(
                 ListChange(
@@ -441,14 +476,37 @@ class ListViewModel(
         }
     }
 
-    /** Undo on "New sticker book for today" (§0.4 Q9): the old book and its items come back; the item goes in the old book. */
+    /**
+     * Undo on "New sticker book for today" (§0.4 Q9): the old book and its items come back; the item goes in the old
+     * book. Only while that new book stands (TripFiling.undoNewBook checks it in the same write): after a New trip, a
+     * deleted list or a later book a stale Undo changes nothing, so the album never rolls back past a newer filing.
+     */
     fun undoNewBook(toggle: TripFiling.Toggle? = lastToggle) {
         val t = toggle ?: return
-        val itemId = t.autoNewBook?.undo?.itemId ?: return
+        val undo = t.autoNewBook?.undo ?: return
         if (lastToggle === t) lastToggle = null
         val now = clock()
-        hint = NewBookUndoHint(itemId)
-        appScope.launch { save { TripFiling.undoNewBook(store, album, t, now) } }
+        // Set before the write, so the state it brings (which may reach onStates before the write returns) plays the
+        // turn back; keyed to that exact change, and dropped again when the Undo no longer applied.
+        val h = NewBookUndoHint(undo.listId, undo.itemId, undo.trip.id)
+        hint = h
+        appScope.launch {
+            var undone = false
+            save { undone = TripFiling.undoNewBook(store, album, t, now) }
+            if (!undone) viewModelScope.launch { if (hint === h) hint = null }
+        }
+    }
+
+    /**
+     * An add started a new book (§0.4 Q9's add-side twin, TripFiling.addItems): the old book is in the album and the
+     * list starts afresh. The book turns to a fresh page and the toast "Fresh sticker book ✦ your last shop is in the
+     * album" offers Undo ([undoNewBook]).
+     */
+    fun addStartedNewBook(listId: String, toggle: TripFiling.Toggle) {
+        if (toggle.autoNewBook == null) return
+        lastToggle = toggle
+        bookTurn.value = bookTurn.value + 1
+        viewModelScope.launch { _events.send(ListEvent.NewBook(listId, byAdd = true) { undoNewBook(toggle) }) }
     }
 
     /** A tear-off or Delete (§8.6): emits [ListEvent.Deleted] so the screen can offer Undo. */
@@ -516,7 +574,8 @@ class ListViewModel(
      * Pull to refresh, the overflow menu's Refresh and the list's custom action (§6.1, D18): pending stickers resume and
      * the items still in "Everything else" are sorted into aisles. [ListEvent.Refreshed] says what changed: the sorting
      * at once, and the stickers once the icon repository has finished the ones it resumed (their names have left its busy
-     * set, within [DRAW_WAIT_MS]). Nothing is said when nothing changed.
+     * set, within [DRAW_WAIT_MS]); that second event carries the sorting too, so the list folds it into the note still
+     * showing ("Sorted 2 items · 1 new sticker drawn", §6.1). Nothing is said when nothing changed.
      */
     fun refresh() {
         appScope.launch {
@@ -530,15 +589,21 @@ class ListViewModel(
             val waiting = list?.items?.filter { it.iconFit == IconFit.PENDING && it.customIconId == null }.orEmpty()
             icons.resumePending()
             val sync = aisleSync
+            var sorted = 0
+            var left = 0
             if (s != null && list != null && sync != null) {
                 val unsorted = groupedOf(s, list, catalog).sections.firstOrNull { it.kind == SectionKind.UNSORTED }
                 val ids = unsorted?.rows?.filterNot { it.manuallyPlaced }?.map { it.id }.orEmpty()
                 val report = if (ids.isEmpty()) null else runCatching { sync.sortItems(ids) }.getOrNull()
-                if (report != null && report.recategorized > 0) _events.send(ListEvent.Refreshed(report.recategorized, report.leftUnsorted, 0))
+                if (report != null && report.recategorized > 0) {
+                    sorted = report.recategorized
+                    left = report.leftUnsorted
+                    _events.send(ListEvent.Refreshed(sorted, left, 0))
+                }
             }
             if (list != null && waiting.isNotEmpty()) {
                 val drawn = awaitResumedStickers(list.id, waiting)
-                if (drawn > 0) _events.send(ListEvent.Refreshed(0, 0, drawn))
+                if (drawn > 0) _events.send(ListEvent.Refreshed(sorted, left, drawn))
             }
         }
     }

@@ -23,6 +23,7 @@ import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -155,6 +156,66 @@ class TripFilingTest {
         assertEquals(listOf("album", "state", "state", "album"), journal.events, "undo: the state first, then the album")
         val list2 = state.current().list(LIST_ID)!!
         assertSame(list2, TripRules.reconcile(list2, nextWeek + 2000, SaturdayShop.STORE), "the restored list satisfies the invariant")
+    }
+
+    /**
+     * §0.4 Q9 (item 315): the automatic new book's Undo after a New trip changes nothing. The album keeps the newer
+     * filing and its counters; the state keeps the fresh list.
+     */
+    @Test
+    fun aLateUndoAfterNewTripChangesNothing() = runTest {
+        val state = InMemoryStateStore(SaturdayShop.state())
+        val album = InMemoryAlbumStore()
+        val nextWeek = NOW + 7 * day
+        val toggle = TripFiling.toggle(state, album, catalog, LIST_ID, "milk", nextWeek)
+        assertNotNull(toggle.autoNewBook)
+        TripFiling.newTrip(state, album, LIST_ID, NewTripMode.CLEAR_GOTTEN, nextWeek + 1000)
+        val filed = album.current()
+        val afterNewTrip = state.current()
+        assertEquals(2, filed.finishedTrips)
+        assertFalse(TripFiling.undoNewBook(state, album, toggle, nextWeek + 2000))
+        assertSame(afterNewTrip, state.current(), "the state is untouched")
+        assertEquals(filed, album.current(), "the album keeps both books and its counters")
+    }
+
+    /**
+     * The add-side twin (§0.4 Q9, item 315): the first add more than 12 h after a finished shop files its book (PERFECT,
+     * the album first) before the add is saved; [TripFiling.addItems]'s then runs in the same update; Undo takes it back.
+     */
+    @Test
+    fun addAfterIdleFilesFirstAndUndoTakesItBack() = runTest {
+        val journal = Journal()
+        val done = SaturdayShop.state().let { s ->
+            val left = s.list(LIST_ID)!!.items.filter { !it.checked }
+            left.foldIndexed(s) { i, acc, item -> acc.toggleChecked(LIST_ID, item.id, NOW + i * 1000L) }
+        }
+        val finished = done.copy(lists = done.lists.map { l -> l.copy(trip = l.trip!!.copy(finaleShownAt = NOW + 60_000)) })
+        val state = JournalStateStore(finished, journal)
+        val album = JournalAlbumStore(journal)
+        val tuesday = NOW + 3 * day
+        val milk = GroceryItem(id = "milk-2", name = "Milk, 2 %", icon = "milk_bag", addedAt = tuesday)
+        var seen: Int? = null
+        val add = TripFiling.addItems(state, album, LIST_ID, listOf(milk), tuesday) { before, after, outcome ->
+            seen = before.list(LIST_ID)!!.items.size
+            assertEquals(listOf("milk-2"), outcome.added)
+            after
+        }
+        assertEquals(24, seen, "then sees the state before the add")
+        val toggle = assertNotNull(add.newBook)
+        assertEquals(listOf("album", "state"), journal.events, "the old book is filed before the state changes")
+        assertTrue(toggle.autoNewBook!!.book.perfect)
+        assertEquals(24, toggle.autoNewBook!!.book.total)
+        assertEquals(1, album.current().perfectStreak)
+        assertEquals(listOf("milk-2"), state.current().list(LIST_ID)!!.items.map { it.id }, "what was got is cleared; milk is a new row")
+        assertNull(state.current().list(LIST_ID)!!.trip)
+
+        assertTrue(TripFiling.undoNewBook(state, album, toggle, tuesday + 1000))
+        val restored = state.current().list(LIST_ID)!!
+        assertEquals(25, restored.items.size)
+        assertEquals(finished.list(LIST_ID)!!.trip!!.id, restored.trip!!.id)
+        assertTrue(TripRules.bookComplete(restored), "the new row stays out of the finished book")
+        assertTrue(album.current().books.isEmpty())
+        assertEquals(0, album.current().perfectStreak)
     }
 
     @Test

@@ -19,6 +19,7 @@ import earth.cora.picnic.core.store.BookStamp
 import earth.cora.picnic.core.store.BookSticker
 import earth.cora.picnic.core.store.TripBook
 import earth.cora.picnic.ui.common.PHONE_360
+import earth.cora.picnic.ui.common.isCut
 import earth.cora.picnic.ui.theme.PicnicTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -89,6 +90,58 @@ class TripBookSheetTest {
         compose.onNodeWithTag(TripBookTags.NEXT).performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals("Page 2 of 2", pageOf())
+    }
+
+    /**
+     * §6.6, §15 "names wrap, never clip" (items 163, 165, 281): at font scale 1.3 and 2.0 every aisle name under a stamp
+     * is whole (no ellipsis, no line wider than its cell, nothing cut at the bottom) and wraps only between words, for
+     * the fixture's trip and for the 14 default aisles' long names ("Pasta, rice & international").
+     */
+    @Test
+    fun stampNamesWrapBetweenWordsAtLargeText() {
+        for (scale in listOf(1.3f, 2f)) {
+            stampNamesWhole(ListFixture.ui(), scale)
+            stampNamesWhole(ListFixture.ui(ListFixture.everyDefaultAisle()), scale)
+        }
+    }
+
+    private var content by androidx.compose.runtime.mutableStateOf<(@androidx.compose.runtime.Composable () -> Unit)?>(null)
+
+    private fun stampNamesWhole(ui: ListUiState, scale: Float) {
+        val probe = RecordingProbe()
+        if (content == null) compose.setContent { content?.invoke() }
+        compose.runOnIdle {
+            content = {
+                val base = androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(
+                    earth.cora.picnic.ui.theme.LocalPieceProbe provides probe,
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, scale),
+                ) {
+                    PicnicTheme {
+                        Box(Modifier.fillMaxSize()) {
+                            androidx.compose.runtime.key(ui, scale) { TripBookSheet(ui.tripBook, dateLabel = "Sat 3 Oct", onClose = {}) }
+                        }
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val stamps = ui.tripBook!!.stamps
+        assertTrue("the fixture has stamps", stamps.isNotEmpty())
+        stamps.forEachIndexed { i, s ->
+            val layout = probe.texts[TripBookTags.stampName(i)] ?: error("no name laid out under stamp $i (${s.aisleName}) at $scale")
+            val text = layout.layoutInput.text.text
+            assertEquals(s.aisleName, text)
+            assertFalse("\"$text\" is cut at font scale $scale", layout.isCut())
+            for (line in 0 until layout.lineCount - 1) {
+                val end = layout.getLineEnd(line)
+                val last = text[end - 1]
+                assertTrue(
+                    "\"$text\" breaks inside a word at font scale $scale: \"${text.substring(layout.getLineStart(line), end)}\" / \"${text.substring(end)}\"",
+                    last.isWhitespace() || last == '-',
+                )
+            }
+        }
     }
 
     @Test

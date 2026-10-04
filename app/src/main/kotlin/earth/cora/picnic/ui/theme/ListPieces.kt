@@ -98,6 +98,9 @@ fun interface PieceProbe {
 
     /** The element reported under [key] left the screen (a name tag lifted off, a page turned). */
     fun gone(key: String) = Unit
+
+    /** A text reported under [key] was laid out (for the large-text rules: no cut line, no break inside a word). */
+    fun text(key: String, layout: TextLayoutResult) = Unit
 }
 
 val LocalPieceProbe = androidx.compose.runtime.staticCompositionLocalOf<PieceProbe?> { null }

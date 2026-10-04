@@ -88,6 +88,7 @@ fun NewTripSheet(
                         StickerBook(
                             book, BookPresentation.Identity, clock, width = listBook,
                             modifier = Modifier.drawnSmall(scale).testTag(NewTripTags.BOOK),
+                            readOnly = true,
                         )
                     }
                 }

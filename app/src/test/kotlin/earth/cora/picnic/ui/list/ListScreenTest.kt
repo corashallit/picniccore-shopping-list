@@ -1,5 +1,7 @@
 package earth.cora.picnic.ui.list
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -34,6 +36,45 @@ class ListScreenTest {
         compose.onNodeWithTag(ListTags.LIST).performScrollToKey("end-note")
         compose.waitForIdle()
         compose.onNodeWithText("end of the list · $n stickers", substring = true, useUnmergedTree = true).assertExists()
+    }
+
+    /**
+     * §4.2, §6.1, §15 (items 94, 98, 281): with large text the bar grows to two rows and the subtitle keeps the whole
+     * width: at 1.3 and 2.0 "Hillcrest Market · 8 stops" reads on one line (it fits there), never squeezed beside the
+     * LCD; the LCD, on a line of its own at the right, overlaps neither the subtitle, the title nor More.
+     */
+    @Test
+    fun largeTextBarKeepsTheSubtitleWhole() {
+        for (scale in listOf(1.3f, 2f)) largeTextBar(scale)
+    }
+
+    private var scaleShown by androidx.compose.runtime.mutableFloatStateOf(1f)
+
+    private fun largeTextBar(scale: Float) {
+        if (scaleShown == 1f) {
+            scaleShown = scale
+            compose.setContent {
+                val base = androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, scaleShown)) {
+                    earth.cora.picnic.ui.theme.PicnicTheme { ListScreen(ListFixture.ui(), ListActions()) }
+                }
+            }
+        } else {
+            compose.runOnIdle { scaleShown = scale }
+        }
+        compose.waitForIdle()
+        val subtitle = compose.onNodeWithText("Hillcrest Market", substring = true, useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        subtitle.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        assertEquals("fs $scale: the subtitle reads on one line", 1, layouts.single().lineCount)
+        val lcd = compose.onNodeWithTag(ListTags.LCD_SLOT).fetchSemanticsNode().boundsInRoot
+        val title = compose.onNodeWithText("Saturday shop", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val more = compose.onNodeWithTag(ListTags.MORE).fetchSemanticsNode().boundsInRoot
+        val patch = subtitle.parent!!.boundsInRoot
+        for ((what, r) in listOf("subtitle" to patch, "title" to title, "More" to more)) {
+            assertFalse("fs $scale: the LCD $lcd overlaps the $what $r", lcd.overlaps(r) && lcd.intersect(r).width > 0.5f && lcd.intersect(r).height > 0.5f)
+        }
+        assertTrue("fs $scale: the LCD stands at the right", lcd.right >= more.left)
     }
 
     /** Item 83: the end note reads "♡ end of the list · N stickers" with the live total (the heart is drawn). */
