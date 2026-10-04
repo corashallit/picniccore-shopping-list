@@ -2,7 +2,11 @@ package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performSemanticsAction
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.theme.TOAST_TAG
@@ -13,6 +17,7 @@ import earth.cora.picnic.ui.add.AddRules
 import earth.cora.picnic.ui.theme.WashiPattern
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -179,6 +184,43 @@ class EggRainTest {
     }
 
     /**
+     * Items 255, 259, 73: the umbrella stands on the docked bar wherever the bar is. She scrolls down her list and the bar
+     * folds into the FAB: the umbrella goes with it (none floats over the binder, none over a word). She scrolls back up
+     * and the bar returns: the umbrella pops back on its shoulder.
+     */
+    @Test
+    fun umbrellaFollowsTheBar() {
+        val r = EggRig(compose).start()
+        r.advance(600)
+        val t0 = r.fire(16)
+        r.advanceTo(t0 + 1_500)
+        fun umbrella(): androidx.compose.ui.geometry.Rect? =
+            compose.onAllNodesWithTag(EggTags.UMBRELLA, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+        fun onTheShoulder(what: String) {
+            val bar = r.anchor(AnchorRegistry.ADD_BAR)
+            val u = umbrella() ?: throw AssertionError("$what: the umbrella shows")
+            assertTrue("$what: at the bar's left end ($u, bar $bar)", u.center.x < bar.left + bar.width * 0.25f)
+            assertTrue("$what: it stands on the bar ($u, bar $bar)", u.bottom in bar.top..bar.top + 24 * 3f && u.top < bar.top)
+            val under = wordBoxes(compose, r.anchors).filter { (_, box) -> box.overlaps(u.deflate(6f)) }.map { it.first }
+            assertEquals("$what: no word under it", emptyList<String>(), under)
+        }
+        onTheShoulder("before")
+        val list = compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST)
+        list.performTouchInput { swipeUp(startY = centerY + 150f, endY = top + 40f) }
+        r.advance(1_500)
+        assertNull("folded: the bar is gone", r.anchors.bounds(AnchorRegistry.ADD_BAR))
+        compose.onNodeWithTag(earth.cora.picnic.ui.add.ADD_FAB_TAG).assertExists()
+        assertTrue("it still rains", r.eggs.umbrella)
+        assertNull("folded: the umbrella went with the bar (${umbrella()})", umbrella())
+        r.advance(3_000)
+        assertNull("and stays away while the bar is folded", umbrella())
+        // She scrolls back up: the bar returns, the umbrella with it.
+        list.performTouchInput { swipeDown(startY = centerY - 100f, endY = centerY + 200f) }
+        r.advance(1_500)
+        onTheShoulder("the bar back")
+    }
+
+    /**
      * Large text (§15; round 1's "toasts sit above the canopy"): the list and the toasts follow the add bar's MEASURED
      * height (about 160 dp at font scale 2.0), not the 84 dp bar of font scale 1: the last strip scrolls wholly above
      * the bar, the rain toast sits above the bar's top, clear of the umbrella, and the list keeps the canopy's room.
@@ -186,7 +228,7 @@ class EggRainTest {
     @Test
     fun largeTextKeepsTheToastAndTheListClearOfTheBar() {
         val r = EggRig(compose, fontScale = 2f).start()
-        val list = compose.onNodeWithTag(PracticeTags.LIST)
+        val list = compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST)
         fun lastStripClearOfTheBar(what: String) {
             list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
             r.advance(100)

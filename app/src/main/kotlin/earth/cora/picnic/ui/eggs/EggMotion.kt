@@ -2,6 +2,7 @@ package earth.cora.picnic.ui.eggs
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import kotlin.math.PI
 import kotlin.math.floor
 import kotlin.math.max
@@ -411,23 +412,62 @@ object ConfettiMotion {
     data class Piece(val kind: String, val x: Float, val sizeDp: Float, val delay: Long, val fallMs: Long, val spin: Float, val sway: Float)
 
     /**
-     * 26 die-cut confetti stickers (12–16 dp), each falling 1.3–1.8 s, all started inside the 2 s, in the two edge lanes
-     * of a [width]-wide screen: the binder gutter on the left (no list words start before 18 dp) and the strip past the
-     * checkbox and chevron column on the right, so they rain beside every word, never over one (§4.1), with nothing cut.
+     * 26 die-cut confetti stickers (12–16 dp), each falling 1.3–1.8 s, all started inside the 2 s, dealt round the
+     * [lanes] (centre x px, widest piece dp, from [lanes]) so they rain beside every word, never over one (§4.1), each
+     * wholly on screen, with nothing cut: a piece takes its lane's width at most, and sways only inside it.
      */
-    fun pieces(width: Float, density: Float, seed: Int = 9): List<Piece> {
+    fun pieces(lanes: List<Pair<Float, Float>>, density: Float, seed: Int = 9): List<Piece> {
+        if (lanes.isEmpty()) return emptyList()
         var s = seed.toLong() and 0x7fffffff
         fun next(): Float {
             s = (s * 1103515245L + 12345L) and 0x7fffffff
             return (s % 10_000).toFloat() / 10_000f
         }
         return List(COUNT) { i ->
-            val left = i % 2 == 0
-            val x = if (left) (5f + next() * 2f) * density else width - (10f + next() * 2f) * density
+            val (x, widest) = lanes[i % lanes.size]
+            val size = minOf(12f + next() * 4f, widest)
             val fall = 1300L + (next() * 500).toLong()
-            Piece(kinds[i % kinds.size], x, 12f + next() * 4f, ((RAIN_MS - fall) * next()).toLong(), fall, (if (next() < 0.5f) -1 else 1) * (140f + next() * 180f), (next() - 0.5f) * 2f)
+            // The sway (dp) keeps the piece inside its lane.
+            val room = ((widest - size) / 2f).coerceAtLeast(0f)
+            Piece(kinds[i % kinds.size], x, size, ((RAIN_MS - fall) * next()).toLong(), fall, (if (next() < 0.5f) -1 else 1) * (140f + next() * 180f), (next() * 2f - 1f) * minOf(1f, room))
         }
     }
+
+    /**
+     * The confetti's lanes across a [width]-px screen ([density] px per dp): the columns no word reaches ([words]: every
+     * word's box from the binder top's down, the list's and the book's; any height), 2 dp clear of the words and the
+     * screen's edges. Each free run of at least [MIN_LANE_DP] holds one lane per 18 dp, the widest piece the lane's own
+     * width up to 16 dp: (centre x px, widest piece dp).
+     */
+    fun lanes(width: Float, density: Float, words: List<Rect>): List<Pair<Float, Float>> {
+        val gap = 2f * density
+        val cols = (width / density).toInt()
+        val blocked = BooleanArray(cols + 1)
+        for (c in 0..cols) {
+            val x0 = c * density
+            val x1 = x0 + density
+            blocked[c] = x0 < gap || x1 > width - gap || words.any { w -> x1 > w.left - gap && x0 < w.right + gap }
+        }
+        val out = ArrayList<Pair<Float, Float>>()
+        var c = 0
+        while (c <= cols) {
+            if (blocked[c]) {
+                c++
+                continue
+            }
+            val start = c
+            while (c <= cols && !blocked[c]) c++
+            val run = (c - start).toFloat()
+            if (run < MIN_LANE_DP) continue
+            val n = maxOf(1, (run / 18f).toInt())
+            val each = run / n
+            for (k in 0 until n) out += ((start + each * (k + 0.5f)) * density) to minOf(16f, each)
+        }
+        return out
+    }
+
+    /** The narrowest lane the confetti takes (dp): a 10 dp piece. */
+    const val MIN_LANE_DP: Float = 10f
 
     /** A piece's pose at [elapsed]: falling from above [top] to below [bottom] in 10 steps, turning. */
     fun at(p: Piece, elapsed: Long, top: Float, bottom: Float, density: Float): EggPose? {
@@ -557,6 +597,66 @@ object DuskMotion {
         if (t < 0 || t >= BURST_MS) return null
         val i = (t * 3 / BURST_MS).toInt()
         return floatArrayOf(0.45f, 0.8f, 1f)[i] to floatArrayOf(0.8f, 1.1f, 0.7f)[i]
+    }
+
+    /**
+     * The horizon the sun sets behind and the moon rises from (dp below the sticker's centre): the 22 dp sticker's
+     * bottom edge, with its hard shadow, so at rest it is whole and below it nothing of it shows.
+     */
+    const val HORIZON_DP: Float = 11f + 4f
+
+    /** The burst's star at rest (dp), and the largest it is drawn (its pop, [burst]'s scale 1.1). */
+    const val STAR_DP: Float = 10f
+    const val STAR_MAX_SCALE: Float = 1.1f
+
+    /**
+     * Where the six burst stars land around the moon at [moon] (px), [density] px per dp: on the free side, every star
+     * whole and clear of every [obstacle] (the binder top's words, the LCD, More: inflated by 1 dp) all the way out from
+     * the moon (each pose of its reach), and inside [area]. The stars sit 13 to 33 dp from the moon's centre (just over
+     * its rim, out to the burst's reach), the upper side first, spread as far apart as they can (farthest first), never
+     * nearer each other than a star. A crowded binder top takes smaller stars (10 dp, then 8, 7 and 6) rather than
+     * fewer; the size comes back with the spots. Pure and deterministic.
+     */
+    fun burstSpots(moon: Offset, density: Float, obstacles: List<Rect>, area: Rect): Pair<List<Offset>, Float> {
+        var best: List<Offset> = emptyList()
+        var bestSize = STAR_DP
+        for (size in floatArrayOf(STAR_DP, 8f, 7f, 6f)) {
+            val half = size * STAR_MAX_SCALE * density / 2f
+            val margin = density
+            fun clear(c: Offset): Boolean {
+                val box = Rect(c.x - half, c.y - half, c.x + half, c.y + half)
+                if (box.left < area.left || box.right > area.right || box.top < area.top || box.bottom > area.bottom) return false
+                return obstacles.none { it.inflate(margin).overlaps(box) }
+            }
+            val candidates = ArrayList<Pair<Offset, Float>>()
+            for (r in intArrayOf(13, 17, 21, 25, 29, 33)) {
+                for (step in 0 until 36) {
+                    val deg = -180.0 + step * 10.0
+                    val a = Math.toRadians(deg)
+                    val at = Offset(moon.x + (kotlin.math.cos(a) * r * density).toFloat(), moon.y + (kotlin.math.sin(a) * r * density).toFloat())
+                    // Whole and clear at every pose of the reach (0.45, 0.8, 1) out from the moon.
+                    val path = floatArrayOf(0.45f, 0.8f, 1f).all { k -> clear(moon + (at - moon) * k) }
+                    if (path) candidates += at to (kotlin.math.abs(deg + 90.0).toFloat() + r * 0.5f)
+                }
+            }
+            if (candidates.isEmpty()) continue
+            val picked = ArrayList<Offset>()
+            picked += candidates.minBy { it.second }.first
+            val apart = size * STAR_MAX_SCALE * density + margin
+            while (picked.size < 6) {
+                val next = candidates
+                    .map { it.first }
+                    .filter { c -> picked.all { (it - c).getDistance() >= apart } }
+                    .maxByOrNull { c -> picked.minOf { (it - c).getDistance() } } ?: break
+                picked += next
+            }
+            if (picked.size > best.size) {
+                best = picked
+                bestSize = size
+            }
+            if (picked.size >= 6) break
+        }
+        return best to bestSize
     }
 
     /** The sticker's drop at [elapsed] in the moon-to-sun undo: the moon sinks (3 poses, 360 ms), the sun rises (360 ms). */

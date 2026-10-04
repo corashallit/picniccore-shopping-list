@@ -59,6 +59,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -102,6 +103,8 @@ object BookTags {
     const val NAME_TAG: String = "picnic_book_name_tag"
     const val COLLAPSED: String = "picnic_book_collapsed"
     const val PAGE_LCD: String = "picnic_book_page_lcd"
+    /** The saved receipt's slip at the fore-edge (§7.3, egg 18; decorative, the tag is for tests). */
+    const val SLIP: String = "picnic_book_receipt_slip"
     fun twin(slot: Int): String = "picnic_book_twin_$slot"
     fun spot(slot: Int): String = "picnic_book_spot_$slot"
     fun stamp(sectionId: String): String = "picnic_book_stamp_$sectionId"
@@ -153,6 +156,8 @@ fun StickerBook(
      */
     pageNumber: Boolean = true,
     onNameTag: ((String?) -> Unit)? = null,
+    /** Egg 7: each twin's twinkle (its slot), handed down by the list; none outside it. */
+    twinkle: (@Composable (slot: Int) -> Modifier)? = null,
 ) {
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
@@ -217,7 +222,9 @@ fun StickerBook(
                         .height((layout.height - BookLayout.BORDERS).dp)
                         .graphicsLayer { alpha = 1f - folded },
                 ) {
-                    BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, onOpen, paging, page, onNameTag)
+                    androidx.compose.runtime.CompositionLocalProvider(LocalTwinTwinkle provides twinkle) {
+                        BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, onOpen, paging, page, onNameTag)
+                    }
                 }
             }
             if (folded > 0f) {
@@ -411,7 +418,9 @@ private fun BookPages(
         }
         // PERFECT (§7.3): the 40 dp PER-FECT! hanko pressed across the spine, its right edge 24 dp past the stamp page's,
         // 6 dp from the top; drawn over the spine and the sticker page.
-        if (perfect) HoloInks(true) { SpinePerfect(fx, clock, Modifier.offset(x = (layout.leftWidth + 24f - 40f).dp, y = 6.dp)) }
+        // PER-FECT! is words: the eggs keep clear of it (the receipt, the bursts; `text:perfect`, §12.1).
+        val perfectAnchor = if (anchors != null) with(anchors) { Modifier.anchor(BOOK_PERFECT_TEXT) } else Modifier
+        if (perfect) HoloInks(true) { SpinePerfect(fx, clock, Modifier.offset(x = (layout.leftWidth + 24f - 40f).dp, y = 6.dp).then(perfectAnchor)) }
     }
 }
 
@@ -726,8 +735,11 @@ private fun Spots(state: BookUi, presentation: BookPresentation, clock: MotionCl
             when {
                 phase is SpotPhase.Peeling && phase.icon != null ->
                     BookTwin(phase.icon, slot, phase, clock, Modifier.testTag(BookTags.twin(slot)), holo = phase.holo, pixel = state.pixel)
-                sticker != null && phase != SpotPhase.Empty ->
-                    BookTwin(sticker.icon, slot, phase, clock, Modifier.testTag(BookTags.twin(slot)), holo = sticker.holo, pixel = state.pixel, aisleIndex = sticker.aisleIndex)
+                sticker != null && phase != SpotPhase.Empty -> {
+                    // Egg 7: every visible sticker twinkles once, the book's twins too (the list hands the twinkle down).
+                    val twinkle = LocalTwinTwinkle.current?.invoke(slot) ?: Modifier
+                    BookTwin(sticker.icon, slot, phase, clock, Modifier.testTag(BookTags.twin(slot)).then(twinkle), holo = sticker.holo, pixel = state.pixel, aisleIndex = sticker.aisleIndex)
+                }
             }
         }
     }
@@ -820,7 +832,12 @@ val NAME_TAG_PAD_Y = 2.dp
 private fun ReceiptSlip(modifier: Modifier) {
     val c = PicnicTheme.colors
     val shadows = PicnicTheme.shadows
-    Canvas(modifier.size(26.dp, 32.dp).rotate(-7f).decorative()) {
+    Canvas(
+        modifier.size(26.dp, 32.dp).rotate(-7f).clearAndSetSemantics {
+            this[earth.cora.picnic.ui.a11y.Decorative] = Unit
+            testTag = BookTags.SLIP
+        },
+    ) {
         drawRect(shadows.color, Offset(shadows.hs.x.toPx(), shadows.hs.y.toPx()), size)
         drawRect(Color.White, size = size)
         val inset = 2.dp.toPx()
@@ -982,6 +999,9 @@ private fun MorePearl(n: Int, modifier: Modifier = Modifier) {
 
 private const val COLLAPSED_TWINS: Int = 6
 
+/** Egg 7's twinkle for the page's twins ([StickerBook]'s `twinkle`), by slot. */
+private val LocalTwinTwinkle = androidx.compose.runtime.staticCompositionLocalOf<(@Composable (Int) -> Modifier)?> { null }
+
 /**
  * The date as a caption row above the book (font scale over 1.3, §7.4): Zen Maru 700 13 sp, scaled, with the heart and
  * the season's pictogram (egg 11) when a seasonal sheet is active.
@@ -1005,6 +1025,9 @@ private val PAGE_LCD_DROP = 8.dp
 
 /** The book's date as the eggs' keep-out (EggAnchors.TEXT_PREFIX + "date"). */
 private const val BOOK_DATE_TEXT: String = "text:date"
+
+/** The PER-FECT! hanko across the spine as the eggs' keep-out (EggAnchors.TEXT_PREFIX + "perfect"). */
+private const val BOOK_PERFECT_TEXT: String = "text:perfect"
 
 /** The page LCD as the eggs' keep-out (EggAnchors.TEXT_PREFIX + "pagelcd"). */
 private const val BOOK_PAGE_LCD_TEXT: String = "text:pagelcd"

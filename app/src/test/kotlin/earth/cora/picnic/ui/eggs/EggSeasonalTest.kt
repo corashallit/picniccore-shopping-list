@@ -59,7 +59,7 @@ class EggSeasonalTest {
                 e.engine.onListShown(e.listId)
                 assertEquals("${c.date}", c.season, e.eggs.season)
                 assertEquals("${c.date}: the add bar's tape", c.tape, AddRules.addBarTape(e.eggs))
-                assertEquals("${c.date}: the book's date pictogram", c.pictogram, seasonPictogram(c.season))
+                assertEquals("${c.date}: the book's date pictogram", c.pictogram, earth.cora.picnic.ui.theme.seasonPictogram(c.season).key)
                 assertTrue("${c.pictogram} is drawn", c.pictogram in DecorManifest.pictograms)
                 val sheet = EggRules.sheetId(c.season, c.date)
                 val album = runBlocking { e.albumStore.current() }

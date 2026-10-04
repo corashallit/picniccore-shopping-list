@@ -246,6 +246,8 @@ class EggJackpotTest {
         // The "jackpot!" chip on its row.
         assertTrue(r.anchors.isLaidOut(EggAnchors.TEXT_PREFIX + "chip:" + row))
         assertTrue(r.anchors.isLaidOut(AnchorRegistry.rowKey(row)))
+        // One lemon star on its sticker (§4.11): the jackpot's, never a second one for "new" beside it.
+        assertEquals("one star flag on the jackpot row", 1, starFlags(r, row))
     }
 
     @Test
@@ -260,4 +262,14 @@ class EggJackpotTest {
         assertNull(r.eggs.jackpot)
         assertEquals(Rarity.JACKPOT, r.list.items.single { it.id == "baking-powder" }.rarity)
     }
+}
+
+/**
+ * The lemon-star flags the real list puts on [itemId]'s sticker (§4.11: New and Shiny are the same lemon star), from the
+ * list's own mapping (buildListUiState, what WP5's row draws).
+ */
+internal fun starFlags(r: EggRig, itemId: String): Int {
+    val ui = earth.cora.picnic.ui.list.buildListUiState(r.state, emptySet(), false, null, earth.cora.picnic.core.catalog.IconCatalog.default, now = r.clock.now())
+    val row = ui.sections.flatMap { it.rows }.single { it.id == itemId }
+    return row.flags.count { it == earth.cora.picnic.ui.theme.StickerFlag.New || it == earth.cora.picnic.ui.theme.StickerFlag.Shiny }
 }

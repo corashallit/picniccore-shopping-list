@@ -6,6 +6,7 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
@@ -32,6 +33,7 @@ import earth.cora.picnic.ui.list.motion.CELEBRATION_TAG
 import earth.cora.picnic.ui.list.motion.NEXT_CARD_TAG
 import earth.cora.picnic.ui.theme.BookTags
 import earth.cora.picnic.ui.theme.TOAST_TAG
+import earth.cora.picnic.core.store.file
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -52,7 +54,9 @@ import org.robolectric.annotation.GraphicsMode
  * 2. goes round the store aisle by aisle in walking order, ticking each row with a tap; the sticker book fills a spot per
  *    tick, and after each finished aisle but the last the Next card says where to go;
  * 3. sees the celebration, which closes by itself behind its progress bar (§0.4 Q7) and leaves the book PERFECT;
- * 4. holds the LCD: the trip is complete, so the receipt prints (D21), never the pet; a tap tucks it into the book.
+ * 4. holds the LCD: the trip is complete, so the receipt prints (D21), never the pet; a tap tucks it into the book;
+ * 5. starts a New trip from the overflow menu ("Clear what I got"): the book is filed in her album with the receipt;
+ * 6. opens her Sticker album: the filed book's row holds the receipt (item 274 end to end).
  * The clock is held and stepped a frame at a time; every wait is bounded.
  */
 @RunWith(AndroidJUnit4::class)
@@ -206,6 +210,76 @@ class WholeTripInTheAppTest {
         advance(2_200)
         compose.onNodeWithTag(EggTags.RECEIPT).performClick()
         until("the receipt tucked into the book", maxMs = 3_000) { state.currentList().trip?.receiptSaved == true }
+        val printed = state.currentList().trip!!.receipt!!
+        until("the slip at the book's fore-edge", maxMs = 3_000) { exists(BookTags.SLIP) }
+
+        // 5. New trip, from the overflow menu's sheet: "Clear what I got" files the book in her album, with its receipt.
+        advance(4_500)
+        compose.onNodeWithTag(ListTags.MORE).performClick()
+        advance(400)
+        compose.onNodeWithText("New trip").performClick()
+        until("the New trip sheet", maxMs = 3_000) { compose.onAllNodesWithText("Clear what I got").fetchSemanticsNodes().isNotEmpty() }
+        advance(400)
+        compose.onNodeWithText("Clear what I got").performClick()
+        until("the book filed and the list cleared", maxMs = 5_000) { state.currentList().trip == null && state.currentList().items.isEmpty() }
+        val newest = runBlocking { app.container.album.current() }.books.maxBy { it.closedAt }
+        assertEquals("the album's newest book carries the receipt", printed, newest.receipt)
+        assertTrue(newest.perfect)
+
+        // 6. Her Sticker album: the book's row says it holds the receipt.
+        advance(4_500)
+        compose.onNodeWithTag(ListTags.MORE).performClick()
+        advance(400)
+        compose.onNodeWithText("Sticker album").performClick()
+        // Past the pocket page: the link above the tabs goes down to the trip books.
+        until("the album's link to its trip books", maxMs = 5_000) { exists(earth.cora.picnic.ui.album.AlbumTags.JUMP) }
+        advance(600)
+        // The link is the button at the row's right end ("1 trip sticker book").
+        compose.onNodeWithText("1 trip sticker book").performClick()
+        until("the album with its trip book", maxMs = 5_000) {
+            compose.onAllNodesWithText("receipt", substring = true).fetchSemanticsNodes().any { n ->
+                n.config.getOrNull(SemanticsProperties.Text)?.any { "perfect · receipt" in it.text } == true
+            }
+        }
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * Egg 14's back pocket, end to end (§12.2): ten finished trips in her album open the back pocket; the toast "Your
+     * album's back pocket opened! · Look" shows on her list, and Look opens the Sticker album at the back pocket, its
+     * corner curling open over "sticker sheet 2 of 2", on screen.
+     */
+    @Test
+    fun theBackPocketsLookOpensTheAlbumThere() {
+        compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText("A brand-new sticker sheet!").fetchSemanticsNodes().isNotEmpty() }
+        compose.mainClock.autoAdvance = false
+        val day = 86_400_000L
+        runBlocking {
+            app.container.album.update { a ->
+                (1..10).fold(a) { acc, n ->
+                    val at = 1_759_000_000_000L + n * day
+                    acc.file(
+                        earth.cora.picnic.core.store.TripBook(
+                            id = "t-$n", listTitle = "Saturday shop", storeName = "Hillcrest Market", startedAt = at - 3_600_000,
+                            completedAt = at - 60_000, closedAt = at, total = 2, minutes = 30,
+                            stickers = (0 until 2).map { earth.cora.picnic.core.store.BookSticker(it, "Apple $it", earth.cora.picnic.core.model.IconRef("apple"), earth.cora.picnic.core.model.Rarity.NONE, at - 60_000) },
+                            stamps = emptyList(), perfect = true, receipt = null,
+                        ),
+                    )
+                }
+            }
+        }
+        until("the back pocket's toast", maxMs = 10_000) { compose.onAllNodesWithText("Look").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Your album’s back pocket opened!", substring = true).assertExists()
+        compose.onNodeWithText("Look").performClick()
+        until("the album at its back pocket, on screen", maxMs = 10_000) {
+            val nodes = compose.onAllNodesWithText("sticker sheet 2 of 2").fetchSemanticsNodes()
+            val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+            nodes.any { it.boundsInRoot.top >= screen.top && it.boundsInRoot.bottom <= screen.bottom }
+        }
+        advance(1_200)
+        compose.onNodeWithText("sticker sheet 2 of 2").assertIsDisplayed()
+        compose.onNodeWithTag(earth.cora.picnic.ui.album.BACK_POCKET_TAG).assertIsDisplayed()
         compose.mainClock.autoAdvance = true
     }
 

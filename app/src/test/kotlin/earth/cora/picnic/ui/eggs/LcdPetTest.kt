@@ -42,7 +42,7 @@ class LcdPetTest {
         val poses = ArrayList<Pair<Long, PetPose>>()
         val r = EggRig(compose)
         r.start {
-            PracticeList(r.model, feedback = r.feedback)
+            PracticeListScreen(r.sandbox)
             PoseProbe(r.engine) { poses += r.now to it }
         }
         r.holdLcd(r.timeouts.holdThresholdMs + 20)
@@ -85,7 +85,7 @@ class LcdPetTest {
         val poses = ArrayList<PetPose>()
         val r = EggRig(compose, reduced = true)
         r.start {
-            PracticeList(r.model, feedback = r.feedback)
+            PracticeListScreen(r.sandbox)
             PoseProbe(r.engine) { poses += it }
         }
         r.holdLcd(r.timeouts.holdThresholdMs + 20)

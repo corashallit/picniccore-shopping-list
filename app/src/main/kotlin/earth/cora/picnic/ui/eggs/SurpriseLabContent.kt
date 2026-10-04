@@ -6,6 +6,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -51,6 +53,7 @@ import earth.cora.picnic.ui.theme.FixedMotionScale
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
+import earth.cora.picnic.ui.theme.PicnicBackground
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.WashiPattern
 import earth.cora.picnic.ui.theme.WashiTape
@@ -61,7 +64,8 @@ import kotlinx.coroutines.withContext
 /*
  * The Surprise lab's content (docs/DESIGN_STICKER.md §6.9, §12.3) inside WP8's shell (SurpriseLabScreen): the 18 egg
  * tiles with their "Try it" lines, a Try it that really plays each egg on the sandbox, and the practice list it plays
- * on, scrolled into view under its "Surprise lab · practice list" ribbon. It works with Easter eggs off (the sandbox
+ * on (WP5's real List screen over the sandbox, PracticeListScreen), scrolled into view under its "Surprise lab ·
+ * practice list" ribbon. It works with Easter eggs off (the sandbox
  * forces them on, on itself only). The sandbox lives in a ViewModel, so a rotation keeps it; leaving the lab discards
  * it. Owner: WP9 (SurpriseLabTest).
  */
@@ -181,6 +185,8 @@ fun PracticeFrame(
     ) {
         Box(
             Modifier
+                // As wide as her phone (past the lab's gutters): the real List screen lays out here as on her list.
+                .bleed(earth.cora.picnic.ui.common.ScreenGutter)
                 .fillMaxWidth()
                 .height(frameHeight)
                 .testTag(LAB_PRACTICE_TAG)
@@ -189,7 +195,15 @@ fun PracticeFrame(
                 .border(3.dp, PicnicTheme.colors.stickerWhite, shape),
         ) {
             PicnicTheme(variant = variant, reducedMotion = LocalReducedMotion.current) {
-                PracticeList(sandbox.model, ribbon = { LabRibbon() })
+                // The real List screen under the "Surprise lab · practice list" ribbon (§6.9).
+                PicnicBackground(Modifier.fillMaxSize()) {
+                    // Egg 1's wash reaches the ribbon's strip of binder too (the list washes its own).
+                    DuskWash(sandbox.engine.state.collectAsState().value)
+                    Column(Modifier.fillMaxSize()) {
+                        LabRibbon()
+                        PracticeListScreen(sandbox, Modifier.weight(1f))
+                    }
+                }
             }
         }
         if (fired == 14) {
@@ -213,6 +227,20 @@ fun PracticeFrame(
         }
     }
 }
+
+/** Widens this by [by] on each side, past its parent's gutters (it reports its parent's width, so nothing else moves). */
+private fun Modifier.bleed(by: androidx.compose.ui.unit.Dp): Modifier = this.then(
+    Modifier.layout { measurable, constraints ->
+        val side = by.roundToPx()
+        val wider = if (constraints.hasBoundedWidth) {
+            constraints.copy(minWidth = constraints.minWidth + 2 * side, maxWidth = constraints.maxWidth + 2 * side)
+        } else {
+            constraints
+        }
+        val placeable = measurable.measure(wider)
+        layout((placeable.width - 2 * side).coerceAtLeast(0), placeable.height) { placeable.place(-side, 0) }
+    },
+)
 
 /** At font scale 2.0 the practice window is this much taller (the binder top, the book and the add bar grow so much). */
 private val LARGE_TEXT_ROOM = 380.dp

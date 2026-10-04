@@ -23,12 +23,12 @@ import org.robolectric.annotation.GraphicsMode
  * Item 259 (§4.1, §12.1): egg overlays never cover text. Every overlay piece reports where it is drawn on every frame
  * (EggProbe), and it is checked against every word on screen: the text nodes and the list's word keep-outs
  * (wordBoxes). The pieces that go about the page (the ladybug, the nap cat, JACK / POT!, the umbrella, the rolling
- * produce, the confetti and the petals in their edge lanes, the Dusk sparkles) never overlap a word at all: they go
+ * produce, the confetti and the petals in their lanes, the Dusk sun, moon and sparkles) never overlap a word at all: they go
  * round the words, so nothing is ever cut out of them. The roll home along the new row's own line is drawn by the row
  * beneath its words (it may pass under that row's words only). The ants on the add bar's edge and the shiny row's burst
  * keep to their lanes and are clipped clear of any word all the same, so where one crosses words those words must be one
- * of the boxes their clip cuts out. Sampled over each egg's whole run on each list under test (the practice list; WP5's
- * ListScreen on merge, [EggListUnderTest]), Day and Glow.
+ * of the boxes their clip cuts out. Sampled over each egg's whole run on WP5's real List screen as the Surprise lab shows
+ * it ([EggListUnderTest]), Day and Glow.
  *
  * The printed receipt is not decoration but an interactive card with its own words, which waits over the list until it
  * is tapped (§13.2), as the Next card and the toasts do: ReceiptTest.neverOverWords keeps it and its slot line off
@@ -48,11 +48,10 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
     )
 
     /**
-     * Clipped clear of words as well as kept to their lanes. Egg 1's six-star burst is one of the bursts drawn inside the
-     * text keep-outs (EggOverlays' KeepOut): on WP5's binder top the LCD stands right beside the sun, so the half ring on
-     * the moon's right reaches it and is cut clear of its digits (integration of part 3).
+     * Clipped clear of words as well as kept to their lanes. Egg 1's sun, moon and six-star burst are not among them:
+     * they are laid out on the free side of the moon and never meet a word, so nothing of them is ever cut.
      */
-    private val clipped = listOf("ant", "shiny", "dusk")
+    private val clipped = listOf("ant", "shiny")
 
     @Test
     fun neverOverText() {

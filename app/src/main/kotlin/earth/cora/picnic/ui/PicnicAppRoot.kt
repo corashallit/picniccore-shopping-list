@@ -31,6 +31,8 @@ import earth.cora.picnic.ui.list.ListViewModel
 import earth.cora.picnic.ui.nav.AboutRoute
 import earth.cora.picnic.ui.nav.AislesRoute
 import earth.cora.picnic.ui.nav.AlbumRoute
+import earth.cora.picnic.ui.nav.AlbumTarget
+import androidx.navigation.toRoute
 import earth.cora.picnic.ui.nav.AppNav
 import earth.cora.picnic.ui.nav.ListRoute
 import earth.cora.picnic.ui.nav.LocalAppNav
@@ -88,12 +90,13 @@ fun PicnicAppRoot(
             // The overflow menu's four screens are siblings: Back from any of them is the list.
             openMyStore = { nav.navigateFromMenu(AislesRoute) },
             openPantry = { nav.navigateFromMenu(PantryRoute) },
-            openAlbum = { nav.navigateFromMenu(AlbumRoute) },
+            openAlbum = { nav.navigateFromMenu(AlbumRoute()) },
             openSettings = { nav.navigateFromMenu(SettingsRoute) },
             openAbout = { nav.navigateOnce(AboutRoute) },
             openSurpriseLab = { nav.navigateOnce(SurpriseLabRoute) },
             back = { nav.popOnce() },
             backToList = { nav.backToList() },
+            openAlbumAt = { target -> nav.navigateFromMenu(AlbumRoute(backPocket = target == AlbumTarget.BackPocket)) },
         )
     }
 
@@ -128,9 +131,10 @@ fun PicnicAppRoot(
                     onBack = appNav.back,
                 )
             }
-            composable<AlbumRoute> {
+            composable<AlbumRoute> { entry ->
                 AlbumDestination(
                     vm = viewModel(factory = AlbumViewModel.factory(container)),
+                    openAt = if (entry.toRoute<AlbumRoute>().backPocket) AlbumTarget.BackPocket else AlbumTarget.Top,
                     onBack = appNav.back,
                     onBackToList = appNav.backToList,
                     onOpenMyStore = appNav.openMyStore,

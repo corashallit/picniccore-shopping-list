@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -24,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -64,7 +64,6 @@ import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.ToastHostState
 import earth.cora.picnic.ui.theme.ToastMessage
-import earth.cora.picnic.ui.theme.binderGround
 import earth.cora.picnic.ui.theme.holdOnFrameClock
 import earth.cora.picnic.ui.theme.rememberLoopTime
 import androidx.compose.material3.Text
@@ -92,6 +91,9 @@ object EggAnchors {
 
     /** The screen title (the holo title of egg 7, the Dusk transition's horizon). */
     const val TITLE: String = "title"
+
+    /** The binder top's More button (egg 1's burst keeps clear of it). */
+    const val MORE: String = "more"
 
     /** Every text the overlays must keep clear of: register each text node's box as `text:<anything>`. */
     const val TEXT_PREFIX: String = "text:"
@@ -151,6 +153,11 @@ fun BoxScope.EggOverlays(
      */
     listPlacesDecor: Boolean = false,
     modifier: Modifier = Modifier,
+    /**
+     * Egg 16: the docked add bar the umbrella stands on (window px), or null while it does not show (the bar folded into
+     * the FAB). Read as snapshot state, so the umbrella follows the bar as it moves.
+     */
+    addBar: () -> Rect? = { anchors.bounds(AnchorRegistry.ADD_BAR) },
 ) {
     val state by engine.state.collectAsState()
     val reduced = LocalReducedMotion.current
@@ -209,9 +216,17 @@ fun BoxScope.EggOverlays(
       androidx.compose.runtime.CompositionLocalProvider(LocalOverlayOrigin provides origin) {
         val local = { r: Rect -> r.translate(-origin) }
         val keepOut = { keepOutRects(anchors).map(local) }
-        state.duskFx?.let { DuskSun(it, anchors.bounds(AnchorRegistry.SUN)?.let(local), engine, feedback) }
+        state.duskFx?.let { DuskSun(it, anchors.bounds(AnchorRegistry.SUN)?.let(local), keepOut, engine, feedback) }
+        // Egg 1's burst keeps to the free side of the moon: clear of the words, the LCD and More, so nothing is cut.
+        state.duskFx?.let { fx ->
+            DuskBurst(fx, anchors.bounds(AnchorRegistry.SUN)?.let(local)) {
+                keepOut() + listOfNotNull(anchors.bounds(EggAnchors.MORE)?.let(local))
+            }
+        }
         if (!listPlacesDecor) state.snackSectionId?.let { SnackStar(it, anchors, local) }
-        if (state.umbrella) anchors.bounds(AnchorRegistry.ADD_BAR)?.let { Umbrella(local(it)) }
+        // Egg 16: on the bar's shoulder wherever the bar is; gone while it is folded into the FAB, back (with its magic
+        // appear) when the bar returns.
+        if (state.umbrella) addBar()?.let { Umbrella(local(it)) }
         // The cat curls up once the chain that finished the other stops has played out (§12.3: chain end + 0.5 s).
         val chainsDone = motion?.current?.value?.let { p -> p.flights.isEmpty() && p.bursts.isEmpty() && p.celebration == null } ?: true
         if (!listPlacesDecor) state.napSectionId?.let { NapCat(it, anchors, local, engine, chainsDone) }
@@ -220,7 +235,6 @@ fun BoxScope.EggOverlays(
         // The bursts: they keep to lanes with no words (the gutters, the checkbox column); clipped clear of every text box
         // all the same, should a layout ever put words there.
         KeepOut(keepOut) {
-            state.duskFx?.let { DuskBurst(it, anchors.bounds(AnchorRegistry.SUN)?.let(local)) }
             state.petalsId?.let { Petals(it, anchors, local, engine) }
             state.antsId?.let { Ants(it, anchors, local, engine) }
             state.confettiId?.let { Confetti(it, anchors, local, engine) }
@@ -342,8 +356,15 @@ private val LocalOverlayOrigin = staticCompositionLocalOf { Offset.Zero }
  * Egg 1: the sun sets behind its horizon and the moon rises; the moon tapped, the sun comes back.
  * ------------------------------------------------------------------------------------------------ */
 
+/**
+ * Egg 1's sun and moon (§12.2): the sticker by the title is hidden while this draws its own ([eggTitleSticker]); the sun
+ * sinks below its horizon (the sticker's own bottom edge, [DuskMotion.HORIZON_DP]) in 3 poses, the moon rises from it
+ * in 3, and the moon tapped plays it back. Nothing is painted but the sticker: no patch of ground, so the binder's own
+ * wash shows round it, and it is drawn only inside its horizon box minus every word's box ([keepOut]: the title, the
+ * subtitle, the LCD), so no glyph, stroke or LCD pixel is ever painted over, at any pose (§2.7, item 334; §4.1).
+ */
 @Composable
-private fun DuskSun(fx: DuskFx, sun: Rect?, engine: SurpriseEngine, feedback: Feedback) {
+private fun DuskSun(fx: DuskFx, sun: Rect?, keepOut: () -> List<Rect>, engine: SurpriseEngine, feedback: Feedback) {
     val total = when {
         fx.reduced -> DuskMotion.FADE_MS
         fx.toDusk -> DuskMotion.DURATION
@@ -360,62 +381,72 @@ private fun DuskSun(fx: DuskFx, sun: Rect?, engine: SurpriseEngine, feedback: Fe
         }
     }
     val box = sun ?: return
-    // In Glow (the phone turned dark mid-change) the sticker by the title is the static Glow moon: no patch, no sun.
+    // In Glow (the phone turned dark mid-change) the sticker by the title is the static Glow moon: no sun, no moon.
     if (PicnicTheme.variant == earth.cora.picnic.ui.theme.ThemeVariant.Glow) return
-    val d = LocalDensity.current
-    val sizeDp = with(d) { box.width.toDp() }
+    val d = LocalDensity.current.density
+    val center = box.center
+    val stickerPx = DUSK_STICKER_DP * d
+    val horizon = Rect(box.left, box.top, box.right, center.y + DuskMotion.HORIZON_DP * d)
+    val (name, pose) = when {
+        fx.reduced -> {
+            val a = (t.toFloat() / DuskMotion.FADE_MS).coerceIn(0f, 1f)
+            (if (fx.toDusk) "moon" else "sun") to EggPose(center, alpha = a)
+        }
+        fx.toDusk -> DuskMotion.sunDrop(t)?.let { "sun" to EggPose(center + Offset(0f, it * d)) }
+            ?: DuskMotion.moonDrop(t)?.let { "moon" to EggPose(center + Offset(0f, it * d)) }
+            ?: return
+        else -> DuskMotion.undo(t).let { (moon, drop) -> (if (moon) "moon" else "sun") to EggPose(center + Offset(0f, drop * d)) }
+    }
     Box(
         Modifier
-            .offset { IntOffset(box.left.roundToInt(), box.top.roundToInt()) }
-            .size(sizeDp, with(d) { box.height.toDp() })
+            .fillMaxSize()
             .decorative()
-            // The ground patch hides the sticker under it while the transition draws its own (§2.12: window-aligned, so
-            // it is the binder exactly as it is there).
-            .binderGround(PicnicTheme.colors)
-            .clipToBounds(),
+            .drawWithContent {
+                clipRect(horizon.left, horizon.top, horizon.right, horizon.bottom) {
+                    val cut = keepOut()
+                    if (cut.isEmpty()) {
+                        this@drawWithContent.drawContent()
+                    } else {
+                        clipPath(Path().apply { cut.forEach { addRect(it) } }, ClipOp.Difference) { this@drawWithContent.drawContent() }
+                    }
+                }
+            },
     ) {
-        val sticker = 22.dp
-        val center = Offset(box.width / 2f, box.height / 2f)
-        val dropPx = { dp: Float -> dp * d.density }
-        when {
-            fx.reduced -> {
-                val a = (t.toFloat() / DuskMotion.FADE_MS).coerceIn(0f, 1f)
-                PlacedSticker(if (fx.toDusk) "moon" else "sun", EggPose(center, alpha = a), sticker)
-            }
-            fx.toDusk -> {
-                DuskMotion.sunDrop(t)?.let { PlacedSticker("sun", EggPose(center + Offset(0f, dropPx(it))), sticker) }
-                DuskMotion.moonDrop(t)?.let { PlacedSticker("moon", EggPose(center + Offset(0f, dropPx(it))), sticker) }
-            }
-            else -> {
-                val (moon, drop) = DuskMotion.undo(t)
-                PlacedSticker(if (moon) "moon" else "sun", EggPose(center + Offset(0f, dropPx(drop))), sticker)
-            }
-        }
+        PlacedSticker(name, pose, DUSK_STICKER_DP.dp)
     }
-    @Suppress("UNUSED_VARIABLE") val unused = sizeDp
+    // What can show of it: the sticker's box inside its horizon (the probe's `duskSun`).
+    val drawn = Rect(Offset.Zero, Size.Zero).sized(pose.center, stickerPx).intersect(horizon)
+    if (drawn.width > 0f && drawn.height > 0f) Probe("duskSun", t, drawn, 0f, origin())
 }
 
+/** The sticker by the title (§4.2): 22 dp. */
+private const val DUSK_STICKER_DP: Float = 22f
+
 /**
- * Egg 1's six-star sparkle burst as the moon rises: a half ring on the moon's right, away from the title, reaching 26 dp
- * from its centre. A burst, so it is drawn inside the text keep-outs (§4.1): a star that would cross the title or the
- * subtitle is cut clear of the words.
+ * Egg 1's six-star sparkle burst as the moon rises, laid out on the free side of the moon ([DuskMotion.burstSpots]):
+ * every star whole, clear of the binder top's words, the LCD and More, inside the screen under the status bar, at
+ * every pose of its reach. Nothing has to be cut.
  */
 @Composable
-private fun DuskBurst(fx: DuskFx, sun: Rect?) {
+private fun BoxScope.DuskBurst(fx: DuskFx, sun: Rect?, obstacles: () -> List<Rect>) {
     if (!fx.toDusk || fx.reduced) return
     val box = sun ?: return
     if (PicnicTheme.variant == earth.cora.picnic.ui.theme.ThemeVariant.Glow) return
     // The same frame-clock time as [DuskSun] (both start on the frame the effect shows).
     val t by rememberEffectTime(fx.id to "burst", DuskMotion.DURATION)
-    val d = LocalDensity.current.density
-    DuskMotion.burst(t)?.let { (reach, scale) ->
+    val density = LocalDensity.current
+    val d = density.density
+    val statusBar = androidx.compose.foundation.layout.WindowInsets.statusBars.getTop(density).toFloat()
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.matchParentSize()) {
+        val area = Rect(d, statusBar + d, constraints.maxWidth - d, constraints.maxHeight - d)
         val c = box.center
-        for (i in 0 until 6) {
-            val a = Math.toRadians(-90.0 + i * 36.0)
-            val r = 26f * d * reach
-            val at = Offset(c.x + (cos(a) * r).toFloat(), c.y + (sin(a) * r).toFloat())
-            PlacedSticker("star4", EggPose(at, 0f, scale), 10.dp)
-            Probe("dusk$i", t, Rect(Offset.Zero, Size.Zero).sized(at, 10 * d * scale), 0f, origin())
+        val (spots, sizeDp) = remember(fx.id, c, area) { DuskMotion.burstSpots(c, d, obstacles(), area) }
+        DuskMotion.burst(t)?.let { (reach, scale) ->
+            for ((i, spot) in spots.withIndex()) {
+                val at = c + (spot - c) * reach
+                PlacedSticker("star4", EggPose(at, 0f, scale), sizeDp.dp)
+                Probe("dusk$i", t, Rect(Offset.Zero, Size.Zero).sized(at, sizeDp * d * scale), 0f, origin())
+            }
         }
     }
 }
@@ -695,11 +726,15 @@ private fun Confetti(id: Long, anchors: AnchorRegistry, local: (Rect) -> Rect, e
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat()
         val h = constraints.maxHeight.toFloat()
-        val pieces = remember(id, w) { ConfettiMotion.pieces(w, d) }
-        // From under the binder top's words (the title, the subtitle, the LCD) down to the add bar's edge, where they
-        // fall out of sight behind the bar: the lanes hold no words in between.
-        val ceiling = listOf("title", "subtitle", "lcd").mapNotNull { anchors.bounds(EggAnchors.TEXT_PREFIX + it)?.let(local)?.bottom }.maxOrNull() ?: 0f
+        // From under the binder top's words (the title, the subtitle, the LCD) down to the add bar's edge.
+        val header = listOf("title", "subtitle", "lcd").mapNotNull { anchors.bounds(EggAnchors.TEXT_PREFIX + it)?.let(local) }
+        val ceiling = header.maxOfOrNull { it.bottom } ?: 0f
         val floor = bar?.top ?: h
+        // The lanes no word below the binder top reaches (the book's, the strips', the rows'), at any height, as the
+        // words lie now (the same lanes, and so the same pieces, frame after frame while nothing moves sideways).
+        val words = keepOutRects(anchors).map(local).filter { it.bottom > ceiling && it.top < floor }
+        val lanes = ConfettiMotion.lanes(w, d, words)
+        val pieces = remember(id, lanes) { ConfettiMotion.pieces(lanes, d) }
         pieces.forEachIndexed { i, p ->
             val size = p.sizeDp * d
             ConfettiMotion.at(p, t, top = ceiling + 1.5f * size, bottom = floor - 1.5f * size, density = d)?.let {

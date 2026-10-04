@@ -56,17 +56,20 @@ import kotlinx.coroutines.withContext
 
 /**
  * The LCD as the eggs show it (§13.1): a word (SNACK? 2.6 s, BONUS★ while the stage lasts, FED 1.5 s with the bee,
- * PRINT★ 1.7 s), the pet bee beside the count while it lives there (egg 15; the star hides), and the receipt's TalkBack
- * action once the trip is complete (egg 18). [base] is the count the list shows; with Easter eggs off it is returned
- * as it is (no pet, no words, no receipt action, §2.5).
+ * PRINT★ until the receipt settles), the pet bee beside the count while it lives there (egg 15; the star hides), and the
+ * receipt's TalkBack action once the trip is complete (egg 18). The bee keeps its own word, FED, beside it; any other
+ * word stands in for the bee and the count together (`Text` mode, `petLives`: the chip keeps their room, §13.1 item 259).
+ * [base] is the count the list shows; with Easter eggs off it is returned as it is (no pet, no words, no receipt action,
+ * §2.5).
  */
 fun SurpriseState.lcd(base: LcdState, petPose: PetPose = PetPose.Rest): LcdState {
     if (!enabled) return base.copy(receiptReady = false)
     val word = lcdWord?.text
     val bee = pet || petVisitId != null
     return when {
-        bee -> base.copy(mode = LcdMode.Pet, text = word.orEmpty(), petPose = petPose, receiptReady = receiptReady)
-        word != null -> base.copy(mode = LcdMode.Text, text = word, receiptReady = receiptReady)
+        bee && (word == null || word == EggRules.FED) ->
+            base.copy(mode = LcdMode.Pet, text = word.orEmpty(), petPose = petPose, receiptReady = receiptReady)
+        word != null -> base.copy(mode = LcdMode.Text, text = word, receiptReady = receiptReady, petLives = bee)
         else -> base.copy(receiptReady = receiptReady)
     }
 }
@@ -435,7 +438,8 @@ fun TrayBee(modifier: Modifier = Modifier) {
 /**
  * The list's standing ladybug on the open tray's end cap (§4.1, §4.27): 14 dp, waddling ±5° every 250 ms (still under
  * reduced motion). It steps off while the nap cat and the umbrella both show ([SurpriseState.ladybugStepsOff]), so the
- * screen never holds more than 3 page stickers. A page sticker.
+ * screen never holds more than 3 page stickers, and while egg 2's ladybug strolls along a strip: there is one ladybug
+ * on the list, and it is the one out for a walk (§12.2 "a ladybug appears"). A page sticker.
  */
 @Composable
 fun EndCapLadybug(state: SurpriseState, modifier: Modifier = Modifier) {

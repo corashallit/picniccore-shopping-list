@@ -6,12 +6,17 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.ui.a11y.Decorative
 import earth.cora.picnic.ui.theme.ThemeVariant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -59,8 +64,8 @@ fun EggRig.decorWithSemantics(): List<String> {
 }
 
 /**
- * Item 73, the eggs' half (§4.1 decor taxonomy) on each list under test (the practice list; WP5's ListScreen on merge,
- * [EggListUnderTest]) in every egg state (Day; Glow for the plain list,
+ * Item 73, the eggs' half (§4.1 decor taxonomy) on WP5's real List screen as the Surprise lab shows it
+ * ([EggListUnderTest]) in every egg state (Day; Glow for the plain list,
  * midnight, the nap and the rain): at most 3 page
  * stickers on the screen at any time (the list's standing bee and ladybug, the nap cat, the umbrella), and no decorative
  * node carries anything TalkBack reads. (Transient bursts never over text: EggOverlayBoundsTest. The gutter-only texture
@@ -108,19 +113,49 @@ class DecorBudgetStepOffTest {
     @get:Rule
     val compose = createComposeRule()
 
+    /**
+     * Brings [sectionId]'s open tray's end cap (where the ladybug stands) into the list's room above the add bar, as her
+     * thumb would: a few bounded drags (never an open-ended scroll-to-node, which the scenes' own scrolling could fight).
+     */
+    private fun EggRig.showCap(sectionId: String) {
+        val list = compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST)
+        val tag = earth.cora.picnic.ui.list.ListTags.cap(sectionId)
+        val d = compose.density.density
+        repeat(24) {
+            val view = list.fetchSemanticsNode().boundsInRoot
+            val floor = minOf(view.bottom, anchor(earth.cora.picnic.ui.list.motion.AnchorRegistry.ADD_BAR).top)
+            val cap = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+            val dy = when {
+                cap == null -> 120 * d
+                cap.bottom > floor -> cap.bottom - floor + 8 * d
+                cap.top < view.top -> cap.top - view.top - 8 * d
+                else -> {
+                    advance(300)
+                    return
+                }
+            }
+            list.performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, dy) }
+            advance(100)
+        }
+        throw AssertionError("$sectionId's end cap never came into the list's room")
+    }
+
     @Test
     fun theLadybugStepsOffForTheCatAndTheUmbrella() {
         val r = EggRig(compose).start()
         r.advance(300)
         assertEquals(setOf("bee", "ladybug"), r.pageStickers().toSet())
-        // Every stop but Frozen done: the cat curls up in Frozen's basket; she opens Frozen (the current stop).
+        // Every stop but Frozen done: the cat curls up in Frozen's basket; she opens Frozen (the current stop) and looks
+        // down to its end cap, the cat's basket on the plate above it.
         r.fire(8)
         r.act { r.model.open("frozen") }
         r.advance(1_500)
+        r.showCap("frozen")
         assertEquals(setOf("bee", "ladybug", "nap cat"), r.pageStickers().toSet())
         // Rain: the umbrella is one more, so the ladybug steps off.
         r.fire(16)
         r.advance(600)
+        r.showCap("frozen")
         val on = r.pageStickers()
         assertEquals(setOf("bee", "nap cat", "umbrella"), on.toSet())
         assertTrue(on.size <= 3)
@@ -128,6 +163,71 @@ class DecorBudgetStepOffTest {
         // The cat trots off: the ladybug comes back.
         r.act { r.engine.onNapTap() }
         r.advance(NapMotion.LEAVE_MS + 300)
+        r.showCap("frozen")
         assertEquals(setOf("bee", "ladybug", "umbrella"), r.pageStickers().toSet())
+    }
+
+    /**
+     * Item 73: with the nap cat and the umbrella both out (the bee, the cat and the umbrella: 3 page stickers), holding a
+     * folded, done basket for the ladybug's hold sets no ladybug off: the screen never shows a 4th page sticker.
+     */
+    @Test
+    fun noStrollWhileTheCatAndTheUmbrellaAreOut() {
+        val r = EggRig(compose).start()
+        r.advance(300)
+        r.fire(8)
+        r.act { r.model.open("frozen") }
+        r.advance(1_500)
+        r.showCap("frozen")
+        r.fire(16)
+        r.advance(600)
+        r.showCap("frozen")
+        assertEquals(setOf("bee", "nap cat", "umbrella"), r.pageStickers().toSet())
+        // Every other stop is done: she holds a folded, done basket for the threshold + 560 ms (as its strip reports it),
+        // and the lab's own Try it does the same.
+        val done = r.list.items.first { it.aisleId != "frozen" && it.aisleId != null }.aisleId!!
+        r.act { r.engine.onBasketHold(done, r.timeouts.holdThresholdMs + EggRules.LADYBUG_AFTER_THRESHOLD_MS + 40) }
+        r.fire(2)
+        assertNull("no stroll: the budget is full", r.eggs.ladybug)
+        repeat(10) {
+            r.advance(200)
+            val on = r.pageStickers()
+            assertTrue("at ${it * 200} ms: $on", on.size <= 3)
+            assertFalse("no ladybug at ${it * 200} ms: $on", "ladybug" in on)
+        }
+        // The cat trots off: there is room again, and the ladybug may stroll.
+        r.act { r.engine.onNapTap() }
+        r.advance(NapMotion.LEAVE_MS + 300)
+        r.fire(2)
+        assertNotNull("with room again, it strolls", r.eggs.ladybug)
+    }
+
+    /**
+     * Egg 2 (§12.2 "a ladybug appears"): there is one ladybug on the list, and it is the one out for its stroll. While
+     * it walks a strip (and flies off), the end cap's ladybug has stepped off; when the stroll is over it is back. Never
+     * two ladybugs at once.
+     */
+    @Test
+    fun oneLadybugAtATime() {
+        val r = EggRig(compose).start()
+        r.advance(300)
+        assertTrue("the end cap's ladybug", "ladybug" in r.pageStickers())
+        r.probe.clear()
+        r.fire(2)
+        val t0 = r.now
+        var walked = 0
+        while (r.now < t0 + LadybugMotion.DURATION + 400) {
+            r.advance(84)
+            // One frame, sampled whole: the strolling ladybug drawn in it, and the stickers standing in it.
+            r.probe.clear()
+            r.frame()
+            val strolling = r.probe.frames.any { it.tag == "ladybug" }
+            val standing = r.pageStickers().count { it == "ladybug" }
+            if (strolling) walked++
+            assertTrue("one ladybug at ${r.now - t0} ms (strolling $strolling, standing $standing)", standing + (if (strolling) 1 else 0) <= 1)
+        }
+        assertTrue("it strolled ($walked samples)", walked > 20)
+        r.advance(300)
+        assertTrue("the end cap's ladybug is back", "ladybug" in r.pageStickers())
     }
 }

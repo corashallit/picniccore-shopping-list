@@ -1335,10 +1335,10 @@ Goldens are `egg_<n>_end_<variant>`, captured at the listed time on the test clo
 
 ### 12.4 Weather source (eggs 11 and 16)
 
-- **Feed**: Environment Canada's city forecast Atom feed for Toronto, `https://weather.gc.ca/rss/city/on-143_e.xml` (the city code follows Q6). Only with **Weather surprises** on; no other request, no location, no identifier.
+- **Feed**: Environment Canada's city forecast Atom feed for the forecast city, named by that CITY's own coordinates to two decimals: `https://weather.gc.ca/rss/weather/<lat>_<lon>_e.xml` (Toronto: `https://weather.gc.ca/rss/weather/43.65_-79.38_e.xml`; the older `rss/city/<code>_e.xml` feeds now answer 404). The city follows Q6: the nearest Environment Canada city to her rounded area with **Use my area** on, otherwise Toronto (`Place.forecastFeedUrl`). Only with **Weather surprises** on; no other request, never her own point, no identifier.
 - **Parser**: the `<entry>` elements whose `<category term>` is "Weather Forecasts"; each `<title>` reads like "Saturday: Rain. High 12." with the summary carrying "Chance of showers … 60 percent". **Rain today** = today's or tonight's entry mentions rain, showers or drizzle, or a probability ≥40 %. **Snow** = an entry mentions snow or flurries. `WeatherSourceTest` runs on recorded feeds (rain, showers 40 %, flurries, clear, malformed) with MockWebServer.
 - **Client**: `WeatherSource` lives in core (`…/weather/EnvironmentCanadaWeather.kt`, on core's existing OkHttp client: 10 s timeout, no retry, any error = no weather); the app constructs it in `AppContainer`. ARCHITECTURE §9 ("the only host is api.openai.com") and §16 gain this opt-in host (§19.3).
-- **Cache (DataStore)**: `weather_fetched_at` (refetch only when the list opens more than 3 h later, across restarts), `weather_cache` (the last parsed day, rain today, snow seen), `rain_toast_day` (the date of the last rainy-day toast; at most one per day), `first_snow_date` (the first snow day after Oct 1 this season; the first-snow tape shows for 7 days from it).
+- **Cache (DataStore)**: `weather_fetched_at` (refetch only when the list opens more than 3 h later, across restarts, or at once when the forecast city changed: Use my area turned on or off, or her area moved to another city), `weather_cache` (the last parsed day, rain today, snow seen, and the city it was for), `rain_toast_day` (the date of the last rainy-day toast; at most one per day), `first_snow_date` (the first snow day after Oct 1 this season; the first-snow tape shows for 7 days from it).
 
 ---
 
@@ -1348,8 +1348,9 @@ Goldens are `egg_<n>_end_<variant>`, captured at the listed time on the test clo
 
 - **`LcdText`** draws a 5 × 7 dot matrix as vectors: pitch p (app bar 1.9 dp; page number 1.2 dp; receipt 1.3 dp; settings OK 1.6 dp), each dot 0.8 p, 1 p column gap; unlit dots at 50 % `lcdGrid`. The pitch scales with the font scale up to 1.6×.
 - **Glyphs**: space ! # % & ' ( ) + , - . / 0–9 : ? A–Z · and the vector extras ★ (star), a full-moon disc (never a crescent), ♪ and ♡. Lowercase prints as uppercase; accents fold (É → E, Ç → C, Œ → OE); any other character prints as a space. The glyph table is generated from the DSL (`deco.py` G57 + the additions) and derived from DotGothic16's shapes, so DotGothic16's OFL text ships on the licences page (§2.7).
-- **Modes** (`LcdMode`): `Count` ("10/24★"); `Pet` (bee + count); `Text` (FED 1.5 s, SNACK? 2.6 s, BONUS★, SYNC 1.5 s, PRINT★ 1.7 s); `Ok` (OK, OK., OK.. ticking every 0.6 s); `Timer` ("0:12"); `Page` ("2/3").
+- **Modes** (`LcdMode`): `Count` ("10/24★"); `Pet` (bee + count); `Text` (FED 1.5 s, SNACK? 2.6 s, BONUS★, SYNC 1.5 s, PRINT★ 1.96 s: while the receipt prints, until it settles and its slot line goes, §13.2); `Ok` (OK, OK., OK.. ticking every 0.6 s); `Timer` ("0:12"); `Page` ("2/3").
 - The star becomes a moon in Dusk and Glow.
+- While a word stands in for the count (`Text` or `Pet` on the app bar: PRINT★, FED, SYNC), the chip is never narrower than the count it replaces and the word is centred, so the binder top's words beside it never re-flow.
 - TalkBack: `Count` → "10 of 24 in the basket"; while showing a word it keeps the count label (words are decorative); the long-press is exposed as a custom action only after the trip is complete and with Easter eggs on ("Print the trip receipt") — the pet stays a secret.
 
 ### 13.2 The receipt (egg 18)
@@ -1670,7 +1671,7 @@ object SunClock { fun sunset(date: LocalDate, lat: Double = 43.65, lon: Double =
 // weather/ (new; owner WP9, §12.4)
 interface WeatherSource { suspend fun today(): WeatherToday? }   // null = off, offline or unparseable
 data class WeatherToday(val date: LocalDate, val rain: Boolean, val snow: Boolean)
-class EnvironmentCanadaWeather(http: OkHttpClient, cityCode: String = "on-143") : WeatherSource
+class EnvironmentCanadaWeather(http: () -> OkHttpClient, place: suspend () -> Place = { Place.TORONTO }, …) : WeatherSource   // GETs place's forecastFeedUrl
 
 // model/Metric.kt (new): fun normalizeMetric(quantity: String): String   // lb, oz, fl oz, qt, gal → metric; cup/tbsp/tsp only as a recipe amount
 
@@ -1874,7 +1875,7 @@ class ThemeVariantSource(settings, clock, sunClock) { val variant: StateFlow<The
 //   onMotionEvent(event); onImeVisible(visible); onIconDrawing(item) / onIconDrawFailed(item); refresh(); effectDone(id);
 //   onDuskSunset(id); setReducedMotion(on); onBasketHello(sectionId)
 AppSurpriseEngine(…, variant: () -> ThemeVariant)   // (+) the Glow moon is static for every caller
-// The list's hand-off (consumers: WP5's ListScreen, the Surprise lab's PracticeList). Wired in the integration of part 3.
+// The list's hand-off (consumer: WP5's ListScreen, on her list and in the Surprise lab's PracticeListScreen). Wired in the integration of part 3.
 @Composable fun EggListHost(engine: SurpriseEngine, listId: String, anchors: AnchorRegistry, listState: LazyListState,
     indexOfSection: (String) -> Int, toasts: ToastHostState? = null, motion: MotionChoreographer? = null,
     feedback: Feedback = NoOpFeedback, onOpenAlbum: () -> Unit = {}, peek: Dp = 4.dp, listPlacesDecor: Boolean = true,
@@ -1910,7 +1911,7 @@ Each item names the consumers ARCHITECTURE's "Changing a contract" rule asks for
 - **§5 catalog**: tags, personalities, `peameal_bacon`, `MIXING_BOWL`.
 - **§6.1 and §6.2 persistence** (replaces): `JsonFileStateStore` is refactored onto a generic `JsonFileStore<T>`; `album.json` (`JsonFileAlbumStore`) is a second file on the backup allow-list; New trip writes the album first, then the state. Consumers: AppContainer, backup rules.
 - **§7.3 and §8.3, live icons v4** (replaces): `imageEdit(model, prompt, images, mask)` and `IconDrawRequest(itemName, sheet, mask, subject, families)` replace the reference-image forms; output is 208 px plus a `.cut` file; a redraw deletes the replaced file only when neither a list nor `album.json` references it. Consumers: AppIconRepository, LiveIconDrawer, BespokeIconCache.
-- **§9 and §16, network hosts**: "the only host is api.openai.com" gains one opt-in exception, the Environment Canada forecast feed (§12.4), requested only with Weather surprises on. Consumers: PRIVACY.md, the Data safety form.
+- **§9 and §16, network hosts**: "the only host is api.openai.com" gains one opt-in exception, the Environment Canada forecast feed (§12.4: `weather.gc.ca/rss/weather/<city lat>_<city lon>_e.xml`, the forecast city's own coordinates, never her point), requested only with Weather surprises on. Consumers: PRIVACY.md, the Data safety form.
 - **§11 theme contract**: variants, the C components (§19.2), `MotionSpec` with `FixedMotionScale` (reduced motion is decided from both scales; animations never follow the system scale, §8.8).
 - **§11.4, row stickers** (replaces "no offset shadows inside a section"): item stickers carry their own hard die-cut shadow in rows (C's sticker look); everything else in a row still lies flat. Consumers: `ItemIcon`, `ListPieces`.
 - **§14 screenshots**: fixture goldens render at `w360dp-h760dp` (the mockup's phone width, so the book has the mockup's 8 columns), with selected `w411dp-h891dp` variants; names and the manifest per §20 and Appendix C.

@@ -269,7 +269,7 @@ class SurpriseLabTest {
         lab.sandbox!!.let { box ->
             val cake = box.store.value.list(box.listId)!!.items.single { it.name == "Birthday cake" }
             assertTrue(cake.checked)
-            inView("egg 9: the HAPPY / B-DAY! hanko", compose.onNodeWithTag(PracticeTags.hanko(cake.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot)
+            inView("egg 9: the HAPPY / B-DAY! hanko", compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.check(cake.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot)
         }
 
         tryIt(13)
@@ -414,7 +414,7 @@ class LargeTextScenesTest(private val egg: Int) {
             8 -> r.probe.frames.lastOrNull { it.tag == "nap" }?.bounds
             9 -> r.list.items.single { it.name == "Birthday cake" }.let { cake ->
                 assertTrue(cake.checked)
-                compose.onNodeWithTag(PracticeTags.hanko(cake.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.check(cake.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
             }
             else -> r.probe.frames.lastOrNull { it.tag == "jackpot" }?.bounds
         }

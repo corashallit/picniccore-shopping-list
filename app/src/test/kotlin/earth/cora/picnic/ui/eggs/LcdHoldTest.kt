@@ -1,6 +1,10 @@
 package earth.cora.picnic.ui.eggs
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.hatchPet
 import earth.cora.picnic.core.model.list
@@ -8,6 +12,7 @@ import earth.cora.picnic.core.model.moveItemToAisle
 import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.platform.Cue
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import org.junit.Assert.assertEquals
@@ -101,10 +106,50 @@ class LcdHoldTest {
         assertTrue("the pet stays as it was", r.list.trip!!.pet)
     }
 
+    /**
+     * §4.3: only a press that stays on the LCD for the hold threshold is a hold. A brush across it (the finger slides off
+     * within 80 ms) does nothing, whether she lets go at once or keeps her finger down off the chip past the threshold:
+     * no pet, no FED, nothing saved on the trip before completion; no receipt, no print after it.
+     */
+    @Test
+    fun brushOffTheLcdDoesNothing() = brushOff(complete = false)
+
+    @Test
+    fun brushOffTheCompleteTripsLcdPrintsNothing() = brushOff(complete = true)
+
+    private fun brushOff(complete: Boolean) {
+        val r = EggRig(compose, fixture = if (complete) completedFixture() else PracticeFixture.state()).start()
+        r.advance(800)
+        val before = r.state
+        for (stayDown in listOf(false, true)) {
+            val lcd = r.anchor(AnchorRegistry.LCD)
+            val what = "complete $complete, finger kept down $stayDown"
+            compose.onRoot().performTouchInput {
+                down(lcd.center)
+                // Off the chip within 80 ms: 5 moves of 16 ms, 60 px each, straight down.
+                repeat(5) { moveBy(Offset(0f, 60f), delayMillis = 16) }
+            }
+            r.advance(80)
+            if (stayDown) r.advance(r.timeouts.holdThresholdMs + 200)
+            compose.onRoot().performTouchInput { up() }
+            r.advance(300)
+            assertFalse("$what: no pet", r.eggs.pet)
+            assertNull("$what: no visit", r.eggs.petVisitId)
+            assertNull("$what: no word", r.eggs.lcdWord)
+            assertEquals("$what: no FED", 0, r.feedback.count(Cue.PET_FED))
+            assertNull("$what: no receipt", r.eggs.receipt)
+            assertEquals("$what: no print", 0, r.feedback.count(Cue.RECEIPT_PRINT))
+            assertEquals("$what: nothing saved", before, r.state)
+        }
+        // A real hold still works afterwards.
+        r.hold()
+        if (complete) assertNotNull("then a hold prints", r.eggs.receipt) else assertTrue("then a hold hatches the pet", r.eggs.pet)
+    }
+
     @Test
     fun receiptAfterTearOffCompletes() {
-        // One item left; she tears it off (swipe left): the trip is complete by the delete, and the hold prints. The
-        // swipe is WP5's List screen's gesture, which the practice list does not have: the store change it makes stands in.
+        // One item left; she tears it off with a swipe left on its row (WP5's gesture, §8.6): the delete completes the
+        // trip, and the hold prints its receipt (item 270).
         val s = completedFixture().toggleChecked(listId, "toothpaste", PracticeFixture.NOW + 3_600_000)
         assertNull(s.list(listId)!!.trip!!.completedAt)
         val r = EggRig(compose, fixture = s).start()
@@ -112,8 +157,34 @@ class LcdHoldTest {
         assertNull("not complete: the pet", r.eggs.receipt)
         assertTrue(r.eggs.pet)
         r.advance(2_000)
-        r.act { r.model.set { it.removeItem(listId, "toothpaste", PracticeFixture.NOW + 3_700_000) } }
-        assertNotNull(r.list.trip!!.completedAt)
+        // Her last row, in view: she opens Household, the toothpaste row comes above the add bar.
+        r.act { r.model.open("household") }
+        r.advance(400)
+        r.act { r.model.focus("household", "toothpaste", aisleFirst = false) }
+        r.advance(800)
+        val dp = compose.density.density
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.row("toothpaste")).performTouchInput {
+            down(center)
+            repeat(4) {
+                moveBy(androidx.compose.ui.geometry.Offset(-20 * dp, 0f))
+                advanceEventTime(16)
+            }
+            up()
+        }
+        // The perforation prints, the halves tumble off, then the row leaves the list (§8.6).
+        var guard = 0
+        while (r.list.items.any { it.id == "toothpaste" } && guard++ < 120) r.frame()
+        assertTrue("torn out", r.list.items.none { it.id == "toothpaste" })
+        assertNotNull("the tear-off completed the trip", r.list.trip!!.completedAt)
+        // A trip finished by a tear-off is finished all the same (§7.1, item 176): the finale plays; she closes it.
+        guard = 0
+        while (r.model.motion.current.value.celebration == null && guard++ < 400) r.frame()
+        assertNotNull("the finale plays", r.model.motion.current.value.celebration)
+        r.advance(1_000)
+        r.act { r.model.motion.closeCelebration() }
+        guard = 0
+        while (r.model.motion.current.value.celebration != null && guard++ < 400) r.frame()
+        r.advance(800)
         r.hold()
         assertNotNull("the tear-off completed it: the receipt prints", r.eggs.receipt)
         assertEquals(23, r.eggs.receipt!!.receipt.stickers)

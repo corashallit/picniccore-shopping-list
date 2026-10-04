@@ -57,6 +57,7 @@ import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
@@ -113,6 +114,7 @@ import earth.cora.picnic.ui.edit.EditItemSheet
 import earth.cora.picnic.ui.eggs.EggAnchors
 import earth.cora.picnic.ui.eggs.EggListHost
 import earth.cora.picnic.ui.eggs.EggListScope
+import earth.cora.picnic.ui.eggs.LocalListRoom
 import earth.cora.picnic.ui.eggs.NoOpSurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseState
@@ -173,6 +175,8 @@ class ListActions(
     val onOpenAisles: () -> Unit = {},
     val onOpenPantry: () -> Unit = {},
     val onOpenAlbum: () -> Unit = {},
+    /** Egg 14's toast "Look" (§12.2): the album at its back pocket. */
+    val onOpenBackPocket: () -> Unit = onOpenAlbum,
     val onOpenSettings: () -> Unit = {},
     val onOpenLists: () -> Unit = {},
     val onCloseEdit: () -> Unit = {},
@@ -376,6 +380,7 @@ fun ListRoute(
             onOpenAisles = onOpenAisles,
             onOpenPantry = nav.openPantry,
             onOpenAlbum = nav.openAlbum,
+            onOpenBackPocket = { nav.openAlbumAt(earth.cora.picnic.ui.nav.AlbumTarget.BackPocket) },
             onOpenSettings = onOpenSettings,
             onOpenLists = { showLists = true },
             onCloseEdit = vm::closeEdit,
@@ -521,6 +526,11 @@ fun ListScreen(
     /** Test hook: the keyboard's visibility for egg 17 (null: the phone's own insets). */
     imeVisible: Boolean? = null,
     talkBackOverride: Boolean? = null,
+    /**
+     * The Surprise lab's practice list: the nap cat's basket and the frozen aisle scroll into view as their scenes start
+     * (EggListHost). Her own list never scrolls by itself for them (§12.1).
+     */
+    sceneScrolls: Boolean = false,
 ) {
     MotionEngineHost(engine, nextStopCard = state.nextStopCard, celebration = state.celebration, eggs = state.eggs, talkBackOverride = talkBackOverride)
     val p = engine.current.value
@@ -556,17 +566,21 @@ fun ListScreen(
         CompositionLocalProvider(LocalListEggs provides eggs, LocalListSurprises provides surprises) {
             ListScreenContent(
                 state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
-                bookCollapsed = screen.scrolledDown || ime || shortWindow,
+                // Egg 18: while a printed receipt waits for its tap, a scroll leaves the book open under it (§13.2).
+                bookCollapsed = (screen.scrolledDown && !receiptWaits) || ime || shortWindow,
             )
         }
     }
     if (imeVisible != null) {
         EggListHost(
             surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback,
-            onOpenAlbum = actions.onOpenAlbum, imeVisible = imeVisible, content = host,
+            onOpenAlbum = actions.onOpenBackPocket, imeVisible = imeVisible, sceneScrolls = sceneScrolls, content = host,
         )
     } else {
-        EggListHost(surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback, onOpenAlbum = actions.onOpenAlbum, content = host)
+        EggListHost(
+            surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback,
+            onOpenAlbum = actions.onOpenBackPocket, sceneScrolls = sceneScrolls, content = host,
+        )
     }
 }
 
@@ -602,7 +616,8 @@ private fun EggListScope.ListScreenContent(
                     presentation = p,
                     engine = engine,
                     ui = TopStackUi(
-                        barCollapsed = screen.scrolledDown,
+                        // Egg 18: the binder top stays open while a printed receipt hangs from its LCD (§13.2).
+                        barCollapsed = screen.scrolledDown && !receiptWaits,
                         bookCollapsed = bookCollapsed,
                         syncing = screen.syncing,
                         sunSpin = screen.sunSpin,
@@ -627,7 +642,8 @@ private fun EggListScope.ListScreenContent(
                 }
             }
         }
-        dock(dockAnchors(engine.anchors).eggAddBar())
+        // The eggs follow the docked bar (egg 16's umbrella stands on it, and steps off while it is folded into the FAB).
+        dock(dockAnchors(engine.anchors).eggAddBar(folded = collapse?.collapsed == true))
         // The toasts sit 20 dp above the bar's top (above the umbrella's canopy while it rains); the eggs' overlays ride
         // in the overlay's `eggs` slot (§12, §19.2).
         MotionOverlay(engine, p, toasts, bottomInset = overlayInset(dockHeight), eggs = overlays)
@@ -793,7 +809,10 @@ private fun AisleList(
     entries: List<Entry>,
     dockHeight: Dp,
     collapse: AddBarCollapseState?,
-    /** Egg 18 at large text: the room a printed receipt asks for above the list's words (EggListScope.listTopExtra). */
+    /**
+     * Egg 18: while a printed receipt hangs down into the list's room, the viewport starts this much lower, under the
+     * paper (EggListScope.listTopExtra), so no row can scroll beneath it.
+     */
     topExtra: Dp = 0.dp,
     /** The add bar + 26 dp, + the umbrella's room while it rains (EggListScope.listBottomPadding). */
     bottomPadding: Dp = dockHeight + 26.dp,
@@ -935,13 +954,22 @@ private fun AisleList(
     // pop). The list's words keep out of that band: the viewport ends above it, so no row or strip ever lies under the
     // canopy at any scroll position, and the list's end needs only a small gap then (§12.2).
     val umbrella = umbrellaBand != null
+    val listRoom = LocalListRoom.current
     // Clipped to the viewport: the bunting starts above it (−34 dp) and comes out from under the top stack (R6).
     Box(
         Modifier
             .fillMaxSize()
             .padding(bottom = umbrellaBand ?: 0.dp)
             .clipToBounds()
-            .onGloballyPositioned { screen.listBounds = it.boundsInWindow() }
+            // Egg 16: where the viewport ends above the umbrella's band, the list fades out into the binder as it does
+            // into the add bar's pad (§6.1), never a hard cut across a strip.
+            .then(if (umbrella) Modifier.fadeOutAtBottom(UMBRELLA_FADE) else Modifier)
+            .onGloballyPositioned {
+                val b = it.boundsInWindow()
+                screen.listBounds = b
+                // Egg 18: where the viewport starts before any inset (the receipt asks for room below its paper).
+                listRoom?.listTop = b.top
+            }
             .pointerInput(connection) {
                 // Watches (never consumes) whether a finger is down, for the pull to refresh.
                 awaitPointerEventScope {
@@ -956,6 +984,8 @@ private fun AisleList(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
+                // Egg 18: the viewport starts under a waiting receipt's paper (its inset, not the content's).
+                .padding(top = topExtra)
                 .testTag(ListTags.LIST)
                 // The eggs' room: the list's viewport (the scenes are brought into it, the ladybug flies off its sides).
                 .then(with(anchors) { Modifier.anchor(EggAnchors.LIST) })
@@ -964,7 +994,7 @@ private fun AisleList(
                 .nestedScroll(connection)
                 .semantics { customActions = listOf(CustomAccessibilityAction(refreshLabel) { refresh(); true }) }
                 .graphicsLayer { translationY = if (reduced) 0f else screen.pull },
-            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp + topExtra, bottom = if (umbrella) UMBRELLA_END_GAP else bottomPadding),
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp, bottom = if (umbrella) UMBRELLA_END_GAP else bottomPadding),
         ) {
             entries.forEachIndexed { index, e ->
                 when (e) {
@@ -1077,6 +1107,28 @@ private val UMBRELLA_BAND: Dp = 44.dp
 
 /** While it rains the viewport already ends above the umbrella's canopy: the list's end keeps this small gap (§6.1). */
 private val UMBRELLA_END_GAP: Dp = 12.dp
+
+/** How far up from the viewport's end above the umbrella's band the list fades out (egg 16). */
+private val UMBRELLA_FADE: Dp = 20.dp
+
+/** The content fades from opaque to clear over the last [fade] at the bottom (alpha mask: the binder shows through). */
+private fun Modifier.fadeOutAtBottom(fade: Dp): Modifier = this
+    .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+    .drawWithContent {
+        drawContent()
+        val f = fade.toPx().coerceAtMost(size.height)
+        drawRect(
+            androidx.compose.ui.graphics.Brush.verticalGradient(
+                0f to androidx.compose.ui.graphics.Color.Black,
+                1f to androidx.compose.ui.graphics.Color.Transparent,
+                startY = size.height - f,
+                endY = size.height,
+            ),
+            topLeft = Offset(0f, size.height - f),
+            size = androidx.compose.ui.geometry.Size(size.width, f),
+            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+        )
+    }
 
 /** Whether a finger is on the list (the pull to refresh follows only her own drags). */
 private interface PullGate {

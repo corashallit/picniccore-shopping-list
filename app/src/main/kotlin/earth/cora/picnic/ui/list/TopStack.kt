@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.eggs.EggAnchors
+import earth.cora.picnic.ui.eggs.LocalListRoom
+import earth.cora.picnic.ui.eggs.eggTwinkle
 import earth.cora.picnic.ui.eggs.eggTitleSticker
 import earth.cora.picnic.ui.eggs.lcd
 import earth.cora.picnic.ui.eggs.rememberKirakiraBrush
@@ -115,7 +117,8 @@ internal fun TopStack(
                 // Above font scale 1.3 the stamp name tag joins the date's caption row (§7.4, §7.7, item 157).
                 var captionTag by remember { mutableStateOf<String?>(null) }
                 BookWithCaption(
-                    caption = if (dateOnPage) null else { { BookDateCaption(book.dateLabel, season = book.season) } },
+                    // The caption's date is words: the eggs keep clear of it (the receipt, the bursts; `text:date`, §12.1).
+                    caption = if (dateOnPage) null else { { BookDateCaption(book.dateLabel, season = book.season, modifier = with(engine.anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "date") }) } },
                     tag = captionTag,
                     book = {
                         StickerBook(
@@ -131,6 +134,8 @@ internal fun TopStack(
                             onStampTap = actions.onStampTap,
                             pageNumber = LocalListEggs.current.rolling == null,
                             onNameTag = if (dateOnPage) null else { text -> captionTag = text },
+                            // Egg 7: the book's twins twinkle once with the rows' stickers (§12.2).
+                            twinkle = LocalListEggs.current.let { eggs -> { slot -> Modifier.eggTwinkle(eggs, slot) } },
                         )
                     },
                 )
@@ -296,7 +301,8 @@ private fun AppBar(
         // An empty list has nothing to count: the LCD comes with the first item (§4.21).
         if (!state.loading && state.total > 0) {
             val lcd = when {
-                ui.syncing -> state.lcd.copy(mode = LcdMode.Text, text = SYNC)
+                // SYNC stands in for the count (and for the bee while it lives here: the chip keeps their room, §13.1).
+                ui.syncing -> state.lcd.copy(mode = LcdMode.Text, text = SYNC, petLives = state.lcd.mode == LcdMode.Pet)
                 else -> {
                     val shown = presentation.lcdCount(state.checked)
                     val base = state.lcd.copy(count = shown, mode = presentation.lcd?.mode ?: state.lcd.mode)
@@ -305,12 +311,21 @@ private fun AppBar(
                     if (presentation.lcd != null || !eggs.enabled) base else eggs.lcd(base, petPose)
                 }
             }
+            // Egg 18: a printed receipt hangs from the LCD wherever it is (snapshot state, so a waiting one follows it).
+            val room = LocalListRoom.current
+            if (room != null) androidx.compose.runtime.DisposableEffect(room) { onDispose { room.lcd = null } }
             with(anchors) {
                 LcdChip(
                     lcd,
                     // The LCD's digits are words too: the bursts are cut clear of them.
-                    Modifier.padding(horizontal = 2.dp).anchor(AnchorRegistry.LCD).anchor(EggAnchors.TEXT_PREFIX + "lcd"),
+                    Modifier
+                        .padding(horizontal = 2.dp)
+                        .anchor(AnchorRegistry.LCD)
+                        .anchor(EggAnchors.TEXT_PREFIX + "lcd")
+                        .then(if (room != null) Modifier.onGloballyPositioned { room.lcd = it.boundsInWindow() } else Modifier),
                     onHold = if (state.eggs) actions.onLcdHold else null,
+                    // One width whatever it shows: SYNC, and the eggs' words while they are on (§13.1, item 259).
+                    words = if (state.eggs || eggs.enabled) LCD_WORDS_EGGS else LCD_WORDS,
                 )
             }
         }
@@ -319,7 +334,9 @@ private fun AppBar(
         Box(
             Modifier
                 .testTag(ListTags.MORE)
-                .onGloballyPositioned { onMoreBounds(it.boundsInWindow()) },
+                .onGloballyPositioned { onMoreBounds(it.boundsInWindow()) }
+                // Egg 1's sparkle burst keeps clear of it (§12.2).
+                .then(with(anchors) { Modifier.anchor(EggAnchors.MORE) }),
         ) {
             PicnicIconButton(PicnicGlyph.More, stringResource(R.string.theme_more_options), onMore)
         }
@@ -420,3 +437,7 @@ private val SUN_ROOM_H = 32.dp
 
 /** The LCD word while the list re-syncs (§6.1). */
 private const val SYNC: String = "SYNC"
+
+/** The words the app bar's LCD can show in place of its count (§13.1): SYNC, and the eggs' while they are on. */
+private val LCD_WORDS: List<String> = listOf(SYNC)
+private val LCD_WORDS_EGGS: List<String> = LCD_WORDS + earth.cora.picnic.ui.eggs.EggRules.LCD_WORDS

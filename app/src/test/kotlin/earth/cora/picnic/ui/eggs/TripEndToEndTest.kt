@@ -8,6 +8,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
@@ -28,10 +29,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Item 274 end to end, on the practice list with WP6's chains and the real overlays, by her own taps: go round the store
- * in walking order (a tap on a folded strip opens it, a tap on each row checks it off) → the finale → a tap closes it →
- * hold the LCD → the receipt prints → tap it → the slip is in the book → New trip → the album's book carries the
- * receipt. (The New trip sheet is WP5's List screen's; the practice list starts the trip over as the lab does.)
+ * Item 274 end to end, on WP5's real List screen as the Surprise lab shows it (WP6's chains, the real overlays), by her
+ * own taps: go round the store in walking order (a tap on a folded strip opens it, a tap on each row checks it off) →
+ * the finale → a tap closes it → hold the LCD → the receipt prints → tap it → the slip is in the book → the overflow
+ * menu's New trip → "Clear what I got" → the album's book carries the receipt. WholeTripInTheAppTest runs the same trip
+ * on MainActivity, through her album.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -72,9 +74,9 @@ class TripEndToEndTest {
         }
         assertTrue("$tag is in the list", exists(tag))
         repeat(3) {
-            val top = compose.onNodeWithTag(PracticeTags.LIST).fetchSemanticsNode().boundsInRoot.top
+            val top = compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.LIST).fetchSemanticsNode().boundsInRoot.top
             // A sticky plate pinned at the list's top covers what scrolls under it.
-            val pinned = boxes("practice_header_").filter { it.top <= top + 2f && it.bottom > top }.maxOfOrNull { it.bottom } ?: top
+            val pinned = boxes("picnic_tray_header_").filter { it.top <= top + 2f && it.bottom > top }.maxOfOrNull { it.bottom } ?: top
             val delta = bounds(tag).top - (pinned + 16 * 3f)
             if (kotlin.math.abs(delta) < 3f) return@repeat
             act { list.dispatchRawDelta(delta) }
@@ -93,7 +95,7 @@ class TripEndToEndTest {
     fun checkEverythingToTheReceiptInTheAlbum() {
         val scroll = LazyListState()
         val r = EggRig(compose, fixture = PracticeFixture.unchecked())
-        r.start { PracticeList(r.model, feedback = r.feedback, listState = scroll) }
+        r.start { PracticeListScreen(r.sandbox, listState = scroll) }
         assertNull(r.list.trip)
         assertEquals(24, r.list.items.size)
         // Go round the store as she would: in walking order, open each stop with a tap on its strip if it is folded,
@@ -106,17 +108,17 @@ class TripEndToEndTest {
             val next = r.list.items.filter { !it.checked }.minBy { order.indexOf(it.aisleId) * 1_000 + r.list.items.indexOf(it) }
             val aisle = next.aisleId!!
             if (r.model.grouped().openSectionId != aisle) {
-                r.bringIntoView(scroll, PracticeTags.strip(aisle))
-                compose.onNodeWithTag(PracticeTags.strip(aisle)).performClick()
+                r.bringIntoView(scroll, earth.cora.picnic.ui.list.ListTags.strip(aisle))
+                compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.strip(aisle), useUnmergedTree = true).performClick()
                 r.advance(700)
                 assertEquals("the tap opened $aisle", aisle, r.model.grouped().openSectionId)
             }
-            r.bringIntoView(scroll, PracticeTags.row(next.id))
-            val at = bounds(PracticeTags.row(next.id))
-            compose.onNodeWithTag(PracticeTags.row(next.id), useUnmergedTree = true).performClick()
+            r.bringIntoView(scroll, earth.cora.picnic.ui.list.ListTags.row(next.id))
+            val at = bounds(earth.cora.picnic.ui.list.ListTags.row(next.id))
+            compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.row(next.id), useUnmergedTree = true).performClick()
             r.frame()
             assertTrue(
-                "the tap checked ${next.name} (row $at; toasts ${boxes(TOAST_TAG)}; card ${boxes(NEXT_CARD_TAG)}; plates ${boxes("practice_header_")})",
+                "the tap checked ${next.name} (row $at; toasts ${boxes(TOAST_TAG)}; card ${boxes(NEXT_CARD_TAG)}; plates ${boxes("picnic_tray_header_")})",
                 r.list.items.single { it.id == next.id }.checked,
             )
             taps++
@@ -148,10 +150,15 @@ class TripEndToEndTest {
         compose.onNodeWithTag(EggTags.RECEIPT).performClick()
         r.advance(900)
         assertTrue(r.list.trip!!.receiptSaved)
-        compose.onNodeWithTag(PracticeTags.SLIP, useUnmergedTree = true).assertExists()
-        // New trip: the book is filed in the album with its receipt; the list starts over.
-        r.act { r.sandbox.newTrip() }
+        compose.onNodeWithTag(earth.cora.picnic.ui.theme.BookTags.SLIP, useUnmergedTree = true).assertExists()
+        // New trip, from the overflow menu's sheet: the book is filed in the album with its receipt; the list starts over.
+        r.advance(4_500)
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.MORE).performClick()
         r.advance(300)
+        compose.onNodeWithText("New trip").performClick()
+        r.advance(600)
+        compose.onNodeWithText("Clear what I got").performClick()
+        r.advance(600)
         val album = runBlocking { r.sandbox.album.current() }
         val book = album.books.first()
         assertEquals(printed, book.receipt)

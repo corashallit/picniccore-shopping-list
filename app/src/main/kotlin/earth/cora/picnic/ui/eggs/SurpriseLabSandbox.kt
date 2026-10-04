@@ -23,6 +23,14 @@ import earth.cora.picnic.core.store.InMemoryAlbumStore
 import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.core.store.file
 import earth.cora.picnic.core.weather.WeatherToday
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import earth.cora.picnic.core.assistant.AisleSync
+import earth.cora.picnic.icons.NoOpIconRepository
+import earth.cora.picnic.platform.AudioRecorder
+import earth.cora.picnic.ui.add.AddViewModel
 import earth.cora.picnic.platform.Announcer
 import earth.cora.picnic.platform.DefaultTimeouts
 import earth.cora.picnic.platform.Feedback
@@ -94,8 +102,8 @@ class SurpriseLabSandbox(
     val clock: SandboxClock = SandboxClock.realTime(),
     val catalog: IconCatalog = IconCatalog.default,
     dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
-    feedback: Feedback = NoOpFeedback,
-    announcer: Announcer = NoOpAnnouncer,
+    val feedback: Feedback = NoOpFeedback,
+    val announcer: Announcer = NoOpAnnouncer,
     val timeouts: Timeouts = DefaultTimeouts,
     seed: Int = 7,
     private val zone: ZoneId = ZoneId.of("America/Toronto"),
@@ -142,6 +150,54 @@ class SurpriseLabSandbox(
     init {
         // The practice album collects what the practice list checks off, as her album does (§7.2): holo pulls included.
         TripFiling.launchAlbumSync(scope, store, album, catalog, clock::now)
+        // What reaches the store from elsewhere (the add bar's commits, the eggs' own saves) reaches the practice chains.
+        scope.launch { store.states.collect { model.observe(it) } }
+    }
+
+    /** The ViewModels the practice list owns while the lab is open; [close] clears them. */
+    private val viewModels = ViewModelStore()
+    private var addVm: AddViewModel? = null
+
+    /**
+     * WP7's add flows over the practice copy (§6.9: the lab's add bar sends as hers does): a note is read by the offline
+     * [SandboxAssistant] (no network, no cost), the magic word is caught first (egg 7), and every commit rolls its
+     * rarity and tells the eggs (3, 6, 9, 17), all on the sandbox. [words] are the app's strings for TalkBack's lines.
+     */
+    fun addViewModel(words: (Int) -> String): AddViewModel = addVm ?: run {
+        val assistant = SandboxAssistant(catalog)
+        val factory = object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = AddViewModel(
+                store = store,
+                assistant = assistant,
+                icons = NoOpIconRepository(),
+                aisleSync = AisleSync(store, assistant, catalog.baskets, clock::now),
+                catalog = catalog,
+                photos = { throw java.io.IOException("the practice list takes no photos") },
+                recorderFactory = { NoRecorder },
+                clock = clock::now,
+                newId = { "practice-${model.nextId()}" },
+                appScope = scope,
+                savedState = SavedStateHandle(),
+                hasKey = { true },
+                surprises = engine,
+                feedback = feedback,
+                thumbs = { null },
+                announcer = announcer,
+                words = words,
+            ) as T
+        }
+        ViewModelProvider(viewModels, factory)[AddViewModel::class.java].also {
+            it.showList(listId)
+            addVm = it
+        }
+    }
+
+    /** The practice add bar has no microphone (it is never started). */
+    private object NoRecorder : AudioRecorder {
+        override fun start(): java.io.File = throw java.io.IOException("the practice list has no microphone")
+        override fun level(): Float = 0f
+        override fun stop(): java.io.File? = null
     }
 
     /**
@@ -243,6 +299,7 @@ class SurpriseLabSandbox(
     /** Discards the sandbox: nothing it held survives the lab (§6.9). */
     fun close() {
         closed = true
+        viewModels.clear()
         scope.cancel()
     }
 
@@ -358,6 +415,9 @@ class SurpriseLabSandbox(
         _followUp.value = FollowUp(firings, 1200) {
             val rarity = engine.onIconDrawn(item)
             if (rarity != Rarity.NONE) model.set { it.setRarity(listId, item.id, rarity) }
+            // The sticker arrived (its "jackpot!" chip can make the row taller): the row comes wholly into view again
+            // before JACK / POT! slams beside it.
+            item.aisleId?.let { model.focus(it, item.id, aisleFirst = false) }
         }
     }
 

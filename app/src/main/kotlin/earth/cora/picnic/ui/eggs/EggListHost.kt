@@ -20,7 +20,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.node.GlobalPositionAwareModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -32,6 +37,10 @@ import earth.cora.picnic.platform.NoOpFeedback
 import earth.cora.picnic.platform.ShakeEffect
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.list.motion.MotionChoreographer
+import earth.cora.picnic.ui.theme.FixedMotionScale
+import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.PicnicMotion
+import kotlinx.coroutines.withContext
 import earth.cora.picnic.ui.theme.ToastHostState
 import kotlin.math.abs
 
@@ -60,22 +69,36 @@ class EggListScope internal constructor(
 
     internal var density: Density = Density(1f)
     internal var barSize: IntSize by mutableStateOf(IntSize.Zero)
+
+    /** The docked add bar's window bounds as last laid out (snapshot state: the umbrella follows it); null while gone. */
+    internal var barBounds: Rect? by mutableStateOf(null)
+
+    /** The docked add bar has folded into the FAB (it slides away, then leaves): the umbrella steps off with it. */
+    internal var barFolded: Boolean by mutableStateOf(false)
     internal val room = ListRoom()
     internal val rollHome = RollHome()
     internal val ladybugHome = LadybugHome(anchors)
     internal var overlay: @Composable BoxScope.() -> Unit = {}
 
     /**
-     * The add bar, measured: put it on the docked add bar (WP7's AddBar or AddDock), so the list's end room, the toasts'
-     * inset and the umbrella's tape follow its real height and width at every font scale.
+     * The add bar, measured and followed: put it on the docked add bar (WP7's AddBar or AddDock), so the list's end
+     * room, the toasts' inset and the umbrella's tape follow its real height and width at every font scale, and the
+     * umbrella stands on the bar wherever it is (risen with the keyboard, grown with large text). [folded]: the bar has
+     * folded into the FAB (the umbrella goes with it, and pops back when the bar returns).
      */
-    fun Modifier.eggAddBar(): Modifier = onSizeChanged { barSize = it }
+    fun Modifier.eggAddBar(folded: Boolean = false): Modifier = onSizeChanged { barSize = it } then EggBarElement(this@EggListScope, folded)
 
     /** The add bar's height as measured ([eggAddBar]; 84 dp, the bar at font scale 1, until it is). */
     val barHeight: Dp get() = if (barSize.height > 0) with(density) { barSize.height.toDp() } else DEFAULT_BAR
 
+    /** Egg 16: the umbrella stands on the docked bar's shoulder (it rains and the bar is out, not folded into the FAB). */
+    val umbrellaShown: Boolean get() = eggs.umbrella && !barFolded
+
+    /** The bar the umbrella stands on (window px), or null when it does not show. */
+    internal val umbrellaBar: Rect? get() = if (umbrellaShown) barBounds else null
+
     /** Egg 16: while the umbrella stands on the bar's shoulder, the list and the toasts keep clear of its canopy. */
-    val umbrellaRoom: Dp get() = if (eggs.umbrella) UMBRELLA_LIST_ROOM else 0.dp
+    val umbrellaRoom: Dp get() = if (umbrellaShown) UMBRELLA_LIST_ROOM else 0.dp
 
     /**
      * The list's bottom content padding (§6.1): the add bar's height + 26 dp, + the umbrella's room while it rains, so the
@@ -86,8 +109,15 @@ class EggListScope internal constructor(
     /** MotionOverlay's `bottomInset` (the toasts sit 20 dp above it): the bar's height, + the umbrella's room. */
     fun overlayInset(bar: Dp = barHeight): Dp = bar + umbrellaRoom
 
-    /** Egg 18 at large text: the list's extra top padding while a printed receipt would lie over its words. */
-    val listTopExtra: Dp get() = with(density) { room.receiptShift.toDp() }
+    /**
+     * Egg 18: while a printed receipt waits and hangs down into the list's room (large text, a short book), the list's
+     * viewport starts this much lower, under the paper, so no row can scroll beneath it (an inset of the viewport, not
+     * of its content). It eases in and out ([ListRoom.shown]).
+     */
+    val listTopExtra: Dp get() = with(density) { room.shown.toDp() }
+
+    /** Egg 18: a printed receipt waits for its tap: the binder top and the book stay open under it (§13.2). */
+    val receiptWaits: Boolean get() = eggs.receipt != null
 
     /**
      * The add bar's `tapeAfterDoodle` (§12.2 egg 16): while the umbrella stands at the bar's left end, the raindrop washi
@@ -125,7 +155,8 @@ class EggListScope internal constructor(
  *   (egg 5), the top while a printed receipt needs room (egg 18). [indexOfSection] gives a section's first lazy index;
  *   an aisle scrolled to sits [peek] under the list's top.
  * The overlay ([EggListScope.overlays]) shows the eggs' toasts in [toasts], forwards [motion]'s events (the pet chomps)
- * and plays [feedback]'s cues; [onOpenAlbum] is the back pocket toast's "Look". [listPlacesDecor] false draws the nap
+ * and plays [feedback]'s cues; [onOpenAlbum] is the back pocket toast's "Look" (the album at its back pocket, §12.2).
+ * [listPlacesDecor] false draws the nap
  * cat and the snack doodle in the overlay instead of the list's content.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -143,6 +174,12 @@ fun EggListHost(
     peek: Dp = 4.dp,
     listPlacesDecor: Boolean = true,
     imeVisible: Boolean = WindowInsets.isImeVisible,
+    /**
+     * The Surprise lab's practice list brings the nap cat's basket and the frozen aisle into view as their scenes start
+     * (§6.9); her own list never scrolls by itself for them (§12.1: an egg never moves her from where she is). Egg 3's
+     * scroll to the rolling item's aisle is the spec's own and runs on every list.
+     */
+    sceneScrolls: Boolean = false,
     content: @Composable EggListScope.() -> Unit,
 ) {
     val eggs by engine.state.collectAsState()
@@ -152,18 +189,27 @@ fun EggListHost(
     scope.density = density
     val openAlbum by rememberUpdatedState(onOpenAlbum)
     scope.overlay = remember(engine, anchors, toasts, motion, feedback, listPlacesDecor) {
-        { EggOverlays(engine, anchors, toasts, motion, feedback, onOpenAlbum = { openAlbum() }, listPlacesDecor = listPlacesDecor) }
+        {
+            EggOverlays(
+                engine, anchors, toasts, motion, feedback, onOpenAlbum = { openAlbum() }, listPlacesDecor = listPlacesDecor,
+                // Read as snapshot state: the umbrella follows the bar as it slides, rises with the keyboard or grows.
+                addBar = { scope.umbrellaBar },
+            )
+        }
     }
     LifecycleStartEffect(engine, listId) {
         engine.onListShown(listId)
         onStopOrDispose { engine.onListHidden() }
     }
-    ShakeEffect(enabled = eggs.enabled) { engine.onShake() }
+    // Egg 4 never runs under reduced motion (§12.3), so the accelerometer is not even listened to then.
+    ShakeEffect(enabled = eggs.enabled && !LocalReducedMotion.current) { engine.onShake() }
     LaunchedEffect(engine, imeVisible) { engine.onImeVisible(imeVisible) }
 
     val index by rememberUpdatedState(indexOfSection)
     val peekPx = with(density) { peek.roundToPx() }
     val gapPx = with(density) { ROOM_GAP.toPx() }
+    // A toast resting above the bar covers the list's room too: a scene lands clear of it.
+    val toastTop: () -> Float? = { toasts?.takeIf { it.current != null }?.restingTop }
     // Egg 3: the list scrolls to the rolling item's aisle (§12.2), then brings its row (or its folded strip) wholly above
     // the bar.
     val rolling = eggs.rolling
@@ -171,36 +217,96 @@ fun EggListHost(
         val r = rolling ?: return@LaunchedEffect
         val i = index(r.sectionId)
         if (i < 0) return@LaunchedEffect
-        bringIntoRoom(listState, anchors, i, peekPx, gapPx, plateIndex = i, scrollFirst = { true }) {
+        bringIntoRoom(listState, anchors, i, peekPx, gapPx, plateIndex = i, scrollFirst = { true }, cover = toastTop) {
             anchors.bounds(EggAnchors.line(r.itemId))?.let { it to true } ?: anchors.bounds(EggAnchors.strip(r.sectionId))?.let { it to false }
         }
     }
+    // The receipt's room under the paper eases in and out (instant under reduced motion).
+    val reduced = LocalReducedMotion.current
+    LaunchedEffect(scope.room) {
+        androidx.compose.runtime.snapshotFlow { scope.room.receiptShift }.collect { target ->
+            if (reduced || scope.room.shownAnim.value == target) {
+                scope.room.shownAnim.snapTo(target)
+            } else {
+                withContext(FixedMotionScale) { scope.room.shownAnim.animateTo(target, tween(ROOM_EASE_MS, easing = PicnicMotion.standard.easing)) }
+            }
+        }
+    }
     // Egg 8: the basket the cat sleeps in, with its strip, wholly above the bar (two strips before it in view, room
-    // allowing).
-    LaunchedEffect(eggs.napSectionId) {
+    // allowing): in the Surprise lab only (sceneScrolls).
+    LaunchedEffect(eggs.napSectionId, sceneScrolls) {
+        if (!sceneScrolls) return@LaunchedEffect
         val nap = eggs.napSectionId ?: return@LaunchedEffect
         val i = index(nap)
         if (i < 0) return@LaunchedEffect
-        bringIntoRoom(listState, anchors, (i - CONTEXT_STRIPS).coerceAtLeast(0), if (i >= CONTEXT_STRIPS) peekPx else 0, gapPx, plateIndex = -1) {
+        bringIntoRoom(listState, anchors, (i - CONTEXT_STRIPS).coerceAtLeast(0), if (i >= CONTEXT_STRIPS) peekPx else 0, gapPx, plateIndex = -1, cover = toastTop) {
             (anchors.bounds(EggAnchors.strip(nap)) ?: anchors.bounds(AnchorRegistry.basketKey(nap)))?.let { it to false }
         }
     }
-    // Egg 5: the frozen aisle, where the snack star and doodle sit by the tab.
-    LaunchedEffect(eggs.snackSectionId) {
+    // Egg 5: the frozen aisle, where the snack star and doodle sit by the tab: in the Surprise lab only (sceneScrolls).
+    LaunchedEffect(eggs.snackSectionId, sceneScrolls) {
+        if (!sceneScrolls) return@LaunchedEffect
         val snack = eggs.snackSectionId ?: return@LaunchedEffect
         val i = index(snack)
         if (i < 0) return@LaunchedEffect
-        bringIntoRoom(listState, anchors, (i - CONTEXT_STRIPS).coerceAtLeast(0), if (i >= CONTEXT_STRIPS) peekPx else 0, gapPx, plateIndex = -1) {
+        bringIntoRoom(listState, anchors, (i - CONTEXT_STRIPS).coerceAtLeast(0), if (i >= CONTEXT_STRIPS) peekPx else 0, gapPx, plateIndex = -1, cover = toastTop) {
             (anchors.bounds(EggAnchors.strip(snack)) ?: anchors.bounds(EggAnchors.tab(snack)))?.let { it to false }
         }
     }
-    // Egg 18 at large text: the list makes room under a printed receipt that would lie over its words, from its top.
-    LaunchedEffect(scope.room.receiptShift > 0f) { if (scope.room.receiptShift > 0f) listState.animateScrollToItem(0) }
+    // The Surprise lab's scenes on a row (the cake's check-off, the shiny pull, the jackpot): its row, wholly above the
+    // add bar, its aisle first when the row is not on screen (§6.9, at any font scale).
+    val focus = LocalSceneFocus.current()
+    LaunchedEffect(focus) {
+        val f = focus ?: return@LaunchedEffect
+        val i = index(f.sectionId)
+        if (i < 0) return@LaunchedEffect
+        bringIntoRoom(listState, anchors, i, peekPx, gapPx, plateIndex = i, cover = toastTop) {
+            f.itemId?.let { id -> anchors.bounds(EggAnchors.line(id))?.let { it to true } }
+                ?: anchors.bounds(EggAnchors.strip(f.sectionId))?.let { it to false }
+        }
+    }
 
     CompositionLocalProvider(LocalRollHome provides scope.rollHome, LocalLadybugHome provides scope.ladybugHome, LocalListRoom provides scope.room) {
         scope.content()
     }
 }
+
+/**
+ * The docked add bar's place, as snapshot state ([EggListScope.barBounds]): recorded on every placement, forgotten when
+ * the bar leaves composition (folded into the FAB), with whether it is folding ([EggListScope.barFolded]).
+ */
+private class EggBarElement(private val scope: EggListScope, private val folded: Boolean) : ModifierNodeElement<EggBarNode>() {
+    override fun create(): EggBarNode = EggBarNode(scope, folded)
+
+    override fun update(node: EggBarNode) = node.update(scope, folded)
+
+    override fun equals(other: Any?): Boolean = other is EggBarElement && other.scope === scope && other.folded == folded
+
+    override fun hashCode(): Int = System.identityHashCode(scope) * 31 + folded.hashCode()
+}
+
+private class EggBarNode(private var scope: EggListScope, private var folded: Boolean) : Modifier.Node(), GlobalPositionAwareModifierNode {
+    override fun onAttach() {
+        scope.barFolded = folded
+    }
+
+    fun update(scope: EggListScope, folded: Boolean) {
+        this.scope = scope
+        this.folded = folded
+        if (isAttached) scope.barFolded = folded
+    }
+
+    override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
+        scope.barBounds = coordinates.boundsInWindow()
+    }
+
+    override fun onDetach() {
+        scope.barBounds = null
+    }
+}
+
+/** The receipt's room eases in and out over this long (ms). */
+private const val ROOM_EASE_MS = 200
 
 /** A strip scene (the nap, the snack) keeps this many entries before it in view when the list scrolls to it. */
 private const val CONTEXT_STRIPS = 2
@@ -228,12 +334,14 @@ internal suspend fun bringIntoRoom(
     plateIndex: Int,
     /** True (read after layout): scroll to [scrollTo] first even when the target is already in the room. */
     scrollFirst: () -> Boolean = { false },
+    /** The window y of what covers the list above the bar (a toast resting there), or null. */
+    cover: () -> Float? = { null },
     target: () -> Pair<Rect, Boolean>?,
 ) {
     fun room(underPlate: Boolean): Rect? {
         val list = anchors.bounds(EggAnchors.LIST) ?: return null
         val bar = anchors.bounds(AnchorRegistry.ADD_BAR)
-        val bottom = minOf(list.bottom, bar?.top ?: list.bottom) - gapPx
+        val bottom = minOf(list.bottom, bar?.top ?: list.bottom, cover() ?: list.bottom) - gapPx
         val info = listState.layoutInfo
         val plate = if (underPlate) info.visibleItemsInfo.firstOrNull { it.index == plateIndex } else null
         val top = if (plate == null) list.top else maxOf(list.top, list.top + info.beforeContentPadding + plate.offset + plate.size)

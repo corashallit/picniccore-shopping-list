@@ -844,6 +844,13 @@ internal fun SeasonCard(card: SeasonCardUi, nextLabel: String?, modifier: Modifi
     }
 }
 
+/** The back pocket's card (tests). */
+const val BACK_POCKET_TAG: String = "album_back_pocket"
+
+/** The back pocket's curl opens in 3 poses, 120 ms apart (egg 14's reveal). */
+private const val BACK_POCKET_POSES: Int = 3
+private const val BACK_POCKET_POSE_MS: Long = 120
+
 /** A sheet sticker: a library sticker or a decor sticker, decorative (its label carries the name). */
 @Composable
 internal fun SheetStickerArt(s: SheetSticker, size: Dp) {
@@ -852,18 +859,38 @@ internal fun SheetStickerArt(s: SheetSticker, size: Dp) {
 
 /**
  * The back pocket (egg 14, after ten finished trips): a vinyl pocket at the back of the album, its corner curled open,
- * "sticker sheet 2 of 2" peeking out with its stickers.
+ * "sticker sheet 2 of 2" peeking out with its stickers. [reveal] (the toast's "Look" brought her here, §12.2): the
+ * corner curls open (0 → 22 dp in 3 stepped poses) and the sheet's three stickers magic-appear; under reduced motion
+ * the corner is open at once and the stickers fade in (120 ms).
  */
 @Composable
-internal fun BackPocketCard(modifier: Modifier = Modifier) {
+internal fun BackPocketCard(modifier: Modifier = Modifier, reveal: Boolean = false) {
     val c = PicnicTheme.colors
     val vinyl = c.albumVinyl
     val curlShadow = PicnicTheme.shadows.color.copy(alpha = 0.35f)
+    val reduced = LocalReducedMotion.current
+    val playing = reveal && !reduced
+    // The curl's pose (0–3, 3 = open) and whether the sheet's stickers are out; at rest both done.
+    var curlPose by remember { mutableIntStateOf(if (playing) 0 else BACK_POCKET_POSES) }
+    var stickersOut by remember { mutableStateOf(!reveal) }
+    LaunchedEffect(reveal) {
+        if (!reveal) return@LaunchedEffect
+        if (!reduced) {
+            withContext(FixedMotionScale) {
+                for (pose in 1..BACK_POCKET_POSES) {
+                    delay(BACK_POCKET_POSE_MS)
+                    curlPose = pose
+                }
+            }
+        }
+        stickersOut = true
+    }
     Column(
         modifier
             .fillMaxWidth()
             .vinylSlice(top = true, bottom = true)
-            .padding(12.dp),
+            .padding(12.dp)
+            .testTag(BACK_POCKET_TAG),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
@@ -878,13 +905,21 @@ internal fun BackPocketCard(modifier: Modifier = Modifier) {
                 .drawBehind {
                     val r = 10.dp.toPx()
                     drawRoundRect(c.stickerWhite, cornerRadius = CornerRadius(r))
-                    // The page curl at the bottom-right: the sheet's corner folded back.
-                    drawPageCurl(22.dp.toPx(), vinyl, Families.sakura.mid, curlShadow, c.stickerWhite, bottom = true)
+                    // The page curl at the bottom-right: the sheet's corner folded back (opening, while it reveals).
+                    val curl = 22.dp.toPx() * curlPose / BACK_POCKET_POSES
+                    if (curl > 0f) drawPageCurl(curl, vinyl, Families.sakura.mid, curlShadow, c.stickerWhite, bottom = true)
                 }
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AlbumSheets.SHEET_2_STICKERS.forEach { SheetStickerArt(it, 44.dp) }
+                AlbumSheets.SHEET_2_STICKERS.forEachIndexed { i, sticker ->
+                    if (stickersOut) {
+                        MagicAppearBox(key = "back-pocket-$i-$reveal", play = reveal, bloomSize = 36f) { SheetStickerArt(sticker, 44.dp) }
+                    } else {
+                        // Still in the pocket: its room kept, nothing shown.
+                        Spacer(Modifier.size(44.dp))
+                    }
+                }
             }
             Text(
                 stringResource(R.string.album_back_pocket_sheet),

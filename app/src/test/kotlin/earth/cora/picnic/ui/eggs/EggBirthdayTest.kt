@@ -1,6 +1,7 @@
 package earth.cora.picnic.ui.eggs
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.GroceryItem
@@ -73,7 +74,7 @@ class EggBirthdayTest {
         assertEquals("26 confetti stickers", ConfettiMotion.COUNT, pieces.map { it.tag }.distinct().size)
         assertTrue("all within the 2 s", pieces.all { it.time < ConfettiMotion.RAIN_MS })
         // Each falls for 1.3–1.8 s.
-        ConfettiMotion.pieces(1080f, 3f).forEach { assertTrue(it.fallMs in 1_300L..1_800L) }
+        ConfettiMotion.pieces(ConfettiMotion.lanes(1080f, 3f, emptyList()), 3f).forEach { assertTrue(it.fallMs in 1_300L..1_800L) }
         // The lab checks it once the confetti has fallen: the hanko reads HAPPY / B-DAY!.
         r.advanceTo(t0 + 2_200 + 1_000)
         val cake = r.list.items.single { it.name == "Birthday cake" }
@@ -109,5 +110,44 @@ class EggBirthdayTest {
         } finally {
             e.close()
         }
+    }
+}
+
+/**
+ * Item 246's rain, as she sees it on the real List screen (§12.2 egg 9: "confetti stickers rain over the screen for
+ * 2 s"): mid-rain at least 20 of the 26 pieces are on screen, every one wholly (never sliced by the screen's edge), and
+ * none over a word; the strip `egg_9_strip_{day,glow}_<t>` at 0, 500, 1000 and 1500 ms.
+ */
+@RunWith(org.robolectric.ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w360dp-h760dp-xxhdpi")
+class ConfettiRainTest(private val variant: earth.cora.picnic.ui.theme.ThemeVariant) {
+    @get:Rule
+    val compose = createComposeRule()
+
+    @Test
+    fun rainsWholeOnScreenBesideTheWords() {
+        val r = EggRig(compose, variant = variant).start()
+        r.probe.clear()
+        val t0 = r.fire(9)
+        val screen = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        for (t in listOf(0L, 500L, 1_000L, 1_500L)) {
+            r.advanceTo(t0 + t)
+            if (t == 1_000L) {
+                val last = r.probe.frames.filter { it.tag.startsWith("confetti") }.groupBy { it.tag }.mapValues { it.value.last() }
+                val now = last.values.filter { it.time >= last.values.maxOf { f -> f.time } - 20 }
+                val whole = now.filter { f -> f.bounds.left >= screen.left && f.bounds.right <= screen.right && f.bounds.top >= screen.top && f.bounds.bottom <= screen.bottom }
+                assertTrue("mid-rain: at least 20 pieces wholly on screen (${whole.size} of ${now.size})", whole.size >= 20)
+                val words = wordBoxes(compose, r.anchors)
+                now.forEach { f -> words.forEach { (w, box) -> assertFalse("confetti over \"$w\"", box.overlaps(f.bounds.deflate(2f))) } }
+            }
+            r.capture("egg_9_strip_${r.v}_$t")
+        }
+    }
+
+    companion object {
+        @JvmStatic
+        @org.robolectric.ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
+        fun params(): List<Array<Any>> = dayAndGlow()
     }
 }

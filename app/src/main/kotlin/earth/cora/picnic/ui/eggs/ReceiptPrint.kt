@@ -26,6 +26,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
@@ -68,27 +71,47 @@ internal class ReceiptSpot {
 internal val LocalReceiptSpot = staticCompositionLocalOf { ReceiptSpot() }
 
 /**
- * Room the list makes for a printed receipt that would otherwise lie over its words (large text, §15): the list's content
- * starts this much lower (window px) while the receipt waits. The overlay sets it; the list reads it ([LocalListRoom]).
+ * The room the list makes for a printed receipt that hangs down into it (large text, a short book; §15): the list's
+ * viewport starts [receiptShift] px lower while the receipt waits, so no row can scroll beneath the paper. The overlay
+ * sets it; EggListHost eases it ([shown]); the list reads it ([LocalListRoom], EggListScope.listTopExtra). The list and
+ * the binder top report where they are as snapshot state ([listTop], [lcd]), so a waiting receipt is placed again
+ * whenever either moves.
  */
 @androidx.compose.runtime.Stable
 class ListRoom {
     var receiptShift: Float by androidx.compose.runtime.mutableFloatStateOf(0f)
         internal set
+
+    /** The inset as it eases towards [receiptShift] (px). */
+    internal val shownAnim = androidx.compose.animation.core.Animatable(0f)
+
+    /** The inset the list's viewport has now (px). */
+    val shown: Float get() = shownAnim.value
+
+    /** The top of the list's viewport before any inset (window px), as the list last laid it out. */
+    var listTop: Float? by androidx.compose.runtime.mutableStateOf(null)
+
+    /** The app bar's LCD (window px), as last laid out: the receipt hangs from it. */
+    var lcd: Rect? by androidx.compose.runtime.mutableStateOf(null)
 }
 
 /** The list's [ListRoom] (null: the list makes no room; the receipt still keeps off the binder top's words). */
 val LocalListRoom = staticCompositionLocalOf<ListRoom?> { null }
 
-/** Where the receipt prints (overlay px): its slot line, the paper's top-left as it feeds, and the room the list makes. */
-internal data class ReceiptPlacement(val slot: Rect, val paper: Offset, val listShift: Float)
+/**
+ * Where the receipt prints (overlay px): its slot line, the paper's top-left as it feeds out of the slot ([feed]) and
+ * where it settles ([settled]), and the room the list makes below it.
+ */
+internal data class ReceiptPlacement(val slot: Rect, val feed: Offset, val settled: Offset, val listShift: Float)
 
 /**
- * Places the receipt (§13.2, item 259): the slot line is the LCD's width, centred under it; the paper ([paperW] ×
- * [paperH] px) feeds out of the slot's bottom edge, right-aligned with the LCD inside the screen, and it settles at
- * (−4, +10) dp turned 3°. It never lies over the binder top's words ([header]: the title, the subtitle, the book's
- * date): when it would, it prints lower, below them. If it would then lie over the list's words ([listWords]), the list
- * makes room: its content moves down below the receipt ([ReceiptPlacement.listShift], from [listTop]).
+ * Places the receipt (§13.2, item 259). The slot line is 4 dp tall, 3 dp under the LCD, as wide as the paper and centred
+ * under the LCD (inside the screen); the paper ([paperW] × [paperH] px) hangs from it while it feeds, its top edge inside
+ * the slot. The binder top's words ([header]: the title, the subtitle, the LCD, the book's date and PER-FECT!) lie over
+ * the slot and the paper, which pass under them (ReceiptPrint cuts them out), so no word is ever covered. It settles at
+ * (−4, +10) dp turned 3° when that is clear of [header]; otherwise lower, under the lowest word it would meet. If the
+ * settled paper then hangs down past the top of the list's viewport ([listTop], before any inset), the list makes room:
+ * its viewport starts 4 dp under the paper ([ReceiptPlacement.listShift]), so no row can scroll beneath it.
  */
 internal fun placeReceipt(
     lcd: Rect?,
@@ -97,35 +120,38 @@ internal fun placeReceipt(
     paperH: Float,
     density: Float,
     header: List<Rect>,
-    listWords: List<Rect>,
     listTop: Float?,
 ): ReceiptPlacement {
     val dp = { v: Float -> v * density }
     val margin = dp(8f)
-    val right = minOf((lcd?.right ?: (width - margin)) + dp(4f), width - margin)
-    val left = maxOf(right - paperW, margin)
-    var top = (lcd?.bottom ?: dp(96f)) + dp(3f) + dp(4f)
-    // Everywhere the paper is drawn, from the first line out of the slot to its settled, turned pose (+ its shadow).
-    fun covers(y: Float): Rect {
+    val centre = lcd?.center?.x ?: (width - margin - paperW / 2f)
+    val left = (centre - paperW / 2f).coerceIn(margin, maxOf(margin, width - margin - paperW))
+    val slotTop = (lcd?.bottom ?: dp(96f)) + dp(3f)
+    val slot = Rect(left - dp(3f), slotTop, left + paperW + dp(3f), slotTop + dp(4f))
+    val feed = Offset(left, slotTop + dp(2f))
+    // Everywhere the settled paper is drawn: turned 3° about its centre (one top corner rises by about half its width
+    // times sin 3°, the other bottom corner drops as much), with its shadow.
+    val above = paperW * 0.03f + dp(2f)
+    fun covers(x: Float, y: Float): Rect {
         val padX = paperH * 0.03f
-        val padY = paperW * 0.03f
-        return Rect(left - dp(4f) - padX, y - dp(2f), left + paperW + padX + dp(3f), y + dp(10f) + paperH + padY + dp(3f))
+        return Rect(x - padX, y - above, x + paperW + padX + dp(3f), y + paperH + above + dp(1f))
     }
+    val x = feed.x - dp(4f)
+    var y = feed.y + dp(10f)
     repeat(8) {
-        val box = covers(top)
+        val box = covers(x, y)
         val hit = header.filter { it.inflate(dp(2f)).overlaps(box) }.maxOfOrNull { it.bottom } ?: return@repeat
-        top = hit + dp(3f) + dp(4f) + dp(2f)
+        // Down until its highest corner is 4 dp under the word.
+        y = hit + dp(4f) + above
     }
-    val slotLeft = lcd?.left ?: (right - paperW)
-    val slotRight = lcd?.right ?: right
-    val slot = Rect(slotLeft, top - dp(4f), slotRight, top)
-    val box = covers(top)
-    val shift = if (listTop != null && listWords.any { it.inflate(dp(2f)).overlaps(box) }) maxOf(0f, box.bottom + dp(8f) - listTop) else 0f
-    return ReceiptPlacement(slot, Offset(left, top), shift)
+    val box = covers(x, y)
+    // Less than a pixel is no room at all (the paper ends at the list's top).
+    val shift = if (listTop != null) (box.bottom + dp(4f) - listTop).takeIf { it >= 1f } ?: 0f else 0f
+    return ReceiptPlacement(slot, feed, Offset(x, y), shift)
 }
 
-/** The binder top's words the receipt keeps off (the anchors' names after `text:`). */
-private val HEADER_WORDS = setOf("title", "subtitle", "lcd", "date")
+/** The binder top's and the book's words the receipt passes under and settles clear of (the anchors' names after `text:`). */
+private val HEADER_WORDS = setOf("title", "subtitle", "lcd", "date", "perfect", "pagelcd")
 
 /**
  * The printing receipt (§13.2): a 4 dp ballpoint slot line under the LCD (the LCD's width); the paper feeds out of it
@@ -152,31 +178,32 @@ internal fun ReceiptPrint(fx: ReceiptFx, anchors: AnchorRegistry, local: (Rect) 
     val room = LocalListRoom.current
     var paperW by remember(fx.id) { mutableIntStateOf(0) }
     var paperH by remember(fx.id) { mutableIntStateOf(0) }
-    // The room the list makes is decided once, from where its words are when the receipt prints.
-    var shift by remember(fx.id) { androidx.compose.runtime.mutableStateOf<Float?>(null) }
-    if (room != null) {
-        // Read here, so the shift decided below (in the layout's subcomposition) recomposes this and reaches the list.
-        val made = shift ?: 0f
-        androidx.compose.runtime.SideEffect { room.receiptShift = made }
-        androidx.compose.runtime.DisposableEffect(fx.id) { onDispose { room.receiptShift = 0f } }
-    }
+    if (room != null) androidx.compose.runtime.DisposableEffect(fx.id) { onDispose { room.receiptShift = 0f } }
     val ink = PicnicTheme.colors.ballpoint
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val width = constraints.maxWidth.toFloat()
-        val words = anchors.keys().filter { it.startsWith(EggAnchors.TEXT_PREFIX) }
-        val header = words.filter { it.removePrefix(EggAnchors.TEXT_PREFIX) in HEADER_WORDS }.mapNotNull { anchors.bounds(it)?.let(local) }
-        val list = words.filter { k -> k.removePrefix(EggAnchors.TEXT_PREFIX).let { it !in HEADER_WORDS && it != "addbar" } }.mapNotNull { anchors.bounds(it)?.let(local) }
+        // Placed again whenever the LCD or the list's top moves (both snapshot state: a waiting receipt is never left
+        // behind, nor over the list's words), and on every frame of the print.
+        val lcd = room?.lcd ?: anchors.bounds(AnchorRegistry.LCD)
+        val listTop = room?.listTop ?: anchors.bounds(EggAnchors.LIST)?.top
+        val header = anchors.keys()
+            .filter { it.startsWith(EggAnchors.TEXT_PREFIX) && it.removePrefix(EggAnchors.TEXT_PREFIX) in HEADER_WORDS }
+            .mapNotNull { anchors.bounds(it)?.let(local) }
         val placed = placeReceipt(
-            anchors.bounds(AnchorRegistry.LCD)?.let(local), width, paperW.toFloat(), paperH.toFloat(), d.density,
-            header, list, anchors.bounds(EggAnchors.LIST)?.let(local)?.top,
+            lcd?.let(local), width, paperW.toFloat(), paperH.toFloat(), d.density,
+            header, listTop?.let { local(Rect(0f, it, 0f, it)).top },
         )
-        if (paperW > 0 && shift == null) shift = placed.listShift
+        // The list's viewport starts under the paper while it waits (EggListHost eases it there).
+        val shift = if (paperW > 0) placed.listShift else 0f
+        if (room != null) androidx.compose.runtime.SideEffect { room.receiptShift = shift }
         val (sdx, sdy, rot) = if (reduced) Triple(-4f, 10f, 3f) else ReceiptMotion.settle(t)
         val jitter = if (reduced) 0f else ReceiptMotion.jitterDp(t)
         val fed = if (reduced) 1f else ReceiptMotion.fed(t)
         val alpha = if (reduced) (t.toFloat() / ReceiptMotion.FADE_MS).coerceIn(0f, 1f) else 1f
-        val x = placed.paper.x + with(d) { (sdx + jitter).dp.toPx() }
-        val y = placed.paper.y + with(d) { sdy.dp.toPx() }
+        // From the slot to where it settles, in step with the settle's own beats (its 10 dp drop: 0, 6, 10).
+        val k = (sdy / 10f).coerceIn(0f, 1f)
+        val x = placed.feed.x + (placed.settled.x - placed.feed.x) * k + with(d) { jitter.dp.toPx() }
+        val y = placed.feed.y + (placed.settled.y - placed.feed.y) * k
         if (paperW > 0) spot.rect = Rect(x, y, x + paperW, y + paperH)
         if (paperW > 0) {
             // Its drawn bounds: the part out of the slot, turned as it is (3° at rest: a few px wider and taller).
@@ -187,50 +214,58 @@ internal fun ReceiptPrint(fx: ReceiptFx, anchors: AnchorRegistry, local: (Rect) 
                 rot, origin(),
             )
         }
-        val slotShows = !reduced && ReceiptMotion.slotVisible(t) && paperW > 0
-        if (slotShows) {
-            // The slot: a 4 dp ballpoint line under the LCD, its width, that the paper comes out of.
-            val slot = placed.slot
-            Canvas(
-                Modifier
-                    .decorative()
-                    .offset { IntOffset(slot.left.roundToInt(), slot.top.roundToInt()) }
-                    .width(with(d) { slot.width.toDp() })
-                    .height(4.dp),
-            ) {
-                drawRoundRect(ink, cornerRadius = CornerRadius(2.dp.toPx()))
-            }
-            Probe("slot", t, slot, 0f, origin())
-        }
+        // The binder top's words lie over the paper and its slot: they are cut out of both (§12.1, item 259).
+        val under = remember(header) { Path().apply { header.forEach { addRect(it) } } }
         Box(
             Modifier
-                .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
-                .testTag(EggTags.RECEIPT)
-                .onSizeChanged { paperW = it.width; paperH = it.height }
-                .clearAndSetSemantics {
-                    contentDescription = spoken
-                    role = Role.Button
-                    onClick(label = saveLabel) {
-                        engine.onReceiptTap()
-                        true
-                    }
-                }
-                .clickable(remember { MutableInteractionSource() }, indication = null) { engine.onReceiptTap() }
-                .graphicsLayer {
-                    // The sticker draws itself at 3°; while it feeds it hangs straight out of the slot.
-                    rotationZ = rot - 3f
-                    transformOrigin = TransformOrigin(0.5f, 0f)
-                    this.alpha = alpha
-                    // Not a pixel before it has been placed (its size is known after the first layout).
-                    if (paperW == 0) this.alpha = 0f
-                }
-                .drawWithContent {
-                    // The clip reveal: only what has come out of the slot shows.
-                    val shown = size.height * fed
-                    clipRect(-size.width, 0f, size.width * 2, shown) { this@drawWithContent.drawContent() }
-                },
+                .fillMaxSize()
+                .drawWithContent { clipPath(under, ClipOp.Difference) { this@drawWithContent.drawContent() } },
         ) {
-            ReceiptSticker(lines, pitch = ReceiptPitch)
+            Box(
+                Modifier
+                    .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+                    .testTag(EggTags.RECEIPT)
+                    .onSizeChanged { paperW = it.width; paperH = it.height }
+                    .clearAndSetSemantics {
+                        contentDescription = spoken
+                        role = Role.Button
+                        onClick(label = saveLabel) {
+                            engine.onReceiptTap()
+                            true
+                        }
+                    }
+                    .clickable(remember { MutableInteractionSource() }, indication = null) { engine.onReceiptTap() }
+                    .graphicsLayer {
+                        // The sticker draws itself at 3°; while it feeds it hangs straight out of the slot.
+                        rotationZ = rot - 3f
+                        transformOrigin = TransformOrigin(0.5f, 0f)
+                        this.alpha = alpha
+                        // Not a pixel before it has been placed (its size is known after the first layout).
+                        if (paperW == 0) this.alpha = 0f
+                    }
+                    .drawWithContent {
+                        // The clip reveal: only what has come out of the slot shows.
+                        val shown = size.height * fed
+                        clipRect(-size.width, 0f, size.width * 2, shown) { this@drawWithContent.drawContent() }
+                    },
+            ) {
+                ReceiptSticker(lines, pitch = ReceiptPitch)
+            }
+            val slotShows = !reduced && ReceiptMotion.slotVisible(t) && paperW > 0
+            if (slotShows) {
+                // The slot: a 4 dp ballpoint line under the LCD, as wide as the paper it feeds, over the paper's top edge.
+                val slot = placed.slot
+                Canvas(
+                    Modifier
+                        .decorative()
+                        .offset { IntOffset(slot.left.roundToInt(), slot.top.roundToInt()) }
+                        .width(with(d) { slot.width.toDp() })
+                        .height(4.dp),
+                ) {
+                    drawRoundRect(ink, cornerRadius = CornerRadius(2.dp.toPx()))
+                }
+                Probe("slot", t, slot, 0f, origin())
+            }
         }
     }
 }

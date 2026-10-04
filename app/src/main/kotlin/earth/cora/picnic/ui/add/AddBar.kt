@@ -707,6 +707,8 @@ fun BoxScope.AddDock(
     otherSheetOpen: Boolean = false,
     /** Egg 16: the umbrella stands at the bar's left end; the washi moves along after the doodle (AddBar). */
     tapeAfterDoodle: Boolean = false,
+    /** False where there is no camera or microphone to offer (the Surprise lab's practice list): Snap and Speak are off. */
+    captureEnabled: Boolean = true,
 ) {
     val collapse = flows.collapse
     val reduced = LocalReducedMotion.current
@@ -742,6 +744,7 @@ fun BoxScope.AddDock(
                 focusRequester = flows.focusRequester,
                 onFocusChange = { collapse.fieldFocused = it },
                 tapeAfterDoodle = tapeAfterDoodle,
+                captureEnabled = captureEnabled,
             )
             // The pad under the bar, over the navigation bar or the keyboard's room (never behind the bar's bites).
             Spacer(Modifier.fillMaxWidth().windowInsetsBottomHeight(bottomInsets).background(c.pad))

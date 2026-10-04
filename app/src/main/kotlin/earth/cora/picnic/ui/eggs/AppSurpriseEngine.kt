@@ -149,12 +149,19 @@ class AppSurpriseEngine(
                 val before = appSettings
                 appSettings = s
                 derive()
+                // Egg 14's rules run on what the album holds whenever the eggs come on (at start, or turned back on):
+                // trips filed while they were off still open the back pocket and the sakura sheet (§12.2).
+                if (eggsOn && (before == null || !before.eggs)) albumNow?.let(::applyAlbumRules)
                 when {
                     // A cold start straight into the list: the list said it was showing before the switches had loaded,
                     // when no egg could know it was on. Its checks run now (SNACK?, the forecast, the ants).
                     before == null && listShown && eggsOn -> listShownChecks(snackDue = true)
-                    // "Use my area" on or off: golden hour follows the new place at once, not tomorrow.
-                    before != null && before.useMyArea != s.useMyArea -> refresh()
+                    // "Use my area" on or off: golden hour and the forecast follow the new place at once, not tomorrow
+                    // (the forecast is asked again when its city changed, WeatherService).
+                    before != null && before.useMyArea != s.useMyArea -> {
+                        refresh()
+                        if (listShown) checkWeather()
+                    }
                 }
             }
         }
@@ -447,6 +454,9 @@ class AppSurpriseEngine(
         if (!eggsOn || reducedMotion) return
         if (heldMs < timeouts.holdThresholdMs + EggRules.LADYBUG_AFTER_THRESHOLD_MS) return
         if (_state.value.ladybug != null) return
+        // §4.1: with the nap cat and the umbrella both out, the bee and they are the screen's 3 page stickers; a strolling
+        // ladybug would be a 4th, so it stays home.
+        if (_state.value.pageStickerBudgetFull) return
         _state.update { it.copy(ladybug = LadybugFx(nextId(), sectionId)) }
     }
 
