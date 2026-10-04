@@ -367,14 +367,14 @@ After a backup restore, items may carry a `customIconId` whose file isn't there:
 interface StateStore {
     val states: Flow<AppState>                                  // current (loads on first use), then each commit
     suspend fun current(): AppState
-    suspend fun update(transform: (AppState) -> AppState): AppState   // Mutex-serialized; persist, then emit
+    suspend fun update(transform: (AppState) -> AppState): AppState   // Mutex-serialized; emit, then persist (a failed write emits the old state again and throws)
 }
 class JsonFileStateStore(file: File, initial: () -> AppState, ioDispatcher = Dispatchers.IO)
 class InMemoryStateStore(initial: AppState)                     // tests/previews (implemented)
 ```
 
 - **Loading:** lazy, on the first `states` collection or `current()`, on the IO dispatcher. Nothing is read in the constructor, so `AppContainer` stays cheap.
-- **Writing:** encode with `CoreJson.json`; write `state.json.tmp` in the same directory; `FileOutputStream.fd.sync()`; `Files.move(tmp, target, ATOMIC_MOVE, REPLACE_EXISTING)`. If the write fails, `update` throws `IOException`; memory and observers keep the previous state. The UI shows the snackbar "Couldn't save."
+- **Writing:** encode with `CoreJson.json`; write `state.json.tmp` in the same directory; `FileOutputStream.fd.sync()`; `Files.move(tmp, target, ATOMIC_MOVE, REPLACE_EXISTING)`. The new state is emitted before the write, so a check-off's chain starts at her tap rather than after the fsync (§8.3 beats are measured from the tap). If the write fails, memory and observers go back to the previous state (emitted again) and `update` throws `IOException`. The UI shows the snackbar "Couldn't save."
 - **Unreadable JSON:** rename the file to `state.json.corrupt-<ms>` and start from `initial()`. Never crash on a bad file.
 - **Missing file:** start from `initial()`; nothing is written until the first update.
 

@@ -77,6 +77,34 @@ class TripRulesTest {
     }
 
     @Test
+    fun autoNewBookSameTapCompletion() {
+        // Saturday's shop is finished and its finale shown; that evening she writes down paper towels.
+        val start = 1_000_000L
+        var s = AppState(
+            lists = listOf(GroceryList("l1", "Groceries", 0, listOf(item("bread"), item("milk")))),
+            currentListId = "l1",
+            store = StoreProfile(name = "Hillcrest Market"),
+        ).toggleChecked("l1", "bread", start).toggleChecked("l1", "milk", start + 5 * min).markFinaleShown("l1", start + 6 * min)
+        s = s.addItems("l1", listOf(item("towels", addedAt = start + 8 * hour)), start + 8 * hour).first
+        assertNull(s.list("l1")!!.trip!!.completedAt, "more to get")
+        // 13 h after the shop she checks them off: the book is filed, the fresh trip is finished by the same tap, and its
+        // finale counts as shown then (no celebration, no bonus).
+        val at = start + 5 * min + 13 * hour
+        val (after, auto) = s.toggleCheckedStartingNewBook("l1", "towels", at)
+        assertNotNull(auto)
+        val trip = after.list("l1")!!.trip!!
+        assertEquals(listOf("towels"), after.list("l1")!!.items.map { it.id })
+        assertEquals(at, trip.completedAt)
+        assertEquals(at, trip.finaleShownAt)
+        assertNull(trip.bonus)
+        assertFalse(TripRules.finaleOwed(after.list("l1")!!))
+        // A fresh book with more to get is not touched: its finale is still to come.
+        val more = s.addItems("l1", listOf(item("soap", addedAt = start + 9 * hour)), start + 9 * hour).first
+        val (open, _) = more.toggleCheckedStartingNewBook("l1", "towels", at)
+        assertNull(open.list("l1")!!.trip!!.finaleShownAt)
+    }
+
+    @Test
     fun autoNewBookAfterIdle() {
         val start = 1_000_000L
         val s = AppState(

@@ -346,8 +346,11 @@ class ListViewModel(
             val checked = item.checked
             val aisleChanged = if (checked) section.complete && beforeSection?.complete != true else beforeSection?.complete == true && !section.complete
             val last = i == toggled.lastIndex
+            // A fresh book finished by the tap that started it is no trip completion: its finale counts as shown (core),
+            // so only the aisle's in-place chain plays and the new book's Undo note stays readable (§0.4 Q9, §7.1).
+            val sameTapFinish = newBook && list.trip?.finaleShownAt != null
             val tripChanged = last && if (checked) {
-                TripRules.isComplete(list) && (newBook || !TripRules.isComplete(before))
+                TripRules.isComplete(list) && !sameTapFinish && (newBook || !TripRules.isComplete(before))
             } else {
                 !newBook && TripRules.isComplete(before) && !TripRules.isComplete(list)
             }
@@ -368,7 +371,7 @@ class ListViewModel(
                 holo = item.rarity != Rarity.NONE,
                 aisleIndex = if (position > 0) position - 1 else -1,
                 aisleWasOpen = prev.grouped.openSectionId == section.id,
-                finaleShown = before.trip?.finaleShownAt != null && !newBook,
+                finaleShown = if (newBook) list.trip?.finaleShownAt != null else before.trip?.finaleShownAt != null,
                 newBook = newBook && checked && item in taps,
             )
             if (next != null) openTo = next

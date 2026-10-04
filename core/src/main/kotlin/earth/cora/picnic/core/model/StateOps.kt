@@ -232,7 +232,9 @@ fun AppState.newBookStands(auto: AutoNewBook): Boolean {
  * activity is more than 12 h old (TripRules.startsNewBook), the old book is filed and what was got last time is
  * cleared (newTrip(CLEAR_GOTTEN)), and the item is checked onto a fresh trip: the result carries the filed book
  * (write it to the album BEFORE this state, §7.2; TripFiling.toggle does both) and the [NewBookUndo] for the
- * toast's Undo. Every other tap is [toggleChecked] with no [AutoNewBook].
+ * toast's Undo. When that check-off also completes the fresh trip (its only item), the fresh trip's finale is marked
+ * shown at once: no finale, no bonus (TripRulesTest.autoNewBookSameTapCompletion). Every other tap is [toggleChecked]
+ * with no [AutoNewBook].
  */
 fun AppState.toggleCheckedStartingNewBook(listId: String, itemId: String, now: Long): Pair<AppState, AutoNewBook?> {
     val list = list(listId) ?: return this to null
@@ -241,8 +243,12 @@ fun AppState.toggleCheckedStartingNewBook(listId: String, itemId: String, now: L
     if (item.checked || oldTrip == null || !TripRules.startsNewBook(list, now)) return toggleChecked(listId, itemId, now) to null
     val cleared = list.items.withIndex().filter { it.value.checked }
     val (fresh, book) = newTrip(listId, NewTripMode.CLEAR_GOTTEN, now)
-    val checked = fresh.toggleChecked(listId, itemId, now)
-    if (book == null) return checked to null
+    val toggled = fresh.toggleChecked(listId, itemId, now)
+    if (book == null) return toggled to null
+    // The same tap that started the book finished it (a one-thing top-up the evening after a shop): its finale counts as
+    // shown, so no celebration plays, no bonus sticker is spent and the new book's Undo note stays readable; the aisle's
+    // own in-place chain still plays (§0.4 Q9, §7.1).
+    val checked = if (toggled.list(listId)?.trip?.completedAt != null) toggled.markFinaleShown(listId, now) else toggled
     return checked to AutoNewBook(book, NewBookUndo(listId, itemId, oldTrip, cleared, list.lastClosedAt, list.openAisle))
 }
 

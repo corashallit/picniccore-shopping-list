@@ -219,4 +219,59 @@ class TripNudgeTest {
         compose.advanceMs(1500)
         assertFalse(compose.exists(TOAST_TAG))
     }
+
+    /**
+     * The trip review (§0.4 Q9, §7.1, items 120 and 314): the evening after a finished shop she writes down paper towels,
+     * and 13 h after the shop checks them off. That tap files Saturday's book, starts a fresh one and finishes it (1/1).
+     * The fresh trip's finale counts as shown at once: no celebration, no bonus sticker; only the aisle's own chain plays,
+     * and the new book's note with its Undo stays readable for its whole hold, and its Undo works.
+     */
+    @Test
+    fun autoNewBookSameTapCompletion() {
+        val rig = ListRig(ListFixture.done(), now = ListFixture.TRIP_START + 8 * ListFixture.HOUR)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { rig.Themed() }
+        compose.frames(5)
+        compose.runOnIdle {
+            rig.addVm.setText("Paper towels")
+            rig.addVm.addAsTyped()
+        }
+        // The add's own note has come and gone.
+        assertTrue(compose.framesUntil(3_000) { compose.exists(TOAST_TAG) })
+        assertTrue(compose.framesUntil(12_000) { !compose.exists(TOAST_TAG) })
+        val towels = rig.app.list(ListFixture.LIST_ID)!!.items.single { it.name == "Paper towels" }
+        assertTrue("written down for next time, the same trip", rig.app.list(ListFixture.LIST_ID)!!.trip!!.finaleShownAt != null)
+        // 13 h after the shop's last check-off.
+        rig.now = ListFixture.TRIP_START + 14 * ListFixture.HOUR
+        compose.runOnIdle { rig.vm.toggle(towels.id) }
+        compose.frames(3)
+        val album = (rig.album.album as kotlinx.coroutines.flow.StateFlow<earth.cora.picnic.core.store.Album>).value
+        assertEquals("Saturday's book is filed", 1, album.books.size)
+        val trip = rig.app.list(ListFixture.LIST_ID)!!.trip!!
+        assertEquals(listOf("Paper towels"), rig.app.list(ListFixture.LIST_ID)!!.items.map { it.name })
+        assertTrue("the fresh trip is complete", trip.completedAt != null)
+        assertEquals("its finale counts as shown at the tap", rig.now, trip.finaleShownAt)
+        // No scene, no bonus, for the whole of the note's hold; the note stays on top.
+        val note = "New sticker book for today"
+        fun noteShows() = compose.onAllNodes(hasText(note, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val shown = compose.framesUntil(3000) { noteShows() }
+        val texts = compose.onAllNodes(androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes().map { it.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString() }
+        assertTrue("the new-book note shows ($texts, celebration ${rig.engine.current.value.celebration})", shown)
+        var frames = 0
+        while (frames < 4000 / 16) {
+            compose.frames(1)
+            frames++
+            assertEquals("no celebration (${frames * 16} ms)", null, rig.engine.current.value.celebration)
+        }
+        assertTrue("the note is still there to read after 4 s", noteShows())
+        assertEquals("no bonus sticker spent", null, rig.app.list(ListFixture.LIST_ID)!!.trip!!.bonus)
+        // Its Undo still works: Saturday's book and its 24 stickers come back, the paper towels checked into it.
+        compose.onNodeWithText("Undo", useUnmergedTree = true).performClick()
+        compose.frames(30)
+        val back = rig.app.list(ListFixture.LIST_ID)!!
+        assertEquals(25, back.items.size)
+        assertTrue(back.items.all { it.checked })
+        assertTrue("the book left the album", (rig.album.album as kotlinx.coroutines.flow.StateFlow<earth.cora.picnic.core.store.Album>).value.books.isEmpty())
+        compose.mainClock.autoAdvance = true
+    }
 }

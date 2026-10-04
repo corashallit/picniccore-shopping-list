@@ -18,10 +18,11 @@ import java.io.File
 
 /**
  * Single source of truth for AppState. CONTRACT (docs/ARCHITECTURE.md §6):
- * - [states] emits the current state (loading it on first use), then every committed update.
- *   It never emits a state that failed to persist.
- * - [update] runs [transform] under a Mutex (updates are serialized), persists the result, then emits it.
- *   If transform returns the same instance, nothing is written or emitted.
+ * - [states] emits the current state (loading it on first use), then every update.
+ * - [update] runs [transform] under a Mutex (updates are serialized), emits the result at once (so what she did shows
+ *   from her tap, not from the fsync: the check-off chain's beats are measured from the tap, §8.3), then persists it.
+ *   If persisting fails, the previous state is emitted again and the call throws: a state that failed to persist never
+ *   stays. If transform returns the same instance, nothing is written or emitted.
  * - All functions are main-safe (I/O happens on the injected IO dispatcher).
  */
 interface StateStore {
@@ -30,7 +31,7 @@ interface StateStore {
     /** Loads if needed and returns the current state. */
     suspend fun current(): AppState
 
-    /** Returns the committed new state. Throws java.io.IOException if persisting failed (state unchanged). */
+    /** Returns the committed new state. Throws java.io.IOException if persisting failed (the state is rolled back). */
     suspend fun update(transform: (AppState) -> AppState): AppState
 }
 
@@ -76,8 +77,17 @@ class JsonFileStateStore(
         val current = loadLocked()
         val next = transform(current)
         if (next === current) return@withLock current
-        withContext(ioDispatcher) { disk.write(next) }
+        // Published before the write (the tap's chain starts now), rolled back if the write fails.
         loaded.value = next
+        try {
+            withContext(ioDispatcher) { disk.write(next) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // The blocking write ran to its end before the cancellation surfaced: the file holds [next].
+            throw e
+        } catch (e: Throwable) {
+            if (loaded.value === next) loaded.value = current
+            throw e
+        }
         next
     }
 

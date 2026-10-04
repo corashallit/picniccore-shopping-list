@@ -134,6 +134,52 @@ class JsonFileStateStoreTest {
         assertEquals(1, state.corrections.size, "other data survives the repair")
     }
 
+    /** Runs what is dispatched to it only when [runAll] is called: the disk write held at the IO dispatcher. */
+    private class HeldDispatcher : kotlinx.coroutines.CoroutineDispatcher() {
+        private val queue = ArrayDeque<Runnable>()
+        override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) { queue += block }
+        fun runAll() { while (queue.isNotEmpty()) queue.removeFirst().run() }
+    }
+
+    /**
+     * Trip review (§8.3, items 127 and 178): an update shows at once, before its write (fsync) is done, so the check-off
+     * chain starts at her tap; the file has it once the write ran.
+     */
+    @Test
+    fun anUpdateShowsBeforeItsWrite() = runTest(UnconfinedTestDispatcher()) {
+        val io = HeldDispatcher()
+        val s = JsonFileStateStore(file, ::initial, io)
+        val loading = launch { s.current() }
+        io.runAll()
+        loading.join()
+        val before = s.current()
+        val seen = mutableListOf<AppState>()
+        val watch = launch { s.states.collect { seen += it } }
+        val job = launch { s.update { it.renameList(it.currentListId, "Shown at once") } }
+        assertEquals("Shown at once", s.current().currentList().title, "published before the write")
+        assertEquals("Shown at once", seen.last().currentList().title, "observers see it before the write")
+        assertFalse(file.exists() && file.readText().contains("Shown at once"), "not on disk yet")
+        io.runAll()
+        job.join()
+        assertTrue(file.readText().contains("Shown at once"), "written")
+        assertTrue(before !== s.current())
+        watch.cancel()
+    }
+
+    /** A failed write takes the shown state back: observers see the old state again, and the call throws. */
+    @Test
+    fun aFailedWriteTakesTheShownStateBack() = runTest(UnconfinedTestDispatcher()) {
+        val notADir = File(dir, "blocker").apply { writeText("x") }
+        val s = store(File(notADir, "state.json"))
+        val before = s.current()
+        val seen = mutableListOf<AppState>()
+        val watch = launch { s.states.collect { seen += it } }
+        assertFailsWith<IOException> { s.update { it.renameList(it.currentListId, "Never saved") } }
+        assertSame(before, s.current())
+        assertSame(before, seen.last(), "observers are back on the saved state")
+        watch.cancel()
+    }
+
     @Test
     fun failedWriteKeepsTheOldStateInMemory() = runTest {
         val notADir = File(dir, "blocker").apply { writeText("x") }
