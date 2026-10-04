@@ -43,6 +43,7 @@ import earth.cora.picnic.R
 import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.a11y.focusRingInk
 import earth.cora.picnic.ui.common.ReceiptPitch
 import earth.cora.picnic.ui.common.ReceiptSticker
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
@@ -257,7 +258,8 @@ internal fun ReceiptPrint(fx: ReceiptFx, anchors: AnchorRegistry, local: (Rect) 
             // reads (§15), and it wears the kit's ring while the keyboard has it.
             val interaction = remember { MutableInteractionSource() }
             val ringed = showsFocusRing(interaction)
-            val ink = PicnicTheme.colors.ink
+            // Its own name: the slot below is drawn in the outer ballpoint `ink`, which must stay ballpoint in Glow too.
+            val ringInk = focusRingInk()
             Box(
                 Modifier
                     .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
@@ -277,7 +279,7 @@ internal fun ReceiptPrint(fx: ReceiptFx, anchors: AnchorRegistry, local: (Rect) 
                         if (paperW == 0) this.alpha = 0f
                     }
                     // The kit's 2 dp ring 3 dp round the paper, turned with it (§4.4).
-                    .focusRing(RoundedCornerShape(4.dp), ink, ringed)
+                    .focusRing(RoundedCornerShape(4.dp), ringInk, ringed)
                     .drawWithContent {
                         // The clip reveal: only what has come out of the slot shows.
                         val shown = size.height * fed
