@@ -141,7 +141,10 @@ class ListStateGoldensTest {
     }
 
     /** Item 118: the tear-off after release (perforation 120 ms, halves 600 ms), frame by frame, Day and Glow. */
-    /** §6.1's "tear-off in progress with the Undo toast": the slot closing, the note "McIntosh apples torn out" + Undo. */
+    /**
+     * §6.1's "tear-off in progress with the Undo toast": the halves gone, the slot closed on the tray's paper (the rows
+     * below followed it up), the note "McIntosh apples torn out" + Undo.
+     */
     @Test
     fun tearOffToastDay() = tearOffToast(ThemeVariant.Day)
 
@@ -157,8 +160,8 @@ class ListStateGoldensTest {
                 repeat(4) { moveBy(Offset(-20f * density, 0f)) }
                 up()
             }
-            // The halves have fallen (720 ms), the row is out and its slot closing, the note has dropped in.
-            frames(((TEAR_TOTAL + 260) / 16).toInt())
+            // The halves have fallen (720 ms), the slot has closed (380 ms) and the row is out, the note has dropped in.
+            frames(((TEAR_TOTAL + SLOT_CLOSE + 260) / 16).toInt())
         }) { rig.Content() }
     }
 

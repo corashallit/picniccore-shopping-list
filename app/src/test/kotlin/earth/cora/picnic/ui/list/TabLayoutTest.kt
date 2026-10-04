@@ -293,6 +293,54 @@ class TabLayoutTest {
         assertTrue("some strips stack their meta under the basket at 2.0 ($stacked)", stacked > 0)
     }
 
+    /**
+     * §4.6, §4.10 (trip review): wherever a strip's meta wraps, its count stays whole ("1 of 1", "2 left", "of 3"), "in the
+     * basket" stays together, and no line ends in the chip's "·": at 1.0, 1.3 and 2.0, finished strips and ones to go,
+     * with and without a store-aisle chip.
+     */
+    @Test
+    fun stripMetaKeepsItsCountsTogether() = metaCountsTogether(1f)
+
+    @Test
+    fun stripMetaKeepsItsCountsTogetherAtFs130() = metaCountsTogether(1.3f)
+
+    @Test
+    fun stripMetaKeepsItsCountsTogetherAtFs200() = metaCountsTogether(2f)
+
+    private fun metaCountsTogether(scale: Float) {
+        run {
+            var state = ListFixture.everyDefaultAisle()
+            for (i in listOf(6, 10)) state = state.toggleChecked(ListFixture.LIST_ID, "d$i", ListFixture.TRIP_START + (20 + i) * ListFixture.MIN)
+            state = state.setOpenAisle(ListFixture.LIST_ID, "")
+            val rig = ListRig(state)
+            compose.show(rig, fontScale = scale)
+            var done = 0
+            var wrapped = 0
+            visit(rig) { s, _ ->
+                val metaNode = compose.onNodeWithTag(ListTags.stripMeta(s.id), useUnmergedTree = true).fetchSemanticsNode()
+                val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+                metaNode.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+                val text = layouts.single()
+                val lines = (0 until text.lineCount).map { text.layoutInput.text.text.substring(text.getLineStart(it), text.getLineEnd(it)).trim() }
+                fun together(what: String) = assertTrue("${s.displayName} at $scale: \"$what\" on one line ($lines)", lines.any { what in it.replace('\u00A0', ' ') })
+                val toGet = s.toGet
+                if (toGet == 0) {
+                    done++
+                    together("${s.total} of ${s.total}")
+                    together("in the basket")
+                } else {
+                    together("$toGet left")
+                    together("of ${s.total}")
+                }
+                if (lines.size > 1) wrapped++
+                lines.forEach { assertTrue("${s.displayName} at $scale: no line ends in \"·\" ($lines)", !it.endsWith("·")) }
+            }
+            assertTrue("finished strips seen at $scale", done >= 2)
+            // At 1.3 the meta still sits beside the basket and wraps there (at 2.0 it takes the strip's whole width).
+            if (scale == 1.3f) assertTrue("some metas wrap at $scale ($wrapped)", wrapped > 0)
+        }
+    }
+
     private companion object {
         /** ChevronFace: its round face starts 8 dp inside the 48 dp target. */
         const val CHEVRON_FACE_INSET = 8f
