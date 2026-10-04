@@ -227,7 +227,7 @@ class AppSurpriseEngine(
                     rain = weatherRain && (st?.weather == true || forceEggs),
                     napSectionId = g?.let { EggRules.napSection(list, it) }?.takeIf { list?.trip?.id?.let { id -> id in napGone } != true },
                     pet = list?.trip?.pet == true,
-                    receiptReady = list != null && TripRules.isComplete(list),
+                    receiptReady = list != null && TripRules.printsReceipt(list),
                     snackSectionId = if (cal.midnight && g != null) EggRules.frozenSection(g)?.id else null,
                     perfectWeek = (albumNow?.perfectUntil ?: 0L) > now,
                     kirakira = cur.kirakiraId != null,
@@ -419,8 +419,9 @@ class AppSurpriseEngine(
         if (!eggsOn) return
         val s = appState ?: return
         val list = currentList() ?: return
-        // D21: a complete trip prints its receipt, however it was completed; the pet branch never runs then.
-        if (TripRules.isComplete(list)) return printReceipt(s, list)
+        // D21: a finished shop prints its receipt, however it was completed, and still once its finale has played and she
+        // has written down more for next time; the pet branch never runs then.
+        if (TripRules.printsReceipt(list)) return printReceipt(s, list)
         if (list.trip == null) {
             // Egg 15 with no trip: the bee visits for 1.5 s with "FED" and leaves; nothing is persisted.
             _state.update { it.copy(petVisitId = nextId(), lcdWord = LcdWord(nextId(), EggRules.FED, EggRules.FED_MS)) }
@@ -432,8 +433,7 @@ class AppSurpriseEngine(
     }
 
     private fun printReceipt(s: AppState, list: GroceryList) {
-        val stops = grouped()?.stops ?: 0
-        val receipt = ReceiptMaker.receipt(list, stops, s.store.name, clock(), zone)
+        val receipt = ReceiptMaker.receipt(list, ReceiptMaker.bookStops(list, s.store.aisles()), s.store.name, clock(), zone)
         scope.launch { safely { store.update { it.printReceipt(list.id, receipt) } } }
         _state.update {
             it.copy(

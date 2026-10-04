@@ -92,8 +92,8 @@ enum class LcdMode {
 
 /**
  * The LCD's content. TalkBack reads the count ("10 of 24 in the basket") whatever the mode shows, since words are
- * decorative. [receiptReady] exposes the long-press as the custom action "Print the trip receipt" (only after the trip
- * is complete and with Easter eggs on; the pet stays a secret).
+ * decorative. [receiptReady] exposes the long-press as the custom action "Print the trip receipt" (only once the hold
+ * prints the receipt, D21: the trip is complete or its finale has played, and with Easter eggs on; the pet stays a secret).
  */
 @Immutable
 data class LcdState(

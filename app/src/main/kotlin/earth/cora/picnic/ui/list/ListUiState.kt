@@ -508,7 +508,7 @@ internal fun buildListUiState(
             mode = if (eggs && trip?.pet == true) LcdMode.Pet else LcdMode.Count,
             count = checked,
             total = grouped.total,
-            receiptReady = eggs && complete,
+            receiptReady = eggs && TripRules.printsReceipt(list),
         ),
         trip = trip?.let {
             TripUi(

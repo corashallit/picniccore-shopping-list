@@ -2,8 +2,12 @@ package earth.cora.picnic.ui.eggs
 
 import android.content.res.Resources
 import earth.cora.picnic.R
+import earth.cora.picnic.core.model.Aisle
+import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.GroceryList
+import earth.cora.picnic.core.model.ListGrouping
 import earth.cora.picnic.core.model.Receipt
+import earth.cora.picnic.core.model.TripRules
 import earth.cora.picnic.core.model.TripStats
 import earth.cora.picnic.ui.album.ReceiptSlip
 import earth.cora.picnic.ui.album.spokenReceipt
@@ -22,16 +26,19 @@ object ReceiptMaker {
     private val TORONTO: ZoneId = ZoneId.of("America/Toronto")
 
     /**
-     * The receipt [list]'s trip prints at [now]: stickers = checked items, baskets = [stops] ("Everything else"
-     * included), minutes = the shop time frozen at the first completion (null for a migrated trip: "--"), shiny = shiny +
-     * jackpot stickers, the store as the trip recorded it (else [storeName]), and the trip's date (the first check-off of
-     * its last session, §7.1) as an ISO date in [Receipt.dateLabel]. A receipt printed before is printed again unchanged
-     * (its stats are frozen at the first print).
+     * The receipt [list]'s trip prints at [now], from the trip's book (D21: the receipt belongs to the finished shop, so
+     * items written down after its finale, [TripRules.bookItems], stay off it): stickers = the book's stickers (checked
+     * items), baskets = [stops] (the book's stops, [bookStops]: "Everything else" included), minutes = the shop time
+     * frozen at the first completion (null for a migrated trip: "--"), shiny = shiny + jackpot stickers, the store as the
+     * trip recorded it (else [storeName]), and the trip's date (the first check-off of its last session, §7.1) as an ISO
+     * date in [Receipt.dateLabel]. A receipt printed before is printed again unchanged (its stats are frozen at the first
+     * print).
      */
     fun receipt(list: GroceryList, stops: Int, storeName: String, now: Long, zone: ZoneId = TORONTO): Receipt {
         list.trip?.receipt?.let { return it }
-        val stats = TripStats.of(list, stops)
-        val start = TripStats.lastSessionStart(list) ?: now
+        val book = list.copy(items = TripRules.bookItems(list))
+        val stats = TripStats.of(book, stops)
+        val start = TripStats.lastSessionStart(book) ?: now
         val date = Instant.ofEpochMilli(start).atZone(zone).toLocalDate()
         return Receipt(
             printedAt = now,
@@ -43,6 +50,13 @@ object ReceiptMaker {
             shiny = stats.shiny,
         )
     }
+
+    /**
+     * The book's stops (§7.4, D23): the aisles the trip's own items fill, "Everything else" included while it has some.
+     * A stop that holds only items written down after the finale is not the finished shop's (D21).
+     */
+    fun bookStops(list: GroceryList, aisles: List<Aisle>): Int =
+        ListGrouping.group(list.copy(items = TripRules.bookItems(list)), aisles, { BasketKind.DEFAULT }).stops
 
     /** The receipt's date: its ISO [Receipt.dateLabel], else the day it was printed. */
     fun date(receipt: Receipt, zone: ZoneId = TORONTO): LocalDate =

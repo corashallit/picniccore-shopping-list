@@ -160,6 +160,35 @@ class GroupingInPlaceTest {
         assertEquals("dairy-eggs", group(items, openAisle = "aisle-2-baking").openSectionId, "an aisle with no items this trip is not a stop")
     }
 
+    /**
+     * Item 179 (§4.13, §8.4): the "now" ring is on the open aisle while it has items left, else on the automatic current
+     * aisle; it moves to the next stop as the stop it was on is done, and leaves the page once the trip is.
+     */
+    @Test
+    fun nowSection() {
+        val s = SaturdayShop.state()
+        fun now(state: AppState) = ListGrouping.group(state.list(LIST_ID)!!, state.store.aisles(), { BasketKind.DEFAULT }).nowSectionId
+        assertEquals("aisle-2-baking", now(s), "she is standing at stop 4: the open aisle has Baking powder left")
+
+        // Baking powder completes Baking: the open aisle has nothing left, so the ring goes to the automatic current
+        // stop (the first in walking order with something left), never stays on a done stop.
+        val bakingDone = s.toggleChecked(LIST_ID, "baking-powder", SaturdayShop.NOW + 60_000)
+        assertTrue(ListGrouping.group(bakingDone.list(LIST_ID)!!, bakingDone.store.aisles(), { BasketKind.DEFAULT }).sections.single { it.id == "aisle-2-baking" }.complete)
+        assertEquals("produce", now(bakingDone))
+
+        // Behind the Next card the next stop opens (D2): the ring moves there with it.
+        val atBreakfast = bakingDone.setOpenAisle(LIST_ID, "breakfast")
+        assertEquals("breakfast", now(atBreakfast))
+
+        // Folding every aisle leaves the ring on the automatic current stop.
+        assertEquals("produce", now(bakingDone.setOpenAisle(LIST_ID, "")))
+
+        // The trip done: no stop is "now".
+        var done = atBreakfast
+        for (item in done.list(LIST_ID)!!.items.filter { !it.checked }) done = done.toggleChecked(LIST_ID, item.id, SaturdayShop.NOW + 120_000)
+        assertNull(now(done))
+    }
+
     @Test
     fun setOpenAisleStoresTheChoice() {
         val s = SaturdayShop.unchecked()

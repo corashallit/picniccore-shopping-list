@@ -30,6 +30,10 @@ import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import earth.cora.picnic.core.model.AppState
+import earth.cora.picnic.core.model.GroceryItem
+import earth.cora.picnic.core.model.addItems
+import earth.cora.picnic.core.model.aisles
+import earth.cora.picnic.core.model.markFinaleShown
 import earth.cora.picnic.core.model.GroceryList
 import earth.cora.picnic.core.model.NewTripMode
 import earth.cora.picnic.core.model.Rarity
@@ -117,6 +121,34 @@ class ReceiptTest {
         // A migrated trip has no shop time: "--".
         val migrated = receipt.copy(minutes = null)
         assertEquals("TIME ............. --", ReceiptMaker.lines("Kirakira Basket", migrated, "Saturday shop")[5].text)
+    }
+
+    /**
+     * D21: the receipt is the finished shop's. Items written down after its finale (one in a stop of its own) clear the
+     * trip's completedAt but stay off the receipt: its stickers, stops, shiny count, date and shop time come from the
+     * book's own items.
+     */
+    @Test
+    fun contentFromBookItems() {
+        val done = completedFixture(41).markFinaleShown(listId, PracticeFixture.TRIP_START + 42 * PracticeFixture.MIN)
+        val evening = PracticeFixture.TRIP_START + 6 * 3_600_000L
+        fun later(id: String, name: String, aisle: String?) =
+            GroceryItem(id = id, name = name, aisleId = aisle, icon = "paper_bag", addedAt = evening)
+        val late = done.addItems(listId, listOf(later("tea", "Tea", "breakfast"), later("glue", "Glitter glue", null)), evening).first
+            .setRarity(listId, "tea", Rarity.SHINY)
+        val l = list(late)
+        assertNull("next week's things re-open the list", l.trip!!.completedAt)
+        val aisles = late.store.aisles()
+        assertEquals("the book's stops", 8, ReceiptMaker.bookStops(l, aisles))
+        assertEquals("as many as the finished shop had", 8, ReceiptMaker.bookStops(list(done), aisles))
+        val receipt = ReceiptMaker.receipt(l, ReceiptMaker.bookStops(l, aisles), PracticeFixture.STORE, evening + 60_000)
+        val shop = ReceiptMaker.receipt(list(done), 8, PracticeFixture.STORE, evening + 60_000)
+        assertEquals("the same receipt the finished shop prints", shop, receipt)
+        assertEquals(24, receipt.stickers)
+        assertEquals(8, receipt.baskets)
+        assertEquals(41, receipt.minutes)
+        assertEquals("a shiny late add is not on it", 1, receipt.shiny)
+        assertEquals("2026-10-03", receipt.dateLabel)
     }
 
     @Test

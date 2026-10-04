@@ -89,8 +89,19 @@ object TripRules {
         return items.isNotEmpty() && items.all { it.checked }
     }
 
-    /** The open trip is complete (the LCD hold prints the receipt, D21). */
+    /** The open trip is complete: every item on the list is checked. */
     fun isComplete(list: GroceryList): Boolean = list.trip?.completedAt != null
+
+    /**
+     * Holding the LCD prints the trip's receipt rather than hatching the pet (D21, §13.2): the trip is complete, or its
+     * finale has played. The receipt belongs to the finished shop, so items written down later for the next shop (which
+     * clear [Trip.completedAt]) never turn the hold back into the pet's; the receipt counts the book's own items
+     * ([bookItems]). False without a trip.
+     */
+    fun printsReceipt(list: GroceryList): Boolean {
+        val trip = list.trip ?: return false
+        return trip.completedAt != null || trip.finaleShownAt != null
+    }
 
     /**
      * The finale is still owed (§7.1): the trip is complete and its finale has not been shown. The app plays it
