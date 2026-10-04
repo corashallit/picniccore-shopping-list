@@ -155,7 +155,7 @@ class ListViewModel(
     /** Taps in flight: item id -> the checked state the tap asked for. */
     private val pending = HashMap<String, Boolean>()
 
-    /** Set by [undoNewBook] until the state that restores the old book arrives. */
+    /** Set by [undoNewBook] until the state that restores the old book arrives (main thread only). */
     private var hint: NewBookUndoHint? = null
 
     /** The last automatic new book (§0.4 Q9), for its toast's Undo. */
@@ -197,8 +197,11 @@ class ListViewModel(
 
     private class Seen(val listId: String, val state: AppState, val list: GroceryList, val grouped: GroupedList)
 
-    /** The automatic new book's Undo (§0.4 Q9) is on its way: the change that brings the old book back plays the turn back. */
-    private data class NewBookUndoHint(val itemId: String)
+    /**
+     * The automatic new book's Undo (§0.4 Q9) is on its way: the change on [listId] that brings back [oldTripId] (and
+     * only that change) plays the turn back, [itemId] (the tapped item, null after an add) landing in its old spot.
+     */
+    private class NewBookUndoHint(val listId: String, val itemId: String?, val oldTripId: String)
 
     // =============================================================================================
     // The one place states arrive (§8.3, §8.4).
@@ -234,7 +237,11 @@ class ListViewModel(
             prev == null || prev.listId != list.id -> {
                 // A list shown for the first time, or another list: the old chains are moot (§6.4: switching lists
                 // switches the book). Nothing plays for what is already there.
-                if (prev != null) engine.finishAll()
+                if (prev != null) {
+                    engine.finishAll()
+                    // Sent before this list's own nudge (opened), so the screen retires only the last list's notes.
+                    viewModelScope.launch { _events.send(ListEvent.Switched(list.id)) }
+                }
                 pending.clear()
                 hint = null
                 opened(list, grouped, now)
@@ -294,8 +301,9 @@ class ListViewModel(
         val tripReplaced = before.trip?.id != list.trip?.id
         val currentHint = hint
 
-        // The automatic new book's Undo (§0.4 Q9): the old book comes back as it was; only the turn back plays.
-        if (currentHint != null && tripReplaced) {
+        // The automatic new book's Undo (§0.4 Q9): the old book comes back as it was; only the turn back plays. Only the
+        // change that restores that very book counts: another list's, or a later New trip's, plays as itself.
+        if (currentHint != null && tripReplaced && currentHint.listId == list.id && list.trip?.id == currentHint.oldTripId) {
             hint = null
             engine.onChange(
                 ListChange(
@@ -468,14 +476,37 @@ class ListViewModel(
         }
     }
 
-    /** Undo on "New sticker book for today" (§0.4 Q9): the old book and its items come back; the item goes in the old book. */
+    /**
+     * Undo on "New sticker book for today" (§0.4 Q9): the old book and its items come back; the item goes in the old
+     * book. Only while that new book stands (TripFiling.undoNewBook checks it in the same write): after a New trip, a
+     * deleted list or a later book a stale Undo changes nothing, so the album never rolls back past a newer filing.
+     */
     fun undoNewBook(toggle: TripFiling.Toggle? = lastToggle) {
         val t = toggle ?: return
-        val itemId = t.autoNewBook?.undo?.itemId ?: return
+        val undo = t.autoNewBook?.undo ?: return
         if (lastToggle === t) lastToggle = null
         val now = clock()
-        hint = NewBookUndoHint(itemId)
-        appScope.launch { save { TripFiling.undoNewBook(store, album, t, now) } }
+        // Set before the write, so the state it brings (which may reach onStates before the write returns) plays the
+        // turn back; keyed to that exact change, and dropped again when the Undo no longer applied.
+        val h = NewBookUndoHint(undo.listId, undo.itemId, undo.trip.id)
+        hint = h
+        appScope.launch {
+            var undone = false
+            save { undone = TripFiling.undoNewBook(store, album, t, now) }
+            if (!undone) viewModelScope.launch { if (hint === h) hint = null }
+        }
+    }
+
+    /**
+     * An add started a new book (§0.4 Q9's add-side twin, TripFiling.addItems): the old book is in the album and the
+     * list starts afresh. The book turns to a fresh page and the toast "Fresh sticker book ✦ your last shop is in the
+     * album" offers Undo ([undoNewBook]).
+     */
+    fun addStartedNewBook(listId: String, toggle: TripFiling.Toggle) {
+        if (toggle.autoNewBook == null) return
+        lastToggle = toggle
+        bookTurn.value = bookTurn.value + 1
+        viewModelScope.launch { _events.send(ListEvent.NewBook(listId, byAdd = true) { undoNewBook(toggle) }) }
     }
 
     /** A tear-off or Delete (§8.6): emits [ListEvent.Deleted] so the screen can offer Undo. */

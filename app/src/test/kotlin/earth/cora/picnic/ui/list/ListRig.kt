@@ -170,6 +170,7 @@ class ListRig(
         thumbs = { null },
         announcer = announcer,
         words = ApplicationProvider.getApplicationContext<Context>()::getString,
+        album = this.album,
     )
 
     /** The eggs as the app shows them on [now]'s day (Appendix A: Thanksgiving's sheet, the pumpkin tape and pictogram). */

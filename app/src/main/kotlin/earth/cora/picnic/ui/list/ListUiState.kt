@@ -264,8 +264,14 @@ sealed interface ListEvent {
     /** A tear-off or a Delete: "Oat cereal torn out" with Undo (merges into "2 items torn out"). */
     data class Deleted(val item: GroceryItem, val index: Int, val listId: String = "") : ListEvent
 
-    /** The first check-off after 12 h idle started a new book (§0.4 Q9): the toast with Undo. */
-    data class NewBook(val listId: String, val undo: () -> Unit) : ListEvent
+    /**
+     * The first check-off (or, [byAdd], the first add) after 12 h idle started a new book (§0.4 Q9): the toast with
+     * Undo.
+     */
+    data class NewBook(val listId: String, val byAdd: Boolean = false, val undo: () -> Unit) : ListEvent
+
+    /** Another list is on screen (§6.4): what the last one's notes offered (the nudge, a new book's Undo) is moot. */
+    data class Switched(val listId: String) : ListEvent
 
     /** New trip filed the book: "New trip · a fresh sticker book ♡". */
     data object NewTrip : ListEvent
@@ -391,16 +397,21 @@ internal fun buildListUiState(
     val trip = list.trip
     val checked = grouped.checked
     val stats = TripStats.of(list, grouped.stops)
+    // The book counts the trip's own items (§7.1, §7.8, item 315): what she writes down after a finished shop is for
+    // the next one, so the finished book keeps its spots, its stamps and its PERFECT while the list has more to get.
+    val bookItems = TripRules.bookItems(list)
+    val ownIds = if (bookItems.size == list.items.size) null else bookItems.mapTo(HashSet()) { it.id }
+    val bookFull = bookItems.isNotEmpty() && bookItems.all { it.checked }
     val book = if (grouped.total == 0) {
         null
     } else {
         val dateMillis = TripStats.lastSessionStart(list) ?: now
-        val perfect = trip?.completedAt != null && trip.finaleShownAt != null
+        val perfect = trip?.finaleShownAt != null && TripRules.bookComplete(list)
         BookUi(
             tripId = trip?.id,
             dateLabel = BOOK_DATE.format(Instant.ofEpochMilli(dateMillis).atZone(zone)),
             season = season,
-            total = grouped.total,
+            total = bookItems.size,
             stickers = list.items.filter { it.checked && it.bookSlot != null }.sortedBy { it.bookSlot }.map { item ->
                 val section = sections.firstOrNull { s -> s.rows.any { it.id == item.id } }
                 BookStickerUi(
@@ -412,11 +423,19 @@ internal fun buildListUiState(
                     aisleIndex = section?.aisleIndex ?: -1,
                 )
             },
-            stamps = sections.map { s ->
-                StampUi(s.id, s.position, s.look, s.displayName, stamped = s.complete, now = s.id == grouped.nowSectionId, toGet = s.toGet)
+            stamps = sections.mapNotNull { s ->
+                if (ownIds == null) {
+                    StampUi(s.id, s.position, s.look, s.displayName, stamped = s.complete, now = s.id == grouped.nowSectionId, toGet = s.toGet)
+                } else {
+                    // A stop with only next week's items is not on this book's stamp page yet.
+                    val own = s.rows.filter { it.id in ownIds }
+                    if (own.isEmpty()) return@mapNotNull null
+                    val left = own.count { !it.checked }
+                    StampUi(s.id, s.position, s.look, s.displayName, stamped = left == 0, now = !bookFull && s.id == grouped.nowSectionId, toGet = left)
+                }
             },
             perfect = perfect,
-            full = checked == grouped.total,
+            full = bookFull,
             receiptSaved = trip?.receiptSaved == true && trip.receipt != null,
             pixel = bonusStage,
             holoStamps = perfectWeek,

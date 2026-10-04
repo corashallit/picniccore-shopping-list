@@ -110,10 +110,17 @@ class ToastHostState {
      */
     var paused: Boolean by mutableStateOf(false)
 
+    /** The current toast's id once [dismiss] retired it: the host lifts it off now, whatever its hold had left. */
+    internal var retiring: Long? by mutableStateOf(null)
+        private set
+
     private val waiting = mutableStateListOf<ToastMessage>()
 
     /** What waits, oldest first. */
     val queue: List<ToastMessage> get() = waiting.toList()
+
+    /** The current toast stays up for its hold and may still take a merge (it is neither leaving nor retired). */
+    private val settled: Boolean get() = !leaving && current?.id != retiring
 
     /** Shows [message] now, merges it into the current Undo, or queues it. */
     fun show(message: ToastMessage) {
@@ -124,7 +131,7 @@ class ToastHostState {
             generation++
             return
         }
-        if (!leaving && cur.undo && message.undo && cur.kind == message.kind) {
+        if (settled && cur.undo && message.undo && cur.kind == message.kind) {
             current = cur.merge?.invoke(cur, message) ?: defaultMerge(cur, message)
             generation++
             return
@@ -132,7 +139,7 @@ class ToastHostState {
         // An info note that knows how to fold itself into the one of its kind still up does (a refresh's stickers drawn
         // after its sorting, §6.1): one note, its hold starting again.
         val fold = message.merge
-        if (!leaving && fold != null && !cur.undo && !message.undo && cur.kind == message.kind) {
+        if (settled && fold != null && !cur.undo && !message.undo && cur.kind == message.kind) {
             current = fold(cur, message)
             generation++
             return
@@ -147,7 +154,19 @@ class ToastHostState {
         if (current?.id != id) return
         current = waiting.removeFirstOrNull()
         leaving = false
+        retiring = null
         if (current != null) generation++
+    }
+
+    /**
+     * Retires every toast of [kind] whose offer no longer holds (§4.15; the list's nudge once a New trip has started a
+     * fresh book, an automatic new book's Undo once a later book was filed): the queued ones go at once, and the one on
+     * screen lifts off now, Undo or not, however long its hold had left.
+     */
+    fun dismiss(kind: String) {
+        waiting.removeAll { it.kind == kind }
+        val cur = current ?: return
+        if (cur.kind == kind && !leaving) retiring = cur.id
     }
 
     private fun defaultMerge(cur: ToastMessage, incoming: ToastMessage): ToastMessage {
@@ -184,10 +203,12 @@ fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset:
                 drop.animateTo(1f, if (reduced) tween(PicnicMotion.rmFade.durationMillis) else tween(PicnicMotion.toastIn.durationMillis, easing = PicnicMotion.toastIn.easing))
                 dropped = m.id
             }
-            // The hold, on the frame clock; a pause (a cover over the toast) waits, then the full hold starts again.
+            // The hold, on the frame clock; a pause (a cover over the toast) waits, then the full hold starts again. A
+            // toast retired meanwhile (ToastHostState.dismiss) cuts its hold short, paused or not.
             val hold = toastHold(m, timeouts)
-            while (!holdUnlessPaused(hold) { state.paused }) {
-                snapshotFlow { state.paused }.first { !it }
+            val retired = { state.retiring == m.id }
+            while (!retired() && !holdUnlessPaused(hold) { state.paused || retired() }) {
+                snapshotFlow { state.paused && !retired() }.first { !it }
             }
             state.leaving = true
             lift.animateTo(1f, if (reduced) tween(PicnicMotion.rmFade.durationMillis) else tween(PicnicMotion.toastOut.durationMillis, easing = PicnicMotion.toastOut.easing))

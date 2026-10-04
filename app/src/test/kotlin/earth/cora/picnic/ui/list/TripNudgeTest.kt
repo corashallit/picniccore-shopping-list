@@ -1,10 +1,21 @@
 package earth.cora.picnic.ui.list
 
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
+import earth.cora.picnic.ui.add.ADD_BAR_TAG
+import earth.cora.picnic.ui.add.ADD_FAB_TAG
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.theme.TOAST_TAG
 import org.junit.Assert.assertEquals
@@ -110,6 +121,85 @@ class TripNudgeTest {
         backgroundFor(rig, owner, 24 * ListFixture.HOUR)
         compose.waitForIdle()
         assertEquals("the new day", "Sun 4 Oct", rig.vm.state.value.book!!.dateLabel)
+    }
+
+    private fun nudgeShows(): Boolean =
+        compose.onAllNodes(hasText(nudge), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+
+    /** Opens the idle list (13 h on) and files its book through the menu's New trip → "Clear what I got". */
+    private fun newTripFromTheMenu(rig: ListRig) {
+        compose.mainClock.autoAdvance = false
+        compose.setContent { rig.Themed() }
+        assertTrue("the nudge shows", compose.framesUntil(1500) { nudgeShows() })
+        compose.onNodeWithContentDescription("More options").performClick()
+        compose.frames(20)
+        compose.onNode(hasText("New trip") and hasAnyAncestor(hasTestTag(LIST_MENU_TAG)), useUnmergedTree = true).performClick()
+        compose.frames(40)
+        compose.onNodeWithText("Clear what I got").performClick()
+        compose.frames(2)
+        assertEquals("the book was filed", null, rig.app.list(ListFixture.LIST_ID)!!.trip)
+    }
+
+    /** Items 120 and 162 (§6.1, §6.5, §4.15): a New trip from the menu while the nudge shows retires it at once. */
+    @Test
+    fun menuNewTripRetiresTheNudge() {
+        val rig = ListRig(now = ListFixture.NOW + 13 * ListFixture.HOUR)
+        newTripFromTheMenu(rig)
+        assertTrue("the nudge lifts off at once, long before its 6 s hold", compose.framesUntil(600) { !nudgeShows() })
+        compose.onNodeWithText("New trip · a fresh sticker book", substring = true, useUnmergedTree = true).assertExists()
+        compose.mainClock.autoAdvance = true
+    }
+
+    /**
+     * Items 120, 162 and 116: a nudge whose trip has gone another way (she peeled its only sticker, so the trip closed
+     * without a New trip) opens nothing when she taps its "New trip"; the next check-off opens no sheet either, and the
+     * add bar still folds into the FAB (no sheet request is left waiting).
+     */
+    @Test
+    fun aStaleNudgeOpensNothing() {
+        val start = ListFixture.longAisle().let { s ->
+            s.copy(lists = s.lists.map { l -> l.copy(items = l.items.map { it.copy(checked = false, checkedAt = null, bookSlot = null) }, trip = null) })
+        }.toggleChecked(ListFixture.LIST_ID, "bananas", ListFixture.NOW)
+        val rig = ListRig(start, now = ListFixture.NOW + 13 * ListFixture.HOUR)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { rig.Themed() }
+        assertTrue("the nudge shows", compose.framesUntil(1500) { nudgeShows() })
+        compose.runOnIdle { rig.vm.toggle("bananas") }
+        compose.frames(20)
+        assertEquals("the trip closed with its last sticker", null, rig.app.list(ListFixture.LIST_ID)!!.trip)
+        assertTrue("the nudge is still up", nudgeShows())
+        compose.onNode(hasText("New trip") and hasAnyAncestor(hasTestTag(TOAST_TAG)), useUnmergedTree = true).performClick()
+        compose.frames(30)
+        assertFalse("no sheet over a list without a trip", compose.exists(NewTripTags.SHEET))
+        // The first check-off opens a fresh trip as usual: no sheet pops up unasked.
+        compose.runOnIdle { rig.vm.toggle("paper-towels") }
+        compose.frames(60)
+        assertFalse(compose.exists(NewTripTags.SHEET))
+        assertTrue(rig.app.list(ListFixture.LIST_ID)!!.items.single { it.id == "paper-towels" }.checked)
+        // And the add bar still folds into the FAB on her scroll down (household holds 11 rows).
+        compose.mainClock.autoAdvance = true
+        compose.onNodeWithTag(ListTags.LIST).performScrollToIndex(0)
+        compose.waitForIdle()
+        assertTrue("at the top the bar is docked", compose.exists(ADD_BAR_TAG))
+        val dp = compose.density.density
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput { swipeUp(startY = centerY + 120 * dp, endY = top + 10 * dp, durationMillis = 500) }
+        compose.waitForIdle()
+        assertTrue("the bar folded into the FAB", compose.exists(ADD_FAB_TAG))
+        assertFalse(compose.exists(ADD_BAR_TAG))
+    }
+
+    /** §6.5 (item 116): a New trip request on a list with no trip to file is dropped, so the add bar can fold. */
+    @Test
+    fun aSheetRequestWithoutATripIsDropped() {
+        val screen = ListScreenState(newTripOpen = true)
+        compose.setContent {
+            earth.cora.picnic.ui.theme.PicnicTheme {
+                ListScreen(state = ListFixture.ui(ListFixture.fresh()), actions = ListActions(), screen = screen)
+            }
+        }
+        compose.waitForIdle()
+        assertFalse(screen.newTripOpen)
+        assertFalse(compose.exists(NewTripTags.SHEET))
     }
 
     @Test

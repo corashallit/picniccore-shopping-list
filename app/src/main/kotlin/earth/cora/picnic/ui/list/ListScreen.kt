@@ -329,23 +329,38 @@ fun ListRoute(
                 is ListEvent.Deleted -> toasts.show(tears.toast(event))
                 is ListEvent.NewBook -> {
                     // The nudge asked for exactly this; once the fresh book has started it has nothing left to offer.
-                    toasts.current?.takeIf { it.kind == NUDGE_KIND }?.let { toasts.finished(it.id) }
+                    toasts.dismiss(NUDGE_KIND)
                     toasts.show(
                         ToastMessage(
-                            resources.getString(R.string.list_toast_new_book),
-                            kind = "book",
+                            resources.getString(if (event.byAdd) R.string.list_toast_new_book_add else R.string.list_toast_new_book),
+                            kind = BOOK_KIND,
                             actionLabel = resources.getString(R.string.list_undo),
                             onAction = event.undo,
                         ),
                     )
                 }
-                ListEvent.NewTrip -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_new_trip), kind = "trip"))
+                ListEvent.NewTrip -> {
+                    // A New trip filed the book: the nudge has nothing left to offer, and an earlier automatic book's
+                    // Undo no longer applies (§6.1, §6.5, §0.4 Q9).
+                    toasts.dismiss(NUDGE_KIND)
+                    toasts.dismiss(BOOK_KIND)
+                    toasts.show(ToastMessage(resources.getString(R.string.list_toast_new_trip), kind = "trip"))
+                }
+                is ListEvent.Switched -> {
+                    // Another list: the last one's nudge and new-book Undo are about a book no longer on screen (§6.4).
+                    toasts.dismiss(NUDGE_KIND)
+                    toasts.dismiss(BOOK_KIND)
+                }
                 is ListEvent.Nudge -> toasts.show(
                     ToastMessage(
                         resources.getString(R.string.list_toast_nudge),
                         kind = NUDGE_KIND,
                         actionLabel = resources.getString(R.string.list_toast_nudge_action),
-                        onAction = { screen.newTripOpen = true },
+                        // Only while the list it was offered on still has a trip to close: never a sheet left waiting.
+                        onAction = {
+                            val now = vm.state.value
+                            if (now.listId == event.listId && now.canStartNewTrip) screen.newTripOpen = true
+                        },
                         minHoldMs = NUDGE_FLOOR,
                     ),
                 )
@@ -358,8 +373,12 @@ fun ListRoute(
         addFlows,
         toasts,
         // The add flows tell the eggs about the commit themselves (AddViewModel → SurpriseEngine.onCommitted, §19.2):
-        // the list only pops the rows, so eggs 3, 6, 9 and 17 fire once per commit.
-        onCommitted = { commit -> screen.pop(commit) },
+        // the list pops the rows, and turns the book when the add started a new one (§0.4 Q9, its add-side twin), so
+        // eggs 3, 6, 9 and 17 fire once per commit.
+        onCommitted = { commit ->
+            screen.pop(commit)
+            commit.newBook?.let { vm.addStartedNewBook(commit.listId, it) }
+        },
     )
     // The add flows send to the list on screen.
     LaunchedEffect(state.listId) {
@@ -432,7 +451,10 @@ fun ListRoute(
 }
 
 /** The nudge's toast kind. */
-private const val NUDGE_KIND: String = "nudge"
+internal const val NUDGE_KIND: String = "nudge"
+
+/** The automatic new book's toast kind (its Undo, §0.4 Q9). */
+internal const val BOOK_KIND: String = "book"
 
 /** The nudge's reading floor (§6.1, §9: it carries an action): 6 s. */
 private const val NUDGE_FLOOR: Long = 6000
@@ -615,6 +637,12 @@ private fun EggListScope.ListScreenContent(
     dock: @Composable BoxScope.(bar: Modifier) -> Unit,
     bookCollapsed: Boolean,
 ) {
+    // The New trip sheet is only ever up over a trip it can file: once the list has none (a New trip from the menu, the
+    // last sticker peeled), a request still pending is dropped, so the sheet never opens unasked later and the add bar
+    // is free to fold (§6.5, item 116).
+    LaunchedEffect(state.canStartNewTrip, state.loading) {
+        if (!state.loading && !state.canStartNewTrip) screen.newTripOpen = false
+    }
     Box(modifier.fillMaxSize()) {
         PicnicBackground(Modifier.fillMaxSize()) {
             // Egg 1: the ground being left fades out over the new one, beneath everything else.
