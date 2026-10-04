@@ -15,6 +15,8 @@ import earth.cora.picnic.ui.a11y.Decorative
 import earth.cora.picnic.ui.theme.ThemeVariant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -163,6 +165,41 @@ class DecorBudgetStepOffTest {
         r.advance(NapMotion.LEAVE_MS + 300)
         r.showCap("frozen")
         assertEquals(setOf("bee", "ladybug", "umbrella"), r.pageStickers().toSet())
+    }
+
+    /**
+     * Item 73: with the nap cat and the umbrella both out (the bee, the cat and the umbrella: 3 page stickers), holding a
+     * folded, done basket for the ladybug's hold sets no ladybug off: the screen never shows a 4th page sticker.
+     */
+    @Test
+    fun noStrollWhileTheCatAndTheUmbrellaAreOut() {
+        val r = EggRig(compose).start()
+        r.advance(300)
+        r.fire(8)
+        r.act { r.model.open("frozen") }
+        r.advance(1_500)
+        r.showCap("frozen")
+        r.fire(16)
+        r.advance(600)
+        r.showCap("frozen")
+        assertEquals(setOf("bee", "nap cat", "umbrella"), r.pageStickers().toSet())
+        // Every other stop is done: she holds a folded, done basket for the threshold + 560 ms (as its strip reports it),
+        // and the lab's own Try it does the same.
+        val done = r.list.items.first { it.aisleId != "frozen" && it.aisleId != null }.aisleId!!
+        r.act { r.engine.onBasketHold(done, r.timeouts.holdThresholdMs + EggRules.LADYBUG_AFTER_THRESHOLD_MS + 40) }
+        r.fire(2)
+        assertNull("no stroll: the budget is full", r.eggs.ladybug)
+        repeat(10) {
+            r.advance(200)
+            val on = r.pageStickers()
+            assertTrue("at ${it * 200} ms: $on", on.size <= 3)
+            assertFalse("no ladybug at ${it * 200} ms: $on", "ladybug" in on)
+        }
+        // The cat trots off: there is room again, and the ladybug may stroll.
+        r.act { r.engine.onNapTap() }
+        r.advance(NapMotion.LEAVE_MS + 300)
+        r.fire(2)
+        assertNotNull("with room again, it strolls", r.eggs.ladybug)
     }
 
     /**

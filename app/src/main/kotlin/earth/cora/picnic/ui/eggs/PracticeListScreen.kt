@@ -59,6 +59,11 @@ fun PracticeListScreen(
     imeVisible: Boolean? = null,
     /** The list's scroll (tests drive it as her thumb would); null: the list keeps its own. */
     listState: androidx.compose.foundation.lazy.LazyListState? = null,
+    /**
+     * The lab brings the nap cat's basket and the frozen aisle into view as their scenes start (§6.9); false runs the
+     * list as her own list runs (ListRoute: no scroll of its own for them; a test hook).
+     */
+    sceneScrolls: Boolean = true,
 ) {
     val model = sandbox.model
     val engine = sandbox.engine
@@ -158,6 +163,7 @@ fun PracticeListScreen(
             feedback = sandbox.feedback,
             imeVisible = imeVisible,
             talkBackOverride = talkBack,
+            sceneScrolls = sceneScrolls,
         )
     }
     // The Write sheet (a longer note opens its review here, on the sandbox).

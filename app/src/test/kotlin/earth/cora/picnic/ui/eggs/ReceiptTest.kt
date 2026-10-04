@@ -3,11 +3,13 @@ package earth.cora.picnic.ui.eggs
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -21,6 +23,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -32,6 +36,8 @@ import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.Receipt
 import earth.cora.picnic.core.model.list
 import earth.cora.picnic.core.model.printReceipt
+import earth.cora.picnic.core.model.removeItem
+import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.core.model.setRarity
 import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.platform.Cue
@@ -166,31 +172,44 @@ class ReceiptTest {
     }
 
     /**
-     * Item 259 (§13.1): while PRINT★ (or FED, SYNC) stands in for the count, the app bar's LCD chip is exactly as wide
-     * as with the count, at font scales 1.0, 1.3 and 2.0, so the words beside it (the subtitle at large text) never
-     * re-flow while the receipt prints. A word wider than the count still grows it.
+     * Item 259 (§13.1): the app bar's LCD keeps one width whatever it shows. Its room is as wide as the widest word it
+     * can show (PRINT★, SNACK?, BONUS★, FED, SYNC) or its count, whichever is wider, in every mode, so PRINT★ on a
+     * 6-item trip, SNACK? at 3/24 or FED at 0/1 never widen it. While the pet lives there, FED beside the bee and every
+     * other word standing in for the bee and the count are exactly as wide as the bee and the count, and the bee's
+     * chip is no wider than it needs (at 10/24 and 24/24 at font scale 1, as wide as the bee and the count). All at font
+     * scales 1.0, 1.3 and 2.0. Off the app bar (no words to keep room for), a word is still never narrower than the count.
      */
     @Test
     fun theLcdKeepsTheCountsWidthWhileAWordShows() {
         var scale by mutableStateOf(1f)
+        val words = listOf("SYNC") + EggRules.LCD_WORDS
+        val counts = listOf(24 to 24, 6 to 6, 3 to 24, 0 to 1, 10 to 24, 100 to 120)
+        fun state(count: Int, total: Int, mode: earth.cora.picnic.ui.theme.LcdMode = earth.cora.picnic.ui.theme.LcdMode.Count, text: String = "") =
+            earth.cora.picnic.ui.theme.LcdState(mode = mode, count = count, total = total, text = text)
+        val pet = earth.cora.picnic.ui.theme.LcdMode.Pet
+        val word = earth.cora.picnic.ui.theme.LcdMode.Text
         compose.setContent {
             val d = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(d.density, scale)) {
                 PicnicTheme(variant = ThemeVariant.Day, reducedMotion = false) {
-                    androidx.compose.foundation.layout.Column {
-                        val count = earth.cora.picnic.ui.theme.LcdState(count = 24, total = 24, receiptReady = true)
-                        earth.cora.picnic.ui.theme.LcdChip(count, Modifier.testTag("count"))
-                        for (word in listOf(EggRules.PRINT, EggRules.FED, "SYNC")) {
-                            earth.cora.picnic.ui.theme.LcdChip(
-                                count.copy(mode = earth.cora.picnic.ui.theme.LcdMode.Text, text = word),
-                                Modifier.testTag(word),
-                            )
+                    // Scrollable: every chip gets its full height, however many there are.
+                    androidx.compose.foundation.layout.Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                        for ((c, t) in counts) {
+                            // As the eggs show them (SurpriseState.lcd): FED beside the bee; any other word stands in for both.
+                            val chips = listOf(
+                                "count" to state(c, t),
+                                "pet" to state(c, t, pet),
+                                "pet ${EggRules.FED}" to state(c, t, pet, EggRules.FED),
+                            ) + words.map { w -> w to state(c, t, word, w) } +
+                                (words - EggRules.FED).map { w -> "pet $w" to state(c, t, word, w).copy(petLives = true) }
+                            for ((tag, st) in chips) {
+                                earth.cora.picnic.ui.theme.LcdChip(st, Modifier.testTag("$c/$t $tag"), words = words)
+                            }
+                            // Off the app bar: no words to keep room for.
+                            earth.cora.picnic.ui.theme.LcdChip(state(c, t), Modifier.testTag("$c/$t plain count"))
+                            earth.cora.picnic.ui.theme.LcdChip(state(c, t, word, EggRules.FED), Modifier.testTag("$c/$t plain FED"))
+                            earth.cora.picnic.ui.theme.LcdChip(state(c, t, pet), Modifier.testTag("$c/$t plain pet"))
                         }
-                        earth.cora.picnic.ui.theme.LcdChip(
-                            earth.cora.picnic.ui.theme.LcdState(mode = earth.cora.picnic.ui.theme.LcdMode.Text, text = "HAPPY B-DAY!", count = 2, total = 9),
-                            Modifier.testTag("wide"),
-                        )
-                        earth.cora.picnic.ui.theme.LcdChip(earth.cora.picnic.ui.theme.LcdState(count = 2, total = 9), Modifier.testTag("wideCount"))
                     }
                 }
             }
@@ -199,11 +218,106 @@ class ReceiptTest {
             scale = s
             compose.waitForIdle()
             fun width(tag: String) = compose.onNodeWithTag(tag).fetchSemanticsNode().size.width
-            for (word in listOf(EggRules.PRINT, EggRules.FED, "SYNC")) {
-                assertEquals("fs $s: $word as wide as 24/24★", width("count"), width(word))
+            for ((c, t) in counts) {
+                val count = width("$c/$t count")
+                for (w in words) assertEquals("fs $s: $w as wide as $c/$t★", count, width("$c/$t $w"))
+                val withBee = width("$c/$t pet")
+                for (w in words) {
+                    assertEquals("fs $s: $w (the pet living here) as wide as the bee and $c/$t", withBee, width("$c/$t pet $w"))
+                }
+                // At font scale 1 (the bee does not scale with the text, so at large text the words may be the wider).
+                if (c >= 10 && s == 1f) assertEquals("the bee's chip at $c/$t no wider than the bee and the count", width("$c/$t plain pet"), withBee)
+                assertTrue("fs $s: off the app bar FED is never narrower than $c/$t★", width("$c/$t plain FED") >= width("$c/$t plain count"))
             }
-            assertTrue("fs $s: a wider word grows the chip", width("wide") > width("wideCount"))
         }
+    }
+
+    /**
+     * Item 259 on the real List screen: a complete 6-item trip (its count, 6/6★, far narrower than PRINT★). From the hold
+     * through the print to well after the settle, the title, the subtitle and the LCD never move by a pixel.
+     */
+    @Test
+    fun theBinderTopHoldsStillWhilePrintShows() {
+        val r = EggRig(compose, fixture = sixItemTrip()).start()
+        r.advance(1_500)
+        assertEquals("6/6", "${r.list.items.count { it.checked }}/${r.list.items.size}")
+        val still = r.binderTop()
+        r.holdLcd(r.timeouts.holdThresholdMs + 20)
+        val t0 = r.now
+        assertEquals(EggRules.PRINT, r.eggs.lcdWord?.text)
+        val frames = r.assertBinderTopStill(still, t0 + ReceiptMotion.SETTLE_AT + 600, "PRINT★ on 6/6")
+        assertTrue("checked every frame ($frames)", frames > 60)
+        assertNull("the count is back", r.eggs.lcdWord)
+    }
+
+    /** The fixture's list cut down to six items, all checked: a complete trip of 6. */
+    private fun sixItemTrip(): AppState {
+        val keep = listOf("strawberries", "bananas", "apples", "carrots", "sourdough", "croissants")
+        var s = PracticeFixture.unchecked()
+        for (id in list(s).items.map { it.id }) if (id !in keep) s = s.removeItem(listId, id, PracticeFixture.WRITTEN + 100)
+        keep.forEachIndexed { i, id -> s = s.toggleChecked(listId, id, PracticeFixture.TRIP_START + i * 60_000L) }
+        return s
+    }
+
+    /**
+     * Item 259, 267: she scrolls her list while a printed receipt waits for its tap. The binder top and the book stay
+     * open (the LCD does not move), the paper still hangs under the LCD where it settled, it still waits, and no word of
+     * the list lies under it, at font scales 1.0 and 2.0 (where the paper hangs into the list's room and the list's
+     * viewport starts under it).
+     */
+    @Test
+    fun scrollWhileItWaits100() = scrollWhileItWaits(1f)
+
+    @Test
+    fun scrollWhileItWaits200() = scrollWhileItWaits(2f)
+
+    private fun scrollWhileItWaits(scale: Float) {
+        val r = EggRig(compose, fontScale = scale, fixture = completedFixture(41)).start()
+        r.advance(1_200)
+        r.holdLcd(r.timeouts.holdThresholdMs + 20)
+        r.advance(2_600)
+        fun paper() = compose.onNodeWithTag(EggTags.RECEIPT, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val lcd0 = r.anchor(AnchorRegistry.LCD)
+        val paper0 = paper()
+        /** Her thumb on the part of the list she can see (between its top and the add bar): [dy] px up. */
+        fun drag(dy: Float) {
+            val list = r.anchor(EggAnchors.LIST)
+            // The add bar may have folded into the FAB by now (at the screen's right edge, clear of her thumb here).
+            val floor = minOf(list.bottom, r.anchors.bounds(AnchorRegistry.ADD_BAR)?.top ?: list.bottom)
+            val from = if (dy > 0) floor - 30f else list.top + 30f
+            val to = (from - dy).coerceIn(list.top + 10f, floor - 10f)
+            compose.onRoot().performTouchInput { swipe(Offset(540f, from), Offset(540f, to), durationMillis = 300) }
+            r.advance(1_000)
+        }
+        /** The words she can see under the paper: the list's are cut at its viewport's top (rows scroll under it). */
+        fun underThePaper(): List<String> {
+            val top = r.anchor(EggAnchors.LIST).top
+            val header = setOf("title", "subtitle", "lcd", "date", "perfect", "pagelcd").map { EggAnchors.TEXT_PREFIX + it }
+            return wordBoxes(compose, r.anchors).mapNotNull { (w, box) ->
+                // Text nodes come cut by the list's clip already; the list's keep-outs are cut here.
+                val listWord = w.startsWith(EggAnchors.TEXT_PREFIX) && w !in header
+                val seen = if (listWord) Rect(box.left, maxOf(box.top, top), box.right, box.bottom) else box
+                w.takeIf { seen.height > 0f && seen.overlaps(paper0.deflate(6f)) }
+            }
+        }
+        val tabs0 = wordBoxes(compose, r.anchors).filter { it.first.startsWith(EggAnchors.TEXT_PREFIX + "tab:") }
+        drag(400f)
+        assertNotNull("fs $scale: it still waits for its tap", r.eggs.receipt)
+        val tabs1 = wordBoxes(compose, r.anchors).filter { it.first.startsWith(EggAnchors.TEXT_PREFIX + "tab:") }
+        assertTrue("fs $scale: the list scrolled", tabs0 != tabs1)
+        assertEquals("fs $scale: the binder top stays open (the LCD did not move)", lcd0, r.anchor(AnchorRegistry.LCD))
+        val paper1 = paper()
+        assertEquals("fs $scale: the paper stays where it settled", paper0, paper1)
+        val lcd = r.anchor(AnchorRegistry.LCD)
+        assertTrue("fs $scale: it hangs under the LCD ($paper1, LCD $lcd)", paper1.top >= lcd.bottom - 2f)
+        assertTrue("fs $scale: under the LCD's middle ($paper1, LCD $lcd)", lcd.center.x in paper1.left..paper1.right)
+        assertTrue("fs $scale: the list's viewport starts under the paper (${r.anchor(EggAnchors.LIST)}, paper $paper1)", r.anchor(EggAnchors.LIST).top >= paper1.bottom)
+        assertEquals("fs $scale: no word under the waiting receipt", emptyList<String>(), underThePaper())
+        // Further down and back up: still none, and the paper is where it was.
+        drag(600f)
+        drag(-200f)
+        assertEquals(paper0, paper())
+        assertEquals("fs $scale: no word under it after more scrolling", emptyList<String>(), underThePaper())
     }
 
     // ---- 267: the print sequence and its strip ----

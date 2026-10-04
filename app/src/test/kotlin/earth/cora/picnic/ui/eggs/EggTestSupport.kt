@@ -252,3 +252,33 @@ fun wordBoxes(compose: ComposeContentTestRule, anchors: AnchorRegistry): List<Pa
 private fun RealListUnderTest(r: EggRig) {
     PracticeListScreen(r.sandbox, talkBack = r.talkBack, imeVisible = r.ime.value)
 }
+
+/** The binder top's words and LCD as laid out now (window px): the title, the subtitle and the LCD chip. */
+fun EggRig.binderTop(): Map<String, Rect?> = mapOf(
+    "title" to anchors.bounds(EggAnchors.TEXT_PREFIX + "title"),
+    "subtitle" to anchors.bounds(EggAnchors.TEXT_PREFIX + "subtitle"),
+    "lcd" to anchors.bounds(AnchorRegistry.LCD),
+)
+
+/**
+ * Item 259 (§13.1): plays frames until test-clock time [until], checking on every one that the binder top's title,
+ * subtitle and LCD lie exactly where [expected] has them (nothing re-flows while a word stands in for the count).
+ * Returns how many frames it checked.
+ */
+fun EggRig.assertBinderTopStill(expected: Map<String, Rect?>, until: Long, what: String): Int {
+    expected.forEach { (k, b) -> org.junit.Assert.assertNotNull("$what: the $k is laid out", b) }
+    var frames = 0
+    var guard = 0
+    while (now < until && guard++ < 2_000) {
+        frame()
+        frames++
+        val at = binderTop()
+        for ((k, b) in expected) {
+            val a = at[k]
+            val same = a != null && b != null && kotlin.math.abs(a.left - b.left) < 0.5f && kotlin.math.abs(a.right - b.right) < 0.5f &&
+                kotlin.math.abs(a.top - b.top) < 0.5f && kotlin.math.abs(a.bottom - b.bottom) < 0.5f
+            org.junit.Assert.assertTrue("$what at ${now} ms: the $k moved from $b to $a", same)
+        }
+    }
+    return frames
+}

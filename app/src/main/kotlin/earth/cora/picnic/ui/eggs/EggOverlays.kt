@@ -153,6 +153,11 @@ fun BoxScope.EggOverlays(
      */
     listPlacesDecor: Boolean = false,
     modifier: Modifier = Modifier,
+    /**
+     * Egg 16: the docked add bar the umbrella stands on (window px), or null while it does not show (the bar folded into
+     * the FAB). Read as snapshot state, so the umbrella follows the bar as it moves.
+     */
+    addBar: () -> Rect? = { anchors.bounds(AnchorRegistry.ADD_BAR) },
 ) {
     val state by engine.state.collectAsState()
     val reduced = LocalReducedMotion.current
@@ -219,7 +224,9 @@ fun BoxScope.EggOverlays(
             }
         }
         if (!listPlacesDecor) state.snackSectionId?.let { SnackStar(it, anchors, local) }
-        if (state.umbrella) anchors.bounds(AnchorRegistry.ADD_BAR)?.let { Umbrella(local(it)) }
+        // Egg 16: on the bar's shoulder wherever the bar is; gone while it is folded into the FAB, back (with its magic
+        // appear) when the bar returns.
+        if (state.umbrella) addBar()?.let { Umbrella(local(it)) }
         // The cat curls up once the chain that finished the other stops has played out (§12.3: chain end + 0.5 s).
         val chainsDone = motion?.current?.value?.let { p -> p.flights.isEmpty() && p.bursts.isEmpty() && p.celebration == null } ?: true
         if (!listPlacesDecor) state.napSectionId?.let { NapCat(it, anchors, local, engine, chainsDone) }

@@ -114,6 +114,7 @@ import earth.cora.picnic.ui.edit.EditItemSheet
 import earth.cora.picnic.ui.eggs.EggAnchors
 import earth.cora.picnic.ui.eggs.EggListHost
 import earth.cora.picnic.ui.eggs.EggListScope
+import earth.cora.picnic.ui.eggs.LocalListRoom
 import earth.cora.picnic.ui.eggs.NoOpSurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseState
@@ -525,6 +526,11 @@ fun ListScreen(
     /** Test hook: the keyboard's visibility for egg 17 (null: the phone's own insets). */
     imeVisible: Boolean? = null,
     talkBackOverride: Boolean? = null,
+    /**
+     * The Surprise lab's practice list: the nap cat's basket and the frozen aisle scroll into view as their scenes start
+     * (EggListHost). Her own list never scrolls by itself for them (§12.1).
+     */
+    sceneScrolls: Boolean = false,
 ) {
     MotionEngineHost(engine, nextStopCard = state.nextStopCard, celebration = state.celebration, eggs = state.eggs, talkBackOverride = talkBackOverride)
     val p = engine.current.value
@@ -560,17 +566,21 @@ fun ListScreen(
         CompositionLocalProvider(LocalListEggs provides eggs, LocalListSurprises provides surprises) {
             ListScreenContent(
                 state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
-                bookCollapsed = screen.scrolledDown || ime || shortWindow,
+                // Egg 18: while a printed receipt waits for its tap, a scroll leaves the book open under it (§13.2).
+                bookCollapsed = (screen.scrolledDown && !receiptWaits) || ime || shortWindow,
             )
         }
     }
     if (imeVisible != null) {
         EggListHost(
             surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback,
-            onOpenAlbum = actions.onOpenBackPocket, imeVisible = imeVisible, content = host,
+            onOpenAlbum = actions.onOpenBackPocket, imeVisible = imeVisible, sceneScrolls = sceneScrolls, content = host,
         )
     } else {
-        EggListHost(surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback, onOpenAlbum = actions.onOpenBackPocket, content = host)
+        EggListHost(
+            surprises, state.listId, engine.anchors, lazyState, indexOfSection, toasts, engine, feedback,
+            onOpenAlbum = actions.onOpenBackPocket, sceneScrolls = sceneScrolls, content = host,
+        )
     }
 }
 
@@ -606,7 +616,8 @@ private fun EggListScope.ListScreenContent(
                     presentation = p,
                     engine = engine,
                     ui = TopStackUi(
-                        barCollapsed = screen.scrolledDown,
+                        // Egg 18: the binder top stays open while a printed receipt hangs from its LCD (§13.2).
+                        barCollapsed = screen.scrolledDown && !receiptWaits,
                         bookCollapsed = bookCollapsed,
                         syncing = screen.syncing,
                         sunSpin = screen.sunSpin,
@@ -631,7 +642,8 @@ private fun EggListScope.ListScreenContent(
                 }
             }
         }
-        dock(dockAnchors(engine.anchors).eggAddBar())
+        // The eggs follow the docked bar (egg 16's umbrella stands on it, and steps off while it is folded into the FAB).
+        dock(dockAnchors(engine.anchors).eggAddBar(folded = collapse?.collapsed == true))
         // The toasts sit 20 dp above the bar's top (above the umbrella's canopy while it rains); the eggs' overlays ride
         // in the overlay's `eggs` slot (§12, §19.2).
         MotionOverlay(engine, p, toasts, bottomInset = overlayInset(dockHeight), eggs = overlays)
@@ -797,7 +809,10 @@ private fun AisleList(
     entries: List<Entry>,
     dockHeight: Dp,
     collapse: AddBarCollapseState?,
-    /** Egg 18 at large text: the room a printed receipt asks for above the list's words (EggListScope.listTopExtra). */
+    /**
+     * Egg 18: while a printed receipt hangs down into the list's room, the viewport starts this much lower, under the
+     * paper (EggListScope.listTopExtra), so no row can scroll beneath it.
+     */
     topExtra: Dp = 0.dp,
     /** The add bar + 26 dp, + the umbrella's room while it rains (EggListScope.listBottomPadding). */
     bottomPadding: Dp = dockHeight + 26.dp,
@@ -939,6 +954,7 @@ private fun AisleList(
     // pop). The list's words keep out of that band: the viewport ends above it, so no row or strip ever lies under the
     // canopy at any scroll position, and the list's end needs only a small gap then (§12.2).
     val umbrella = umbrellaBand != null
+    val listRoom = LocalListRoom.current
     // Clipped to the viewport: the bunting starts above it (−34 dp) and comes out from under the top stack (R6).
     Box(
         Modifier
@@ -948,7 +964,12 @@ private fun AisleList(
             // Egg 16: where the viewport ends above the umbrella's band, the list fades out into the binder as it does
             // into the add bar's pad (§6.1), never a hard cut across a strip.
             .then(if (umbrella) Modifier.fadeOutAtBottom(UMBRELLA_FADE) else Modifier)
-            .onGloballyPositioned { screen.listBounds = it.boundsInWindow() }
+            .onGloballyPositioned {
+                val b = it.boundsInWindow()
+                screen.listBounds = b
+                // Egg 18: where the viewport starts before any inset (the receipt asks for room below its paper).
+                listRoom?.listTop = b.top
+            }
             .pointerInput(connection) {
                 // Watches (never consumes) whether a finger is down, for the pull to refresh.
                 awaitPointerEventScope {
@@ -963,6 +984,8 @@ private fun AisleList(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
+                // Egg 18: the viewport starts under a waiting receipt's paper (its inset, not the content's).
+                .padding(top = topExtra)
                 .testTag(ListTags.LIST)
                 // The eggs' room: the list's viewport (the scenes are brought into it, the ladybug flies off its sides).
                 .then(with(anchors) { Modifier.anchor(EggAnchors.LIST) })
@@ -971,7 +994,7 @@ private fun AisleList(
                 .nestedScroll(connection)
                 .semantics { customActions = listOf(CustomAccessibilityAction(refreshLabel) { refresh(); true }) }
                 .graphicsLayer { translationY = if (reduced) 0f else screen.pull },
-            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp + topExtra, bottom = if (umbrella) UMBRELLA_END_GAP else bottomPadding),
+            contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 11.dp, bottom = if (umbrella) UMBRELLA_END_GAP else bottomPadding),
         ) {
             entries.forEachIndexed { index, e ->
                 when (e) {

@@ -279,6 +279,9 @@ object EggRules {
     const val PRINT: String = "PRINT★"
     const val BONUS: String = "BONUS★"
 
+    /** Every word the eggs show on the app bar's LCD: its text slot keeps the widest one's room (§13.1, item 259). */
+    val LCD_WORDS: List<String> = listOf(FED, SNACK, PRINT, BONUS)
+
     /** The pet's chomp at each landing: 2 frames, 520 ms. */
     const val CHOMP_MS: Long = 520
 

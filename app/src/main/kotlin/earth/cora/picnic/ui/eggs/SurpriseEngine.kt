@@ -42,14 +42,18 @@ import kotlinx.coroutines.flow.emptyFlow
  * the code her list runs). Wrap the screen in [EggListHost] (EggListHost.kt): it calls onListShown / onListHidden (screen,
  * list switch, app stop and start), runs the shake detector and the keyboard observer (onImeVisible), provides
  * LocalRollHome and LocalListRoom, and scrolls each scene into the list's room above the add bar (the rolling item's
- * aisle and row, the nap cat's strip, the frozen aisle's tab, the top under a printed receipt). Its [EggListScope] hands
- * the content the rest:
+ * aisle and row on every list; the nap cat's strip and the frozen aisle's tab in the Surprise lab only, `sceneScrolls`).
+ * Its [EggListScope] hands the content the rest:
  *   - `Wash()` first inside PicnicBackground (egg 1's Dusk wash);
  *   - `overlays` into MotionOverlay's `eggs` slot, with `bottomInset = overlayInset()` (the toasts sit above the bar's
  *     MEASURED top, and above the umbrella's canopy while it rains);
- *   - the lazy list's `contentPadding(top = listTop + listTopExtra, bottom = listBottomPadding())`: the measured bar +
- *     26 dp (+ the umbrella's room), so the last strip always scrolls wholly above the bar at any font scale;
- *   - `Modifier.eggAddBar()` on the docked add bar (it is measured), with `tape = AddRules.addBarTape(eggs)` and
+ *   - the lazy list's `contentPadding(bottom = listBottomPadding())`: the measured bar + 26 dp (+ the umbrella's room),
+ *     so the last strip always scrolls wholly above the bar at any font scale; its viewport's top inset `listTopExtra`
+ *     (`Modifier.padding(top = …)` before the `list` anchor) while a printed receipt hangs into it, its outer top
+ *     reported to `LocalListRoom.listTop`; the binder top and the book stay open while `receiptWaits`;
+ *   - the LCD's window bounds reported to `LocalListRoom.lcd` (the receipt hangs from it);
+ *   - `Modifier.eggAddBar(folded)` on the docked add bar (it is measured and followed; `folded` while it is folded
+ *     into the FAB), with `tape = AddRules.addBarTape(eggs)` and
  *     `tapeAfterDoodle = tapeAfterDoodle` (AddBar / AddDock: the rain's tape goes after the doodle while the umbrella
  *     stands at the bar's left end).
  * Anchors (`with(anchors) { Modifier.anchor(key) }`; the overlays find everything through them):
@@ -266,6 +270,12 @@ data class SurpriseState(
      * ladybug strolls along a strip (§12.2 "a ladybug appears"): there is one ladybug on the list, the one out walking.
      */
     val ladybugStepsOff: Boolean get() = (napSectionId != null && umbrella) || (enabled && ladybug != null)
+
+    /**
+     * §4.1: the egg page stickers already take the screen's room beside the bee (the nap cat and the umbrella together):
+     * no other page sticker may join them, so egg 2's ladybug does not set off.
+     */
+    val pageStickerBudgetFull: Boolean get() = enabled && napSectionId != null && umbrella
 
     /** Egg 3: the row's own sticker hides while its rolling twin travels (it settles on its line at the end). */
     fun hidesRowSticker(itemId: String): Boolean = rolling?.itemId == itemId

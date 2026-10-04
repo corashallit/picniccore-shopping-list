@@ -3,6 +3,8 @@ package earth.cora.picnic.ui.eggs
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.ui.theme.ThemeVariant
@@ -52,7 +54,8 @@ class EggMidnightTest {
         // The doodle is decorative: TalkBack has no text node for it.
         assertEquals(0, compose.onAllNodesWithText("snack?").fetchSemanticsNodes().size)
         val t0 = r.now
-        // The frozen aisle comes into view, and the snack star and doodle sit by its tab: right of the tab in its row
+        // The Surprise lab brings the frozen aisle into view (her own list does not: herListNeverScrollsByItself), and
+        // the snack star and doodle sit by its tab: right of the tab in its row
         // when the tab leaves room for it, else right of the meta line ("2 left of 2"), never over either; within the
         // strip's words (clear of the basket), on screen above the add bar.
         r.advance(800)
@@ -155,6 +158,59 @@ class EggMidnightTest {
         } finally {
             e.close()
         }
+    }
+
+    /**
+     * §12.1 (none changes where she is): on her own list (ListRoute: no scene scrolls) the midnight snack never moves
+     * the list. Entering at 23:30 leaves it at its top; she scrolls a little, leaves for another screen and comes back,
+     * and it is where she left it. Egg 5 still shows (SNACK?, the snack doodle by the frozen tab when she gets there).
+     */
+    @Test
+    fun herListNeverScrollsByItself() {
+        val shown = androidx.compose.runtime.mutableStateOf(true)
+        val ls = androidx.compose.foundation.lazy.LazyListState()
+        val r = EggRig(compose, startAt = torontoMs(LocalTime.of(23, 30)))
+        r.start { if (shown.value) PracticeListScreen(r.sandbox, listState = ls, sceneScrolls = false) }
+        r.advance(1_500)
+        assertEquals(EggRules.SNACK, r.eggs.lcdWord?.text)
+        assertEquals("frozen", r.eggs.snackSectionId)
+        assertEquals("entry: still at the top", 0 to 0, ls.firstVisibleItemIndex to ls.firstVisibleItemScrollOffset)
+        // The nap cat (every stop but Frozen done) does not move it either.
+        r.fire(8)
+        r.advance(1_500)
+        assertEquals("frozen", r.eggs.napSectionId)
+        assertEquals("the nap: still at the top", 0 to 0, ls.firstVisibleItemIndex to ls.firstVisibleItemScrollOffset)
+        // She scrolls a little (one strip), then goes to Settings and back: the list leaves composition and returns.
+        r.act { runBlocking { ls.scrollToItem(1) } }
+        r.advance(300)
+        val left = ls.firstVisibleItemIndex to ls.firstVisibleItemScrollOffset
+        r.act { shown.value = false }
+        r.advance(300)
+        r.act { shown.value = true }
+        r.advance(1_500)
+        assertEquals("re-entry: where she left it", left, ls.firstVisibleItemIndex to ls.firstVisibleItemScrollOffset)
+    }
+
+    /**
+     * Item 259 on the real List screen at 3/24 (a count far narrower than SNACK?): from entry at 23:30 through the 2.6 s
+     * of SNACK? to the count again, the title, the subtitle and the LCD never move by a pixel.
+     */
+    @Test
+    fun theBinderTopHoldsStillWhileSnackShows() {
+        val ids = PracticeFixture.unchecked().list(PracticeFixture.LIST_ID)!!.items.take(3).map { it.id }
+        val s = ids.foldIndexed(PracticeFixture.unchecked()) { i, acc, id ->
+            acc.toggleChecked(PracticeFixture.LIST_ID, id, PracticeFixture.TRIP_START + i * 60_000L)
+        }
+        val r = EggRig(compose, fixture = s, startAt = torontoMs(LocalTime.of(23, 30)))
+        r.start { PracticeListScreen(r.sandbox, sceneScrolls = false) }
+        val t0 = r.now
+        assertEquals(EggRules.SNACK, r.eggs.lcdWord?.text)
+        assertEquals(3, r.list.items.count { it.checked })
+        r.advance(100)
+        val still = r.binderTop()
+        val frames = r.assertBinderTopStill(still, t0 + EggRules.SNACK_MS + 500, "SNACK? at 3/24")
+        assertTrue("checked every frame ($frames)", frames > 60)
+        assertNull("the count is back", r.eggs.lcdWord)
     }
 
     @Test

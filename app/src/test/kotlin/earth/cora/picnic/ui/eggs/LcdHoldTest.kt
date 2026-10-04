@@ -1,6 +1,8 @@
 package earth.cora.picnic.ui.eggs
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -10,6 +12,7 @@ import earth.cora.picnic.core.model.moveItemToAisle
 import earth.cora.picnic.core.model.removeItem
 import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.platform.Cue
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import org.junit.Assert.assertEquals
@@ -101,6 +104,46 @@ class LcdHoldTest {
         assertEquals("no FED", 0, r.feedback.count(Cue.PET_FED))
         assertNull("no chomp", r.eggs.petChompId)
         assertTrue("the pet stays as it was", r.list.trip!!.pet)
+    }
+
+    /**
+     * §4.3: only a press that stays on the LCD for the hold threshold is a hold. A brush across it (the finger slides off
+     * within 80 ms) does nothing, whether she lets go at once or keeps her finger down off the chip past the threshold:
+     * no pet, no FED, nothing saved on the trip before completion; no receipt, no print after it.
+     */
+    @Test
+    fun brushOffTheLcdDoesNothing() = brushOff(complete = false)
+
+    @Test
+    fun brushOffTheCompleteTripsLcdPrintsNothing() = brushOff(complete = true)
+
+    private fun brushOff(complete: Boolean) {
+        val r = EggRig(compose, fixture = if (complete) completedFixture() else PracticeFixture.state()).start()
+        r.advance(800)
+        val before = r.state
+        for (stayDown in listOf(false, true)) {
+            val lcd = r.anchor(AnchorRegistry.LCD)
+            val what = "complete $complete, finger kept down $stayDown"
+            compose.onRoot().performTouchInput {
+                down(lcd.center)
+                // Off the chip within 80 ms: 5 moves of 16 ms, 60 px each, straight down.
+                repeat(5) { moveBy(Offset(0f, 60f), delayMillis = 16) }
+            }
+            r.advance(80)
+            if (stayDown) r.advance(r.timeouts.holdThresholdMs + 200)
+            compose.onRoot().performTouchInput { up() }
+            r.advance(300)
+            assertFalse("$what: no pet", r.eggs.pet)
+            assertNull("$what: no visit", r.eggs.petVisitId)
+            assertNull("$what: no word", r.eggs.lcdWord)
+            assertEquals("$what: no FED", 0, r.feedback.count(Cue.PET_FED))
+            assertNull("$what: no receipt", r.eggs.receipt)
+            assertEquals("$what: no print", 0, r.feedback.count(Cue.RECEIPT_PRINT))
+            assertEquals("$what: nothing saved", before, r.state)
+        }
+        // A real hold still works afterwards.
+        r.hold()
+        if (complete) assertNotNull("then a hold prints", r.eggs.receipt) else assertTrue("then a hold hatches the pet", r.eggs.pet)
     }
 
     @Test

@@ -182,6 +182,39 @@ class PerfectWeekTest {
         }
     }
 
+    /**
+     * Her tenth finished trip (and a fourth complete one in a row) filed while Easter eggs were off: turning them back on
+     * opens the back pocket and the sakura sheet then, with the "Look" toast, not at some later filing (§12.2 egg 14).
+     */
+    @Test
+    fun eggsOnAgainOpensThePocket() {
+        val e = EngineRig(settings = earth.cora.picnic.settings.AppSettings(eggs = false, weather = false, sounds = false))
+        try {
+            runBlocking {
+                e.albumStore.update { a ->
+                    (1..10).fold(a) { acc, n -> acc.file(book(n, "s", n > 6, at = PracticeFixture.NOW - (11 - n) * day)) }
+                }
+            }
+            val off = runBlocking { e.albumStore.current() }
+            assertEquals(10, off.finishedTrips)
+            assertFalse("eggs off: the pocket stays shut", off.backPocketOpen)
+            assertFalse(EggRules.SAKURA_SHEET in off.sheets)
+            assertTrue(e.toasts.isEmpty())
+            runBlocking { e.settings.setSurprise(earth.cora.picnic.settings.Surprise.EasterEggs, true) }
+            val on = runBlocking { e.albumStore.current() }
+            assertTrue("eggs on again: the back pocket opens", on.backPocketOpen)
+            assertTrue(EggRules.SHEET_2 in on.sheets)
+            assertTrue("and the sakura sheet unlocks", EggRules.SAKURA_SHEET in on.sheets)
+            assertEquals(listOf(EggToast.BackPocket), e.toasts)
+            // Off and on again: nothing more to grant, no second toast.
+            runBlocking { e.settings.setSurprise(earth.cora.picnic.settings.Surprise.EasterEggs, false) }
+            runBlocking { e.settings.setSurprise(earth.cora.picnic.settings.Surprise.EasterEggs, true) }
+            assertEquals(listOf(EggToast.BackPocket), e.toasts)
+        } finally {
+            e.close()
+        }
+    }
+
     @Test
     fun theLabFilesFourCompleteTrips() {
         val r = EggRig(compose)

@@ -71,13 +71,28 @@ internal class ReceiptSpot {
 internal val LocalReceiptSpot = staticCompositionLocalOf { ReceiptSpot() }
 
 /**
- * Room the list makes for a printed receipt that would otherwise lie over its words (large text, §15): the list's content
- * starts this much lower (window px) while the receipt waits. The overlay sets it; the list reads it ([LocalListRoom]).
+ * The room the list makes for a printed receipt that hangs down into it (large text, a short book; §15): the list's
+ * viewport starts [receiptShift] px lower while the receipt waits, so no row can scroll beneath the paper. The overlay
+ * sets it; EggListHost eases it ([shown]); the list reads it ([LocalListRoom], EggListScope.listTopExtra). The list and
+ * the binder top report where they are as snapshot state ([listTop], [lcd]), so a waiting receipt is placed again
+ * whenever either moves.
  */
 @androidx.compose.runtime.Stable
 class ListRoom {
     var receiptShift: Float by androidx.compose.runtime.mutableFloatStateOf(0f)
         internal set
+
+    /** The inset as it eases towards [receiptShift] (px). */
+    internal val shownAnim = androidx.compose.animation.core.Animatable(0f)
+
+    /** The inset the list's viewport has now (px). */
+    val shown: Float get() = shownAnim.value
+
+    /** The top of the list's viewport before any inset (window px), as the list last laid it out. */
+    var listTop: Float? by androidx.compose.runtime.mutableStateOf(null)
+
+    /** The app bar's LCD (window px), as last laid out: the receipt hangs from it. */
+    var lcd: Rect? by androidx.compose.runtime.mutableStateOf(null)
 }
 
 /** The list's [ListRoom] (null: the list makes no room; the receipt still keeps off the binder top's words). */
@@ -95,8 +110,8 @@ internal data class ReceiptPlacement(val slot: Rect, val feed: Offset, val settl
  * the slot. The binder top's words ([header]: the title, the subtitle, the LCD, the book's date and PER-FECT!) lie over
  * the slot and the paper, which pass under them (ReceiptPrint cuts them out), so no word is ever covered. It settles at
  * (−4, +10) dp turned 3° when that is clear of [header]; otherwise lower, under the lowest word it would meet. If the
- * settled paper would then lie over the list's words ([listWords]), the list makes room: its content moves down below
- * the paper ([ReceiptPlacement.listShift], from [listTop]).
+ * settled paper then hangs down past the top of the list's viewport ([listTop], before any inset), the list makes room:
+ * its viewport starts 4 dp under the paper ([ReceiptPlacement.listShift]), so no row can scroll beneath it.
  */
 internal fun placeReceipt(
     lcd: Rect?,
@@ -105,7 +120,6 @@ internal fun placeReceipt(
     paperH: Float,
     density: Float,
     header: List<Rect>,
-    listWords: List<Rect>,
     listTop: Float?,
 ): ReceiptPlacement {
     val dp = { v: Float -> v * density }
@@ -131,7 +145,8 @@ internal fun placeReceipt(
         y = hit + dp(4f) + above
     }
     val box = covers(x, y)
-    val shift = if (listTop != null && listWords.any { it.inflate(dp(2f)).overlaps(box) }) maxOf(0f, box.bottom + dp(8f) - listTop) else 0f
+    // Less than a pixel is no room at all (the paper ends at the list's top).
+    val shift = if (listTop != null) (box.bottom + dp(4f) - listTop).takeIf { it >= 1f } ?: 0f else 0f
     return ReceiptPlacement(slot, feed, Offset(x, y), shift)
 }
 
@@ -163,25 +178,24 @@ internal fun ReceiptPrint(fx: ReceiptFx, anchors: AnchorRegistry, local: (Rect) 
     val room = LocalListRoom.current
     var paperW by remember(fx.id) { mutableIntStateOf(0) }
     var paperH by remember(fx.id) { mutableIntStateOf(0) }
-    // The room the list makes is decided once, from where its words are when the receipt prints.
-    var shift by remember(fx.id) { androidx.compose.runtime.mutableStateOf<Float?>(null) }
-    if (room != null) {
-        // Read here, so the shift decided below (in the layout's subcomposition) recomposes this and reaches the list.
-        val made = shift ?: 0f
-        androidx.compose.runtime.SideEffect { room.receiptShift = made }
-        androidx.compose.runtime.DisposableEffect(fx.id) { onDispose { room.receiptShift = 0f } }
-    }
+    if (room != null) androidx.compose.runtime.DisposableEffect(fx.id) { onDispose { room.receiptShift = 0f } }
     val ink = PicnicTheme.colors.ballpoint
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val width = constraints.maxWidth.toFloat()
-        val words = anchors.keys().filter { it.startsWith(EggAnchors.TEXT_PREFIX) }
-        val header = words.filter { it.removePrefix(EggAnchors.TEXT_PREFIX) in HEADER_WORDS }.mapNotNull { anchors.bounds(it)?.let(local) }
-        val list = words.filter { k -> k.removePrefix(EggAnchors.TEXT_PREFIX).let { it !in HEADER_WORDS && it != "addbar" } }.mapNotNull { anchors.bounds(it)?.let(local) }
+        // Placed again whenever the LCD or the list's top moves (both snapshot state: a waiting receipt is never left
+        // behind, nor over the list's words), and on every frame of the print.
+        val lcd = room?.lcd ?: anchors.bounds(AnchorRegistry.LCD)
+        val listTop = room?.listTop ?: anchors.bounds(EggAnchors.LIST)?.top
+        val header = anchors.keys()
+            .filter { it.startsWith(EggAnchors.TEXT_PREFIX) && it.removePrefix(EggAnchors.TEXT_PREFIX) in HEADER_WORDS }
+            .mapNotNull { anchors.bounds(it)?.let(local) }
         val placed = placeReceipt(
-            anchors.bounds(AnchorRegistry.LCD)?.let(local), width, paperW.toFloat(), paperH.toFloat(), d.density,
-            header, list, anchors.bounds(EggAnchors.LIST)?.let(local)?.top,
+            lcd?.let(local), width, paperW.toFloat(), paperH.toFloat(), d.density,
+            header, listTop?.let { local(Rect(0f, it, 0f, it)).top },
         )
-        if (paperW > 0 && shift == null) shift = placed.listShift
+        // The list's viewport starts under the paper while it waits (EggListHost eases it there).
+        val shift = if (paperW > 0) placed.listShift else 0f
+        if (room != null) androidx.compose.runtime.SideEffect { room.receiptShift = shift }
         val (sdx, sdy, rot) = if (reduced) Triple(-4f, 10f, 3f) else ReceiptMotion.settle(t)
         val jitter = if (reduced) 0f else ReceiptMotion.jitterDp(t)
         val fed = if (reduced) 1f else ReceiptMotion.fed(t)

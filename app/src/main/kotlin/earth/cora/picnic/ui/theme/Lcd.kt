@@ -6,14 +6,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -34,8 +32,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.isOutOfBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.res.pluralStringResource
@@ -101,6 +104,11 @@ data class LcdState(
     val receiptReady: Boolean = false,
     /** The pet's pose in [LcdMode.Pet] (WP9 animates it). */
     val petPose: PetPose = PetPose.Rest,
+    /**
+     * The pet lives in this LCD (egg 15) while a word other than its own stands in (`Text` mode: PRINT★, SNACK?,
+     * BONUS★, SYNC): the bee steps aside for the word, and the chip keeps the bee's and the count's room.
+     */
+    val petLives: Boolean = false,
 )
 
 /** The pixel bee's sprite frames (egg 15, 9 × 7 px): bob 2 steps per second, a 2-frame chomp, a 4-frame dance. */
@@ -286,11 +294,22 @@ private fun DrawScope.drawExtra(extra: LcdExtra, left: Float, p: Float, color: C
  * The app-bar LCD chip (§4.3): face `lcd`, 3 dp white border, radius 9, hs, padding 7 × 8 dp, a faint 1 dp grid at
  * 50 %. Digits tick on change (−2 → +1 → 0 dp, 2 steps, 160 ms); the star blinks to 12 % for 3 % of every 4 s (0.25 Hz)
  * and is a moon in Dusk and Glow (the count's star only: the star in a word, BONUS★ or PRINT★, stays a star). [onHold]
- * fires after the hold threshold (`max(440 ms, longPressTimeout)`): the receipt when the trip is complete, otherwise the
- * pet (D21). TalkBack reads the count label in every mode.
+ * fires once the finger has stayed down on the chip for the hold threshold (`max(440 ms, longPressTimeout)`): the
+ * receipt when the trip is complete, otherwise the pet (D21); a tap, a brush across it or a scroll that takes the
+ * gesture does nothing. TalkBack reads the count label in every mode.
  */
 @Composable
-fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)? = null, pitch: Dp = 1.9.dp) {
+fun LcdChip(
+    state: LcdState,
+    modifier: Modifier = Modifier,
+    onHold: (() -> Unit)? = null,
+    pitch: Dp = 1.9.dp,
+    /**
+     * The words this chip can show in place of its count (the app bar: SYNC, and with Easter eggs on FED, SNACK?,
+     * BONUS★ and PRINT★): its text keeps one slot as wide as the widest of them and the count, in every mode.
+     */
+    words: List<String> = emptyList(),
+) {
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
     val variant = PicnicTheme.variant
@@ -342,17 +361,12 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
         }
     }
     val starAlpha = if (dim) PicnicMotion.lcdBlinkAlpha else 1f
-    // A word standing in for the count (an egg's PRINT★ or FED, a refresh's SYNC) never makes the chip narrower than the
-    // count it replaces, so the words beside the chip never re-flow while it shows (§4.3, item 259); it is centred.
-    val density = LocalDensity.current
-    val standIn = if (state.mode != LcdMode.Count && state.total > 0) {
-        // The count's own LcdText width, to the pixel (LcdText: ceil(columns × pitch × scale)).
-        val scale = min(density.fontScale, 1.6f).coerceAtLeast(1f)
-        val columns = lcdColumns(lcdCells("${state.count}/${state.total}★"))
-        with(density) { ceil(columns * pitch.toPx() * scale).toInt().toDp() }
-    } else {
-        0.dp
-    }
+    // The text's slot (§13.1, item 259): a word standing in for the count (an egg's PRINT★ or FED, a refresh's SYNC) is
+    // never narrower than the count it replaces, and on the app bar ([words]) the slot is as wide as the widest word the
+    // chip can show as well, in every mode, so the chip keeps one width whatever it shows and the binder top's words
+    // beside it never re-flow. The bee (Pet mode) stands beside the slot, so FED and PRINT★ with the bee are as wide as
+    // the bee and the count. The text is centred in its slot.
+    val slot = remember(state.mode, state.count, state.total, state.text, state.petLives, words) { lcdSlot(state, words) }
 
     Box(
         modifier
@@ -367,9 +381,8 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
                 if (onHold != null) {
                     Modifier.pointerInput(threshold) {
                         awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            val released = withTimeoutOrNull(threshold) { waitForUpOrCancellation() }
-                            if (released == null) hold?.invoke()
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            if (awaitLcdHold(down, threshold)) hold?.invoke()
                         }
                     }
                 } else {
@@ -390,14 +403,12 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
                 .padding(horizontal = 8.dp, vertical = 7.dp),
         ) {
             Row(
-                Modifier
-                    .offset { IntOffset(0, tickDy.dp.roundToPx()) }
-                    .widthIn(min = standIn),
+                Modifier.lcdSlot(slot, pitch).offset { IntOffset(0, tickDy.dp.roundToPx()) },
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (state.mode == LcdMode.Pet) {
-                    LcdPetSprite(state.petPose, Modifier.padding(end = pitch * 1.5f), pitch = pitch)
+                    LcdPetSprite(state.petPose, Modifier.padding(end = pitch * PET_GAP), pitch = pitch)
                 }
                 // One line, one layout: the blink dims the star's dots in place and never re-lays the digits.
                 LcdText(shown, pitch, moon = moon, starAlpha = starAlpha)
@@ -410,6 +421,84 @@ fun LcdChip(state: LcdState, modifier: Modifier = Modifier, onHold: (() -> Unit)
 internal fun lcdShowsMoon(variant: ThemeVariant, state: LcdState): Boolean =
     (variant == ThemeVariant.Dusk || variant == ThemeVariant.Glow) &&
         (state.mode == LcdMode.Count || (state.mode == LcdMode.Pet && state.text.isEmpty()))
+
+/**
+ * The room the chip's content keeps (§13.1, item 259), in LCD columns: [alone], a text shown on its own; [besideBee], a
+ * text shown beside the bee (null when the pet does not live here). The content is centred in the widest.
+ */
+@Immutable
+internal data class LcdSlot(val alone: Int, val besideBee: Int?)
+
+/**
+ * The chip's room for [state] (§13.1, item 259). With [words] (the app bar: every word it can show in place of its
+ * count), the widest of them and the count, in every mode, so the chip keeps one width whatever it shows; without, a
+ * word or the bee standing in for the count is never narrower than the count. While the pet lives here (Pet mode, or
+ * [LcdState.petLives] while another word stands in), the bee's room beside the count (or its own word, FED) is kept
+ * too, and the star hides.
+ */
+internal fun lcdSlot(state: LcdState, words: List<String>): LcdSlot {
+    val petHome = state.mode == LcdMode.Pet || state.petLives
+    val count = if (state.total > 0) {
+        lcdColumns(lcdCells(if (petHome) "${state.count}/${state.total}" else "${state.count}/${state.total}★"))
+    } else {
+        0
+    }
+    val wordsAlone = words.maxOfOrNull { lcdColumns(lcdCells(it)) } ?: 0
+    return if (petHome) {
+        val own = if (state.mode == LcdMode.Pet) lcdColumns(lcdCells(state.text)) else 0
+        LcdSlot(alone = wordsAlone, besideBee = maxOf(count, own))
+    } else {
+        LcdSlot(alone = maxOf(wordsAlone, if (state.mode != LcdMode.Count || words.isNotEmpty()) count else 0), besideBee = null)
+    }
+}
+
+/** The gap after the bee, in pitches. */
+private const val PET_GAP = 1.5f
+
+/**
+ * Lays the chip's content out as wide as [slot] at least, centred: LcdText's own px (ceil(columns × pitch × scale)) and
+ * the bee's (9 pitches, unscaled, and its gap).
+ */
+private fun Modifier.lcdSlot(slot: LcdSlot, pitch: Dp): Modifier = layout { measurable, constraints ->
+    val scale = min(fontScale, 1.6f).coerceAtLeast(1f)
+    val p = pitch.toPx()
+    fun text(columns: Int): Int = if (columns <= 0) 0 else ceil(columns * p * scale).toInt()
+    val bee = (pitch * 9).roundToPx() + (pitch * PET_GAP).roundToPx()
+    val room = maxOf(text(slot.alone), slot.besideBee?.let { bee + text(it) } ?: 0)
+    val content = measurable.measure(constraints.copy(minWidth = 0))
+    val w = maxOf(content.width, room).coerceIn(constraints.minWidth, constraints.maxWidth)
+    layout(w, content.height) { content.place((w - content.width) / 2, 0) }
+}
+
+/**
+ * Waits out the hold threshold after [down] (§4.3) without consuming anything. True only when the finger is still down
+ * on the chip, within the touch slop of where it landed, and nothing else has taken the gesture when the threshold runs
+ * out; false on a release, a cancellation, a brush off the chip or a move, which are all different from running out the
+ * clock (eggs 15 and 18 never fire from a swipe across the LCD).
+ */
+private suspend fun AwaitPointerEventScope.awaitLcdHold(down: PointerInputChange, thresholdMs: Long): Boolean {
+    val slop = viewConfiguration.touchSlop
+    var ended = false
+    withTimeoutOrNull(thresholdMs) {
+        while (true) {
+            val e = awaitPointerEvent()
+            val change = e.changes.firstOrNull { it.id == down.id }
+            if (change == null || !change.pressed || change.isConsumed || change.isOutOfBounds(size, extendedTouchPadding) ||
+                (change.position - down.position).getDistance() > slop
+            ) {
+                ended = true
+                return@withTimeoutOrNull
+            }
+            // A parent that takes the gesture consumes on the Main pass after this child: look again on the Final pass.
+            val after = awaitPointerEvent(PointerEventPass.Final)
+            if (after.changes.any { it.id == down.id && it.isConsumed }) {
+                ended = true
+                return@withTimeoutOrNull
+            }
+        }
+    }
+    return !ended
+}
 
 private val RoundedLcdInner = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
 
