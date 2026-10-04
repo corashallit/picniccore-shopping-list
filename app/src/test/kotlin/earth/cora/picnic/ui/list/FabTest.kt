@@ -163,4 +163,28 @@ class FabTest {
         compose.waitForIdle()
         assertEquals("nothing moved", strip.top, compose.boundsOf(ListTags.strip("household")).top, 1f)
     }
+
+    /**
+     * Trip review (item 337, §6.1): at font scale 2.0 with the bar folded into the FAB and the list at its end, the last
+     * row's check spot (and its GOT IT hanko) and the end note stand clear of the FAB, at least 16 dp above it: the
+     * list's bottom padding is the FAB's dock + 26 dp while it shows.
+     */
+    @Test
+    fun theListEndsClearOfTheFab() {
+        val rig = ListRig(ListFixture.longAisle())
+        compose.show(rig, fontScale = 2f)
+        compose.onNodeWithTag(ListTags.LIST).performTouchInput { swipeUp(startY = centerY + 120 * dp, endY = top + 10 * dp, durationMillis = 500) }
+        compose.waitForIdle()
+        assertTrue("scrolled down: the FAB", compose.exists(ADD_FAB_TAG))
+        // To the very end (a programmatic scroll leaves the FAB folded).
+        compose.onNodeWithTag(ListTags.LIST).performScrollToKey("end-note")
+        compose.waitForIdle()
+        assertTrue("still the FAB", compose.exists(ADD_FAB_TAG))
+        val fab = compose.boundsOf(ADD_FAB_TAG)
+        val last = rig.vm.state.value.sections.single { it.id == "household" }.rows.last()
+        val spot = compose.boundsOf(ListTags.check(last.id), unmerged = true)
+        assertTrue("the last row's check spot ${spot.bottom / dp} dp ends 16 dp above the FAB's top ${fab.top / dp} dp", spot.bottom <= fab.top - 16 * dp + 0.5f)
+        val note = compose.boundsOf(ListTags.END_NOTE)
+        assertTrue("the end note ${note.bottom / dp} dp ends 16 dp above the FAB's top ${fab.top / dp} dp", note.bottom <= fab.top - 16 * dp + 0.5f)
+    }
 }

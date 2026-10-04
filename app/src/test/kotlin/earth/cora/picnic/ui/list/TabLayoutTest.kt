@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.setOpenAisle
+import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.ui.common.PHONE_360
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -223,6 +224,73 @@ class TabLayoutTest {
         val stripBadgeRight = basket.right - 10 * dp + badge.width
         val stripAir = air(stripBadgeRight, strip.right - 48 * dp)
         assertTrue("fs $fontScale, strip: the badge and its shadow end before the chevron's face ($stripAir dp of air)", stripAir >= 0.3f)
+    }
+
+    /**
+     * §4.10 tab fit: a name too long even at 16 sp is cut at a word boundary and never leaves a dangling "&" or "·"
+     * ("Deli…", not "Deli & …"); a first word too long on its own is cut inside it.
+     */
+    @Test
+    fun tabEllipsisCutsAtAWordBoundary() {
+        fun cut(name: String, room: Int) = earth.cora.picnic.ui.theme.tabEllipsis(name) { it.length <= room }
+        assertEquals("Deli\u2026", cut("Deli & meat", 8))
+        assertEquals("Dairy\u2026", cut("Dairy & eggs", 9))
+        assertEquals("Snacks\u2026", cut("Snacks · chips", 10))
+        assertEquals("Dairy & eggs\u2026", cut("Dairy & eggs & more", 15))
+        assertEquals("Breakfa\u2026", cut("Breakfast & cereal", 8))
+        assertEquals("Frozen", cut("Frozen", 6))
+    }
+
+    /**
+     * Item 337 at font scale 2.0 (§4.10, §15): the tab names that cannot fit are cut at a word ("Deli…"), never "Deli & …";
+     * a meta line that would wrap a word a line beside the basket takes the strip's whole width under the tab instead,
+     * the basket on the tab's line, and "in the basket" stays together; no line of a meta holds a lone word.
+     */
+    @Test
+    fun largeTextStripsKeepTheirWordsTogether() {
+        val state = ListFixture.state()
+            .toggleChecked(ListFixture.LIST_ID, "baking-powder", ListFixture.TRIP_START + 20 * ListFixture.MIN)
+            .setOpenAisle(ListFixture.LIST_ID, "")
+        val rig = ListRig(state)
+        val probe = RecordingProbe()
+        compose.show(rig, probe, fontScale = 2f)
+        var stacked = 0
+        var cut = 0
+        visit(rig) { s, _ ->
+            val name = compose.onAllNodes(
+                androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(ListTags.stripTab(s.id))) and
+                    androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString("") }.single { n -> n.any { it.isLetter() } }
+            if (name != s.displayName) {
+                cut++
+                assertTrue("${s.displayName}: cut with an ellipsis ($name)", name.endsWith("\u2026"))
+                val head = name.removeSuffix("\u2026")
+                assertTrue("${s.displayName}: no dangling & or · or space ($name)", head.isNotEmpty() && head.last() !in "&· \u00A0")
+                val next = s.displayName.getOrNull(head.length)
+                assertTrue("${s.displayName}: whole words ($name)", s.displayName.startsWith(head) && (next == null || !next.isLetterOrDigit() || head.none { it == ' ' }))
+            }
+            val metaNode = compose.onNodeWithTag(ListTags.stripMeta(s.id), useUnmergedTree = true).fetchSemanticsNode()
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            metaNode.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+            val text = layouts.single()
+            val lines = (0 until text.lineCount).map { text.layoutInput.text.text.substring(text.getLineStart(it), text.getLineEnd(it)).trim() }
+            if (lines.size > 1) lines.forEach { assertTrue("${s.displayName}: no lone word on a line of the meta ($lines)", it.any { c -> c == ' ' || c == '\u00A0' }) }
+            if (s.toGet == 0) assertTrue("${s.displayName}: \"in the basket\" together ($lines)", lines.any { "in\u00A0the\u00A0basket" in it })
+            val meta = probe["meta:${s.id}"]
+            val basket = probe["basket:${s.id}"]
+            val tab = probe["tab:${s.id}"]
+            assertTrue("${s.displayName}: the meta $meta clear of the basket $basket", !meta.overlaps(basket))
+            if (meta.right > basket.left) {
+                stacked++
+                assertTrue("${s.displayName}: the basket stands on the tab's line (${basket.center.y} in ${tab.top}..${tab.bottom})", basket.center.y in tab.top..tab.bottom)
+                assertTrue("${s.displayName}: the meta line under the basket", meta.top >= basket.bottom - 1f)
+                assertEquals("${s.displayName}: one line at the strip's whole width ($lines)", 1, lines.size)
+            }
+            assertTrue("${s.displayName}: the strip holds its words", compose.boundsOf(ListTags.strip(s.id)).let { it.bottom >= meta.bottom - 0.5f })
+        }
+        assertTrue("some names are cut at 2.0 ($cut)", cut > 0)
+        assertTrue("some strips stack their meta under the basket at 2.0 ($stacked)", stacked > 0)
     }
 
     private companion object {

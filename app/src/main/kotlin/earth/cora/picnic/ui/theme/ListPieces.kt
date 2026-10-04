@@ -25,7 +25,10 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.HorizontalAlignmentLine
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.node.GlobalPositionAwareModifierNode
@@ -71,6 +74,33 @@ import earth.cora.picnic.ui.a11y.textOverflowed
 /** The tab name as fitted: its size, and whether it had to ellipsize (TabLayoutTest). */
 @Immutable
 data class TabFit(val fontSizeSp: Float, val ellipsized: Boolean)
+
+/** The baseline of an [IndexTab]'s name (not its numeral's), as an alignment line its parent can read. */
+val TabNameBaseline: HorizontalAlignmentLine = HorizontalAlignmentLine(::minOf)
+
+/**
+ * A tab name cut to fit (§4.10): the longest run of whole words that [fits] with "…" after it, any trailing "&", "·",
+ * "," or "/" dropped with the space before the cut ("Deli & cheese" → "Deli…"); a first word too long on its own is
+ * cut inside it ("Breakf…"). [name] itself when it fits.
+ */
+fun tabEllipsis(name: String, fits: (String) -> Boolean): String {
+    if (fits(name)) return name
+    fun trimmed(s: String) = s.trimEnd { it.isWhitespace() || it in DANGLING }
+    val boundaries = (name.length - 1 downTo 1).filter { name[it - 1].isWhitespace() && !name[it].isWhitespace() }
+    for (cut in boundaries) {
+        val head = trimmed(name.substring(0, cut))
+        if (head.isNotEmpty() && fits(head + ELLIPSIS)) return head + ELLIPSIS
+    }
+    for (n in name.length - 1 downTo 1) {
+        if (name[n - 1].isHighSurrogate()) continue
+        val head = trimmed(name.substring(0, n))
+        if (head.isNotEmpty() && fits(head + ELLIPSIS)) return head + ELLIPSIS
+    }
+    return ELLIPSIS
+}
+
+private const val ELLIPSIS = "\u2026"
+private const val DANGLING = "&·,/+"
 
 /** The fitted tab label's size (sp), for tests. */
 val TabNameFontSize: SemanticsPropertyKey<Float> = SemanticsPropertyKey("TabNameFontSize")
@@ -192,6 +222,15 @@ private fun TabFace(
     val fixed = tabChrome(look, circle)
     val room = if (maxWidth == Dp.Infinity) Int.MAX_VALUE else with(density) { (maxWidth - fixed).roundToPx().coerceAtLeast(1) }
     val fit = remember(displayName, base, room) { fitTabName(measurer, displayName, base, room) }
+    // Too long even at 16 sp: cut at a word boundary, never leaving a dangling "&" (§4.10: "Deli…", not "Deli & …").
+    val shown = remember(displayName, base, room, fit) {
+        if (!fit.ellipsized) {
+            displayName
+        } else {
+            val style = base.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp)
+            tabEllipsis(displayName) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width <= room }
+        }
+    }
     Row(
         Modifier
             .probe(probe, probeKey, fit.fontSizeSp)
@@ -215,12 +254,16 @@ private fun TabFace(
     ) {
         TabNumber(number, look, size, maxSize = if (circle >= grown) Dp.Infinity else circle, numberModifier)
         Text(
-            displayName,
+            shown,
             style = base.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp),
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis,
-            modifier = nameModifier,
+            modifier = nameModifier.layout { m, c ->
+                // The name's baseline, for what sits beside the tab on it (egg 5's "snack?", §4.10 doodle).
+                val p = m.measure(c)
+                layout(p.width, p.height, mapOf(TabNameBaseline to p[FirstBaseline])) { p.place(0, 0) }
+            },
         )
     }
 }

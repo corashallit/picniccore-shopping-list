@@ -133,6 +133,9 @@ object EggTags {
     const val OVERLAY: String = "egg_overlays"
     /** Egg 5's snack star and "snack?" doodle (decorative: the tag is for tests; TalkBack reads nothing). */
     const val SNACK: String = "egg_snack"
+
+    /** Egg 5's snack star alone, on a folded strip's tab corner. */
+    const val SNACK_STAR: String = "egg_snack_star"
 }
 
 /**

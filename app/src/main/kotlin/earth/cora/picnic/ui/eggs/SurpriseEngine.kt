@@ -74,8 +74,8 @@ import kotlinx.coroutines.flow.emptyFlow
  *     `goldenMinutesLeft = eggs.goldenMinutesLeft`; `titleBrush = rememberKirakiraBrush(eggs)`;
  *   - book: `pixel = eggs.pixelStickers`; the holo stamp page while `eggs.perfectWeek`; the season's pictogram from
  *     `eggs.season`; each stamp's tap `engine.onStampTap(position)` (0-based, the capsule stamp included);
- *   - folded strip: `TabMetaDoodle(tab, meta, doodle = SnackDoodle when eggs.snackDoodleAt(section))` (the doodle never
- *     shrinks the tab); the basket's `Modifier.basketHello(eggs, section)` and, inside the basket's box,
+ *   - folded strip: `SnackStarSticker` on the tab's corner and `SnackWord` beside the tab when
+ *     eggs.snackDoodleAt(section) (the word never shrinks the tab, and is dropped where it does not fit); the basket's `Modifier.basketHello(eggs, section)` and, inside the basket's box,
  *     `NapCatInBasket(eggs, section, kind, engine, chainsDone)`; a hold on the basket `engine.onBasketHold(section, ms)`
  *     at the hold threshold + 560 ms (a hold of the threshold alone only peeks);
  *   - open tray: `SnackDoodle(eggs, section)` after its tab (its own width, after the tab's); the basket's

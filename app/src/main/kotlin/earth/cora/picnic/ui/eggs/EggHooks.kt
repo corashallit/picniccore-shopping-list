@@ -1,6 +1,11 @@
 package earth.cora.picnic.ui.eggs
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.Text
+import androidx.compose.ui.platform.testTag as taggedAs
+import androidx.compose.ui.unit.sp
+import earth.cora.picnic.R
+import earth.cora.picnic.ui.a11y.decorative
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -203,7 +208,7 @@ fun Modifier.basketHello(state: SurpriseState, sectionId: String): Modifier {
  * Egg 5: the snack-time star sticker and the "snack?" doodle, for the list to place right after [sectionId]'s tab (it
  * scrolls with its strip). Draws nothing unless it is midnight and [sectionId] is the frozen aisle. Decorative. It never
  * takes room from the tab (§4.10 tab fit, §12.1 "none hides information"): give it its own width after the tab's fitted
- * one, as [TabMetaDoodle] does, never a share of the tab's row.
+ * one, never a share of the tab's row (a folded strip sets [SnackStarSticker] and [SnackWord] itself).
  */
 @Composable
 fun SnackDoodle(state: SurpriseState, sectionId: String, modifier: Modifier = Modifier) {
@@ -215,63 +220,27 @@ fun SnackDoodle(state: SurpriseState, sectionId: String, modifier: Modifier = Mo
 fun SurpriseState.snackDoodleAt(sectionId: String): Boolean = enabled && snackSectionId == sectionId
 
 /**
- * A folded strip's words with egg 5's doodle (§4.10, §12.2): the [tab] is laid out first at its own fitted width (§4.10
- * Fit: 20 sp down to 16 sp, then an ellipsis), then the [meta] line under it; the [doodle] (null: none) goes beside the
- * tab only in the room the tab leaves, else after the meta line, else on a line of its own under it. The doodle never
- * shrinks the tab. The layout is as wide as the farthest of the three ends (the strip's ribbon is placed after it).
+ * Egg 5 on a folded strip (§4.10 doodle, §12.2): the snack-time star sticker, which the strip sets on its tab's top-right
+ * corner over the tab's pattern (never its name). Decorative.
  */
 @Composable
-fun TabMetaDoodle(
-    tab: @Composable () -> Unit,
-    meta: @Composable () -> Unit,
-    doodle: (@Composable () -> Unit)?,
-    modifier: Modifier = Modifier,
-    gap: androidx.compose.ui.unit.Dp = 4.dp,
-) {
-    androidx.compose.ui.layout.Layout(
-        contents = listOf(tab, meta, doodle ?: {}),
-        modifier = modifier,
-    ) { (tabM, metaM, doodleM), constraints ->
-        val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val t = tabM.map { it.measure(loose) }
-        val m = metaM.map { it.measure(loose) }
-        val d = doodleM.map { it.measure(androidx.compose.ui.unit.Constraints()) }
-        val tabW = t.maxOfOrNull { it.width } ?: 0
-        val tabH = t.maxOfOrNull { it.height } ?: 0
-        val metaW = m.maxOfOrNull { it.width } ?: 0
-        val metaH = m.maxOfOrNull { it.height } ?: 0
-        val dW = d.maxOfOrNull { it.width } ?: 0
-        val dH = d.maxOfOrNull { it.height } ?: 0
-        val g = gap.roundToPx()
-        val lift = 2.dp.roundToPx()
-        val max = constraints.maxWidth
-        var dx = 0
-        var dy = 0
-        if (d.isNotEmpty()) {
-            when {
-                tabW + g + dW <= max -> {
-                    dx = tabW + g
-                    dy = -lift
-                }
-                metaW + g + dW <= max -> {
-                    dx = metaW + g
-                    dy = tabH + metaH - dH
-                    if (dx < tabW) dy = maxOf(dy, tabH)
-                }
-                else -> {
-                    dx = g
-                    dy = tabH + metaH
-                }
-            }
-        }
-        val width = maxOf(tabW, metaW, if (d.isEmpty()) 0 else dx + dW).coerceIn(constraints.minWidth, max)
-        val height = maxOf(tabH + metaH, if (d.isEmpty()) 0 else dy + dH).coerceAtLeast(constraints.minHeight)
-        layout(width, height) {
-            t.forEach { it.place(0, 0) }
-            m.forEach { it.place(0, tabH) }
-            d.forEach { it.place(dx, dy) }
-        }
-    }
+fun SnackStarSticker(modifier: Modifier = Modifier) {
+    DecorSticker("glowstar", modifier.taggedAs(EggTags.SNACK_STAR).decorative(), size = 20.dp)
+}
+
+/**
+ * Egg 5 on a folded strip: the "snack?" doodle, Hachi Maru rotated −4°, which the strip sets beside its tab on the name's
+ * baseline, in the free band before the basket, and drops where it does not fit (large text): the star stays. Decorative.
+ */
+@Composable
+fun SnackWord(modifier: Modifier = Modifier) {
+    Text(
+        androidx.compose.ui.res.stringResource(R.string.egg_snack_doodle),
+        style = PicnicTheme.type.doodle.copy(fontSize = 12.sp, color = PicnicTheme.colors.doodle, fontStyle = androidx.compose.ui.text.font.FontStyle.Normal),
+        maxLines = 1,
+        softWrap = false,
+        modifier = modifier.taggedAs(EggTags.SNACK).decorative().graphicsLayer { rotationZ = -4f },
+    )
 }
 
 /**

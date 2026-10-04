@@ -55,9 +55,8 @@ class EggMidnightTest {
         assertEquals(0, compose.onAllNodesWithText("snack?").fetchSemanticsNodes().size)
         val t0 = r.now
         // The Surprise lab brings the frozen aisle into view (her own list does not: herListNeverScrollsByItself), and
-        // the snack star and doodle sit by its tab: right of the tab in its row
-        // when the tab leaves room for it, else right of the meta line ("2 left of 2"), never over either; within the
-        // strip's words (clear of the basket), on screen above the add bar.
+        // the snack star sits on its tab's corner, "snack?" beside the tab on the name's line, never over the words;
+        // clear of the basket, on screen above the add bar.
         r.advance(800)
         assertSnackBesideTheWords(r)
         // "SNACK?" holds 2.6 s, then the count.
@@ -67,23 +66,35 @@ class EggMidnightTest {
         assertNull(r.eggs.lcdWord)
     }
 
-    /** The snack doodle by the frozen tab, clear of the tab's and the meta line's words, and of the basket. */
-    private fun assertSnackBesideTheWords(r: EggRig) {
-        val snack = compose.onNodeWithTag(EggTags.SNACK, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+    /**
+     * §4.10 doodle, §12.2 egg 5: the snack star on the frozen tab's top-right corner, over its pattern (never its name);
+     * "snack?" beside the tab, outside it, on the name's line, in the free band before the basket, never over the tab's
+     * or the meta line's words, within the strip and on screen. Where the word does not fit (large text) it is dropped and
+     * the star stays: [wordShown] says which to expect (null: either).
+     */
+    private fun assertSnackBesideTheWords(r: EggRig, wordShown: Boolean? = true) {
         val tab = r.anchor(EggAnchors.tab("frozen"))
+        val name = r.anchor(EggAnchors.TEXT_PREFIX + "tab:frozen")
         val meta = r.anchor(EggAnchors.TEXT_PREFIX + "meta:frozen")
         val strip = r.anchor(EggAnchors.strip("frozen"))
         val basket = r.anchor(AnchorRegistry.basketKey("frozen"))
         val bar = r.anchor(AnchorRegistry.ADD_BAR)
+        val star = compose.onNodeWithTag(EggTags.SNACK_STAR, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        assertTrue("the star is drawn ($star)", star.width > 15 * 3f)
+        assertTrue("the star sits on the tab's top-right corner ($star, tab $tab)", star.center.x in tab.right - 20 * 3f..tab.right + 2 * 3f && star.top < tab.top + 8 * 3f && star.top >= tab.top - 4 * 3f)
+        assertFalse("the star never over the tab's name ($star, name $name)", star.deflate(1f).overlaps(name))
+        val node = compose.onNodeWithTag(EggTags.SNACK, useUnmergedTree = true).fetchSemanticsNode()
+        val placed = node.layoutInfo.isPlaced
+        if (wordShown != null) assertEquals("the word ${if (wordShown) "fits beside the tab" else "is dropped"}", wordShown, placed)
+        if (!placed) return
+        val snack = node.boundsInRoot
         assertTrue("drawn ($snack)", snack.width > 20 * 3f && snack.height > 10 * 3f)
-        val besideTab = snack.left >= tab.right - 1f && snack.center.y in tab.top..tab.bottom
-        val afterMeta = snack.left >= meta.right - 1f && snack.top >= tab.bottom - 3 * 3f
-        val underMeta = snack.top >= meta.bottom - 1f && snack.left <= meta.left + 6 * 3f
-        assertTrue("by the tab ($snack, tab $tab, meta $meta)", besideTab || afterMeta || underMeta)
+        assertTrue("beside the tab, outside it ($snack, tab $tab)", snack.left >= tab.right - 1f)
+        assertTrue("on the name's line ($snack, name $name)", snack.center.y in name.top..name.bottom)
         assertFalse("never over the tab ($snack, tab $tab)", snack.deflate(2f).overlaps(tab))
         assertFalse("never over the meta line ($snack, meta $meta)", snack.deflate(2f).overlaps(meta))
         assertTrue("clear of the basket ($snack, basket $basket)", snack.right <= basket.left + 2f)
-        assertTrue("within the strip ($snack, strip $strip)", snack.left >= strip.left && snack.bottom <= strip.bottom)
+        assertTrue("within the strip ($snack, strip $strip)", snack.left >= strip.left && snack.top >= strip.top && snack.bottom <= strip.bottom)
         assertTrue("on screen above the add bar ($snack, bar $bar)", snack.top >= 0f && snack.bottom <= bar.top)
     }
 
@@ -120,7 +131,8 @@ class EggMidnightTest {
         assertEquals("fs $scale: the tab's name keeps its room", day, night, 1f)
         val need = fits!!("Frozen", 16f)
         assertTrue("fs $scale: the full \"Frozen\" fits at 16 sp or more ($need px in $night px)", need.toFloat() <= night + 1f)
-        assertSnackBesideTheWords(r)
+        // At 1.3 the word may still fit; at 2.0 it never does, and the star stays.
+        assertSnackBesideTheWords(r, wordShown = if (scale >= 2f) false else null)
         r.sandbox.close()
     }
 

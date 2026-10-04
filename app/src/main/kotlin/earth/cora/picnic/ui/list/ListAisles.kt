@@ -28,8 +28,11 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.AlignmentLine
+import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -40,6 +43,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
@@ -52,8 +56,9 @@ import earth.cora.picnic.ui.eggs.EggAnchors
 import earth.cora.picnic.ui.eggs.EggRules
 import earth.cora.picnic.ui.eggs.NapCatInBasket
 import earth.cora.picnic.ui.eggs.SnackDoodle
+import earth.cora.picnic.ui.eggs.SnackStarSticker
+import earth.cora.picnic.ui.eggs.SnackWord
 import earth.cora.picnic.ui.eggs.StripLadybug
-import earth.cora.picnic.ui.eggs.TabMetaDoodle
 import earth.cora.picnic.ui.eggs.basketHello
 import earth.cora.picnic.ui.eggs.pageSticker
 import earth.cora.picnic.ui.eggs.snackDoodleAt
@@ -77,6 +82,8 @@ import earth.cora.picnic.ui.theme.PadPatch
 import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.StoreAisleChip
+import earth.cora.picnic.ui.theme.TabNameBaseline
+import earth.cora.picnic.ui.theme.TabPattern
 import earth.cora.picnic.ui.theme.TabSize
 import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
@@ -194,6 +201,9 @@ internal fun FoldedStrip(
     val threshold = LocalTimeouts.current.holdThresholdMs
     val probe = LocalPieceProbe.current
     val badgeGap = basketGap(section, 6.dp)
+    val stacked = LocalDensity.current.fontScale >= STACKED_FONT_SCALE
+    // How far the snack star reaches into the tab: over its 26 dp pattern; beside a plain tab, whose name runs to its end.
+    val starInset = if (section.look.pattern == TabPattern.Plain) (-2).dp else 20.dp
     val metaText = buildAnnotatedString {
         // After the store-aisle chip that leads the line (§4.10): "[A3] · 2 left of 5".
         if (section.storeAisle != null) append(stringResource(R.string.list_strip_after_chip))
@@ -235,56 +245,54 @@ internal fun FoldedStrip(
                     .focusRing(PicnicTheme.shapes.strip, c.ink, ringed)
                     .stripFace(),
             )
-            // The tab at its own fitted width, the meta line under it; egg 5's snack doodle only in the room the tab leaves
-            // (it never shrinks the tab), else after the meta line (§4.10, §12.2).
-            TabMetaDoodle(
-                tab = {
-                    IndexTab(
-                        position = section.position,
-                        displayName = section.displayName,
-                        look = section.look,
-                        size = TabSize.Strip,
-                        ballpoint = false,
-                        modifier = Modifier
-                            .testTag(ListTags.stripTab(section.id))
-                            .then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)) }),
-                        probeKey = "tab:${section.id}",
-                        nameModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) },
-                        numberModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "num:" + section.id) },
-                    )
-                },
-                meta = {
-                    // Led by the store-aisle chip when the aisle has one (§4.7, §4.10), its "A3" on the line's baseline;
-                    // decorative, since the strip's one TalkBack line already says "store aisle 3" (§15). The chip's
-                    // white border keeps it off the tab, so it needs no extra room above it: the strip stays within a
-                    // couple of dp of its neighbours' height.
-                    Row(Modifier.padding(start = 3.dp, top = if (section.storeAisle != null) 0.dp else 2.dp)) {
-                        section.storeAisle?.let { n ->
-                            StoreAisleChip(
-                                n,
-                                Modifier
-                                    .alignByBaseline()
-                                    .padding(end = 4.dp)
-                                    .testTag(ListTags.stripChip(section.id))
-                                    .decorative()
-                                    .probe(probe, "stripChip:${section.id}")
-                                    .then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "stripChip:" + section.id) }),
-                            )
-                        }
-                        Text(
-                            metaText,
-                            style = t.stripMeta.copy(color = c.inkSoft),
-                            modifier = Modifier
-                                .alignByBaseline()
-                                .testTag(ListTags.stripMeta(section.id))
-                                .probe(probe, "meta:${section.id}")
-                                .then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + section.id) }),
-                        )
-                    }
-                },
-                doodle = if (eggs.snackDoodleAt(section.id)) ({ SnackDoodle(eggs, section.id) }) else null,
-                modifier = Modifier.layoutId("text"),
+            // The tab at its own fitted width, the meta line under it (§4.10).
+            IndexTab(
+                position = section.position,
+                displayName = section.displayName,
+                look = section.look,
+                size = TabSize.Strip,
+                ballpoint = false,
+                modifier = Modifier
+                    .layoutId("tab")
+                    .testTag(ListTags.stripTab(section.id))
+                    .then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)) }),
+                probeKey = "tab:${section.id}",
+                nameModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) },
+                numberModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "num:" + section.id) },
             )
+            // Led by the store-aisle chip when the aisle has one (§4.7, §4.10), its "A3" on the line's baseline;
+            // decorative, since the strip's one TalkBack line already says "store aisle 3" (§15). The chip's white border
+            // keeps it off the tab, so it needs no extra room above it: the strip stays within a couple of dp of its
+            // neighbours' height. Balanced lines when it wraps (§4.6), "in the basket" never split.
+            Row(Modifier.layoutId("meta").padding(start = 3.dp, top = if (section.storeAisle != null) 0.dp else 2.dp)) {
+                section.storeAisle?.let { n ->
+                    StoreAisleChip(
+                        n,
+                        Modifier
+                            .alignByBaseline()
+                            .padding(end = 4.dp)
+                            .testTag(ListTags.stripChip(section.id))
+                            .decorative()
+                            .probe(probe, "stripChip:${section.id}")
+                            .then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "stripChip:" + section.id) }),
+                    )
+                }
+                Text(
+                    metaText,
+                    style = t.stripMeta.copy(color = c.inkSoft, lineBreak = LineBreak.Paragraph),
+                    modifier = Modifier
+                        .alignByBaseline()
+                        .testTag(ListTags.stripMeta(section.id))
+                        .probe(probe, "meta:${section.id}")
+                        .then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "meta:" + section.id) }),
+                )
+            }
+            // Egg 5 at midnight (§12.2): the snack star on the tab's corner and "snack?" beside the tab, never taking the
+            // tab's room (the layout drops the word where it does not fit).
+            if (eggs.snackDoodleAt(section.id)) {
+                SnackStarSticker(Modifier.layoutId("star"))
+                SnackWord(Modifier.layoutId("word"))
+            }
             if (complete || aisle?.untieT0 != null) {
                 Box(Modifier.layoutId("ribbon").testTag(ListTags.ribbon(section.id)).probe(probe, "ribbon:${section.id}")) {
                     // The band runs the strip's whole height, however tall large text makes it (§4.10, §15).
@@ -355,8 +363,9 @@ internal fun FoldedStrip(
     ) { measurables, constraints ->
         val w = constraints.maxWidth
         val px = { d: Dp -> d.roundToPx() }
-        val chevron = measurables.first { it.layoutId == "chevron" }.measure(Constraints.fixed(px(48.dp), px(48.dp)))
-        val basketM = measurables.first { it.layoutId == "basket" }.measure(Constraints())
+        fun measurable(id: String) = measurables.firstOrNull { it.layoutId == id }
+        val chevron = measurable("chevron")!!.measure(Constraints.fixed(px(48.dp), px(48.dp)))
+        val basketM = measurable("basket")!!.measure(Constraints())
         val chevronX = w - chevron.width
         // The badge overhangs the basket box (12 dp, more as a pill): the basket stands far enough left to keep it clear
         // of the chevron (item 107).
@@ -364,34 +373,75 @@ internal fun FoldedStrip(
         val start = px(6.dp)
         // The tab ends 8 dp before the basket (§4.10); the meta line wraps under it.
         val textMax = (basketX - px(8.dp) - start).coerceAtLeast(px(48.dp))
-        val text = measurables.first { it.layoutId == "text" }.measure(Constraints(maxWidth = textMax))
-        val h = max(px(56.dp), text.height + px(6.dp))
-        val face = measurables.first { it.layoutId == "face" }.measure(Constraints.fixed(w, h))
+        val tab = measurable("tab")!!.measure(Constraints(maxWidth = textMax))
+        // Large text (§15, item 337): a meta line that would wrap a word a line beside the basket takes the strip's whole
+        // width under the tab instead, the basket and the chevron standing on the tab's line.
+        val metaMax = if (stacked) (w - start - px(12.dp)).coerceAtLeast(textMax) else textMax
+        val meta = measurable("meta")!!.measure(Constraints(maxWidth = metaMax))
+        val below = stacked && meta.width > textMax
+        // Egg 5: the star on the tab's top-right corner, over its pattern (never its name), and the word after it on the
+        // name's baseline, in the free band before the basket; where the word does not fit (large text), the star alone.
+        val star = measurable("star")?.measure(Constraints())
+        val word = measurable("word")?.measure(Constraints())
+        val starX = tab.width - px(starInset)
+        val starRight = if (star != null) starX + star.width else tab.width
+        val wordX = max(tab.width, starRight) + px(2.dp)
+        val wordShown = word != null && start + wordX + word.width <= basketX - px(2.dp)
+        val nameBase = tab[TabNameBaseline]
+        val wordBase = word?.get(FirstBaseline) ?: AlignmentLine.Unspecified
+        val wordY = when {
+            word == null -> 0
+            nameBase != AlignmentLine.Unspecified && wordBase != AlignmentLine.Unspecified -> nameBase - wordBase
+            else -> (tab.height - word.height) / 2
+        }
+        val lineEnd = start + max(starRight, if (wordShown) wordX + word!!.width else tab.width)
+        val textTop: Int
+        val metaY: Int
+        val basketY: Int
+        val chevronY: Int
+        val h: Int
+        if (below) {
+            textTop = px(3.dp)
+            val tabMid = textTop + tab.height / 2
+            basketY = (tabMid - basketM.height / 2).coerceAtLeast(-px(8.dp))
+            metaY = max(textTop + tab.height, basketY + basketM.height + px(2.dp))
+            h = max(px(56.dp), metaY + meta.height + px(3.dp))
+            chevronY = (tabMid - chevron.height / 2).coerceAtLeast(0)
+        } else {
+            val words = tab.height + meta.height
+            h = max(px(56.dp), words + px(6.dp))
+            textTop = ((h - words) / 2).coerceAtLeast(px(3.dp))
+            metaY = textTop + tab.height
+            // The basket stands on the strip's bottom edge.
+            basketY = h - basketM.height
+            chevronY = (h - chevron.height) / 2
+        }
+        val face = measurable("face")!!.measure(Constraints.fixed(w, h))
         // The ribbon: from the end of the text + 12 dp, at most the basket's left edge − 22 dp; else a bow on the
-        // basket's left shoulder, never over text (§4.10).
-        val ribbonMeasurable = measurables.firstOrNull { it.layoutId == "ribbon" }
-        val bowMeasurable = measurables.firstOrNull { it.layoutId == "bow" }
-        val textEnd = start + text.width
+        // basket's left shoulder, never over text (§4.10). A meta line under the basket leaves no room for the band.
+        val textEnd = if (below) lineEnd else max(lineEnd, start + meta.width)
         val bandX = textEnd + px(12.dp)
-        val fits = bandX <= basketX - px(22.dp)
-        val ribbon = if (fits) ribbonMeasurable?.measure(Constraints.fixedHeight(h)) else null
-        val bow = if (!fits) bowMeasurable?.measure(Constraints()) else null
+        val fits = !below && bandX <= basketX - px(22.dp)
+        val ribbon = if (fits) measurable("ribbon")?.measure(Constraints.fixedHeight(h)) else null
+        val bow = if (!fits) measurable("bow")?.measure(Constraints()) else null
         // Egg 2's lane: StripLadybug walks 2 dp below the bottom of the box it is given. The strip's words sit close to its
         // bottom edge and the next strip's tab 7 dp below it, so the 15 dp bug walks a little lower, in the gap between
         // the two, clear of this strip's meta line and the next one's tab words (§12.2 "never crossing item text").
-        val ladybug = measurables.firstOrNull { it.layoutId == "ladybug" }?.measure(Constraints.fixed(w, h + px(LADYBUG_LANE_DROP)))
+        val ladybug = measurable("ladybug")?.measure(Constraints.fixed(w, h + px(LADYBUG_LANE_DROP)))
         layout(w, h) {
             face.place(0, 0)
-            text.place(start, ((h - text.height) / 2).coerceAtLeast(px(3.dp)))
+            tab.place(start, textTop)
+            meta.place(start, metaY)
+            star?.place(start + starX, textTop - px(2.dp))
+            if (wordShown) word!!.place(start + wordX, textTop + wordY)
             // The ribbon box is 30 dp wide with its 10 dp band at 10–20 dp.
             ribbon?.place(bandX - px(10.dp), 0)
-            // On the basket's left shoulder, and never back over the end of a long name. The bow follows the basket down
-            // when large text makes the strip taller (the basket stands on the strip's bottom edge): 12 dp below the
-            // basket's top, as at 1.0, where the strip is 56 dp and the basket overhangs it by 8 dp.
-            val basketY = h - basketM.height
+            // On the basket's left shoulder, and never back over the end of a long name. The bow follows the basket (it
+            // stands on the strip's bottom edge, or on the tab's line under large text): 12 dp below the basket's top, as
+            // at 1.0, where the strip is 56 dp and the basket overhangs it by 8 dp.
             bow?.place(maxOf(basketX - px(14.dp), textEnd + px(1.dp)), basketY + px(BOW_BELOW_BASKET_TOP))
             basketM.place(basketX, basketY)
-            chevron.place(chevronX, (h - chevron.height) / 2)
+            chevron.place(chevronX, chevronY)
             ladybug?.place(0, 0)
         }
     }
@@ -597,6 +647,12 @@ internal fun TrayHeader(
  * the bow's top lines up with the basket's top and the knot sits on the basket's left shoulder (§4.10).
  */
 internal val BOW_BELOW_BASKET_TOP: Dp = 12.dp
+
+/**
+ * From this font scale a folded strip whose meta line would wrap beside the basket stacks instead: the basket and the
+ * chevron on the tab's line, the meta line the strip's whole width under them (§15, item 337).
+ */
+internal const val STACKED_FONT_SCALE: Float = 1.5f
 
 /** How far below the strip's bottom edge egg 2's ladybug walks, past StripLadybug's own 2 dp (the centre of its lane). */
 private val LADYBUG_LANE_DROP: Dp = 2.5.dp
