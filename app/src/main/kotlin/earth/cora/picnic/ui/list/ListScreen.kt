@@ -220,6 +220,9 @@ class ListScreenState(
     var newTripOpen by mutableStateOf(newTripOpen)
     var tripBookOpen by mutableStateOf(tripBookOpen)
 
+    /** The book spot the Trip book sheet opens at (§6.6): where the list's book was when she opened it. */
+    var tripBookSlot by mutableIntStateOf(0)
+
     /** The folded strip whose basket is held open (§5.3), or null. */
     var peek by mutableStateOf(peek)
 
@@ -312,8 +315,13 @@ class ListScreenState(
          * scroll had folded the bar and the book (the list keeps its own scroll).
          */
         val Saver: Saver<ListScreenState, Any> = listSaver(
-            save = { listOf(it.menuOpen, it.newTripOpen, it.tripBookOpen, it.scrolledDown) },
-            restore = { ListScreenState(menuOpen = it[0], newTripOpen = it[1], tripBookOpen = it[2]).apply { scrolledDown = it[3] } },
+            save = { listOf(it.menuOpen, it.newTripOpen, it.tripBookOpen, it.scrolledDown, it.tripBookSlot) },
+            restore = {
+                ListScreenState(menuOpen = it[0] as Boolean, newTripOpen = it[1] as Boolean, tripBookOpen = it[2] as Boolean).apply {
+                    scrolledDown = it[3] as Boolean
+                    tripBookSlot = it[4] as Int
+                }
+            },
         )
     }
 }
@@ -698,7 +706,10 @@ private fun EggListScope.ListScreenContent(
                     actions = actions,
                     onMore = { screen.menuOpen = true },
                     onMoreBounds = { screen.moreBounds = it },
-                    onOpenBook = { screen.tripBookOpen = true },
+                    onOpenBook = { slot ->
+                        screen.tripBookSlot = slot
+                        screen.tripBookOpen = true
+                    },
                 )
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when {
@@ -759,6 +770,7 @@ private fun EggListScope.ListScreenContent(
             book = if (screen.tripBookOpen) state.tripBook else null,
             dateLabel = state.book?.dateLabel.orEmpty(),
             onClose = { screen.tripBookOpen = false },
+            initialSlot = screen.tripBookSlot,
         )
         CelebrationHost(engine, p)
     }

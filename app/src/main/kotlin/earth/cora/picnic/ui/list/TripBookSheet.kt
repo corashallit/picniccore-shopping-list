@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -123,7 +124,8 @@ internal fun widestWordPx(text: String, style: androidx.compose.ui.text.TextStyl
 
 /**
  * The read-only sheet of [book] (null = closed). [dateLabel] is the trip's date ("Sat 3 Oct"); [date] prints on the
- * receipt. Same call shape as the album's former FiledBookSheet, so the album swaps one for the other.
+ * receipt. Same call shape as the album's former FiledBookSheet, so the album swaps one for the other. The sticker pages
+ * open on the page holding [initialSlot] (from the list, the spot its book shows; from the album, the first page).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -134,6 +136,7 @@ fun TripBookSheet(
     modifier: Modifier = Modifier,
     date: LocalDate? = null,
     initialFullReceipt: Boolean = false,
+    initialSlot: Int = 0,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
@@ -237,7 +240,7 @@ fun TripBookSheet(
                     style = t.label.copy(color = c.ink),
                     modifier = Modifier.padding(top = 16.dp, bottom = 6.dp).semantics { heading() },
                 )
-                StickerPages(book.total, stickers.associateBy { it.slot }, full = stickers.size >= book.total || book.perfect)
+                StickerPages(book.total, stickers.associateBy { it.slot }, full = stickers.size >= book.total || book.perfect, initialSlot = initialSlot)
             }
             book.bonus?.let { bonus ->
                 Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -300,10 +303,11 @@ internal fun lookOf(s: BookStamp): AisleLook {
  * (nothing needs the gesture, §15); the dots and LCD say "Page 2 of 3", politely, when the page changes.
  */
 @Composable
-private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.store.BookSticker>, full: Boolean) {
+private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.store.BookSticker>, full: Boolean, initialSlot: Int = 0) {
     val c = PicnicTheme.colors
     val book = c.book
-    var page by remember { mutableIntStateOf(0) }
+    // Null until she turns a page: the page holding [initialSlot] (worked out once the page size is known).
+    var turned by remember { mutableStateOf<Int?>(null) }
     val nextLabel = stringResource(R.string.list_trip_book_next)
     val previousLabel = stringResource(R.string.list_trip_book_previous)
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -312,8 +316,12 @@ private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.sto
         val rows = 4
         val perPage = cols * rows
         val pages = ((total + perPage - 1) / perPage).coerceAtLeast(1)
+        val page = turned ?: (initialSlot.coerceAtLeast(0) / perPage)
         val shown = page.coerceIn(0, pages - 1)
-        val turn = { to: Int -> page = to.coerceIn(0, pages - 1) }
+        val turn = { to: Int -> turned = to.coerceIn(0, pages - 1) }
+        // The swipe's handler outlives a composition: it reads the page shown now.
+        val shownState = rememberUpdatedState(shown)
+        val shownNow = { shownState.value }
         val pageLabel = stringResource(R.string.list_trip_book_page, shown + 1, pages)
         Column(Modifier.fillMaxWidth()) {
             Box(
@@ -337,8 +345,8 @@ private fun StickerPages(total: Int, bySlot: Map<Int, earth.cora.picnic.core.sto
                     .pointerInput(pages) {
                         var dx = 0f
                         detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = {
-                            if (dx < -40 * density) page = (page.coerceIn(0, pages - 1) + 1).coerceAtMost(pages - 1)
-                            if (dx > 40 * density) page = (page.coerceIn(0, pages - 1) - 1).coerceAtLeast(0)
+                            if (dx < -40 * density) turned = (shownNow() + 1).coerceAtMost(pages - 1)
+                            if (dx > 40 * density) turned = (shownNow() - 1).coerceAtLeast(0)
                         }) { _, a -> dx += a }
                     }
                     .padding(horizontal = 9.dp, vertical = 8.dp),

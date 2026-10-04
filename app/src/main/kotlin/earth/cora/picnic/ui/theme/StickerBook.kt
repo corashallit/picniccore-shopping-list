@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -140,8 +141,10 @@ object BookRules {
  * nodes. [dateOnPage] false: the date is a caption above the book (font scale over 1.3), and the name tag goes there too
  * through [onNameTag] (its text while it holds, then null), where it can grow with the text. [turnKey] changes: the page
  * turns to a fresh book (New trip). Keyboard and switch access: the book takes focus (Enter or Space opens the Trip book
- * sheet) and wears the 2 dp ink ring 3 dp outside its outline (§4.4, §15). [readOnly]: a still picture of the book
- * (the New trip sheet's, §6.5): no taps, swipes, boing or name tag, no focus and no action.
+ * sheet) and wears the 2 dp ink ring 3 dp outside its outline (§4.4, §15). Collapsed, the whole strip is the tap
+ * that opens the sheet. [onOpenAt] (by default [onOpen]) hears where to open: the lowest free spot while the book shows
+ * its own page, else the first spot of the page she swiped to (or the engine shows). [readOnly]: a still picture of the
+ * book (the New trip sheet's, §6.5): no taps, swipes, boing or name tag, no focus and no action.
  */
 @Composable
 fun StickerBook(
@@ -163,6 +166,7 @@ fun StickerBook(
     pageNumber: Boolean = true,
     onNameTag: ((String?) -> Unit)? = null,
     readOnly: Boolean = false,
+    onOpenAt: (slot: Int) -> Unit = { onOpen() },
 ) {
     val c = PicnicTheme.colors
     val shapes = PicnicTheme.shapes
@@ -170,7 +174,10 @@ fun StickerBook(
     val layout = remember(width, state.stamps.size, state.total) { BookLayout.of(width.value, state.stamps.size, state.total) }
     val summary = bookSummary(state)
     val openLabel = stringResource(R.string.list_book_open)
-    val open by rememberUpdatedState(onOpen)
+    val openAt by rememberUpdatedState(onOpenAt)
+    // Where the sheet opens: set below from the page shown (read when she opens, never observed).
+    val shownSlot = remember { IntArray(1) }
+    val open: () -> Unit = remember { { openAt(shownSlot[0]) } }
     // The book's own turn to a fresh page on New trip (3 frames, 240 ms); the engine turns it for an automatic new book.
     val freshTurn = rememberFreshTurn(turnKey)
     val interaction = remember { MutableInteractionSource() }
@@ -226,6 +233,11 @@ fun StickerBook(
         // The page shown (§7.4): the engine's, else the one she swiped to (for 6 s), else the page of the next free spot.
         val paging = remember { PagingState() }
         val page = (presentation.fx.showPage ?: paging.userPage ?: layout.shownPage(state.takenSlots)).coerceIn(0, layout.pages - 1)
+        shownSlot[0] = if (presentation.fx.showPage == null && paging.userPage == null) {
+            (0 until state.total).firstOrNull { it !in state.takenSlots } ?: (page * layout.perPage)
+        } else {
+            page * layout.perPage
+        }
         Box(
             Modifier
                 .fillMaxWidth()
@@ -246,7 +258,7 @@ fun StickerBook(
                         .height((layout.height - BookLayout.BORDERS).dp)
                         .graphicsLayer { alpha = 1f - folded },
                 ) {
-                    BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, onOpen, paging, page, onNameTag, readOnly)
+                    BookPages(state, presentation, clock, layout, anchors, dateOnPage, freshTurn, onStampTap, open, paging, page, onNameTag, readOnly)
                 }
             }
             if (folded > 0f) {
@@ -254,6 +266,9 @@ fun StickerBook(
                     state, presentation, clock, dateOnPage,
                     Modifier
                         .testTag(BookTags.COLLAPSED)
+                        // Collapsed (scrolled down for most of a shop, the keyboard up, a short window) the strip is one
+                        // tap target: it opens the Trip book sheet, as the right page does (§7.4, §7.7).
+                        .then(if (collapsed && !readOnly) Modifier.pointerInput(Unit) { detectTapGestures { open() } } else Modifier)
                         .fillMaxWidth()
                         .height((BookLayout.COLLAPSED - BookLayout.BORDERS).dp)
                         .graphicsLayer { alpha = folded },
@@ -552,17 +567,38 @@ private fun StampGrid(
     }
 }
 
-/** The "+n" circle above 24 stops. */
+/**
+ * The "+n" circle above 24 stops: a stamp circle whose numeral counts the stops the page has no room for (their tabs
+ * show on the list at full size). It is set like the stamp numerals (§2.7, §4.13): 11 sp in its 20 dp circle, growing
+ * with the font only as far as the circle holds it.
+ */
 @Composable
 private fun MoreCircle(n: Int, size: Dp, modifier: Modifier) {
     val c = PicnicTheme.colors
+    val probe = LocalPieceProbe.current
+    val fontScale = LocalDensity.current.fontScale
+    val sp = minOf(MORE_NUMERAL_SP * fontScale, size.value * 0.55f) / fontScale
     Box(modifier.size(size).decorative(), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {
             drawDashedCircle(c.ballpointSoft, center, this.size.minDimension / 2f - 1.dp.toPx(), 2.dp.toPx(), 3.4.dp.toPx(), 2.6.dp.toPx())
         }
-        Text("+$n", style = PicnicTheme.type.stampNumeral.copy(color = c.ballpointSoft, fontSize = 10.sp, lineHeight = 11.sp), maxLines = 1)
+        Text(
+            "+$n",
+            style = PicnicTheme.type.stampNumeral.copy(color = c.ballpointSoft, fontSize = sp.sp, lineHeight = (sp * 1.15f).sp),
+            maxLines = 1,
+            softWrap = false,
+            onTextLayout = { probe?.text(BOOK_MORE_CIRCLE, it) },
+            modifier = Modifier.wrapContentSize(unbounded = true),
+        )
     }
 }
+
+/** The "+n" stop counters' numeral (the stamp numerals' 11 sp in a 20 dp circle, §2.7). */
+private const val MORE_NUMERAL_SP: Float = 11f
+
+/** Probe keys of the "+n" stop counters' text (the large-text tests). */
+internal const val BOOK_MORE_CIRCLE: String = "bookMoreCircle"
+internal const val COLLAPSED_MORE_TEXT: String = "collapsedMoreText"
 
 /**
  * The date tag (§7.3): lemon pastel, radius 5 9 9 5, 2 dp white border, hs, −2°, a 12 dp sakura heart, the date and, when
@@ -949,17 +985,17 @@ private fun CollapsedStamps(stamps: List<StampUi>, plan: CollapsedDots, probe: P
 }
 
 /**
- * The collapsed strip's "+n" for stops its dots leave out: a 12 dp pill in the undone dots' ink, its numeral at the
- * page's art scale (10 sp at font scale 1.0, like the stamp page's "+n" circle; the book's pages keep their size, §7.4).
- * Decorative: the book's TalkBack line counts every stop.
+ * The collapsed strip's "+n" for stops its dots leave out: a pill in the undone dots' ink round a stamp numeral (11 sp,
+ * like the "+n" circle on the stamp page, §2.7). The numeral grows with the font and the pill with it (at least 12 dp
+ * tall and 18 dp wide), so the count is never shrunk or cut. Decorative: the book's TalkBack line counts every stop.
  */
 @Composable
 private fun MoreDot(n: Int, modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
-    val k = 1f / LocalDensity.current.fontScale
+    val probe = LocalPieceProbe.current
     Box(
         modifier
-            .height(12.dp)
+            .heightIn(min = 12.dp)
             .widthIn(min = 18.dp)
             .decorative()
             .drawBehind {
@@ -977,9 +1013,10 @@ private fun MoreDot(n: Int, modifier: Modifier = Modifier) {
     ) {
         Text(
             "+$n",
-            style = PicnicTheme.type.stampNumeral.copy(color = c.inkSoft, fontSize = (10f * k).sp, lineHeight = (11f * k).sp),
+            style = PicnicTheme.type.stampNumeral.copy(color = c.inkSoft, fontSize = MORE_NUMERAL_SP.sp, lineHeight = 12.sp),
             maxLines = 1,
-            modifier = Modifier.wrapContentHeight(unbounded = true),
+            softWrap = false,
+            onTextLayout = { probe?.text("$COLLAPSED_MORE_TEXT:$n", it) },
         )
     }
 }

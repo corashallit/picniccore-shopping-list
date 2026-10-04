@@ -98,7 +98,8 @@ internal fun TopStack(
     actions: ListActions,
     onMore: () -> Unit,
     onMoreBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
-    onOpenBook: () -> Unit,
+    /** Opens the Trip book sheet at the book's [slot] (§6.6: the page the book shows). */
+    onOpenBook: (slot: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val fontScale = LocalDensity.current.fontScale
@@ -127,7 +128,7 @@ internal fun TopStack(
                             anchors = engine.anchors,
                             dateOnPage = dateOnPage,
                             turnKey = state.bookTurn,
-                            onOpen = onOpenBook,
+                            onOpenAt = onOpenBook,
                             onStampTap = actions.onStampTap,
                             pageNumber = LocalListEggs.current.rolling == null,
                             onNameTag = if (dateOnPage) null else { text -> captionTag = text },
