@@ -15,14 +15,17 @@ import earth.cora.picnic.core.store.Album
 import earth.cora.picnic.core.store.InMemoryAlbumStore
 import earth.cora.picnic.core.store.InMemoryStateStore
 import earth.cora.picnic.icons.IconRepository
+import earth.cora.picnic.platform.DefaultTimeouts
 import earth.cora.picnic.platform.FakeAnnouncer
 import earth.cora.picnic.platform.FakeFeedback
+import earth.cora.picnic.platform.Timeouts
 import earth.cora.picnic.settings.InMemorySettingsRepository
 import earth.cora.picnic.ui.add.AddViewModel
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.ui.eggs.SurpriseEngine
 import earth.cora.picnic.ui.eggs.SurpriseState
+import earth.cora.picnic.ui.theme.LocalTimeouts
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import earth.cora.picnic.ui.common.FakeAssistant
@@ -122,6 +125,8 @@ class ListRig(
     var now: Long = ListFixture.NOW,
     /** TalkBack's ear: the view models, the engine and the toasts all speak into it (one on the test clock de-duplicates). */
     val announcer: FakeAnnouncer = FakeAnnouncer(),
+    /** The phone's timing settings, for the engine and the screen (the app's defaults unless a test sets the phone's). */
+    val timeouts: Timeouts = DefaultTimeouts,
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     val store = InMemoryStateStore(initial)
@@ -136,7 +141,7 @@ class ListRig(
     private var next = 0
     private val newId: () -> String = { "new-${next++}" }
     val aisleSync = AisleSync(store, assistant, ListFixture.catalog.baskets) { now }
-    val engine = MotionChoreographer(feedback, announcer)
+    val engine = MotionChoreographer(feedback, announcer, timeouts)
     val settings = InMemorySettingsRepository(storedToken = "sk-test-0123456789abcdef")
     val vm = ListViewModel(
         store = store,
@@ -187,7 +192,7 @@ class ListRig(
     /** The List destination as the app hosts it. */
     @Composable
     fun Content() {
-        CompositionLocalProvider(LocalAppNav provides nav.nav, LocalAnnouncer provides announcer) {
+        CompositionLocalProvider(LocalAppNav provides nav.nav, LocalAnnouncer provides announcer, LocalTimeouts provides timeouts) {
             ListRoute(vm, addVm, onOpenAisles = { aisles += "aisles" }, onOpenSettings = { settingsOpened += Unit })
         }
     }
