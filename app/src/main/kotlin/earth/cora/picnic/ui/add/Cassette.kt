@@ -54,6 +54,7 @@ import earth.cora.picnic.ui.theme.FaceKind
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.LcdChip
+import earth.cora.picnic.ui.theme.PicnicMotion
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import earth.cora.picnic.ui.theme.LoaderKind
@@ -290,7 +291,7 @@ private val EQ_HEIGHT: Dp = 82.dp
 fun RecDot(size: Dp = 10.dp, modifier: Modifier = Modifier) {
     val reduced = LocalReducedMotion.current
     val t by rememberLoopTime(enabled = !reduced)
-    val on = reduced || (t % 1200L) < 600L
+    val on = reduced || (t % PicnicMotion.recBlinkPeriod) < PicnicMotion.recBlinkPeriod / 2
     Box(
         modifier
             .size(size + 4.dp)

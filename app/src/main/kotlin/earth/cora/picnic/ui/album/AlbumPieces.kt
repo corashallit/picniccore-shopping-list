@@ -281,11 +281,25 @@ internal fun Modifier.vinylSlice(top: Boolean, bottom: Boolean): Modifier {
 /** A group's title on the vinyl ("Produce", "Drawn for you", "Picnic sheet"): Zen Maru 700 13.5 sp, ballpoint. */
 @Composable
 internal fun VinylTitle(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint),
-        modifier = modifier.padding(start = 6.dp, top = 6.dp, bottom = 2.dp).semantics { heading() },
-    )
+    // On a pad patch, never straight on the vinyl's pinstripes (§4.1): the white kiss-cut label in both variants, as
+    // the pink page keeps its own colours in Glow (a navy patch would be a hole in it).
+    val c = PicnicTheme.colors
+    val shape = PicnicTheme.shapes.patch
+    Box(modifier.padding(start = 6.dp, top = 6.dp, bottom = 4.dp)) {
+        Box(
+            Modifier
+                .hardShadow(shape, PicnicTheme.shadows)
+                .clip(shape)
+                .background(c.stickerWhite)
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+        ) {
+            Text(
+                text,
+                style = PicnicTheme.type.label.copy(color = c.ballpoint),
+                modifier = Modifier.semantics { heading() },
+            )
+        }
+    }
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -630,6 +644,8 @@ internal fun BooksJump(count: Int, onClick: () -> Unit, modifier: Modifier = Mod
             onClick = onClick,
             style = PicnicButtonStyle.Text,
             glyph = PicnicGlyph.Expand,
+            // On the binder over the vinyl: on its pad patch, never straight on the pinstripes (§4.1).
+            padPatch = true,
         )
     }
 }

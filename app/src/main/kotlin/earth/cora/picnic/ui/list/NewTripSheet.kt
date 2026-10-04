@@ -85,11 +85,14 @@ fun NewTripSheet(
                     val listBook = BookLayout.widthFor(LocalConfiguration.current.screenWidthDp.toFloat()).dp
                     BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp).decorative(), contentAlignment = Alignment.Center) {
                         val scale = (maxWidth / listBook).coerceAtMost(1f)
-                        StickerBook(
-                            book, BookPresentation.Identity, clock, width = listBook,
-                            modifier = Modifier.drawnSmall(scale).testTag(NewTripTags.BOOK),
-                            readOnly = true,
-                        )
+                        // Its date tag keeps its own size, so the date is never drawn under 13 sp (§2.7).
+                        androidx.compose.runtime.CompositionLocalProvider(earth.cora.picnic.ui.theme.LocalBookDrawnScale provides scale) {
+                            StickerBook(
+                                book, BookPresentation.Identity, clock, width = listBook,
+                                modifier = Modifier.drawnSmall(scale).testTag(NewTripTags.BOOK),
+                                readOnly = true,
+                            )
+                        }
                     }
                 }
                 Text(stringResource(R.string.list_new_trip_body), style = t.body.copy(color = c.ink), modifier = Modifier.fillMaxWidth())

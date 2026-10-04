@@ -242,8 +242,9 @@ class TabLayoutTest {
     }
 
     /**
-     * Item 337 at font scale 2.0 (§4.10, §15): the tab names that cannot fit are cut at a word ("Deli…"), never "Deli & …";
-     * a meta line that would wrap a word a line beside the basket takes the strip's whole width under the tab instead,
+     * Item 337 at font scale 2.0 (§4.10, §15), and item 281: a tab name shrinks to its 1.0 size before it is cut, so the
+     * fixture's names (all whole at 1.0) are whole at 2.0 too; a name that is cut is cut at a word ("Deli…", never "Deli & …").
+     * A meta line that would wrap a word a line beside the basket takes the strip's whole width under the tab instead,
      * the basket on the tab's line, and "in the basket" stays together; no line of a meta holds a lone word.
      */
     @Test
@@ -289,7 +290,7 @@ class TabLayoutTest {
             }
             assertTrue("${s.displayName}: the strip holds its words", compose.boundsOf(ListTags.strip(s.id)).let { it.bottom >= meta.bottom - 0.5f })
         }
-        assertTrue("some names are cut at 2.0 ($cut)", cut > 0)
+        assertEquals("no name is cut at 2.0: each shrinks to its 1.0 size first", 0, cut)
         assertTrue("some strips stack their meta under the basket at 2.0 ($stacked)", stacked > 0)
     }
 

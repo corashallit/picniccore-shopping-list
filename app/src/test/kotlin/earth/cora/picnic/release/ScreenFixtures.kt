@@ -124,7 +124,7 @@ enum class Surface(val third: String?) {
     Pantry(KitFonts.KLEE_ONE),
     Settings(null),
 
-    // §12.2: the About page hints "tap the sun… 7 times?" in Hachi Maru.
+    // §12.2: the About page hints "tap the sun?" in Hachi Maru.
     About(KitFonts.HACHI_MARU),
 
     // The lab shows the practice list (the real List screen, with its doodles) on its page.
