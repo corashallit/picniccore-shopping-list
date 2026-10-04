@@ -102,4 +102,36 @@ class ListUiStateTest {
         val after = ListFixture.ui(ListFixture.state().toggleChecked(ListFixture.LIST_ID, "baking-powder", ListFixture.NOW))
         assertEquals("the next twin takes the lowest free spot", 10, after.row("baking-powder")!!.slot)
     }
+
+    /** Items 71 and 98 (§4.14, egg 11): the season rides on the list itself, so an empty list's add bar wears its tape. */
+    @Test
+    fun seasonWithoutABook() {
+        val ui = ListFixture.ui(ListFixture.empty())
+        assertNull(ui.book)
+        assertEquals(earth.cora.picnic.core.calendar.Season.THANKSGIVING, ui.season)
+        assertEquals(ui.season, ListFixture.ui().book!!.season)
+    }
+
+    /**
+     * Item 315 (§7.1, §7.8): what she writes down after a finished shop stays out of its book: the spots, the stamps,
+     * PERFECT and the Trip book sheet's snapshot keep the shop; the LCD counts the list.
+     */
+    @Test
+    fun theBookKeepsTheShopAfterItsFinale() {
+        val evening = ListFixture.TRIP_START + 6 * ListFixture.HOUR
+        val salt = GroceryItem(id = "salt", name = "Salt", aisleId = "aisle-2-baking", icon = "salt", iconFit = IconFit.EXACT, addedAt = evening)
+        val app = ListFixture.done().addItems(ListFixture.LIST_ID, listOf(salt), evening).first
+        val ui = ListFixture.ui(app, now = evening)
+        val book = ui.book!!
+        assertEquals(24, book.total)
+        assertTrue(book.perfect)
+        assertTrue(book.full)
+        assertTrue(book.stamps.all { it.stamped })
+        assertTrue("no now ring on a finished book", book.stamps.none { it.now })
+        assertEquals(25, ui.lcd.total)
+        assertEquals(24, ui.tripBook!!.total)
+        assertTrue(ui.tripBook!!.perfect)
+        // Baking's strip has Salt to get; its stamp in the book stays stamped.
+        assertEquals(1, ui.sections.first { it.id == "aisle-2-baking" }.toGet)
+    }
 }

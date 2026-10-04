@@ -87,6 +87,11 @@ data class ListUiState(
     val celebration: Boolean = true,
     /** The book as the Trip book sheet shows it (§6.6): a snapshot of the open trip (or of today's empty book). */
     val tripBook: TripBook? = null,
+    /**
+     * The active seasonal sheet (egg 11, with the eggs on), whether or not there is a book to wear it: the add bar's
+     * washi (§4.14) shows it on an empty list too.
+     */
+    val season: Season? = null,
 ) {
     val checked: Int get() = total - remaining
 
@@ -522,6 +527,7 @@ internal fun buildListUiState(
         eggs = eggs,
         bookTurn = bookTurn,
         tripBook = tripBook,
+        season = season,
     )
 }
 

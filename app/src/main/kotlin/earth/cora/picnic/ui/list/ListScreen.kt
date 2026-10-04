@@ -584,10 +584,11 @@ fun ListScreen(
     collapse: AddBarCollapseState? = null,
     /** The docked add bar; [bar] goes on it (the eggs' `addbar` anchor, its words' keep-out, its measured height). */
     dock: @Composable BoxScope.(bar: Modifier) -> Unit = { bar ->
-        // The bar wears the eggs' tape (the season's, the rain's) when the eggs run here, else the season the book shows.
+        // The bar wears the eggs' tape (the season's, the rain's) when the eggs run here, else the list's season (the
+        // same on an empty list, which has no book to show it, §4.14).
         val eggs = LocalListEggs.current
         StaticDock(
-            tape = AddRules.addBarTape(if (eggs.enabled) eggs else SurpriseState(season = state.book?.season)),
+            tape = AddRules.addBarTape(if (eggs.enabled) eggs else SurpriseState(season = state.season)),
             modifier = bar,
             tapeAfterDoodle = eggs.umbrella,
         )
