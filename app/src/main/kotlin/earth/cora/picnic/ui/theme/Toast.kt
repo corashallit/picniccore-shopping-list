@@ -4,6 +4,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -272,14 +275,19 @@ fun StickyNote(
         ) {
             PicnicText(message, style = PicnicTheme.type.toast)
             if (actionLabel != null) {
+                // Pressed, the chip sticker drops onto its shadow in 2 steps like the kit's chips (never a ripple, §0.2,
+                // §4.7); focused, it wears their 2 dp ring.
+                val interaction = remember { MutableInteractionSource() }
+                val pressed by interaction.collectIsPressedAsState()
+                val focused by interaction.collectIsFocusedAsState()
                 Box(
                     Modifier
                         .align(Alignment.End)
                         .minimumInteractiveComponentSize()
-                        .clickable(role = Role.Button, onClick = onAction),
+                        .clickable(interaction, indication = null, role = Role.Button, onClick = onAction),
                     contentAlignment = Alignment.Center,
                 ) {
-                    ChipFace(fill = c.stickerWhite, height = 32.dp, border = 0.dp, horizontal = 12.dp) {
+                    ChipFace(fill = c.stickerWhite, height = 32.dp, border = 0.dp, horizontal = 12.dp, press = rememberPressFraction(pressed), focused = focused) {
                         Glyph(PicnicGlyph.Undo, null, tint = c.ballpoint, size = 16.dp)
                         Text(actionLabel, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
                     }

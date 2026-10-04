@@ -251,8 +251,10 @@ internal fun FoldedStrip(
                 },
                 meta = {
                     // Led by the store-aisle chip when the aisle has one (§4.7, §4.10), its "A3" on the line's baseline;
-                    // decorative, since the strip's one TalkBack line already says "store aisle 3" (§15).
-                    Row(Modifier.padding(start = 3.dp, top = 2.dp)) {
+                    // decorative, since the strip's one TalkBack line already says "store aisle 3" (§15). The chip's
+                    // white border keeps it off the tab, so it needs no extra room above it: the strip stays within a
+                    // couple of dp of its neighbours' height.
+                    Row(Modifier.padding(start = 3.dp, top = if (section.storeAisle != null) 0.dp else 2.dp)) {
                         section.storeAisle?.let { n ->
                             StoreAisleChip(
                                 n,

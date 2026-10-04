@@ -13,6 +13,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -309,13 +310,18 @@ fun OverflowMenu(items: List<MenuItem>, onDismissRequest: () -> Unit, modifier: 
 @Composable
 private fun ColumnScope.MenuRow(item: MenuItem, onDismissRequest: () -> Unit) {
     val c = PicnicTheme.colors
+    // Pressed (or reached by the keyboard), the row shows the kit's highlighter band behind its words, never a ripple
+    // (§0.2, §4.6 text button, §4.24).
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val keyed = showsFocusRing(interaction)
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .then(
                 if (item.enabled) {
-                    Modifier.clickable(role = Role.Button) {
+                    Modifier.clickable(interaction, indication = null, role = Role.Button) {
                         item.onClick()
                         onDismissRequest()
                     }
@@ -327,7 +333,8 @@ private fun ColumnScope.MenuRow(item: MenuItem, onDismissRequest: () -> Unit) {
                 },
             )
             .alpha(if (item.enabled) 1f else 0.5f)
-            .padding(horizontal = 14.dp),
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .highlighterBand(item.enabled && (pressed || keyed), c.pressedBand),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {

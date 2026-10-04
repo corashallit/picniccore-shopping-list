@@ -107,6 +107,7 @@ import earth.cora.picnic.ui.add.AddDock
 import earth.cora.picnic.ui.add.AddEventsEffect
 import earth.cora.picnic.ui.add.AddRules
 import earth.cora.picnic.ui.add.AddSheetHost
+import earth.cora.picnic.ui.common.NoMaterialPress
 import earth.cora.picnic.ui.add.AddViewModel
 import earth.cora.picnic.ui.add.rememberAddFlows
 import earth.cora.picnic.ui.edit.EditItemSheet
@@ -425,7 +426,7 @@ fun ListRoute(
         feedback = vm.feedback,
     )
     // The sheet's state waits in AddViewModel while Settings or My pantry is open: Back returns to the same sheet.
-    AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry)
+    NoMaterialPress { AddSheetHost(addFlows, addState, onOpenSettings = onOpenSettings, onEditPantry = nav.onEditPantry) }
 }
 
 /** The nudge's toast kind. */
@@ -554,10 +555,14 @@ fun ListScreen(
     val indexOfSection = remember { { id: String -> latestEntries.indexOfFirst { it.sectionId == id && (it is Entry.Strip || it is Entry.Header) } } }
     val host: @Composable EggListScope.() -> Unit = {
         CompositionLocalProvider(LocalListEggs provides eggs, LocalListSurprises provides surprises) {
-            ListScreenContent(
-                state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
-                bookCollapsed = screen.scrolledDown || ime || shortWindow,
-            )
+            // No Material default survives (§0.2): anything on the list that falls back on LocalIndication (inside
+            // PicnicTheme that is Material's ripple) shows no ripple here; the kit draws its own pressed states.
+            NoMaterialPress {
+                ListScreenContent(
+                    state, actions, modifier, engine, p, toasts, showLists, screen, lazyState, entries, dockHeight, collapse, dock,
+                    bookCollapsed = screen.scrolledDown || ime || shortWindow,
+                )
+            }
         }
     }
     if (imeVisible != null) {

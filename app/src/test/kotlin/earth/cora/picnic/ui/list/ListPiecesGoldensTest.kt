@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import earth.cora.picnic.core.model.BasketKind
@@ -139,6 +140,32 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
     }) {
         val s = section(midtrip, "aisle-2-baking")
         TrayOf(s.copy(rows = s.rows.takeLast(1)))
+    }
+
+    /** §4.4 (items 58, 287): the keyboard's focus on a row: the 2 dp ink ring 3 dp outside its 48 dp checkbox target. */
+    @Test
+    fun rowFocused() {
+        var input: androidx.compose.ui.input.InputModeManager? = null
+        compose.recordPiece(goldenName("row_focused", variant), variant, pad = 16.dp, before = {
+            runOnIdle { input!!.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard) }
+            onNodeWithTag(ListTags.row("sugar")).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
+        }) {
+            input = androidx.compose.ui.platform.LocalInputModeManager.current
+            TrayOf(section(midtrip, "aisle-2-baking"))
+        }
+    }
+
+    /** §4.4, §15: the keyboard's focus on a folded strip: the same ring 3 dp outside the strip face. */
+    @Test
+    fun stripFocused() {
+        var input: androidx.compose.ui.input.InputModeManager? = null
+        compose.recordPiece(name("strip_focused"), variant, before = {
+            runOnIdle { input!!.requestInputMode(androidx.compose.ui.input.InputMode.Keyboard) }
+            onNodeWithTag(ListTags.strip("bakery")).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.RequestFocus)
+        }) {
+            input = androidx.compose.ui.platform.LocalInputModeManager.current
+            StripsOf(midtrip.sections.filter { it.id != "aisle-2-baking" }.take(3))
+        }
     }
 
     @Test

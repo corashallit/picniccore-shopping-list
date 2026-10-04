@@ -1649,16 +1649,20 @@ fun PicnicSwitch(
     val shape = PicnicTheme.shapes.pill
     val shadows = PicnicTheme.shadows
     val c = PicnicTheme.colors
+    // No ripple (§0.2): the knob's move is the switch's feedback; focus wears the kit's ring round the pill.
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Box(
         modifier
             .minimumInteractiveComponentSize()
-            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .toggleable(value = checked, interactionSource = interaction, indication = null, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
             .alpha(if (enabled) 1f else 0.5f),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
                 .size(width = 40.dp, height = 24.dp)
+                .focusRing(shape, c.ink, focused)
                 .hardShadow(shape, shadows)
                 .clip(shape)
                 .background(c.stickerWhite)
@@ -1708,14 +1712,17 @@ fun KeepSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: M
             }
         }
     }
+    // No ripple (§0.2): the star pressed onto the spot is the switch's feedback; focus wears the kit's ring round the spot.
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
     Box(
         modifier
             .size(48.dp)
-            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
+            .toggleable(value = checked, interactionSource = interaction, indication = null, role = Role.Switch, onValueChange = onCheckedChange)
             .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        StickerSpot(size = 30.dp)
+        StickerSpot(Modifier.focusRing(CircleShape, PicnicTheme.colors.ink, focused), size = 30.dp)
         if (checked) {
             DecorSticker(
                 "star",

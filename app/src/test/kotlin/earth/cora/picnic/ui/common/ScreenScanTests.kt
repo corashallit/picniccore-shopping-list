@@ -161,7 +161,10 @@ class NoMaterialDefaultsTest {
         val call = Regex("""\.(clickable|toggleable|selectable|combinedClickable|triStateToggleable)\(""")
         val offenders = mutableListOf<String>()
         var calls = 0
-        for (file in sources) {
+        // WP8's files, and the kit (ui/theme) and the List screen (ui/list) the list and the sheets are made of (§0.2).
+        val tapSources = (sources + listOf("theme", "list").flatMap { File("src/main/kotlin/earth/cora/picnic/ui/$it").walkTopDown().filter { f -> f.extension == "kt" }.toList() }).distinct()
+        assertTrue("the kit and the list are scanned", tapSources.any { it.name == "AppBar.kt" } && tapSources.any { it.name == "ListRows.kt" })
+        for (file in tapSources) {
             val text = file.readText()
             for (m in call.findAll(text)) {
                 calls++
@@ -189,8 +192,8 @@ class NoMaterialDefaultsTest {
         // The hazard this guards against: PicnicTheme's MaterialTheme provides a ripple.
         assertTrue("PicnicTheme's default indication: $inPicnicTheme", inPicnicTheme !== NoPressIndication)
         assertSame(NoPressIndication, inScreen)
-        // The two sheets WP8 owns open their content under NoMaterialPress too.
-        for (name in listOf("edit/EditItemSheet.kt", "list/ListSwitcherSheet.kt")) {
+        // The two sheets WP8 owns open their content under NoMaterialPress too, and so do the List screen and its Add sheet.
+        for (name in listOf("edit/EditItemSheet.kt", "list/ListSwitcherSheet.kt", "list/ListScreen.kt")) {
             val text = File("src/main/kotlin/earth/cora/picnic/ui/$name").readText()
             assertTrue("$name runs under NoMaterialPress", text.contains("NoMaterialPress {"))
         }
