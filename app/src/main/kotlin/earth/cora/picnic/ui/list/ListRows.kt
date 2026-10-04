@@ -110,6 +110,7 @@ import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.traySlice
 import kotlin.math.abs
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -132,7 +133,18 @@ internal class RowActions(
 )
 
 /** A pop asked for by a commit (§6.2): the sticker pops and the text band flashes, [delayMs] after [generation] changed. */
-data class PopRequest(val generation: Int, val delayMs: Long)
+data class PopRequest(val generation: Int, val delayMs: Long) {
+    /** How long after the commit the pop may still start: its delay, its 400 ms and a little grace for the layout. */
+    val window: Long get() = delayMs + POP_MS + POP_GRACE_MS
+
+    companion object {
+        /** The pop itself (§6.2): the sticker's .9 → 1.1 → 1 and the band's flash. */
+        const val POP_MS: Long = 400
+
+        /** A row laid out a beat after the commit (the tray opening to show it) still pops. */
+        const val POP_GRACE_MS: Long = 600
+    }
+}
 
 /** How far a swipe must go to act (§4.11): 56 dp. */
 internal val SWIPE_THRESHOLD: Dp = 56.dp
@@ -157,6 +169,8 @@ internal fun TrayRow(
     sweepT0: Long? = null,
     ambientClock: MotionClock? = null,
     current: Boolean = true,
+    /** The pop of a generation started (false) or has played (true): the list never plays it again. */
+    onPop: (generation: Int, done: Boolean) -> Unit = { _, _ -> },
 ) {
     val c = PicnicTheme.colors
     val shadows = PicnicTheme.shadows
@@ -233,6 +247,7 @@ internal fun TrayRow(
                 anchors = anchors,
                 actions = actions,
                 pop = pop,
+                onPop = onPop,
                 sweepT0 = sweepT0,
                 ambientClock = ambientClock,
                 modifier = m
@@ -457,6 +472,8 @@ internal fun RowContent(
     actions: RowActions,
     modifier: Modifier = Modifier,
     pop: PopRequest? = null,
+    /** The pop of a generation started (false) or has played (true). */
+    onPop: (generation: Int, done: Boolean) -> Unit = { _, _ -> },
     sweepT0: Long? = null,
     ambientClock: MotionClock? = null,
     /** Egg 7: the row's place in its tray (each sticker twinkles 60 ms after the one before). */
@@ -483,22 +500,36 @@ internal fun RowContent(
     val popScale = remember { Animatable(1f) }
     val flash = remember { Animatable(0f) }
     val probe = LocalPieceProbe.current
+    val popEvents by rememberUpdatedState(onPop)
     LaunchedEffect(pop?.generation) {
         val p = pop ?: return@LaunchedEffect
-        withContext(FixedMotionScale) {
-            if (p.delayMs > 0) kotlinx.coroutines.delay(p.delayMs)
-            if (reduced) {
-                flash.snapTo(1f)
-                flash.animateTo(0f, tween(400))
-            } else {
-                launch {
+        var started = false
+        try {
+            withContext(FixedMotionScale) {
+                if (p.delayMs > 0) kotlinx.coroutines.delay(p.delayMs)
+                started = true
+                popEvents(p.generation, false)
+                if (reduced) {
                     flash.snapTo(1f)
-                    flash.animateTo(0f, tween(400))
+                    flash.animateTo(0f, tween(PopRequest.POP_MS.toInt()))
+                } else {
+                    launch {
+                        flash.snapTo(1f)
+                        flash.animateTo(0f, tween(PopRequest.POP_MS.toInt()))
+                    }
+                    popScale.snapTo(0.9f)
+                    popScale.animateTo(1.1f, tween(160))
+                    popScale.animateTo(1f, tween(240))
                 }
-                popScale.snapTo(0.9f)
-                popScale.animateTo(1.1f, tween(160))
-                popScale.animateTo(1f, tween(240))
             }
+        } finally {
+            // Cut short (the row left the screen), it comes to rest: never a band left half lit.
+            withContext(NonCancellable) {
+                flash.snapTo(0f)
+                popScale.snapTo(1f)
+            }
+            // Played (or cut short once started): handed back, so the row never flashes again when it comes back.
+            if (started) popEvents(p.generation, true)
         }
     }
     Row(

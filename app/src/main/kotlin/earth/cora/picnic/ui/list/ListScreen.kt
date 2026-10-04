@@ -233,9 +233,17 @@ class ListScreenState(
     /** The scroll collapsed the app bar and the book. */
     var scrolledDown by mutableStateOf(false)
 
-    /** Item id -> its pop (a new row or a duplicate, §6.2). */
+    /**
+     * Item id -> its pop (a new row or a duplicate, §6.2). A pop plays once: the row hands it back when it has played
+     * ([popped]), and one whose row was not on screen in time (a folded aisle, a row scrolled away) lapses
+     * ([expirePops]), so no row ever flashes again when it comes back, or for the first time hours later.
+     */
     val pops = mutableStateMapOf<String, PopRequest>()
-    private var popGen = 0
+
+    /** The latest commit's pops (bumped by [pop]); the list lets them lapse [PopRequest.window] ms on. */
+    internal var popGeneration by mutableIntStateOf(0)
+        private set
+    private val popsStarted = HashSet<String>()
 
     /** Her own fold and unfold taps (FoldFocusEffect). */
     val toggles = FoldToggles()
@@ -260,9 +268,27 @@ class ListScreenState(
 
     /** Pops the stickers of a commit's rows, the new ones 80 ms apart (§6.2), the ones already there at once. */
     fun pop(commit: AddCommit) {
-        popGen++
-        commit.added.forEachIndexed { i, item -> pops[item.id] = PopRequest(popGen, commit.popDelayMillis(i)) }
-        commit.alreadyThere.forEach { pops[it.id] = PopRequest(popGen, 0) }
+        val gen = popGeneration + 1
+        commit.added.forEachIndexed { i, item -> pops[item.id] = PopRequest(gen, commit.popDelayMillis(i)) }
+        commit.alreadyThere.forEach { pops[it.id] = PopRequest(gen, 0) }
+        popGeneration = gen
+    }
+
+    /** [itemId]'s pop of [generation] has started to play (it is no longer lapsed by [expirePops]). */
+    internal fun popStarted(itemId: String, generation: Int) {
+        popsStarted += "$itemId:$generation"
+    }
+
+    /** [itemId]'s pop of [generation] has played: it never plays again. */
+    internal fun popped(itemId: String, generation: Int) {
+        popsStarted -= "$itemId:$generation"
+        if (pops[itemId]?.generation == generation) pops.remove(itemId)
+    }
+
+    /** The pops up to [generation] that have not started by now lapse: their rows were not on screen in time. */
+    internal fun expirePops(generation: Int) {
+        val lapsed = pops.filter { (id, p) -> p.generation <= generation && "$id:${p.generation}" !in popsStarted }.keys
+        lapsed.forEach { pops.remove(it) }
     }
 
     internal fun focusOf(sectionId: String): Pair<FocusRequester, FocusRequester> = focus.getOrPut(sectionId) { FocusRequester() to FocusRequester() }
@@ -565,6 +591,15 @@ fun ListScreen(
 ) {
     MotionEngineHost(engine, nextStopCard = state.nextStopCard, celebration = state.celebration, eggs = state.eggs, talkBackOverride = talkBackOverride)
     val p = engine.current.value
+    // A commit's pops play while their rows are on screen; the ones whose rows were not (a folded aisle, a row scrolled
+    // away) lapse once the last would have finished, on the frame clock (§6.2: a pop belongs to the commit's moment).
+    LaunchedEffect(screen.popGeneration) {
+        val gen = screen.popGeneration
+        if (gen == 0) return@LaunchedEffect
+        val window = screen.pops.values.filter { it.generation == gen }.maxOfOrNull { it.window } ?: 0L
+        withContext(FixedMotionScale) { holdOnFrameClock(window) }
+        screen.expirePops(gen)
+    }
     // SYNC holds on the LCD for the LCD-word floor after each refresh, on the frame clock (§6.1, §9).
     LaunchedEffect(screen.sunSpin) {
         if (!screen.syncing) return@LaunchedEffect
@@ -1089,6 +1124,7 @@ private fun AisleList(
                             anchors = anchors,
                             actions = rowActions,
                             pop = screen.pops[e.row.id],
+                            onPop = { generation, done -> if (done) screen.popped(e.row.id, generation) else screen.popStarted(e.row.id, generation) },
                             sweepT0 = beat?.sweepT0.takeIf { beat?.sweepItem == e.row.id },
                             ambientClock = ambient.clock,
                             current = e.s.id == currentId,
