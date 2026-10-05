@@ -4,6 +4,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.platform.LocalDensity
+import earth.cora.picnic.ui.a11y.Keyboard
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onRoot
@@ -214,33 +216,108 @@ class AlbumTest {
         assertTrue(again.state.value.books.none { it.fresh })
     }
 
-    /** Large text (§15): the three tabs always show whole, inside the screen, at font scale 1.3 and 2.0. */
+    /**
+     * Large text (§15; §0.4: wrap, never cut): the three tabs always show whole, inside the screen, at font scale 1.0,
+     * 1.3 and 2.0, whichever of them is selected. Their unclipped bounds count: "Seasonal" cut off at the screen's edge at
+     * 2.0 passed on its clipped bounds. They stay on one row at 1.0 and 1.3; at 2.0 they stand in two tiers, "Groceries"
+     * behind "Picnic" and "Seasonal", the same tiers whichever is selected.
+     */
     @Test
     fun tabsFitAtLargeText() {
         var scale by mutableFloatStateOf(1.3f)
+        var state by mutableStateOf(AlbumSamples.state(AlbumSamples.mockup))
         compose.setContent {
             val base = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(base.density, scale)) {
-                PicnicTheme { AlbumScreen(AlbumSamples.state(AlbumSamples.mockup), AlbumActions()) }
+                PicnicTheme { AlbumScreen(state, AlbumActions()) }
             }
         }
-        for (s in listOf(1f, 1.3f, 2f)) {
+        for (s in listOf(1f, 1.3f, 2f)) for (selected in AlbumTab.entries) {
             scale = s
+            state = AlbumSamples.state(AlbumSamples.mockup, selected)
             compose.waitForIdle()
             val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
             val tabs = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).fetchSemanticsNodes()
             assertEquals(3, tabs.size)
-            tabs.forEach { tab ->
-                val b = tab.boundsInRoot
-                assertTrue("tab ${tab.config.getOrNull(SemanticsProperties.Text)} at $s: $b in $root", b.left >= root.left && b.right <= root.right && b.width > 0f)
+            val bottoms = tabs.associate { tab ->
+                val left = tab.positionInRoot.x
+                val right = left + tab.size.width
+                val name = tab.config.getOrNull(SemanticsProperties.Text)?.joinToString().orEmpty()
+                assertTrue("$name at $s with $selected: $left..$right in $root", left >= root.left && right <= root.right && right > left)
+                name to tab.positionInRoot.y + tab.size.height
+            }
+            val front = bottoms.getValue("Seasonal")
+            assertEquals("Picnic stands on the page's edge at $s with $selected", front, bottoms.getValue("Picnic"), 0.5f)
+            if (s < 2f) {
+                assertEquals("one row at $s with $selected", front, bottoms.getValue("Groceries"), 0.5f)
+            } else {
+                assertTrue("Groceries stands behind at $s with $selected", bottoms.getValue("Groceries") < front - 20f)
             }
             for (label in listOf("Groceries", "Picnic", "Seasonal")) {
                 val node = compose.onNodeWithText(label, useUnmergedTree = true).fetchSemanticsNode()
                 val results = mutableListOf<TextLayoutResult>()
                 node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
-                assertTrue("$label is cut at $s", results.none { it.isCut() })
+                assertTrue("$label is cut at $s with $selected", results.none { it.isCut() })
             }
         }
+    }
+
+    /**
+     * The seasonal cards at large text (§0.4, §15: wrap, never cut): the sheet's name never breaks inside a word and the
+     * "next!" chip is never cut. At 1.3 the chip used to squeeze "Autumn sheet" into "Au / tu"; it now moves under the name.
+     */
+    @Test
+    fun seasonHeadersWrapNeverCut() {
+        var scale by mutableFloatStateOf(1f)
+        compose.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, scale)) {
+                PicnicTheme { AlbumScreen(AlbumSamples.state(AlbumSamples.full, AlbumTab.Seasonal), AlbumActions()) }
+            }
+        }
+        for (s in listOf(1f, 1.3f, 2f)) {
+            scale = s
+            compose.waitForIdle()
+            compose.onNodeWithTag(AlbumTags.LIST).performScrollToKey("season:thanksgiving")
+            compose.waitForIdle()
+            for (text in listOf("Autumn sheet", "Thanksgiving")) {
+                val node = compose.onNodeWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNode()
+                val results = mutableListOf<TextLayoutResult>()
+                node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+                val r = results.single()
+                assertFalse("\"$text\" is cut at $s", r.isCut())
+                val chars = r.layoutInput.text.text
+                for (line in 0 until r.lineCount - 1) {
+                    val end = r.getLineEnd(line)
+                    assertFalse("\"$text\" breaks inside a word at $s", chars[end - 1].isLetterOrDigit() && chars[end].isLetterOrDigit())
+                }
+            }
+        }
+    }
+
+    /** In tiers (font scale 2.0) the keyboard still goes Groceries, Picnic, Seasonal, and Enter picks the focused tab. */
+    @Test
+    fun tieredTabsKeepTheirKeyboardOrder() {
+        val keys = Keyboard(compose)
+        var state by mutableStateOf(AlbumSamples.state(AlbumSamples.mockup))
+        compose.setContent {
+            keys.Capture()
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, 2f)) {
+                PicnicTheme { AlbumScreen(state, AlbumActions(onSelectTab = { state = AlbumSamples.state(AlbumSamples.mockup, it) })) }
+            }
+        }
+        keys.on()
+        val order = mutableListOf<String>()
+        repeat(12) {
+            if (order.size == 3) return@repeat
+            keys.press(Key.Tab)
+            val focused = keys.focused() ?: return@repeat
+            if (focused.config.getOrNull(SemanticsProperties.Role) == Role.Tab) order += focused.config.getOrNull(SemanticsProperties.Text)?.joinToString().orEmpty()
+        }
+        assertEquals(listOf("Groceries", "Picnic", "Seasonal"), order)
+        keys.press(Key.Enter)
+        assertEquals(AlbumTab.Seasonal, state.tab)
     }
 
     @Test

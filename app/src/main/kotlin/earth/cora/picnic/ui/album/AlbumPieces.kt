@@ -56,6 +56,9 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
@@ -82,7 +85,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -90,6 +92,7 @@ import earth.cora.picnic.R
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.ui.common.MagicAppearBox
 import earth.cora.picnic.ui.common.highlighterPress
+import earth.cora.picnic.ui.theme.CHIP_LABEL_LINES
 import earth.cora.picnic.ui.theme.ChipFace
 import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.Families
@@ -109,6 +112,7 @@ import earth.cora.picnic.ui.theme.Stepped
 import earth.cora.picnic.ui.theme.StickerFamily
 import earth.cora.picnic.ui.theme.Twinkle
 import earth.cora.picnic.ui.theme.WashiTape
+import earth.cora.picnic.ui.theme.WholeLabel
 import earth.cora.picnic.ui.theme.drawArt
 import earth.cora.picnic.ui.theme.drawDashedCircle
 import earth.cora.picnic.ui.theme.drawGlint
@@ -160,7 +164,7 @@ object AlbumFaces {
  * Tabs and the vinyl page.
  * ------------------------------------------------------------------------------------------------ */
 
-/** How the album's tabs fit the width: as roomy index tabs, or tighter ones (which scroll sideways if still too wide). */
+/** How the album's tabs fit the width: as roomy index tabs, or tighter ones (on one row, or in tiers when even those are too wide). */
 internal enum class TabFit { Roomy, Compact }
 
 /** A tab's side padding inside its face for [fit]. */
@@ -169,14 +173,24 @@ private fun tabPadding(fit: TabFit, selected: Boolean): Dp = when (fit) {
     TabFit.Compact -> if (selected) 10.dp else 9.dp
 }
 
+/** A tab label's width as the selected tab sets it (DynaPuff, [on]) and as the others do (Zen Maru, [off]). */
+private class LabelWidths(val on: Dp, val off: Dp)
+
 /**
  * The index tabs (§6.10): Groceries · Picnic · Seasonal on sakura, lemon and peach; each a Role.Tab, standing on the
  * vinyl page's top edge. The selected tab reaches [TAB_JOIN] down over the page's white edge, so it opens into the page
- * as a binder tab does; the row reports itself that much shorter, and the album draws it above the page. They stay on
- * one row (§15): when the three no longer fit at their roomy padding (large text) the padding tightens, and when even
- * that is too wide (font scale 1.3 and up on a 360 dp phone) the row scrolls sideways, keeping the selected tab in view.
- * The scrolling row reaches [bleed] past its own width on each side (the screen gutter), so a tab slides off the
- * screen's edge rather than being cut short of it over the binder.
+ * as a binder tab does; the row reports itself that much shorter, and the album draws it above the page. When the three
+ * no longer fit on one row at their roomy padding (large text) the padding tightens. When even that is too wide with
+ * any one of the three selected (font scale 2.0 on a 360 dp phone), the tabs wrap, never cut (§0.4, §15): they stand
+ * in tiers like a set of staggered dividers, the front tier on the page's edge holding as many tabs from the end as fit
+ * ("Picnic", "Seasonal") and the tier behind it the rest ("Groceries"), left-aligned like the row. A tab in a back tier
+ * runs on down behind the front tier to the page, so it never floats and shows between the front tabs; selected, its
+ * face and body are the mid colour and its face is taller. The tiers are worked out from each tab's widest
+ * face (selected or not), so picking another tab never moves a tab to another tier, and the row never turns into tiers
+ * and back as she switches. Keyboard order and TalkBack go Groceries, Picnic, Seasonal in either layout.
+ * The one-row layout reaches [bleed] past its own width on each side (the screen gutter) and scrolls sideways as a
+ * last resort, keeping the selected tab in view, so a tab would slide off the screen's edge rather than be cut short
+ * of it over the binder.
  *
  * [shown] false keeps the row's room and its place in the keyboard's order only: the album's own row stands in, unseen
  * and silent, while the pinned copy above the page is the one she sees and taps (and TalkBack reads). [keys] false
@@ -218,58 +232,212 @@ internal fun AlbumTabs(
             },
     ) {
         val density = LocalDensity.current
-        val labelWidths = remember(labels, selected, density, type) {
+        val labelWidths = remember(labels, density, type) {
             AlbumTab.entries.associateWith { tab ->
-                val style = if (tab == selected) type.smallTitle else type.label
-                with(density) { measurer.measure(labels.getValue(tab), style, maxLines = 1).size.width.toDp() }
+                fun width(style: TextStyle) = with(density) { measurer.measure(labels.getValue(tab), style, maxLines = 1).size.width.toDp() }
+                LabelWidths(on = width(type.smallTitle), off = width(type.label))
             }
         }
         val room = maxWidth - bleed * 2 - TABS_START - TABS_END
-        fun needed(fit: TabFit): Dp = AlbumTab.entries.fold(TAB_GAP * (AlbumTab.entries.size - 1)) { sum, tab ->
-            sum + labelWidths.getValue(tab) + tabPadding(fit, tab == selected) * 2 + TAB_BORDER * 2 + 2.dp
+        fun face(tab: AlbumTab, fit: TabFit, on: Boolean): Dp {
+            val w = labelWidths.getValue(tab)
+            return (if (on) w.on else w.off) + tabPadding(fit, on) * 2 + TAB_BORDER * 2 + 2.dp
         }
-        val fit = if (needed(TabFit.Roomy) <= room) TabFit.Roomy else TabFit.Compact
-        val viewport = constraints.maxWidth
-        val span = spans[selected]
-        var settled by remember { mutableStateOf(false) }
-        LaunchedEffect(selected, span, viewport) {
-            if (span == null) return@LaunchedEffect
-            // In view within the page's width where it can be (past the gutter), the screen's edge where it cannot.
-            val start = with(density) { (bleed + TABS_START).roundToPx() }
-            val end = with(density) { (bleed + TABS_END).roundToPx() }
-            val target = when {
-                span.first - start < scroll.value -> span.first - start
-                span.last + end > scroll.value + viewport -> span.last + end - viewport
-                else -> null
-            }?.coerceIn(0, scroll.maxValue.coerceAtLeast(0))
-            if (target != null && target != scroll.value) {
-                // Where she left it the first time (and under reduced motion) it is simply there; after a tap it slides.
-                if (!settled || reduced) scroll.scrollTo(target) else scroll.animateScrollTo(target)
-            }
-            settled = true
+        fun needed(fit: TabFit, chosen: AlbumTab = selected): Dp = AlbumTab.entries.fold(TAB_GAP * (AlbumTab.entries.size - 1)) { sum, tab ->
+            sum + face(tab, fit, tab == chosen)
         }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(scroll)
-                .padding(start = bleed + TABS_START, end = bleed + TABS_END)
-                .selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(TAB_GAP),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            AlbumTab.entries.forEach { t ->
-                AlbumTabFace(
-                    labels.getValue(t), t, t == selected, fit,
-                    keys = keys,
-                    modifier = Modifier
-                        .onPlaced { c ->
-                            val x = c.positionInParent().x.toInt()
-                            spans[t] = x..(x + c.size.width)
-                        },
-                ) { onSelect(t) }
+        if (AlbumTab.entries.all { needed(TabFit.Compact, it) <= room }) {
+            val fit = if (needed(TabFit.Roomy) <= room) TabFit.Roomy else TabFit.Compact
+            val viewport = constraints.maxWidth
+            val span = spans[selected]
+            var settled by remember { mutableStateOf(false) }
+            LaunchedEffect(selected, span, viewport) {
+                if (span == null) return@LaunchedEffect
+                // In view within the page's width where it can be (past the gutter), the screen's edge where it cannot.
+                val start = with(density) { (bleed + TABS_START).roundToPx() }
+                val end = with(density) { (bleed + TABS_END).roundToPx() }
+                val target = when {
+                    span.first - start < scroll.value -> span.first - start
+                    span.last + end > scroll.value + viewport -> span.last + end - viewport
+                    else -> null
+                }?.coerceIn(0, scroll.maxValue.coerceAtLeast(0))
+                if (target != null && target != scroll.value) {
+                    // Where she left it the first time (and under reduced motion) it is simply there; after a tap it slides.
+                    if (!settled || reduced) scroll.scrollTo(target) else scroll.animateScrollTo(target)
+                }
+                settled = true
             }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scroll)
+                    .padding(start = bleed + TABS_START, end = bleed + TABS_END)
+                    .selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(TAB_GAP),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                AlbumTab.entries.forEach { t ->
+                    AlbumTabFace(
+                        labels.getValue(t), t, t == selected, fit,
+                        keys = keys,
+                        modifier = Modifier
+                            .onPlaced { c ->
+                                val x = c.positionInParent().x.toInt()
+                                spans[t] = x..(x + c.size.width)
+                            },
+                    ) { onSelect(t) }
+                }
+            }
+        } else {
+            // Tiers from each tab's widest face, so the selection never moves a tab; roomy while that takes no more tiers.
+            fun tiersFor(fit: TabFit) = tabTiers(AlbumTab.entries.map { maxOf(face(it, fit, true), face(it, fit, false)) }, room, TAB_GAP)
+            val roomy = tiersFor(TabFit.Roomy)
+            val compact = tiersFor(TabFit.Compact)
+            val fit = if (roomy.size <= compact.size) TabFit.Roomy else TabFit.Compact
+            TabTiers(
+                selected = selected,
+                labels = labels,
+                fit = fit,
+                tiers = if (fit == TabFit.Roomy) roomy else compact,
+                keys = keys,
+                onSelect = onSelect,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = bleed + TABS_START, end = bleed + TABS_END),
+            )
         }
     }
+}
+
+/**
+ * The tabs' tiers, back to front, as runs of indices into [widths]: the front tier (the page's edge) takes as many tabs
+ * from the end as fit in [room], the tier behind it as many of the ones before, and so on, so the tiers keep the tabs'
+ * order read top to bottom and the front tier, on which the others stand, is the fullest. A tab wider than [room] has a
+ * tier to itself.
+ */
+internal fun tabTiers(widths: List<Dp>, room: Dp, gap: Dp): List<IntRange> {
+    val tiers = ArrayDeque<IntRange>()
+    var end = widths.size
+    while (end > 0) {
+        var start = end - 1
+        var used = widths[start]
+        while (start > 0 && used + gap + widths[start - 1] <= room) {
+            start--
+            used += gap + widths[start]
+        }
+        tiers.addFirst(start until end)
+        end = start
+    }
+    return tiers.toList()
+}
+
+/**
+ * The tabs in [tiers] (back to front, from [tabTiers]): each tier's tabs left to right and bottom-aligned on the tier
+ * in front of it, the front tier on the page's edge. Behind the tabs, each back-tier tab's body runs from under its face
+ * down to the page's edge, in its colour (mid when selected) between its white kiss-cut sides with its
+ * hard shadow on the right, so the tier in front stands over it and it shows between those tabs. The faces are placed
+ * in the tabs' order, so keyboard focus goes Groceries, Picnic, Seasonal; TalkBack reads them top to bottom and left to
+ * right, which is the same order.
+ */
+@Composable
+private fun TabTiers(
+    selected: AlbumTab,
+    labels: Map<AlbumTab, String>,
+    fit: TabFit,
+    tiers: List<IntRange>,
+    keys: Boolean,
+    onSelect: (AlbumTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tabs = AlbumTab.entries
+    // Where a selected back tab opens into the page: the stretches of its foot that no front-tier face stands on (px
+    // from the body's left edge), worked out at layout and read when the body draws.
+    var openings by remember { mutableStateOf<List<List<IntRange>>>(emptyList()) }
+    Layout(
+        content = {
+            tabs.forEach { t -> TabBody(AlbumInk.family(t), t == selected, openings = openings.getOrNull(t.ordinal).orEmpty()) }
+            tabs.forEach { t -> AlbumTabFace(labels.getValue(t), t, t == selected, fit, keys = keys) { onSelect(t) } }
+        },
+        modifier = modifier.selectableGroup(),
+    ) { measurables, constraints ->
+        val n = tabs.size
+        val faces = List(n) { measurables[n + it].measure(Constraints()) }
+        val gap = TAB_GAP.roundToPx()
+        val join = TAB_JOIN.roundToPx()
+        val rowHeights = tiers.map { tier -> tier.maxOf { faces[it].height } }
+        val height = rowHeights.sum()
+        val x = IntArray(n)
+        val y = IntArray(n)
+        var top = 0
+        tiers.forEachIndexed { i, tier ->
+            var left = 0
+            for (k in tier) {
+                x[k] = left
+                y[k] = top + rowHeights[i] - faces[k].height
+                left += faces[k].width + gap
+            }
+            top += rowHeights[i]
+        }
+        val front = tiers.last()
+        // A back tab's body: from its face's foot (an unselected face stops TAB_JOIN above its target's bottom) to the
+        // page's edge, TAB_JOIN above the tiers' bottom. Selected, it runs TAB_JOIN further, over the page's white edge,
+        // as the selected tab on a row does, but only where no front tab stands on that edge (between them and past
+        // them); under a front tab the edge stays white.
+        val opens = List(n) { k ->
+            if (k in front || tabs[k] != selected) return@List emptyList()
+            var free = listOf(0 until faces[k].width)
+            for (f in front) {
+                val l = x[f] - x[k]
+                val r = l + faces[f].width
+                free = free.flatMap { span ->
+                    listOfNotNull(
+                        (span.first until minOf(span.last + 1, l)).takeUnless { it.isEmpty() },
+                        (maxOf(span.first, r) until span.last + 1).takeUnless { it.isEmpty() },
+                    )
+                }
+            }
+            free
+        }
+        if (opens != openings) openings = opens
+        val bodies = List(n) { k ->
+            if (k in front) return@List null
+            val from = y[k] + faces[k].height - join
+            val to = height - if (tabs[k] == selected) 0 else join
+            measurables[k].measure(Constraints.fixed(faces[k].width, (to - from).coerceAtLeast(0))) to from
+        }
+        layout(constraints.maxWidth, height) {
+            bodies.forEachIndexed { k, body -> body?.let { (p, from) -> p.place(x[k], from) } }
+            for (k in 0 until n) faces[k].place(x[k], y[k])
+        }
+    }
+}
+
+/**
+ * A back-tier tab's body under the tier in front (see [TabTiers]): its colour between white kiss-cut sides, its hard
+ * shadow on the right. Selected ([on]), its last [TAB_JOIN] lies over the page's white edge and is drawn only in its
+ * [openings] (px from its left edge), where it opens into the page; no shadow falls there.
+ */
+@Composable
+private fun TabBody(family: StickerFamily, on: Boolean, openings: List<IntRange> = emptyList()) {
+    val white = PicnicTheme.colors.stickerWhite
+    val shadows = PicnicTheme.shadows
+    Spacer(
+        Modifier.drawBehind {
+            val border = TAB_BORDER.toPx()
+            val fill = if (on) family.mid else family.pastel
+            val foot = if (on) TAB_JOIN.roundToPx().toFloat() else 0f
+            val body = size.height - foot
+            fun piece(top: Float, bottom: Float) {
+                drawRect(white, topLeft = Offset(0f, top), size = Size(size.width, bottom - top))
+                drawRect(fill, topLeft = Offset(border, top), size = Size(size.width - 2 * border, bottom - top))
+            }
+            clipRect(bottom = body) {
+                drawRect(shadows.color, topLeft = Offset(shadows.hs.x.toPx(), 0f), size = Size(size.width, body))
+                piece(0f, body)
+            }
+            for (o in openings) clipRect(left = o.first.toFloat(), top = body, right = (o.last + 1).toFloat()) { piece(body, size.height) }
+        },
+    )
 }
 
 /**
@@ -921,36 +1089,54 @@ internal fun SeasonCard(card: SeasonCardUi, nextLabel: String?, modifier: Modifi
     Box(modifier.fillMaxWidth().padding(top = 10.dp)) {
         PicnicSurface(Modifier.fillMaxWidth(), color = c.backing) {
             Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 12.dp, top = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        card.sheet.name,
-                        style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint),
-                        modifier = Modifier.weight(1f, fill = false).semantics { heading() },
-                        maxLines = 2,
-                    )
-                    if (nextLabel != null) {
-                        ChipFace(fill = Families.lemon.mid, height = 30.dp, horizontal = 10.dp) {
-                            Text(nextLabel, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
+                SeasonHeader(card.sheet.name, nextLabel)
+                // Three across, each name on one line under its sticker in an 88 dp column; when a name is wider than
+                // that (large text), one sticker per row with its name beside it, wrapping, never cut (§0.4, §15).
+                val caption = PicnicTheme.type.caption
+                val measurer = rememberTextMeasurer()
+                val density = LocalDensity.current
+                val stacked = remember(card.sheet.stickers, caption, density) {
+                    val column = with(density) { SEASON_LABEL_WIDTH.roundToPx() }
+                    card.sheet.stickers.any { s -> measurer.measure(s.label, caption, maxLines = 1, softWrap = false).size.width > column }
+                }
+                if (stacked) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        card.sheet.stickers.forEach { s ->
+                            val desc = if (card.unlocked) s.label else stringResource(R.string.album_season_locked, s.label)
+                            Row(
+                                Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = desc },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Box(Modifier.alpha(if (card.unlocked) 1f else 0.55f)) { SheetStickerArt(s, 40.dp) }
+                                Text(
+                                    s.label,
+                                    style = caption.copy(color = c.ballpoint),
+                                    softWrap = true,
+                                    modifier = Modifier.weight(1f).alpha(if (card.unlocked) 1f else 0.7f).clearAndSetSemantics { },
+                                )
+                            }
                         }
                     }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    card.sheet.stickers.forEach { s ->
-                        val desc = if (card.unlocked) s.label else stringResource(R.string.album_season_locked, s.label)
-                        Column(
-                            Modifier.width(88.dp).semantics(mergeDescendants = true) { contentDescription = desc },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Box(Modifier.alpha(if (card.unlocked) 1f else 0.55f)) { SheetStickerArt(s, 40.dp) }
-                            Text(
-                                s.label,
-                                style = PicnicTheme.type.caption.copy(color = c.ballpoint),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.alpha(if (card.unlocked) 1f else 0.7f).clearAndSetSemantics { },
-                            )
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        card.sheet.stickers.forEach { s ->
+                            val desc = if (card.unlocked) s.label else stringResource(R.string.album_season_locked, s.label)
+                            Column(
+                                Modifier.width(SEASON_LABEL_WIDTH).semantics(mergeDescendants = true) { contentDescription = desc },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Box(Modifier.alpha(if (card.unlocked) 1f else 0.55f)) { SheetStickerArt(s, 40.dp) }
+                                Text(
+                                    s.label,
+                                    style = caption.copy(color = c.ballpoint),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.alpha(if (card.unlocked) 1f else 0.7f).clearAndSetSemantics { },
+                                )
+                            }
                         }
                     }
                 }
@@ -960,6 +1146,58 @@ internal fun SeasonCard(card: SeasonCardUi, nextLabel: String?, modifier: Modifi
         WashiTape(card.sheet.tape, Modifier.align(Alignment.TopEnd).offset(x = (-30).dp, y = (-10).dp), length = 92.dp, height = 18.dp, rotation = -3f)
     }
 }
+
+/**
+ * A seasonal card's sheet name and, for the upcoming sheet, the lemon "next! · Thanksgiving Oct 12" chip beside it. The
+ * name keeps the room the chip leaves; when a word of it would not fit there, or it would take more than two lines (large
+ * text), the chip moves under the name instead, so the name is never broken inside a word or cut (§0.4, §15). The chip's
+ * label wraps onto two lines when even the card's width is too narrow for it.
+ */
+@Composable
+private fun SeasonHeader(name: String, nextLabel: String?) {
+    val c = PicnicTheme.colors
+    val style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint)
+    val measurer = rememberTextMeasurer()
+    Layout(
+        content = {
+            Text(name, style = style, modifier = Modifier.semantics { heading() })
+            if (nextLabel != null) {
+                ChipFace(fill = Families.lemon.mid, height = 30.dp, horizontal = 10.dp) {
+                    WholeLabel(nextLabel, PicnicTheme.type.label.copy(color = c.ballpoint), CHIP_LABEL_LINES)
+                }
+            }
+        },
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val chipMeasurable = measurables.getOrNull(1)
+        if (chipMeasurable == null) {
+            val title = measurables[0].measure(constraints.copy(minWidth = 0))
+            return@Layout layout(title.width, title.height) { title.place(0, 0) }
+        }
+        val gap = 8.dp.roundToPx()
+        val chip = chipMeasurable.measure(Constraints(maxWidth = width))
+        val room = width - chip.width - gap
+        val beside = room > 0 && measurables[0].minIntrinsicWidth(Constraints.Infinity) <= room &&
+            measurer.measure(name, style, constraints = Constraints(maxWidth = room)).lineCount <= 2
+        if (beside) {
+            val title = measurables[0].measure(Constraints(maxWidth = room))
+            val height = maxOf(title.height, chip.height)
+            layout(title.width + gap + chip.width, height) {
+                title.place(0, (height - title.height) / 2)
+                chip.place(title.width + gap, (height - chip.height) / 2)
+            }
+        } else {
+            val title = measurables[0].measure(Constraints(maxWidth = width))
+            layout(width, title.height + gap + chip.height) {
+                title.place(0, 0)
+                chip.place(0, title.height + gap)
+            }
+        }
+    }
+}
+
+/** A seasonal sticker's column when the three stand across the card (its name on one line under it). */
+private val SEASON_LABEL_WIDTH: Dp = 88.dp
 
 /** The back pocket's card (tests). */
 const val BACK_POCKET_TAG: String = "album_back_pocket"
