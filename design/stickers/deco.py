@@ -21,67 +21,69 @@ def face(cx, cy, fam, spread=5.2, s=1.0, blink=False):
 
 
 d('star', 'Star', [F(('path', star_path(24, 25.4, 18.4, 8.8)), 'lemon', 'm', band=.22, ol=2.2)],
-  gloss=[G('M16.6 22.4L20.6 18.6', 2.6), DOT(14.4, 25)])
+  gloss=[G('M16.6 21.8Q21.6 21.4 23.4 16.8', 2.6), DOT(13.5, 22.1, 0.8)])
 d('star4', 'Sparkle', [F(('path', 'M24 5C25.6 18.6 29.4 22.4 43 24C29.4 25.6 25.6 29.4 24 43C22.4 29.4 18.6 25.6 5 24C18.6 22.4 22.4 18.6 24 5Z'), 'sakura', 'm', band=.2)],
-  gloss=[G('M21.2 19.4L22.6 14', 2.2)])
+  gloss=[G('M19.4 22.6Q21 20.4 23.4 19', 2.6), DOT(17.2, 24.2, 0.8)])
 d('heart', 'Heart', [F(('path', heart_path(24, 25, 17)), 'sakura', 'm', band=.22)],
   gloss=[G('M12 20.4Q12.6 15.4 17.6 14.4'), DOT(11.6, 24.6)])
 d('cloud', 'Cloud', [F(('path', 'M11.4 36C5.6 36 4.6 28 9.8 26.4C9 19.6 16.6 15.8 21.2 19.6C23.4 12.8 34 12.6 35.8 20.4C42.4 19.8 45 28.4 39.6 31.6C41.4 35 38.6 36 36.6 36Z'), 'ramune', 'w', band=.24, band_t='p')],
-  gloss=[G('M10.4 30Q10.8 27.4 13 26.8', 2.2), G('M23.4 20Q24.8 16.8 28.2 16.4')])
+  gloss=[])
+# the face sits wholly inside the body's trace, the stripes behind it on the back half, the stinger tucked behind the
+# body, and the gloss and its dot inside the right shoulder (inset 2.6u), clear of the stripes (the head is HEADS['bee'])
 d('bee', 'Bee', [
     F(('ellipse', 18.4, 15.6, 6.4, 8.6, -28), 'ramune', 'w', ol=1.8),
     F(('ellipse', 29.2, 14.4, 6.4, 8.6, 22), 'ramune', 'w', ol=1.8),
-    F(('ellipse', 24, 29, 14.4, 11.4), 'lemon', 'm', band=.2, tex=['M20 16V42', 'M28.4 16V42'], tex_t='#7A4A28', tex_w=3.6),
-    LINE('M38.4 29.4L42.4 30.2', 'cocoa', 2.2),
-    *face(14.6, 28.2, 'lemon', 3.2, .9),
-], gloss=[G('M33.6 21.8Q36.8 23.4 37.8 26.8', 2.2), DOT(38, 30, .8)])
+    LINE('M35.4 28.8L42.4 30.2', 'cocoa', 2.2),
+    F(('ellipse', 24, 29, 14.4, 11.4), 'lemon', 'm', band=.2, tex=['M25.7 16V42', 'M31.3 16V42'], tex_t='#7A4A28', tex_w=2.8),
+    *face(17.5, 28.4, 'lemon', 3.0, .85),
+], gloss=[G('M34.2 24.5Q36 26.9 35.8 29.6', 2.2), DOT(34.6, 32.8, .8)])
 d('ladybug', 'Ladybug', [
     F(('circle', 24, 13.4, 6.4), 'periwinkle', 'tr', ol=0),
     LINE('M21 8.4C19.6 5.6 17.4 5 16 5.8M27 8.4C28.4 5.6 30.6 5 32 5.8', 'periwinkle', 1.6),
     F(('path', 'M24 15.4C33.6 15.4 40.6 21.6 40.6 29.4C40.6 37 33.4 41.6 24 41.6C14.6 41.6 7.4 37 7.4 29.4C7.4 21.6 14.4 15.4 24 15.4Z'), 'strawberry', 'm', band=.2,
       det=['M24 16V41.4']),
     *[F(('circle', x, y, r), 'periwinkle', 'tr', ol=0, cut=False) for x, y, r in [(16.4, 26, 3), (31.6, 26, 3), (18, 34.6, 2.4), (30, 34.6, 2.4)]],
-], gloss=[G('M11.8 27Q12.6 21.6 17.6 19.2'), DOT(11.6, 30.8)])
+], gloss=[G('M13.3 22.5L16 20.5L18.3 19.3', 2.6), DOT(11.1, 25.5, .8)])
 d('ladybugfly', 'Ladybug in flight', [
     F(('ellipse', 11.4, 22.4, 9.6, 5.4, -30), 'ramune', 'w', ol=1.6, det=['M5 26L17 18'], det_t='p', det_w=1.2),
     F(('ellipse', 36.6, 22.4, 9.6, 5.4, 30), 'ramune', 'w', ol=1.6, det=['M43 26L31 18'], det_t='p', det_w=1.2),
     F(('circle', 24, 15.4, 6), 'periwinkle', 'tr', ol=0),
     LINE('M21 10.6C19.6 7.8 17.4 7.2 16 8M27 10.6C28.4 7.8 30.6 7.2 32 8', 'periwinkle', 1.6),
-    F(('path', 'M24 19.6C30.4 20.4 34.6 26 33.4 33.4C32.6 38.4 28.4 41.6 24 40.8Z'), 'strawberry', 'm', band=.2, tf='rotate(14 24 20)'),
-    F(('path', 'M24 19.6C17.6 20.4 13.4 26 14.6 33.4C15.4 38.4 19.6 41.6 24 40.8Z'), 'strawberry', 'm', band=.2, tf='rotate(-14 24 20)'),
-    *[F(('circle', x, y, r), 'periwinkle', 'tr', ol=0, cut=False) for x, y, r in [(19, 28, 2.4), (29, 28, 2.4), (20.6, 35, 2), (27.4, 35, 2)]],
-], gloss=[G('M16.6 27Q16.8 24 19 22.6', 2)])
+    F(('path', 'M24 19.6C30.4 20.4 34.6 26 33.4 33.4C32.6 38.4 28.4 41.6 24 40.8Z'), 'strawberry', 'm', band=.2),
+    F(('path', 'M24 19.6C17.6 20.4 13.4 26 14.6 33.4C15.4 38.4 19.6 41.6 24 40.8Z'), 'strawberry', 'm', band=.2),
+    *[F(('circle', x, y, r), 'periwinkle', 'tr', ol=0, cut=False) for x, y, r in [(19.4, 29.6, 2.4), (28.6, 29.6, 2.4), (20.8, 35.8, 2), (27.2, 35.8, 2)]],
+], gloss=[G('M18.2 26.2Q18.8 24.4 20.6 23.4', 2.2)])
 d('ant', 'Ant with strawberry', [
     F(berry(26, 6.6, 15, 17.4), 'strawberry', 'm', band=.2),
     F(('path', 'M21.6 7.4Q23.6 4 25.6 6.4Q26 2.6 28 4.6Q30 3.4 30.4 7Q28 9.8 21.6 7.4Z'), 'melon', 'm', ol=1.4),
-    LINE('M14 30L18.6 22M20.4 30.4L22.6 22.4', 'cocoa', 1.8),
+    LINE('M14 30L20.4 18.9M20.4 30.4L22.6 22.4', 'cocoa', 1.8),
     LINE('M10.6 41L13.4 35.6M17.4 41.4L18 35.8M24.8 41L22 35.8M30 41.4L26.6 36.4', 'cocoa', 1.8),
+    LINE('M10.6 29.4C9 26.6 7.4 26 6.2 26.6', 'cocoa', 1.6),
     F(('circle', 12.4, 32, 3.6), 'cocoa', 'm'),
     F(('ellipse', 19.4, 34.6, 4.2, 3.4), 'cocoa', 'm'),
     F(('ellipse', 27.4, 36, 5, 4), 'cocoa', 'm', band=.3),
-    LINE('M10.6 29.4C9 26.6 7.4 26 6.2 26.6', 'cocoa', 1.6),
-], gloss=[G('M20.6 13Q21.8 10.4 24.6 10', 2.2), DOT(20.8, 16.4, .8)])
+], gloss=[G('M22.6 16.4Q22.2 12.2 27 11.4', 2.6), DOT(24.3, 18.9, 0.8)])   # one smooth arc (the traced run turned a right angle)
 # r10 (WP2) · the ant parade's other four ants (egg 17, 22 dp): ants always carry food, never stand on it (§4.27)
 d('antcrumb', 'Ant with a cookie', [
     F(('circle', 25.4, 14.6, 8.6), 'cocoa', 'p', band=.24, det=['M21.6 11.4h.1M28.4 12.6h.1M24.6 17.8h.1M29.4 18h.1'], det_t='tr', det_w=2.2),
     LINE('M14 30L18.6 22M20.4 30.4L22.6 22.4', 'cocoa', 1.8),
     LINE('M10.6 41L13.4 35.6M17.4 41.4L18 35.8M24.8 41L22 35.8M30 41.4L26.6 36.4', 'cocoa', 1.8),
+    LINE('M10.6 29.4C9 26.6 7.4 26 6.2 26.6', 'cocoa', 1.6),
     F(('circle', 12.4, 32, 3.6), 'cocoa', 'm'),
     F(('ellipse', 19.4, 34.6, 4.2, 3.4), 'cocoa', 'm'),
     F(('ellipse', 27.4, 36, 5, 4), 'cocoa', 'm', band=.3),
-    LINE('M10.6 29.4C9 26.6 7.4 26 6.2 26.6', 'cocoa', 1.6),
-], gloss=[G('M19.4 13.2Q20.2 9.8 23.6 8.6', 2.2), DOT(19.2, 16.4, .8)])
+], gloss=[G('M23.2 9.1L24.9 8.8L26.5 8.9L28 9.4L29.2 10.1', 2.4), DOT(31.1, 14, 0.8)])
 d('blanket', 'Picnic blanket', [
     F(('path', 'M8 15.4L38.4 9.6Q41 9.2 41.4 11.8L42 35.6Q42 38 39.6 38.4L11.2 42Q8.6 42.4 8.2 39.8Z'), 'strawberry', 'p',
       tex=['M14 8V44', 'M20.6 8V44', 'M27.2 8V44', 'M33.8 8V44', 'M6 18.6L44 12', 'M6 25.6L44 19', 'M6 32.6L44 26', 'M6 39.6L44 33'], tex_w=3.6),
-    F(('path', 'M33.6 37.4L41.6 36.4L41.4 28.6Z'), 'strawberry', 'w', ol=1.8),
+    F(('path', 'M41.8 28.6L42 35.6Q42 38 39.6 38.4L33.6 39.2Z'), 'strawberry', 'w'),
 ], gloss=[G('M11.4 20.6L12 30', 2.4), DOT(12.2, 33.6)])
 d('sun', 'Sun', [
     *[F(('rect', 22.2, 3.6, 3.6, 7, 1.8), 'lemon', 'm', ol=1.6, tf=f'rotate({a} 24 24)') for a in range(0, 360, 45)],
     F(('circle', 24, 24, 11.6), 'lemon', 'm', band=.22),
     *face(24, 23.4, 'lemon', 4.2, .9),
-], gloss=[G('M15.6 21.4Q16.6 17 20.8 15.6', 2.4)])
-d('glowstar', 'Glow star', [F(('path', star_path(24, 25.4, 18.4, 8.8)), '#7FD6A6', '#C9FFDE', ol=1.8)], gloss=[G('M16.6 22.4L20.6 18.6', 2.6)])
+], gloss=[G('M16 20.9L17 19.2L18 17.9L19.2 16.9L20.6 16.1L22 15.7L23.5 15.5L25.2 15.5L26.9 15.9', 2.6), DOT(30, 17.8, 0.8)])
+d('glowstar', 'Glow star', [F(('path', star_path(24, 25.4, 18.4, 8.8)), '#7FD6A6', '#C9FFDE', ol=1.8)], gloss=[G('M16.6 21.8Q21.6 21.4 23.4 16.8', 2.6), DOT(13, 21.9, 0.8)])
 d('moon', 'Full moon', [
     F(('circle', 24, 24, 17), 'lemon', 'p', band=.22),
     F(('circle', 30.4, 19, 3.6), 'lemon', 'm', ol=1.4, cut=False),
@@ -91,7 +93,7 @@ d('moon', 'Full moon', [
 d('flower', 'Flower', [
     *[F(('ellipse', 24, 13.6, 6, 8.4), 'sakura', 'p', band=.25, tf=f'rotate({a} 24 24.4)') for a in range(0, 360, 72)],
     F(('circle', 24, 24.4, 5.6), 'lemon', 'm'),
-], gloss=[G('M20.4 9.8Q21.4 7.6 23.6 7', 2)])
+], gloss=[G('M9 21.3L8.6 20.1L8.7 19.3L9.2 18.6L10.3 18.1L11.3 17.9L12.9 17.9L14.4 18.2L15.9 18.7', 2.6), DOT(11.9, 23.6, 0.8)])
 d('teacup', 'Teacup', [
     TUBE('M34.6 23C42 22.4 42 33.6 34 33', 'mint', 5, 'p'),
     F(('path', 'M8.6 19.4H37.4V27.4C37.4 35.2 31.6 40 23 40C14.4 40 8.6 35.2 8.6 27.4Z'), 'mint', 'p', band=.24),
@@ -102,10 +104,12 @@ d('teacup', 'Teacup', [
 ], gloss=[G('M12.6 24.6Q12.8 30 15.6 33.6', 2.4)])
 d('sandwich', 'Sandwich', [
     F(('path', 'M8.4 34.4L24 9.6Q25.4 7.6 26.8 9.6L40.4 34.4Z'), 'cocoa', 'p', ol=2),
-    F(('path', 'M7.2 34L41.6 34L40 37.2Q38.6 39.6 36 38.6Q33.4 40.8 30.6 38.6Q28 40.8 25.4 38.6Q22.6 40.8 20 38.6Q17.2 40.8 14.6 38.6Q11.4 39.8 9.4 37.6Z'), 'melon', 'm', ol=1.6),
+    # the lettuce lies on the bottom slice, its frill showing under the ham (its tips used to poke past the bread and
+    # pinch the border)
     F(('rect', 7.4, 36.6, 34.2, 5.6, 2.4), 'cocoa', 'p'),
+    F(('path', 'M8.6 34.6L39.4 34.6L39.6 36.8Q38.6 38.6 36 37.8Q33.4 39.4 30.6 37.8Q28 39.4 25.4 37.8Q22.6 39.4 20 37.8Q17.2 39.4 14.6 37.8Q11.6 38.8 8.6 37Z'), 'melon', 'm', ol=1.6),
     F(('rect', 8.4, 32.4, 32, 3.4, 1.6), 'sakura', 'm', ol=1.4),
-], gloss=[G('M15.4 28.6L21.4 18.2', 2.4)])
+], gloss=[G('M16.1 28.9L21.4 20.4', 2.4)])   # parallel to the left crust, 1.4u in from its outline
 d('envelope', 'Envelope', [
     F(('rect', 6.6, 12.6, 34.8, 26, 4), 'strawberry', 'w', band=.22, band_t='p', det=['M8 15L24 27.6L40 15']),
     F(('path', heart_path(24, 27.2, 5.4)), 'strawberry', 'm', ol=1.6),
@@ -123,37 +127,40 @@ d('camera', 'Instant camera', [
     F(('circle', 24, 27.4, 8.2), 'ramune', 'w', ol=2),
     F(('circle', 24, 27.4, 4.4), 'ramune', 'm', ol=1.6, cut=False),
     F(('rect', 32.4, 17, 5.6, 3.6, 1.4), 'lemon', 'p', ol=1.3, cut=False),
-], gloss=[G('M9.6 19.6V25', 2.4), G('M20.2 25.6Q21 23.4 23.2 23', 1.6)])
+], gloss=[G('M9.6 19.6V25', 2.4), DOT(22.8, 26.2, .7)])   # the lens glint sits inside the inner ring
 d('basketdeco', 'Picnic basket', [
     TUBE('M13.6 24C13.6 8 34.4 8 34.4 24', 'cocoa', 4.6, 'p'),
     F(('path', 'M6 24.4H42L39.6 39.4Q39 42 36.4 42H11.6Q9 42 8.4 39.4Z'), 'cocoa', 'p', band=.26, tex=['M5 30H43', 'M5 35.6H43', 'M13 24V42', 'M19 24V42', 'M25 24V42', 'M31 24V42', 'M37 24V42']),
     F(('rect', 4.4, 21.6, 39.2, 5, 2.5), 'cocoa', 'm'),
     F(('path', 'M7 22.4H20L15 31.4Q14 33 13 31.4Z'), 'strawberry', 'p', tex=['M10 20V34', 'M14 20V34', 'M18 20V34', 'M6 25.4H22', 'M6 29.4H22'], tex_w=2),
-], gloss=[G('M8 23.8H11', 2.2)])
+], gloss=[G('M10.4 35.1L9.8 31.2', 2.4), DOT(11.2, 38.6, 0.8)])
 d('scissors', 'Scissors', [
     TUBE('M14 13L33 32', 'periwinkle', 4.2, 'w'), TUBE('M14 35L33 16', 'periwinkle', 4.2, 'w'),
     F(('circle', 12, 13, 5.4), 'periwinkle', 'p', ol=2), F(('circle', 12, 35, 5.4), 'periwinkle', 'p', ol=2),
     F(('circle', 12, 13, 2.2), 'periwinkle', 'w', ol=1.6, cut=False), F(('circle', 12, 35, 2.2), 'periwinkle', 'w', ol=1.6, cut=False),
     F(('circle', 23.6, 24, 1.6), 'periwinkle', 'm', ol=1.2, cut=False),
 ])
+# the tail ring is drawn behind the body, both ends tucked inside it, with a white gap between ring and body; the loaf's
+# left end is tucked behind the head (no doubled outline); the ears are mirror images about the face's axis (x 15.8)
+# with their bases sunk in the head; the gloss and its dot sit inside the right shoulder (inset 3u), clear of the stripes
 d('cat', 'Sleeping tabby', [
-    F(('path', 'M6.6 33C6.6 24.6 13.8 19.6 22 19.6C31.6 19.6 39.4 24.4 39.4 31.6C39.4 37.6 33.4 41.4 23.4 41.4C13.4 41.4 6.6 39 6.6 33Z'), 'peach', 'm', band=.2,
-      tex=['M22 18V26', 'M27.6 18.6V26', 'M33 21V27.4'], tex_t='deep', tex_w=2.4),
-    TUBE('M37.8 36.4C43.6 35.2 43.4 27.4 38.4 27.6', 'peach', 4.6, 'm'),
-    F(('path', 'M8.6 26.6L9.4 18.6Q9.8 17.2 10.8 18.2L15.6 22.4Z'), 'peach', 'm', ol=1.8),
-    F(('path', 'M17.6 21.6L22 16.6Q23 15.6 23.6 17L24.6 23Z'), 'peach', 'm', ol=1.8),
+    TUBE('M34.6 35.6C37.4 38.4 42.1 37.6 42.1 31.8C42.1 27.4 37.8 25.2 34.4 27.4', 'peach', 4.6, 'm'),
+    F(('path', 'M12.8 31.4C14.8 27 18.8 19.6 25 19.6C31.4 19.6 37.6 24.4 37.6 31.6C37.6 37.6 31.4 41.4 23.4 41.4C19.6 41.4 17.4 40.4 16.4 37.6Z'),
+      'peach', 'm', band=.2, tex=['M25.8 18V25.2', 'M29.2 18.2V24.4'], tex_t='deep', tex_w=2.4),
+    F(('path', 'M8.4 27.6L9.4 18.6Q9.8 17.2 10.8 18.2L15.2 24.6Z'), 'peach', 'm', ol=1.8),
+    F(('path', 'M23.2 27.6L22.2 18.6Q21.8 17.2 20.8 18.2L16.4 24.6Z'), 'peach', 'm', ol=1.8),
     F(('ellipse', 15.8, 31.4, 9.6, 7.6), 'peach', 'p', ol=1.8),
     LINE('M10.6 30.4Q12.2 31.8 13.8 30.4M17.8 30.4Q19.4 31.8 21 30.4', 'peach', 1.4, t='tr'),
     F(('ellipse', 9.8, 33.6, 1.6, 1), 'sakura', 'm', ol=0, cut=False),
     F(('ellipse', 22, 33.6, 1.6, 1), 'sakura', 'm', ol=0, cut=False),
     LINE('M15.2 33.6l.6 .6l.6 -.6', 'peach', 1.2, t='tr'),
-], gloss=[G('M27 21.6Q30.6 20.8 33.8 22.4', 2.2), DOT(36, 23.8, .8)])
+], gloss=[G('M31.7 25.2Q33.9 27.2 34.4 29.8', 2.2), DOT(34.3, 33.3, .8)])
 d('pumpkin', 'Pumpkin', [
     F(('rect', 22, 8.4, 4, 7, 1.6), 'melon', 'm', ol=1.6),
     F(('ellipse', 15.4, 28.6, 9.6, 12), 'peach', 'm', band=.22),
     F(('ellipse', 32.6, 28.6, 9.6, 12), 'peach', 'm', band=.22),
     F(('ellipse', 24, 28.6, 9.6, 13), 'peach', 'm', band=.22),
-], gloss=[G('M18.6 22Q19.4 18.4 22.4 17.2', 2.2), G('M8.8 26Q9.2 22.4 11.4 20.4', 2)])
+], gloss=[G('M17.8 25.2Q19 19.6 24.8 18.7', 2.6), DOT(17.4, 28.8, 0.8), G('M36.1 28.4Q35.8 25.6 36.6 23.8', 2.2)])
 d('mapleleaf', 'Maple leaf', [
     F(('path', 'M24 5.6L27.2 12.4L31.6 10.4L30.4 19.4L37 13.6L38.6 17.6L43 17L40.4 23.6L42.6 25.4L33.4 32.4L34.4 35.4L25.4 33.8V42H22.6V33.8L13.6 35.4L14.6 32.4L5.4 25.4L7.6 23.6L5 17L9.4 17.6L11 13.6L17.6 19.4L16.4 10.4L20.8 12.4Z'), 'strawberry', 'm', band=.2),
 ], gloss=[G('M14.8 21.8L18 24.6', 2.2)])
@@ -163,7 +170,7 @@ d('snowflake', 'Snowflake', [
     F(('circle', 24, 24, 5), 'ramune', 'w'),
 ])
 d('cake', 'Birthday cake', [
-    LINE('M24 12.4V7.4', 'lemon', 3.4, t='tr'), F(('path', 'M24 3.6C26 5.8 26 7.6 24 8.6C22 7.6 22 5.8 24 3.6Z'), 'peach', 'm', ol=1.3),
+    LINE('M24 12.4V7.4', 'lemon', 1.6, t='tr'), F(('path', 'M24 3.6C26 5.8 26 7.6 24 8.6C22 7.6 22 5.8 24 3.6Z'), 'peach', 'm', ol=1.3),
     F(('rect', 21.8, 9.6, 4.4, 9, 1.4), 'ramune', 'p', ol=1.4),
     F(('rect', 8.6, 17.6, 30.8, 10, 4), 'sakura', 'p', ol=2, det=['M10 23.6Q13 26.4 16 23.6Q19 26.4 22 23.6Q25 26.4 28 23.6Q31 26.4 34 23.6Q36 25.6 38 23.6'], det_t='w', det_w=1.8),
     F(('rect', 5.6, 26.6, 36.8, 14.4, 4), 'sakura', 'm', band=.26),
@@ -175,14 +182,14 @@ d('ribbon', 'Ribbon bow', [
     F(('path', 'M21.6 25.6L15.6 39.4L19.6 38.4L21.6 41.4L25 26.4Z'), 'sakura', 'm'),
     F(('path', 'M26.4 25.6L32.4 39.4L28.4 38.4L26.4 41.4L23 26.4Z'), 'sakura', 'm'),
     F(('rect', 20.6, 19.6, 6.8, 8, 2.6), 'sakura', 'p'),
-], gloss=[G('M11 18.6Q12 16.2 15 16.4', 2.2)])
+], gloss=[G('M10.3 19.7L10.6 18.6L11.7 18L13.5 18L16 18.8', 2.6), DOT(12.3, 22.6, 0.8), G('M29.5 20L32.2 18.5L34.5 17.7', 2.2)])
 d('redenvelope', 'Red envelope', [
     F(('rect', 11, 6.6, 26, 35, 4), 'strawberry', 'm', band=.2, det=['M11.6 17Q24 24.6 36.4 17']),
     F(('circle', 24, 21.4, 4.6), 'lemon', 'm', ol=1.6),
 ], gloss=[G('M14.6 25V33', 2.4)])
-d('kira', 'Holo sparkle', [F(('path', 'M24 1.6C26 17.6 30.4 22 46.4 24C30.4 26 26 30.4 24 46.4C22 30.4 17.6 26 1.6 24C17.6 22 22 17.6 24 1.6Z'), '#3E4BB0', 'url(#sticker-holo)', ol=2.2),
+d('kira', 'Holo sparkle', [F(('path', 'M24 2.2C26 17.6 30.4 22 45.8 24C30.4 26 26 30.4 24 45.8C22 30.4 17.6 26 2.2 24C17.6 22 22 17.6 24 2.2Z'), '#3E4BB0', 'url(#sticker-holo)', ol=2.2),
                         F(('path', 'M24 12.4C25 20.6 27.4 23 35.6 24C27.4 25 25 27.4 24 35.6C23 27.4 20.6 25 12.4 24C20.6 23 23 20.6 24 12.4Z'), '#FFFFFF', '#FFFFFF', ol=0, cut=False, op='.55')],
-  gloss=[G('M20.6 16.4L22.4 9.6', 2.4)])
+  gloss=[])
 d('petal', 'Sakura petal', [F(('path', 'M8.6 35.6C7.4 22.6 18.4 9.6 36.6 9.2C40.2 9.2 41.8 11.6 40.6 14.6L38.8 16.8L41.4 19.8C38 31.8 24.4 40 12.8 39.8Q9 39.6 8.6 35.6Z'), 'sakura', 'm', band=.24, det=['M14.4 33.2Q22 22 34 15.6'], det_t='p', det_w=1.6)],
   gloss=[G('M12.6 28.6Q14.6 20.6 22 15.6', 2.4)])
 
@@ -210,12 +217,19 @@ def _fluff(cx, cy, r, n=11, bulge=1.2):
 
 d('dustbunny', 'Dust bunny', [               # the empty pantry shelf (§6.13)
     F(('path', _fluff(22.6, 29.6, 10.4)), 'periwinkle', 'p', band=.24,
-      det=['M14.6 22.6Q15.4 21.4 16.8 21.2', 'M28.4 35.8Q29.8 35.4 30.6 34.2'], det_t='m', det_w=1.5),
+      det=['M27.2 34.4Q28.6 34 29.4 32.8'], det_t='m', det_w=1.5),
     F(('circle', 18.4, 28.4, 1.3), 'periwinkle', 'tr', ol=0, cut=False),
     F(('circle', 26.4, 28.4, 1.3), 'periwinkle', 'tr', ol=0, cut=False),
     F(('circle', 39.4, 38.6, 2.4), 'periwinkle', 'p', ol=1.6),
     F(('circle', 41.2, 31.6, 1.6), 'periwinkle', 'p', ol=1.4),
-], gloss=[G('M13.6 26.4Q14 23.4 16.2 21.8', 2.2)])
+], gloss=[G('M15.2 27Q16.8 22.4 21.7 21.9', 2), DOT(15, 31, .8)])
+# hand-placed gloss is held to the same rule as the generated gloss (gloss.clean): cut back where it would cross a trace
+# or a part painted over its shape
+import tidy as _tidy
+from gloss import trim_gloss as _trim_gloss
+for _d in DECO:
+    _tidy.inset_lines(_d)
+    _d.gloss = _trim_gloss(_d.parts, _d.gloss)
 DBY = {i.key: i for i in DECO}
 
 
@@ -237,7 +251,7 @@ PICTO = {
     'sun': ''.join(f'<rect x="10.8" y="1.4" width="2.4" height="4" rx="1.2" transform="rotate({a} 12 12)"/>' for a in range(0, 360, 45)) + '<circle cx="12" cy="12" r="6"/>',
     # r9 · seasonal sheet stamps (egg 11)
     'maple': '<path d="M12 2L13.6 6.4L16.4 5L15.8 9.4L19.6 8L18.6 11L21 12L17.4 15L18 17L13 16.4L12.8 21.6H11.2L11 16.4L6 17L6.6 15L3 12L5.4 11L4.4 8L8.2 9.4L7.6 5L10.4 6.4Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>',
-    'pumpkin': '<path d="M12 7C6 7 3 10 3 14C3 18 6.5 21 12 21C17.5 21 21 18 21 14C21 10 18 7 12 7Z"/><path d="M12 7.6V20.6M7.6 8.6C6 12 6 16 7.6 20.2M16.4 8.6C18 12 18 16 16.4 20.2" stroke="#fff" stroke-width="1.4" fill="none"/><path d="M12 7.6C12 5 13 3.6 15 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+    'pumpkin': '<path d="M12 7C6 7 3 10 3 14C3 18 6.5 21 12 21C17.5 21 21 18 21 14C21 10 18 7 12 7Z"/><path d="M12 8.4V19.8M7.6 9.4C6 12.4 6 15.6 7.6 18.8M16.4 9.4C18 12.4 18 15.6 16.4 18.8" stroke="#fff" stroke-width="1.4" fill="none"/><path d="M12 7.6C12 5 13 3.6 15 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
     'ghost': '<path d="M5 21V11C5 6.6 8 3.6 12 3.6S19 6.6 19 11V21L16.6 19.2L14.3 21L12 19.2L9.7 21L7.4 19.2Z"/><circle cx="9.4" cy="11" r="1.5" fill="#fff"/><circle cx="14.6" cy="11" r="1.5" fill="#fff"/>',
     'snowflake': '<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"><path d="M12 2.6V21.4M3.9 7.3L20.1 16.7M3.9 16.7L20.1 7.3"/><path d="M9.6 4.4L12 6.6L14.4 4.4M9.6 19.6L12 17.4L14.4 19.6"/></g>',
     'envelope': ('<rect x="2.4" y="5.4" width="19.2" height="13.6" rx="2.4"/>'
@@ -286,7 +300,7 @@ TB = {
     'store': ('<path d="M4.4 9.6L6.2 4.6H17.8L19.6 9.6"/><path d="M4.4 9.6Q6.3 12.2 8.2 9.6Q10.1 12.2 12 9.6Q13.9 12.2 15.8 9.6Q17.7 12.2 19.6 9.6"/>'
               '<path d="M5.8 12V19.6H18.2V12"/><path d="M10 19.6V15.4H14V19.6"/>'),
     'lists': '<path d="M9.6 6.6H19.4M9.6 12H19.4M9.6 17.4H19.4"/><path d="M5 6.6h.1M5 12h.1M5 17.4h.1" stroke-width="2.8"/>',
-    'trash': '<path d="M4.6 7H19.4"/><path d="M9.4 7V4.8H14.6V7"/><path d="M6.6 7L7.6 19.4H16.4L17.4 7"/><path d="M10.2 10.6V16M13.8 10.6V16"/>',
+    'trash': '<path d="M4.6 7H19.4"/><path d="M9.4 6V3.6H14.6V6"/><path d="M6.6 7L7.6 19.4H16.4L17.4 7"/><path d="M10.2 10.6V16M13.8 10.6V16"/>',
     'scissors': '<circle cx="6.6" cy="7" r="2.6"/><circle cx="6.6" cy="17" r="2.6"/><path d="M8.8 8.4L19.6 17M8.8 15.6L19.6 7"/>',
     'album': ('<rect x="6" y="3.6" width="13.4" height="16.8" rx="2.4"/><path d="M6 7.4H3.8M6 12H3.8M6 16.6H3.8"/>'
               f'<path d="{heart_path(12.7, 12.2, 3)}"/>'),
@@ -299,8 +313,8 @@ TB = {
                  '<path d="M16.8 8.4h.1"/><path d="M7.8 17.4H16.2"/>'),
     'jar': ('<path d="M7.4 4.2H16.6"/><path d="M8.2 4.2V7.2Q5.4 8.6 5.4 11.6V17.8Q5.4 20 7.6 20H16.4Q18.6 20 18.6 17.8V11.6Q18.6 8.6 15.8 7.2V4.2"/>'
             '<path d="M9 12.2H15V16.4H9Z"/>'),
-    'basket': '<path d="M4.6 10H19.4L17.8 18.4Q17.6 19.6 16.4 19.6H7.6Q6.4 19.6 6.2 18.4Z"/><path d="M8.6 10L11 4.8M15.4 10L13 4.8"/><path d="M9.8 13V16.4M14.2 13V16.4"/>',
-    'torn': '<path d="M6 3.6H14.4L18.4 7.6V16.6L16.4 18.6L14.2 16.8L12 18.8L9.8 16.8L7.8 18.6L6 16.8Z"/><path d="M14.4 3.6V7.6H18.4"/>',
+    'basket': '<path d="M4.6 10H19.4L17.8 18.4Q17.6 19.6 16.4 19.6H7.6Q6.4 19.6 6.2 18.4Z"/><path d="M8.6 10L12 4.6L15.4 10"/><path d="M9.8 13V16.4M14.2 13V16.4"/>',
+    'torn': '<path d="M6 3.6H14.4L18.4 7.6V16.6L16.4 18.6L14.2 16.8L12 18.8L9.8 16.8L7.8 18.6L6 16.8Z"/><path d="M14.4 3.6V7.6H18.4Z" fill="currentColor"/>',
     'paste': '<rect x="5.6" y="5" width="12.8" height="15.4" rx="2.4"/><path d="M9.4 5V3.6H14.6V5Q14.6 6.6 13 6.6H11Q9.4 6.6 9.4 5Z"/><path d="M8.8 11H15.2M8.8 14.4H13"/>',
     'heart': f'<path d="{heart_path(12, 12.6, 8.2)}"/>',
     'star': f'<path d="{star_path(12, 12.9, 9.4, 4.3)}" fill="currentColor"/>',

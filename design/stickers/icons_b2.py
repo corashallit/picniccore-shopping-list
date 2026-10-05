@@ -113,7 +113,7 @@ add('cookies', 'Chocolate chip cookies', [
 PUFFS = [(13.6, 16.4, 4.6), (20.4, 13.2, 5), (27.8, 13.2, 5), (34.4, 16.6, 4.6), (17.4, 9.4, 3.6), (24.4, 7.6, 4), (31, 9.6, 3.6)]
 add('popcorn', 'Microwave popcorn', [
     *[F(('path', blob(x, y, r, r * .9, 7, .14, int(x * 3 + y))), 'lemon', 'w', ol=1.6, band=.3, band_t='p') for x, y, r in PUFFS],
-    F(('path', 'M8.6 18.6H39.4L36 39.2Q35.6 42 32.6 42H15.4Q12.4 42 12 39.2Z'), 'strawberry', 'w', tex=['M15.6 18V42', 'M24 18V42', 'M32.4 18V42'], tex_t='m', tex_w=4.4),
+    F(('path', 'M8.6 18.6H39.4L36 39.2Q35.6 42 32.6 42H15.4Q12.4 42 12 39.2Z'), 'strawberry', 'm', tex=['M16.6 18V42', 'M24.6 18V42', 'M32.6 18V42'], tex_t='w', tex_w=4.4),
     F(('rect', 7, 16.8, 34, 4.6, 2.3), 'strawberry', 'm'),
 ], gloss=[G('M10 15Q10.8 12.4 13 11.6', 2.2), G('M12.6 22.6L13.4 30', 2.2)], qty='3 × 85 g', aisle='snacks')
 
@@ -156,7 +156,7 @@ add('beans', 'Kidney beans', [
 
 # soup: periwinkle tin, peach label, steaming bowl pictogram
 add('soup', 'Chicken noodle soup', [
-    *can('periwinkle', 'peach', top=12.6, lab_y=18, lab_h=18.4),
+    *can('periwinkle', 'peach', top=12.6, lab_y=19.8, lab_h=16.6),
     F(('path', 'M16.4 28.4H31.6C31.6 32.6 28.4 35 24 35C19.6 35 16.4 32.6 16.4 28.4Z'), 'peach', 'w', ol=1.4, cut=False),
     F(('ellipse', 24, 28.4, 7.6, 1.6), 'peach', 'm', ol=1.3, cut=False),
     LINE('M19.6 25.6C18.6 24.4 20.6 23.2 19.6 21.6M24 25.6C23 24.4 25 23.2 24 21.6M28.4 25.6C27.4 24.4 29.4 23.2 28.4 21.6', 'peach', 1.3, cut=False),

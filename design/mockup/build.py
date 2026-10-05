@@ -62,7 +62,7 @@ def defs(mono_keys=()):
     return f'<svg class="sk-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs>{"".join(clips)}{"".join(syms)}</defs></svg>'
 
 
-HEADS = {'cat': (15.8, 31.4, 9.6), 'bee': (14.6, 28.2, 7), 'ladybug': (24, 13.4, 6.4), 'ladybugfly': (24, 15.4, 6), 'ant': (12.4, 32, 3.6)}
+HEADS = {'cat': (15.8, 31.4, 9.6), 'bee': (17.5, 28.4, 7), 'ladybug': (24, 13.4, 6.4), 'ladybugfly': (24, 15.4, 6), 'ant': (12.4, 32, 3.6)}
 
 
 def lint_heads():

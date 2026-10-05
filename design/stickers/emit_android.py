@@ -410,10 +410,46 @@ def part_geom(p, base):
     return stroke_geom(bake(p.s[1], m), p.w * mat_scale(m))
 
 
+def printed_geom(p, base):
+    """everything a part paints (fill with its outline, strokes, detail lines), viewport coordinates"""
+    m = _mul(to_matrix(p.tf), base) if p.tf else base
+    sc = mat_scale(m)
+    geos = []
+    if p.kind == 'fill':
+        g = fill_geom(shape_path(p.s, m))
+        geos.append(g.buffer((p.ol or 0) * sc / 2) if p.ol else g)
+    else:
+        geos.append(stroke_geom(bake(p.s[1], m), p.w * sc))
+    geos += [stroke_geom(bake(d, m), p.det_w * sc) for d in p.det]
+    return unary_union(geos)
+
+
+def _filled(g):
+    polys = [g] if isinstance(g, Polygon) else [x for x in getattr(g, 'geoms', []) if isinstance(x, Polygon)]
+    return unary_union([Polygon(x.exterior) for x in polys]) if polys else Polygon()
+
+
 def silhouette(parts, base, cutx=()):
+    """the union of the die-cut parts, as one filled outline: printed paint that leaves the art (a tea-bag string, a
+    fleck) joins it, its holes are filled, and so is any gap the white border would enclose between separate pieces
+    (the white border is this outline stroked CUT_W wide, so a gap it rings would show the paper behind)."""
     geos = [g for g in (part_geom(p, base) for p in parts) if g is not None and not g.is_empty]
     geos += [fill_geom(shape_path(s, base)) for s in cutx]
-    return unary_union(geos) if geos else Polygon()
+    if not geos:
+        return Polygon()
+    sil = unary_union(geos)
+    r = CUT_W / 2 * mat_scale(base)
+    over = [printed_geom(p, base) for p in parts if not p.cut or p.det]
+    if over:
+        o = unary_union(over)
+        poke = o.difference(sil.buffer(1.05 * mat_scale(base)))
+        if poke.area > .05:
+            sil = unary_union([sil, o.intersection(poke.buffer(1.3 * mat_scale(base)))])
+    sil = _filled(sil)
+    white = sil.buffer(r)
+    if not _filled(white).difference(white).buffer(-.02).is_empty:
+        sil = _filled(unary_union([sil, _filled(white).buffer(-r)]))
+    return sil
 
 
 def cut_prim(parts, base, cutx=()):

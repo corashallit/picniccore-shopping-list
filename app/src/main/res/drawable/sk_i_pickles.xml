@@ -40,11 +40,6 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M17.8 18.8L34.2 18.8"
-        android:strokeColor="#D3F4C5"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"/>
     <path android:pathData="M21.96 31.87C22.18 33.44 22.22 35 22.09 36.4C21.95 37.8 21.63 38.99 21.17 39.85C20.7 40.72 20.11 41.22 19.45 41.31C18.79 41.41 18.09 41.08 17.4 40.38C16.72 39.68 16.09 38.62 15.57 37.31C15.05 36.01 14.66 34.49 14.44 32.93C14.22 31.36 14.18 29.8 14.31 28.4C14.45 27 14.77 25.81 15.23 24.95C15.7 24.08 16.29 23.58 16.95 23.49C17.61 23.39 18.31 23.72 19 24.42C19.68 25.12 20.31 26.18 20.83 27.49C21.35 28.79 21.74 30.31 21.96 31.87Z"
         android:fillColor="#8EDB76"/>
     <group>
@@ -109,13 +104,11 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M14.5 27L14.9 25.9L15.7 24.7L16.9 23.9L19.6 22.6L20.7 21.1L21.1 20.8L22.3 20.6L30.1 20.6"
+    <path android:pathData="M22.2 20.1L29.6 20.1"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.6"
+        android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M15.2 30.7C15.2 30.82 15.17 30.94 15.12 31.05C15.07 31.16 14.99 31.25 14.9 31.33C14.8 31.4 14.7 31.45 14.58 31.48C14.46 31.51 14.34 31.51 14.22 31.48C14.1 31.45 14 31.4 13.9 31.33C13.81 31.25 13.73 31.16 13.68 31.05C13.63 30.94 13.6 30.82 13.6 30.7C13.6 30.58 13.63 30.46 13.68 30.35C13.73 30.24 13.81 30.15 13.9 30.07C14 30 14.1 29.95 14.22 29.92C14.34 29.89 14.46 29.89 14.58 29.92C14.7 29.95 14.8 30 14.9 30.07C14.99 30.15 15.07 30.24 15.12 30.35C15.17 30.46 15.2 30.58 15.2 30.7Z"
-        android:fillColor="#FFFFFF"/>
   </group>
   <group android:name="dominant">
     <clip-path android:pathData="M17.6 17.6L34.4 17.6L34.4 20.4C38.4 21.4 40.6 24.2 40.6 28L40.6 40Q40.6 44 36.6 44L15.4 44Q11.4 44 11.4 40L11.4 28C11.4 24.2 13.6 21.4 17.6 20.4Z"/>

@@ -21,12 +21,12 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M22.4 14.6Q24.6 13.4 26.6 14.4Q28.6 15.4 30.6 14.2"
+    <path android:pathData="M22.4 14.6Q24.6 13.4 26.6 14.4Q28.46 15.33 30.31 14.36"
         android:strokeColor="#E4D6FF"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M21.2 17.6Q23.6 16.4 26 17.4Q28.4 18.4 30.8 17.2"
+    <path android:pathData="M21.2 17.6Q23.6 16.4 26 17.4Q26.53 17.62 27.06 17.73M29.26 17.74Q30.03 17.58 30.8 17.2"
         android:strokeColor="#E4D6FF"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
@@ -65,16 +65,9 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M20.3 28.1L19.7 22.8L19.8 22.2L20.2 21.8L20.8 21.5L21.5 21.5L28.4 21.4"
+    <path android:pathData="M23.7 11.8L24.9 11.5L26.4 11.4L27.8 11.7L29 12.4"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.6"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"/>
-    <path android:pathData="M21.16 31.75C21.16 31.87 21.13 31.99 21.08 32.1C21.03 32.21 20.95 32.3 20.86 32.38C20.76 32.45 20.66 32.5 20.54 32.53C20.42 32.56 20.3 32.56 20.18 32.53C20.06 32.5 19.96 32.45 19.86 32.38C19.77 32.3 19.69 32.21 19.64 32.1C19.59 31.99 19.56 31.87 19.56 31.75C19.56 31.63 19.59 31.51 19.64 31.4C19.69 31.29 19.77 31.2 19.86 31.12C19.96 31.05 20.06 31 20.18 30.97C20.3 30.94 20.42 30.94 20.54 30.97C20.66 31 20.76 31.05 20.86 31.12C20.95 31.2 21.03 31.29 21.08 31.4C21.13 31.51 21.16 31.63 21.16 31.75Z"
-        android:fillColor="#FFFFFF"/>
-    <path android:pathData="M22.4 13.1L23.3 12.2L24.3 11.6L25.7 11.4L27.4 11.5"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.2"
+        android:strokeWidth="2.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>

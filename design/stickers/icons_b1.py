@@ -10,7 +10,7 @@ add('peameal', 'Peameal bacon', [
 # cheese curds: lemon-pastel bag, four lumpy curds, twist tie
 CURDS = [(18.6, 27.6, 4.6, 4, 2), (29.4, 27.2, 4.8, 4.2, 5), (17.4, 35.2, 4.8, 3.8, 9), (28.8, 35.4, 5, 4, 12)]
 add('curds', 'Cheese curds', [
-    F(('path', 'M20.6 14.6L18.6 8.2Q18.4 6.6 20 7L24 8.6L28 7Q29.6 6.6 29.4 8.2L27.4 14.6Z'), 'lemon', 'w', ol=1.8, det=['M22.4 9.4V13.6', 'M25.6 9.4V13.6'], det_t='m', det_w=1.2),
+    F(('path', 'M20.6 14.6L18.6 8.2Q18.4 6.6 20 7L24 8.6L28 7Q29.6 6.6 29.4 8.2L27.4 14.6Z'), 'lemon', 'w', ol=1.8, det=['M22.8 10.6V13.2', 'M25.2 10.6V13.2'], det_t='m', det_w=1.2),
     F(('path', 'M15.6 17.6C11.4 21.6 9.4 29.6 10 36.4Q10.4 42 16 42H32Q37.6 42 38 36.4C38.6 29.6 36.6 21.6 32.4 17.6Z'), 'lemon', 'p', band=.22),
     *[F(('path', blob(x, y, rx, ry, 7, .16, sd)), 'lemon', 'w', ol=1.5, cut=False) for x, y, rx, ry, sd in CURDS],
     F(('rect', 18.4, 13.4, 11.2, 4.4, 2.2), 'lemon', 'm'),
@@ -23,7 +23,7 @@ add('buttertart', 'Butter tarts', [
     F(('ellipse', 18.4, 24.4, 2.1, 1.4, -14), 'cocoa', 'tr', ol=0, cut=False),
     F(('ellipse', 30.2, 23.8, 2.1, 1.4, 12), 'cocoa', 'tr', ol=0, cut=False),
     F(('path', SH), 'peach', 'p', band=.26, det=['M14.6 31V38.4', 'M19.8 31.4V39.4', 'M24 31.4V39.6', 'M28.2 31.4V39.4', 'M33.4 31V38.4'], det_t='m', det_w=1.6),
-    F(('path', 'M25.4 26.6C26.8 26.6 27.2 28.4 27.2 30.6C27.2 32.2 26.4 33 25.4 33C24.4 33 23.6 32.2 23.6 30.6C23.6 28.4 24 26.6 25.4 26.6Z'), 'cocoa', 'm', ol=1.5),
+    F(('ellipse', 24.4, 23, 2.2, 1.5, 4), 'cocoa', 'tr', ol=0, cut=False),
 ], gloss=[G('M12.6 24.6Q16 22.2 21.4 22', 2.2), DOT(24.4, 22), G('M11.6 31.4L12.6 36', 2.2)], qty='6 pack', aisle='bakery')
 
 # 3 L peach basket: cocoa woven punnet, three peach-mid peaches, one leaf
@@ -47,11 +47,11 @@ add('lettuce', 'Green leaf lettuce', [
 ], gloss=[G('M11.4 23.4Q12.6 17.6 17.6 14.2'), DOT(19.8, 12.8)], qty='1 head', aisle='produce')
 
 # cucumber + slice
-CTF = 'translate(21.6 23) rotate(-28)'
+CTF = 'translate(22.2 23) rotate(-28)'
 add('cucumber', 'English cucumber', [
     F(('path', 'M-17 -5.4H15.6C18.4 -5.4 20 -3 20 0C20 3 18.4 5.4 15.6 5.4H-17C-19.4 5.4 -20.6 3 -20.6 0C-20.6 -3 -19.4 -5.4 -17 -5.4Z'), 'melon', 'm', band=.28, tf=CTF,
-      tex=['M-14 -2.4h.1M-6 -2.6h.1M2 -2.4h.1M10 -2.6h.1M-10 1.8h.1M-2 2h.1M6 1.8h.1M14 1.6h.1'], tex_t='p', tex_w=2),
-    F(('rect', -23, -1.8, 3.4, 3.6, 1.2), 'melon', 'tr', ol=0, tf=CTF),
+      tex=['M-14 -.4h.1M-6 -.5h.1M2 -.4h.1M10 -.5h.1M-10 2.6h.1M-2 2.8h.1M6 2.6h.1M14 2.4h.1'], tex_t='p', tex_w=2),   # the speckles sit low enough to leave the gloss a lane along the top
+    F(('rect', -22.4, -1.8, 2.8, 3.6, 1.2), 'melon', 'tr', ol=0, tf=CTF),
     F(('circle', 34, 34.6, 7.4), 'melon', 'm', band=None, ol=2),
     F(('circle', 34, 34.6, 5.4), 'melon', 'p', ol=0, cut=False, tex=[dots_ring(34, 34.6, 2.6, 6, 30)], tex_t='#FFF3A6', tex_w=1.8),
 ], gloss=[G('M-14 -3H-2', 2.4, CTF), DOT(1.6, -3, .9, CTF), G('M29.4 32.6Q30.2 30.6 32.2 30', 1.8)], qty='1 each', aisle='produce')
@@ -92,18 +92,19 @@ KER = ''.join(f'M{fmt(x)} {fmt(y)}h.1' for y in (13.6, 18, 22.4, 26.8, 31.2) for
 add('corn', 'Sweet corn', [
     F(('path', 'M24 6.4C29.4 6.4 31.6 12.4 31.6 20.6C31.6 28 29.6 34 24 34C18.4 34 16.4 28 16.4 20.6C16.4 12.4 18.6 6.4 24 6.4Z'), 'lemon', 'm', ol=2,
       tex=[KER], tex_t='p', tex_w=3.2),
-    F(('path', 'M24 42C17 41.4 10.6 36 9.4 26.4C9.2 24.6 10.8 24.2 11.6 25.6C14.4 31 18.8 33.6 23 33.8Z'), 'melon', 'm', band=.3, det=['M12.6 28.4Q16 34.6 21.6 37'], det_t='p', det_w=1.4),
-    F(('path', 'M24 42C31 41.4 37.4 36 38.6 26.4C38.8 24.6 37.2 24.2 36.4 25.6C33.6 31 29.2 33.6 25 33.8Z'), 'melon', 'm', band=.3, det=['M35.4 28.4Q32 34.6 26.4 37'], det_t='p', det_w=1.4),
+    F(('path', 'M24 42C17 41.4 10.6 36 9.4 26.4C9.2 24.6 10.8 24.2 11.6 25.6C14.4 31 18.8 33.6 23 33.8Z'), 'melon', 'm', band=.3, det=['M15.4 33Q17.8 35.8 21.6 37'], det_t='p', det_w=1.4),
+    F(('path', 'M24 42C31 41.4 37.4 36 38.6 26.4C38.8 24.6 37.2 24.2 36.4 25.6C33.6 31 29.2 33.6 25 33.8Z'), 'melon', 'm', band=.3, det=['M32.6 33Q30.2 35.8 26.4 37'], det_t='p', det_w=1.4),
     F(('path', 'M18.6 33.4C20.4 36.4 22 40.4 24 42C26 40.4 27.6 36.4 29.4 33.4C27.4 35 20.6 35 18.6 33.4Z'), 'melon', 'p', ol=1.6),
 ], gloss=[G('M19.4 19Q19.6 13 22.4 10'), DOT(19.6, 22.6)], qty='3 cobs', aisle='produce')
 
 # mushrooms: two button mushrooms
 add('mushrooms', 'White mushrooms', [
-    F(('path', 'M33.4 30H39.6L40.2 40Q40.2 42 38.2 42H34.8Q32.8 42 32.8 40Z'), 'cocoa', 'w', band=.26, band_t='p'),
-    F(('path', 'M27.4 30.6C27.4 24.4 31.6 21.4 36.4 21.4C41.2 21.4 45 24.4 45 30.6C45 31.8 44 32.2 43 32.2H29.4C28.4 32.2 27.4 31.8 27.4 30.6Z'), 'cocoa', 'p', band=.3, band_t='m'),
-    F(('path', 'M15.4 26.8H24.6L25.6 39.6Q25.6 42 23.2 42H16.8Q14.4 42 14.4 39.6Z'), 'cocoa', 'w', band=.24, band_t='p', det=['M16.6 30.2Q20 31.4 23.4 30.2'], det_w=1.2),
+    # centred on the sticker (it sat 1.2u right, its die-cut 0.4u off the canvas edge)
+    F(('path', 'M33.4 30H39.6L40.2 40Q40.2 42 38.2 42H34.8Q32.8 42 32.8 40Z'), 'cocoa', 'w', band=.26, band_t='p', tf='translate(-1.2 0)'),
+    F(('path', 'M27.4 30.6C27.4 24.4 31.6 21.4 36.4 21.4C41.2 21.4 45 24.4 45 30.6C45 31.8 44 32.2 43 32.2H29.4C28.4 32.2 27.4 31.8 27.4 30.6Z'), 'cocoa', 'p', band=.3, band_t='m', tf='translate(-1.2 0)'),
+    F(('path', 'M15.4 26.8H24.6L25.6 39.6Q25.6 42 23.2 42H16.8Q14.4 42 14.4 39.6Z'), 'cocoa', 'w', band=.24, band_t='p', det=['M16.6 30.2Q20 31.4 23.4 30.2'], det_w=1.2, tf='translate(-1.2 0)'),
     F(('path', 'M5.4 25.6C5.4 15.6 12 10.6 20 10.6C28 10.6 34.6 15.6 34.6 25.6C34.6 27.4 33.4 28.2 31.8 28.2H8.2C6.6 28.2 5.4 27.4 5.4 25.6Z'), 'cocoa', 'p', band=.24, band_t='m',
-      tex=['M13 17.6h.1M24.6 15.6h.1M28.4 21.4h.1'], tex_t='w', tex_w=2.6),
+      tex=['M13 17.6h.1M24.6 15.6h.1M28.4 21.4h.1'], tex_t='w', tex_w=2.6, tf='translate(-1.2 0)'),
 ], gloss=[G('M9.4 21Q10.4 15.6 15.6 13.4'), DOT(18.6, 12.8), G('M30.8 26.4Q31.4 24 33.4 23.2', 1.8)], qty='227 g pack', aisle='produce')
 
 # Bartlett pear
@@ -149,8 +150,8 @@ add('sweetpotato', 'Sweet potatoes', [
 
 # limes: two limes + slice
 add('limes', 'Limes', [
-    F(('ellipse', 30.4, 22.4, 10.6, 8.8, -14), 'melon', 'm', band=.22, det=['M40.4 19.2l1.6 -.6'], det_w=2),
-    F(('ellipse', 17.6, 30.6, 11.4, 9.4, 10), 'melon', 'm', band=.22, det=['M6.6 28.6l-1.6 -.4'], det_w=2),
+    F(('ellipse', 30.4, 22.4, 10.6, 8.8, -14), 'melon', 'm', band=.22), LINE('M40.4 19.2l1.4 -.5', 'melon', 2),
+    F(('ellipse', 17.6, 30.6, 11.4, 9.4, 10), 'melon', 'm', band=.22),
     F(('circle', 35, 35.4, 6.8), 'melon', 'p', ol=2),
     F(('circle', 35, 35.4, 4.8), 'melon', 'p', ol=0, cut=False, det=['M35 31V39.8', 'M31.2 33.2L38.8 37.6', 'M31.2 37.6L38.8 33.2'], det_t='m', det_w=1.4),
 ], gloss=[G('M8.8 28.4Q10.2 24.6 14.2 23.2'), DOT(9.2, 32), G('M23.4 18.4Q25 15.6 28.2 14.6', 2)], qty='bag of 6', aisle='produce')

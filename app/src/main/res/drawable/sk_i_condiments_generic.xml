@@ -83,7 +83,7 @@
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M33.8 30.4Q35 28.2 36.4 30.4Q37.8 32.6 39 30.4"
+    <path android:pathData="M34.41 29.57Q35.35 28.75 36.4 30.4Q37.45 32.05 38.39 31.22"
         android:strokeColor="#FFDA4A"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
@@ -120,14 +120,14 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M11.6 25L11.7 19.6L12 18.4L12.9 17.9L16.9 17.8"
+    <path android:pathData="M11.9 24.1L12 19.8L12.2 18.9L12.8 18.4L13.2 18.2L16.8 18.1"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M12.4 28.73C12.4 28.85 12.37 28.97 12.32 29.08C12.27 29.19 12.19 29.28 12.1 29.36C12 29.43 11.9 29.48 11.78 29.51C11.66 29.54 11.54 29.54 11.42 29.51C11.3 29.48 11.2 29.43 11.1 29.36C11.01 29.28 10.93 29.19 10.88 29.08C10.83 28.97 10.8 28.85 10.8 28.73C10.8 28.61 10.83 28.49 10.88 28.38C10.93 28.27 11.01 28.18 11.1 28.1C11.2 28.03 11.3 27.98 11.42 27.95C11.54 27.92 11.66 27.92 11.78 27.95C11.9 27.98 12 28.03 12.1 28.1C12.19 28.18 12.27 28.27 12.32 28.38C12.37 28.49 12.4 28.61 12.4 28.73Z"
+    <path android:pathData="M20.49 19.26C20.49 19.38 20.46 19.5 20.41 19.61C20.36 19.72 20.28 19.81 20.19 19.89C20.09 19.96 19.99 20.01 19.87 20.04C19.75 20.07 19.63 20.07 19.51 20.04C19.39 20.01 19.29 19.96 19.19 19.89C19.1 19.81 19.02 19.72 18.97 19.61C18.92 19.5 18.89 19.38 18.89 19.26C18.89 19.14 18.92 19.02 18.97 18.91C19.02 18.8 19.1 18.71 19.19 18.63C19.29 18.56 19.39 18.51 19.51 18.48C19.63 18.45 19.75 18.45 19.87 18.48C19.99 18.51 20.09 18.56 20.19 18.63C20.28 18.71 20.36 18.8 20.41 18.91C20.46 19.02 20.49 19.14 20.49 19.26Z"
         android:fillColor="#FFFFFF"/>
-    <path android:pathData="M32.1 23.8L32.2 19.1L32.5 18.2L33.1 17.7L33.6 17.6L37.9 17.5"
+    <path android:pathData="M32.5 22.8L32.6 19.4L32.8 18.7L33.1 18.3L33.6 18.1L34.6 17.9L37.7 17.9"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"

@@ -81,8 +81,8 @@ replace('pastasauce', 'Tomato pasta sauce', [
 
 # baby food: little round pot with a ridged peach lid and the feeding spoon
 replace('babyfood', 'Baby food', [
-    TUBE('M33.4 32.6L41.6 13.6', 'ramune', 2.6, 'p'),
-    F(('ellipse', 41.6, 11.4, 3.4, 4.4, 22), 'ramune', 'p', ol=1.6),
+    TUBE('M32.4 32.6L40.6 13.6', 'ramune', 2.6, 'p'),          # the spoon 1u in, so its shadow stays on the canvas
+    F(('ellipse', 40.6, 11.4, 3.4, 4.4, 22), 'ramune', 'p', ol=1.6),
     F(('path', 'M15 23.4H33Q36.6 23.4 36.8 27C37.2 33 35.4 42 26.4 42H21.6C12.6 42 10.8 33 11.2 27Q11.4 23.4 15 23.4Z'), 'peach', 'p', band=.32, band_t='m'),
     F(('rect', 10.6, 16.4, 26.8, 7.6, 3.8), 'peach', 'm', det=['M14.4 18.6V21.8M18.4 18.6V21.8M22.4 18.6V21.8M26.4 18.6V21.8M30.4 18.6V21.8M34 18.6V21.8'], det_w=1.1),
     F(('path', heart_path(24, 30.4, 3.6)), 'peach', 'w', ol=1.3, cut=False),
@@ -91,7 +91,7 @@ replace('babyfood', 'Baby food', [
 # peameal bacon: front-view roast (1:3 top ellipse) in a stippled cornmeal coat, one cut slice leaning on it
 replace('peameal', 'Peameal bacon', [
     F(cyl(6.6, 30.6, 17.4, 42, 4), 'lemon', 'p', band=.2,
-      tex=['M9.6 22h.1M14 24.8h.1M19 22.4h.1M24 25h.1M28 22.2h.1M11 29h.1M16.4 30.6h.1M21.6 28.6h.1M26.6 30.8h.1M9.6 34.6h.1M14.6 35.6h.1M20 34.2h.1M25 35.4h.1M29 33.6h.1'],
+      tex=['M9.8 23.8h.1M14 25.6h.1M19 23.8h.1M24 25.6h.1M27.6 23.8h.1M11 28.6h.1M16.4 30.2h.1M21.6 28.6h.1M26.4 30.2h.1M9.8 32.2h.1M20 32.2h.1M14.6 36.2h.1M25 36.2h.1'],
       tex_t='deep', tex_w=2),
     F(('ellipse', 18.6, 17.4, 12, 4), 'lemon', 'm', det=['M8.8 17.4h.1M28.4 17.4h.1M12.6 14.8h.1M24.6 14.8h.1M12.6 20h.1M24.6 20h.1'], det_t='deep', det_w=1.8),
     F(('ellipse', 18.6, 17.4, 8.6, 2.6), 'strawberry', 'p', ol=1.4, cut=False),
@@ -107,7 +107,7 @@ def stalk(rot):
         *[F(('path', smooth([(24 + dx - 4.6, 15 + dy), (24 + dx - 3.6, 9.6 + dy), (24 + dx, 7 + dy), (24 + dx + 3.8, 9.8 + dy), (24 + dx + 4.8, 15.2 + dy), (24 + dx, 17 + dy)])),
              'melon', 'm', ol=1.6, tf=tf, det=[f'M{fmt(24 + dx)} 16.4V{fmt(10.6 + dy)}'], det_w=1.2) for dx, dy in [(-3.6, 2.2), (3.6, 2.2), (0, -.6)]],
         F(('path', 'M20.2 16.2H27.8L27 39.4Q26.8 42 24 42Q21.2 42 21 39.4Z'), 'melon', 'p', band=.24, tf=tf,
-          det=['M22.6 18.6L23 38.6', 'M25.4 18.6L25 38.6'], det_t='m', det_w=1.4),
+          det=['M22.7 27L23 38.6', 'M25.4 18.6L25 38.6'], det_t='m', det_w=1.4),
     ]
 
 
@@ -128,8 +128,11 @@ replace('granola', 'Maple granola', [
 # old cheddar: a wedge; lemon-pastel cut face, peach rind on the back (curved) face, no bite
 replace('cheese', 'Old cheddar', [
     F(('path', 'M8.8 38.4L33.2 14.6Q35.4 12.6 37.4 14.4L39.4 16.2Q41.4 18 41.4 21V38.6Q41.4 42 38 42H10.4Q6 42 8.8 38.4Z'), 'peach', 'm', band=.2),
-    F(('path', 'M9.8 39.6L33 16.6Q34.6 15.2 34.8 17.6V41.4H11.2Q8.6 41.4 9.8 39.6Z'), 'lemon', 'p', ol=1.6, cut=False, band=.26, band_t='m',
+    # the cut face meets the rind's own outline (a second outline beside it read doubled); one rind-coloured line parts
+    # it from the curved back
+    F(('path', 'M9.2 39.4L32.6 16.2Q34.6 14.6 34.8 17.6V41H10.6Q7.8 41 9.2 39.4Z'), 'lemon', 'p', ol=0, cut=False, band=.26, band_t='m',
       det=['M24.6 30.6h.1M29.4 26.6h.1M30.2 34.6h.1M19.6 36.4h.1'], det_t='#FFFFFF', det_w=1.8),
+    LINE('M34.8 17.6V41', 'peach', 1.6, t='tr', cut=False),
 ], '400 g block', 'dairy')
 
 # liquid honey: a skep-shaped pot (stacked rounded bands), cocoa lid knob, dipper leaning in

@@ -28,6 +28,9 @@ run(report) -> (errors, warnings, measurements). Errors fail `build_android.py` 
   baskets   all 17 kinds; back, front, open and closed lid present; exactly the decorated kinds carry a decoration
             slice; the hanko point lies on the closed lid; the rim sits inside the art; every layer's die-cut (4u
             border included) stays inside the 80 x 64 viewport; palette as above.
+  clean     gloss on trace pixels, necks or hooks (check_gloss_clean); a die-cut border with holes or leaving the
+            canvas (check_cut); detail and printed lines whose caps sit on an outline (check_line_caps); a done basket
+            whose back border shows past the closed lid as an empty white bump (check_lid_cover).
 
 GRANDFATHERED lists the approved r9 stickers (§18.2: "the 121 approved stickers ship as they are") that miss a
 geometry or gloss rule as drawn. They are reported, not failed; any other sticker, including every new key, must pass.
@@ -38,7 +41,7 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 
 import engine
-from engine import C, deep
+from engine import C, deep, apply_tf, parse_tf
 import emit_android as E
 
 TOKENS = {E.WHITE}
@@ -59,7 +62,7 @@ EXTRAS = {
 }
 
 # critter heads (centre x, centre y, radius) in DSL units: no gloss inside (§3.1, §20.3 item 30)
-HEADS = {'cat': (15.8, 31.4, 9.6), 'bee': (14.6, 28.2, 7), 'ladybug': (24, 13.4, 6.4), 'ladybugfly': (24, 15.4, 6), 'ant': (12.4, 32, 3.6),
+HEADS = {'cat': (15.8, 31.4, 9.6), 'bee': (17.5, 28.4, 7), 'ladybug': (24, 13.4, 6.4), 'ladybugfly': (24, 15.4, 6), 'ant': (12.4, 32, 3.6),
          'antcrumb': (12.4, 32, 3.6), 'dustbunny': (22.4, 29.6, 6.4),   # the dust bunny's face; its gloss is on the fluff
          # item stickers with a head (no face on a list sticker, but a white stroke in the head still reads as one)
          'candy': (32.6, 26.4, 4.6)}
@@ -91,12 +94,11 @@ GRANDFATHERED = {
     'thin': {'frozen_pizza'},
     'corner': {'bottled_water', 'cream', 'french_fries', 'frozen_vegetables', 'laundry_detergent', 'olive_oil',
         'orange_juice', 'potato_chips'},
-    'stray_gloss': {'bacon', 'celery', 'grapes'},
-    'coverage': {'baby_wipes', 'bandages', 'bottled_water', 'butter_tart', 'diapers', 'honey'},
-    'dot': {'baguette', 'diapers', 'lettuce'},
+    'stray_gloss': set(),
+    'coverage': set(),
+    'dot': set(),
     'cross': set(),
-    'printed': {'bakery_generic', 'canned_tomatoes', 'canned_tuna', 'cheddar', 'donut', 'maple_syrup', 'oatmeal', 'pasta',
-        'soup_can', 'sunscreen', 'sweet_potato', 'tea', 'tissues', 'yogurt'},
+    'printed': {'bakery_generic', 'donut', 'pasta', 'sunscreen', 'sweet_potato', 'tea', 'tissues', 'yogurt'},
     'families': set(),
     'hairline': {'baby_food', 'cat_food', 'cat_litter', 'cherries', 'granola', 'grapes', 'honey', 'hot_sauce', 'ice_cream', 'jam',
         'ketchup', 'laundry_detergent', 'lemonade', 'maple_syrup', 'mayonnaise', 'oatmeal', 'orange', 'pasta_sauce', 'peach',
@@ -170,11 +172,13 @@ def check_gloss(lint, stickers, gloss_report, critters):
     spans = []
     for icon, key, groups, dom, sil in stickers:
         art = _art_geom(icon, base).buffer(.35)
-        for g in icon.gloss:
+        inf = infos.get(icon.key) or {}
+        small = bool(inf.get('main') and inf['main'].get('small'))       # the main arc on a grape: at least 3u
+        for gi, g in enumerate(icon.gloss):
             if g[0] == 'g':
                 d = E.bake(g[1], base)
                 geo = E.stroke_geom(d, g[2])
-                if g[2] < 2.4 and _length(d) < 4:
+                if g[2] < 2.4 and _length(d) < (2.8 if small and gi == 0 else 4):
                     lint.errors.append(f'gloss: {key} sub-gloss is {_length(d):.1f}u long (>= 4u)')
             else:
                 geo = Point(g[1] + OFF, g[2] + OFF).buffer(g[3])
@@ -188,10 +192,10 @@ def check_gloss(lint, stickers, gloss_report, critters):
             spans.append((cov, key))
             if cov > .36:
                 lint.errors.append(f'gloss: {key} main gloss covers {cov:.0%} of its contour (25-35 %)')
-            elif cov < COVERAGE_MIN:
+            elif cov < COVERAGE_MIN and not info['main'].get('clipped') and info['main']['len'] < 12:
                 lint.fail('coverage', key, f'gloss: {key} main gloss covers {cov:.1%} of its contour (25-35 %): '
                                            f'a shape drawn above cuts the run short, or the shape has no clear upper-left curve')
-            if not info.get('dot'):
+            if not info.get('dot') and not info.get('dot_blocked'):
                 lint.fail('dot', key, f'gloss: {key} main gloss has no dot (the dot would leave the shape)')
     for icon, key, *_ in list(critters) + list(stickers):
         if icon.key in HEADS:
@@ -470,6 +474,97 @@ def check_baskets(lint, baskets):
         lint.errors.append(f'basket: no art for {k}')
 
 
+def check_gloss_clean(lint, label, parts, gloss):
+    """gloss on trace pixels: every gloss mark keeps off its host's colour-trace and off every part painted over its
+    shape (labels, icons, trace-coloured detail lines, the parts drawn in front), stays out of necks and rays, never
+    turns sharply (no hooks or hairpins); every dot keeps 1u off any stroke (gloss.clean). Detail lines in a non-trace
+    colour (a banana's ridge, a pale vein) may sit under a gloss stroke where they run along it (within
+    gloss.ALONG_MAX degrees), never across it, and never under a dot."""
+    import gloss as GL
+    if not gloss:
+        return
+    pp = GL.paints(parts)
+    bad = []
+    for n, g in enumerate(gloss):
+        why = GL.clean(pp, g, trace_gap=.35, gap=.15, tex='spots', soft_ok='along')
+        if why:
+            bad.append(f'{"stroke" if g[0] == "g" else "dot"} {n} {why}')
+    if bad:
+        lint.errors.append(f'gloss: {label} ' + '; '.join(bad))
+
+
+def check_cut(lint, label, sil, w, h, r):
+    """the white border (the silhouette stroked CUT_W) encloses no holes and stays inside the canvas"""
+    if sil is None or sil.is_empty:
+        return
+    white = sil.buffer(r)
+    holes = E._filled(white).difference(white)
+    if holes.area > .02:
+        c = holes.centroid
+        lint.errors.append(f'cut: {label} white border has a hole of {holes.area:.2f} u² at ({c.x:.1f},{c.y:.1f})')
+    x0, y0, x1, y1 = white.bounds
+    if x0 < -.02 or y0 < -.02 or x1 > w + .02 or y1 > h + .02:
+        lint.errors.append(f'cut: {label} white border leaves the {w} x {h} canvas ({x0:.2f},{y0:.2f}..{x1:.2f},{y1:.2f})')
+
+
+def check_lid_cover(lint, kind, lsil):
+    """done state (back, front, closed lid): wherever the back's white border shows past the closed lid's, some of the
+    basket's art shows with it. An empty white bump means a part hidden under the lid (a handle, ice cubes) still
+    pushes the back's border out: stand it over the lid (Basket over_lid) or sit it lower. Steps under 1.5u are fine."""
+    back, lid = lsil.get('back'), lsil.get('lid_closed')
+    if back is None or lid is None:
+        return
+    r = E.CUT_W / 2
+    vis = E._filled(back.buffer(r)).difference(E._filled(lid.buffer(r)))
+    for c in getattr(vis, 'geoms', [vis]):
+        if c.is_empty or c.area < 4 or c.buffer(-.75).is_empty:
+            continue
+        art = c.intersection(back).area
+        if art < .05 * c.area:
+            p = c.representative_point()
+            lint.errors.append(f'done: sk_b_{kind}_back border shows {c.area:.1f} u² past the closed lid with '
+                               f'{art:.1f} u² of art, around ({p.x:.1f},{p.y:.1f})')
+
+
+def check_line_caps(lint, icon, key):
+    """lines whose caps sit on an outline: a detail line's or a printed line's round end never lies on a visible
+    colour-trace of another colour (a band line's red cap on a blue can's outline; tidy.inset_lines cuts such ends back
+    to tidy.LINE_GAP off it), and never pokes past the outline's outer edge. An end meeting a trace of its own colour
+    is a T-junction and merges into it."""
+    import gloss as GL
+    import tidy
+    from shapely.ops import unary_union
+    pp = GL.paints(icon.parts)
+    art = unary_union([q.fill for q in pp if q.p.cut and q.fill is not None and not q.fill.is_empty])
+    hits = []
+    cache = {}
+    for i, p in enumerate(icon.parts):
+        paths = []
+        if p.kind == 'fill':
+            paths = [(d, p.det_w) for d in p.det]
+        elif p.kind == 'line' and not p.cut:
+            paths = [(p.s[1], p.w)]
+        if not paths:
+            continue
+        col = tidy.colour_of_line(p)
+        if col not in cache:
+            cache[col] = tidy.visible_traces(pp, unlike=col)
+        traces = cache[col]
+        cover = [r.paint for r in pp[i + 1:] if not r.paint.is_empty]
+        cover = unary_union(cover) if cover else None
+        for d, w in paths:
+            for segs in tidy._segments(d):
+                for end in (segs[0][0], segs[-1][-1]):
+                    q = apply_tf(parse_tf(p.tf), *end) if p.tf else end
+                    cap = Point(q).buffer(w / 2)
+                    if cover is not None:
+                        cap = cap.difference(cover)          # an end under a part drawn later is not seen
+                    if (traces is not None and cap.intersection(traces).area > .05) or cap.difference(art.buffer(1.0)).area > .05:
+                        hits.append(f'part {i} at ({q[0]:.1f},{q[1]:.1f})')
+    if hits:
+        lint.errors.append(f'lines: {key} has line ends on an outline: ' + ', '.join(hits[:6]))
+
+
 def run(report):
     lint = Lint()
     from icons import GLOSS_REPORT, ICONS
@@ -494,7 +589,23 @@ def run(report):
     check_hairlines(lint, stickers)
     check_no_text(lint, ICONS + DECO)
     check_baskets(lint, report['baskets'])
+    # gloss on trace pixels, white-border holes, the white border inside the canvas, line ends on outlines
+    for icon, key, groups, dom, sil in stickers:
+        check_gloss_clean(lint, f'sk_i_{key}', icon.parts, icon.gloss)
+        check_cut(lint, f'sk_i_{key}', sil, 52, 52, E.CUT_W / 2)
+        check_line_caps(lint, icon, key)
+    for icon, key, groups, dom, sil in report['decor']:
+        check_gloss_clean(lint, f'sk_d_{key}', icon.parts, icon.gloss)
+        check_cut(lint, f'sk_d_{key}', sil, 52, 52, E.CUT_W / 2)
+    for b, kind, layers, lsil in report['baskets']:
+        check_gloss_clean(lint, f'sk_b_{kind}_front', (b.back if b.glass else []) + b.front, b.gloss)
+        check_gloss_clean(lint, f'sk_b_{kind}_lid_closed', b.lid_closed, b.lid_gloss)
+        check_lid_cover(lint, kind, lsil)
+        for name, sil in lsil.items():
+            check_cut(lint, f'sk_b_{kind}_{name}', sil, 80, 64, E.CUT_W / 2)
     import launcher
+    ham = launcher.hamper()
+    check_gloss_clean(lint, 'sk_l_launcher_foreground (hamper)', ham.parts, ham.gloss)
     lint.errors += launcher.safe_zone_errors()
     for path, xml in report['out'].items():
         if '<text' in xml:

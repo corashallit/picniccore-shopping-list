@@ -61,12 +61,10 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M17 30.8L24 30.8"
+    <path android:pathData="M17.6 31.3L24 31.3"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M27.9 30.8C27.9 30.94 27.87 31.07 27.81 31.19C27.75 31.31 27.67 31.42 27.56 31.5C27.46 31.59 27.33 31.65 27.2 31.68C27.07 31.71 26.93 31.71 26.8 31.68C26.67 31.65 26.54 31.59 26.44 31.5C26.33 31.42 26.25 31.31 26.19 31.19C26.13 31.07 26.1 30.94 26.1 30.8C26.1 30.66 26.13 30.53 26.19 30.41C26.25 30.29 26.33 30.18 26.44 30.1C26.54 30.01 26.67 29.95 26.8 29.92C26.93 29.89 27.07 29.89 27.2 29.92C27.33 29.95 27.46 30.01 27.56 30.1C27.67 30.18 27.75 30.29 27.81 30.41C27.87 30.53 27.9 30.66 27.9 30.8Z"
-        android:fillColor="#FFFFFF"/>
   </group>
 </vector>

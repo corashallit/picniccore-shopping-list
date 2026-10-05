@@ -6,7 +6,7 @@
     android:viewportWidth="80"
     android:viewportHeight="64">
   <group android:name="cut">
-    <path android:pathData="M12.77 31L12 31L17.6 16.4L17.85 15.88L18.31 15.27L18.66 14.97L19.05 14.76L19.71 14.61L20.2 14.62L20.72 14.72L40 20L59.28 14.72L60.05 14.6L60.74 14.68L61.34 14.97L61.85 15.45L62.28 16.13L68 31L67.23 31L67.07 31.35L66.82 31.71L66.33 32.15L65.96 32.37L65.55 32.51L64.9 32.6L15.1 32.6L14.45 32.51L14.04 32.37L13.67 32.15L13.18 31.71L12.93 31.35Z"
+    <path android:pathData="M62.4 16.4L65.25 27.63L65.96 27.83L66.33 28.05L66.67 28.33L67.07 28.85L67.25 29.25L67.36 29.66L67.4 30.1L67.36 30.54L67.25 30.95L67.07 31.35L66.82 31.71L66.33 32.15L65.96 32.37L65.55 32.51L64.9 32.6L15.1 32.6L14.45 32.51L14.04 32.37L13.67 32.15L13.33 31.87L13.05 31.53L12.83 31.16L12.69 30.75L12.6 30.1L12.64 29.66L12.83 29.04L13.05 28.67L13.49 28.18L13.85 27.93L14.25 27.75L14.75 27.63L17.6 16.4L17.85 15.88L18.31 15.27L18.66 14.97L19.26 14.68L19.95 14.6L20.72 14.72L40 20L59.55 14.66L60.05 14.6L60.52 14.63L61.15 14.85L61.52 15.1L61.85 15.45L62.15 15.88Z"
         android:fillColor="#FFFFFF"
         android:fillType="evenOdd"
         android:strokeColor="#FFFFFF"
@@ -15,10 +15,10 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="art">
-    <path android:pathData="M12 31L17.6 16.4Q18.6 14 21 14.8L40 20L59 14.8Q61.4 14 62.4 16.4L68 31Z"
+    <path android:pathData="M14 30.6L17.6 16.4Q18.6 14 21 14.8L40 20L59 14.8Q61.4 14 62.4 16.4L66 30.6Z"
         android:fillColor="#F1DEC9"/>
     <group>
-      <clip-path android:pathData="M12 31L17.6 16.4Q18.6 14 21 14.8L40 20L59 14.8Q61.4 14 62.4 16.4L68 31Z"/>
+      <clip-path android:pathData="M14 30.6L17.6 16.4Q18.6 14 21 14.8L40 20L59 14.8Q61.4 14 62.4 16.4L66 30.6Z"/>
       <path android:pathData="M23 18L23 31"
           android:strokeColor="#CB9C73"
           android:strokeWidth="1.4"
@@ -39,10 +39,10 @@
           android:strokeWidth="1.4"
           android:strokeLineCap="round"
           android:strokeLineJoin="round"/>
-      <path android:pathData="M10 27.6L70 27.6L70 33L10 33Z"
+      <path android:pathData="M12 27.28L68 27.28L68 32.6L12 32.6Z"
           android:fillColor="#CB9C73"/>
     </group>
-    <path android:pathData="M12 31L17.6 16.4Q18.6 14 21 14.8L40 20L59 14.8Q61.4 14 62.4 16.4L68 31Z"
+    <path android:pathData="M14 30.6L17.6 16.4Q18.6 14 21 14.8L40 20L59 14.8Q61.4 14 62.4 16.4L66 30.6Z"
         android:strokeColor="#7A4A28"
         android:strokeWidth="2"
         android:strokeLineCap="round"

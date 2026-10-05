@@ -22,7 +22,7 @@ add('ham', 'Sliced deli meat', [*deli_slice(30.6, 17.4, 10.6), *deli_slice(24.6,
 SAU = 'M-9 -4.2H9C11.4 -4.2 12.6 -2.2 12.6 0C12.6 2.2 11.4 4.2 9 4.2H-9C-11.4 4.2 -12.6 2.2 -12.6 0C-12.6 -2.2 -11.4 -4.2 -9 -4.2Z'
 add('sausages', 'Pork sausages', [
     *[F(('path', SAU), 'peach', 'm', band=.32, tf=f'translate({x} {y}) rotate({r})', det=['M-6 -1.6Q0 -2.8 6 -1.6'], det_t='p', det_w=1.4) for x, y, r in [(16, 17.6, -14), (31.6, 23.4, 12), (18.4, 34, -6)]],
-    LINE('M28.2 15.8l1.6 -1.6', 'peach', 1.6, t='tr'), LINE('M35.6 34.6l1.8 1.4', 'peach', 1.6, t='tr'),
+    LINE('M28.2 15.8l1.6 -1.6', 'peach', 1.6, t='tr'), LINE('M31.2 35.2l1.6 1.2', 'peach', 1.6, t='tr'),
 ], gloss=[G('M-7.6 -1.8H-1', 2.2, 'translate(16 17.6) rotate(-14)'), G('M-7.6 -1.8H-1', 2.2, 'translate(18.4 34) rotate(-6)')], qty='500 g pack', aisle='meat')
 
 # bacon: two wavy strips with white fat stripes
@@ -59,7 +59,7 @@ add('roastchicken', 'Rotisserie chicken', [
 # pizza slice: lemon cheese, golden lemon crust, strawberry pepperoni
 add('pizza', 'Frozen pizza', [
     F(('path', 'M24 42.2C21.6 42.2 6.8 15.4 7.8 13C11.4 9.8 17.4 8.4 24 8.4C30.6 8.4 36.6 9.8 40.2 13C41.2 15.4 26.4 42.2 24 42.2Z'), 'lemon', 'p', band=.18,
-      det=['M14.4 18.6q1 3.4 -.2 5.6', 'M33.6 22q-1.2 3 .2 5'], det_t='m', det_w=1.6),
+      det=['M15 18.4q.9 2.8 -.1 4.6', 'M33 21.6q-1 2.6 .1 4.2'], det_t='m', det_w=1.6),
     F(('path', 'M6.8 12.6C10.6 8 17 6 24 6C31 6 37.4 8 41.2 12.6C41.8 13.4 41.4 14.6 40.4 14.6C36.4 12.2 30.6 11 24 11C17.4 11 11.6 12.2 7.6 14.6C6.6 14.6 6.2 13.4 6.8 12.6Z'), 'lemon', 'm', ol=2),
     *[F(('circle', x, y, r), 'strawberry', 'm', ol=1.4, cut=False) for x, y, r in [(18.4, 17.6, 3.2), (29, 19.6, 3), (23.4, 27.6, 2.8)]],
     F(('path', 'M26.6 33.2C28 33.4 28.2 35.4 27.4 37.6C26.6 39.4 25.4 39.2 25.4 37.6Z'), 'lemon', 'p', ol=1.6),
@@ -112,8 +112,8 @@ add('sourcream', 'Sour cream', [
 # blueberry muffin: periwinkle pleated cup, cocoa dome with periwinkle berries (two families, §3.1)
 add('muffins', 'Blueberry muffins', [
     F(('path', 'M8.4 24.4C8.4 15.4 15 10.6 24 10.6C33 10.6 39.6 15.4 39.6 24.4C39.6 26.6 38 27.4 36.4 27.4H11.6C10 27.4 8.4 26.6 8.4 24.4Z'), 'cocoa', 'p', band=.2,
-      det=['M16 15.6h.1M30.6 15h.1'], det_t='m', det_w=1.8),
-    *[F(('circle', x, y, 2.1), 'periwinkle', 'm', ol=1.3, cut=False) for x, y in [(19.4, 18.2), (27.6, 20.4), (33.4, 17.2), (14.2, 22), (23.4, 13.8)]],
+      det=['M17.6 17.8h.1M30.6 15h.1'], det_t='m', det_w=1.8),
+    *[F(('circle', x, y, 2.1), 'periwinkle', 'm', ol=1.3, cut=False) for x, y in [(20.2, 19.2), (27.6, 20.4), (33.4, 17.2), (16.4, 22.4), (24.4, 15.4)]],
     F(('path', 'M10.6 26.6H37.4L34.8 39.6Q34.4 42 31.8 42H16.2Q13.6 42 13.2 39.6Z'), 'periwinkle', 'p', band=.24, det=['M17 29V39.6', 'M21.4 29V40', 'M26.6 29V40', 'M31 29V39.6'], det_t='m', det_w=1.6),
 ], gloss=[G('M12.4 20Q13.6 15.4 18 13.4'), DOT(21.8, 12.6)], qty='6 pack', aisle='bakery')
 
