@@ -60,7 +60,7 @@ import earth.cora.picnic.R
 import earth.cora.picnic.platform.AreaLookup
 import earth.cora.picnic.settings.Surprise
 import earth.cora.picnic.ui.common.DoneButton
-import earth.cora.picnic.ui.common.accentInk
+import earth.cora.picnic.ui.theme.accentInk
 import earth.cora.picnic.ui.common.HankoTextButton
 import earth.cora.picnic.ui.common.LinkRow
 import earth.cora.picnic.ui.common.MoreMenuButton

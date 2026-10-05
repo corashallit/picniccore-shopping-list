@@ -306,8 +306,10 @@ fun OverflowMenu(
         }
     }
     // A floating layer (a pantry sticker's pop card opens over the light cabinet): it re-roots on the binder's colours,
-    // then lays its own pad card (§2.4.1).
-    OnPaper(null) {
+    // then lays its own pad card (§2.4.1). It names the binder as its paper rather than standing on it, so in Glow the
+    // navy card keeps its white kiss-cut edge: a menu that opens over a navy card (the pantry's text card) never runs
+    // into it. Day's card has the edge anyway.
+    OnPaper(colorsFor(PicnicTheme.variant).binder) {
         PicnicSurface(
             modifier
                 .width(width)

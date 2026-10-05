@@ -1787,7 +1787,7 @@ private fun FieldUnderline(focused: Boolean, error: Boolean, enabled: Boolean) {
     val c = PicnicTheme.colors
     val color = when {
         error -> c.hanko
-        focused -> if (c.isDark) Families.strawberry.mid else Families.strawberry.trace
+        focused -> accentInk(Families.strawberry)
         else -> c.inkSoft
     }
     val thickness = if (focused || error) 3.dp else 2.dp

@@ -19,6 +19,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Paint
@@ -221,18 +224,32 @@ fun stepText(step: ThinkingStep): String = when (step) {
         if (step.aisles > 0) pluralStringResource(R.plurals.add_step_sorted, step.aisles, step.aisles) else stringResource(R.string.add_step_checked)
 }
 
-/** A skipped row's sticker (§4.17): 45 % with 60 % desaturation (a colour matrix on one layer; nothing is blurred). */
-fun Modifier.skippedSticker(): Modifier = drawWithContent {
-    val paint = Paint().apply {
-        colorFilter = Desaturate60
-        alpha = 0.45f
-    }
+/**
+ * A skipped row's sticker (§4.17): 45 % with 60 % desaturation (a colour matrix on one layer; nothing is blurred). On
+ * dark paper, pass [recede] (Glow's disabled face): a sticker faded into the navy page goes muddy (a plum-brown blob
+ * with a grey rim), so there it turns grey at full strength and takes [recede] at 55 % over itself instead, a flat
+ * lavender-grey cut-out with a pale edge, like Glow's disabled round sticker (§4.6).
+ */
+fun Modifier.skippedSticker(recede: Color? = null): Modifier = drawWithContent {
     val pad = 8.dp.toPx()
+    val bounds = Rect(Offset(-pad, -pad), Size(size.width + pad * 2, size.height + pad * 2))
     drawIntoCanvas { canvas ->
-        canvas.saveLayer(Rect(Offset(-pad, -pad), androidx.compose.ui.geometry.Size(size.width + pad * 2, size.height + pad * 2)), paint)
-        drawContent()
-        canvas.restore()
+        if (recede == null) {
+            canvas.saveLayer(bounds, Paint().apply { colorFilter = Desaturate60; alpha = 0.45f })
+            drawContent()
+            canvas.restore()
+        } else {
+            // The grey sticker on a plain layer, then the tint over its own pixels only (outside the grey layer, so the
+            // tint keeps its colour).
+            canvas.saveLayer(bounds, Paint())
+            canvas.saveLayer(bounds, Paint().apply { colorFilter = Greyscale })
+            drawContent()
+            canvas.restore()
+            drawRect(recede.copy(alpha = 0.55f), topLeft = bounds.topLeft, size = bounds.size, blendMode = BlendMode.SrcAtop)
+            canvas.restore()
+        }
     }
 }
 
 private val Desaturate60: ColorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.4f) })
+private val Greyscale: ColorFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })

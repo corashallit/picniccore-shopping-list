@@ -18,12 +18,10 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.ui.theme.Families
-import earth.cora.picnic.ui.theme.StickerFamily
 import earth.cora.picnic.ui.theme.drawDashedPath
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -120,10 +118,3 @@ fun DashedAddSpot(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
         Text(text, style = PicnicTheme.type.label.copy(color = ink, fontSize = 15.sp))
     }
 }
-
-/**
- * A family's ink for a decorative line glyph on a page: the trace on the Day pad, the mid on the Glow page (where the
- * traces fall to 1.7-2.8 : 1 and the mids reach 5-10 : 1, as the stamp pictograms do, §4.13).
- */
-@Composable
-fun accentInk(family: StickerFamily): Color = if (PicnicTheme.colors.isDark) family.mid else family.trace

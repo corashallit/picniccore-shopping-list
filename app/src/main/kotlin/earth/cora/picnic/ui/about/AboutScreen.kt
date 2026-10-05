@@ -35,7 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.common.LinkRow
-import earth.cora.picnic.ui.common.accentInk
+import earth.cora.picnic.ui.theme.accentInk
 import earth.cora.picnic.ui.common.highlighterPress
 import earth.cora.picnic.ui.common.PadCard
 import earth.cora.picnic.ui.common.RowRule
