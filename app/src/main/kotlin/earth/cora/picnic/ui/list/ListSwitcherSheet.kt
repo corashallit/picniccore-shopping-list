@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -46,6 +47,7 @@ import earth.cora.picnic.ui.theme.LcdChip
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import earth.cora.picnic.ui.theme.LetterSetSheet
+import earth.cora.picnic.ui.theme.LocalPaperColor
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -183,6 +185,7 @@ private fun ListLabel(summary: ListSummary, canDelete: Boolean, onClick: () -> U
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val shape = PicnicTheme.shapes.card
+    val paper = if (summary.current) Families.lemon.pastel else c.backing
     val left = if (summary.remaining == 0) {
         stringResource(R.string.lists_all_done)
     } else {
@@ -196,7 +199,7 @@ private fun ListLabel(summary: ListSummary, canDelete: Boolean, onClick: () -> U
             .background(c.stickerWhite)
             .padding(3.dp)
             .clip(shape)
-            .background(if (summary.current) Families.lemon.pastel else c.backing)
+            .background(paper)
             .padding(start = 10.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -219,8 +222,12 @@ private fun ListLabel(summary: ListSummary, canDelete: Boolean, onClick: () -> U
                 LcdChip(LcdState(mode = LcdMode.Text, text = summary.remaining.toString()), pitch = 1.6.dp)
             }
         }
-        PicnicIconButton(PicnicGlyph.Edit, stringResource(R.string.lists_rename, summary.title), onRename)
-        PicnicIconButton(PicnicGlyph.Delete, stringResource(R.string.lists_delete, summary.title), onDelete, enabled = canDelete)
+        // The pencil and bin stand on the label's own paper, not the sheet's white: their white faces have an edge there
+        // already, so no rim (§17).
+        CompositionLocalProvider(LocalPaperColor provides paper) {
+            PicnicIconButton(PicnicGlyph.Edit, stringResource(R.string.lists_rename, summary.title), onRename)
+            PicnicIconButton(PicnicGlyph.Delete, stringResource(R.string.lists_delete, summary.title), onDelete, enabled = canDelete)
+        }
     }
 }
 

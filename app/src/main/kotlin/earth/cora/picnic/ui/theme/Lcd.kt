@@ -290,15 +290,16 @@ private fun DrawScope.drawExtra(extra: LcdExtra, left: Float, p: Float, color: C
 }
 
 /**
- * The LCD's full moon (§13.1): a lit disc with three unlit craters (holes through which the face shows), so "10/24" and
- * its moon never read as a full stop. The same 3.1-pitch disc, so the line keeps its width.
+ * The LCD's full moon (§13.1): a lit disc with two unlit craters (holes through which the face shows), so "10/24" and
+ * its moon never read as a full stop. Laid out as the title's moon sticker: the big crater up on the right, a small one
+ * down on the left, well apart (three holes in a cluster would read as a bowling ball). The same 3.1-pitch disc, so the
+ * line keeps its width.
  */
 private fun moonPath(c: Offset, p: Float): Path = Path().apply {
     fillType = PathFillType.EvenOdd
     addOval(Rect(c, 3.1f * p))
-    addOval(Rect(Offset(c.x - 1.05f * p, c.y - 0.95f * p), 0.8f * p))
-    addOval(Rect(Offset(c.x + 1.15f * p, c.y + 0.35f * p), 0.6f * p))
-    addOval(Rect(Offset(c.x - 0.35f * p, c.y + 1.45f * p), 0.5f * p))
+    addOval(Rect(Offset(c.x + 1.05f * p, c.y - 1.0f * p), 0.9f * p))
+    addOval(Rect(Offset(c.x - 1.3f * p, c.y + 0.95f * p), 0.55f * p))
 }
 
 /* ------------------------------------------------------------------------------------------------

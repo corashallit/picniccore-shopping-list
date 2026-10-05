@@ -17,6 +17,7 @@ import earth.cora.picnic.settings.Surprise
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.theme.PicnicTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -133,6 +134,11 @@ class SettingsScreenTest {
         assertEquals(key, shown())
         compose.onNodeWithContentDescription("Hide key").performClick()
         assertEquals("•".repeat(key.length), shown())
+        // Shown, then cleared: the eye is disabled while empty, so the field masks again for the next paste.
+        compose.onNodeWithContentDescription("Show key").performClick()
+        state = state.copy(tokenInput = "")
+        compose.waitForIdle()
+        assertFalse("a cleared field masks again", state.tokenVisible)
     }
 
     /** Paste reads the clipboard (trimmed) into the key field, through the route's real wiring. */

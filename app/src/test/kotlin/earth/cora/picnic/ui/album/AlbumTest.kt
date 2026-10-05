@@ -320,5 +320,7 @@ class AlbumTest {
         compose.waitForIdle()
         compose.onNodeWithText("Trip sticker books").assertIsDisplayed()
         compose.onNodeWithText("Sat 26 Sep", substring = true).assertIsDisplayed()
+        // The page has gone by: its pinned tabs went with it rather than sitting over the books card's heading.
+        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).assertCountEquals(0)
     }
 }

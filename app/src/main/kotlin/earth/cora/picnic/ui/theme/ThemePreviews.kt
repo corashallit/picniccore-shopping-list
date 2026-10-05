@@ -689,7 +689,6 @@ internal fun CapsuleRow() {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (i in -1 until 10) ItemIcon(IconRef(StickerManifest.CAPSULE), null, size = 46.dp, aisleIndex = i)
         ItemIcon(IconRef(StickerManifest.CAPSULE), null, size = 46.dp, jackpot = true)
-        ItemIcon(IconRef("paper_bag"), null, size = 46.dp, aisleIndex = 2)
     }
 }
 

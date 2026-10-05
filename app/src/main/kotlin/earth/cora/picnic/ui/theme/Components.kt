@@ -1771,6 +1771,9 @@ fun KeyField(
     supportingText: String? = null,
     enabled: Boolean = true,
 ) {
+    // A cleared field masks again: the eye is disabled while empty, so a key pasted next must not arrive revealed.
+    val empty = value.isEmpty()
+    LaunchedEffect(empty) { if (empty && revealed) onRevealChange?.invoke(false) }
     PicnicTextField(
         value = value,
         onValueChange = onValueChange,

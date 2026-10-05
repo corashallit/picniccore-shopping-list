@@ -370,13 +370,15 @@ private fun StickerToggle(
 @Composable
 private fun StickerGrid(state: EditItemUi, all: Boolean, onPick: (String) -> Unit) {
     val catalog = LocalIconCatalog.current
-    val keys = remember(state.iconChoices, state.item.icon, all) { stickerChoices(state, catalog, all) }
-    StickerPicker(keys, selected = state.item.icon.takeIf { state.item.customIconId == null }, onPick = onPick)
+    val keys = remember(state.iconChoices, state.item.icon, state.item.iconFit, all) { stickerChoices(state, catalog, all) }
+    // An item still showing the capsule has chosen nothing yet: no cell (not the stored "Shopping bag") wears the ring.
+    val chosen = state.item.icon.takeIf { state.item.customIconId == null && !IconCatalog.showsCapsule(it, state.item.iconFit) }
+    StickerPicker(keys, selected = chosen, onPick = onPick)
 }
 
 /** The keys the grid shows: the item's category (its current sticker first), then, with [all], every other key. */
 internal fun stickerChoices(state: EditItemUi, catalog: IconCatalog, all: Boolean): List<String> {
-    val category = catalog[state.item.icon]?.category?.takeIf { state.item.icon != IconCatalog.DEFAULT_ICON }
+    val category = catalog[state.item.icon]?.category?.takeIf { !IconCatalog.showsCapsule(state.item.icon, state.item.iconFit) }
     val own = if (category == null) state.iconChoices.take(MIN_GRID) else state.iconChoices.filter { catalog[it]?.category == category }
     val first = (listOfNotNull(state.item.icon.takeIf { it in own }) + own).distinct()
     return if (all) (first + state.iconChoices).distinct() else first
@@ -396,5 +398,5 @@ private const val LARGE_TEXT = 1.5f
 /** From this font scale Amount and Note stand one under the other (side by side, Note's hint would be cut at 1.3). */
 private const val FIELDS_STACK = 1.15f
 
-/** Stickers shown for an item with no category (the paper bag): the first ones of the catalog. */
+/** Stickers shown for an item with no category yet (it still shows the capsule): the first ones of the catalog. */
 internal const val MIN_GRID = 15

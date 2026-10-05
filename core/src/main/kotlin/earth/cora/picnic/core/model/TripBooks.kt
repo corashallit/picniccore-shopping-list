@@ -15,11 +15,12 @@ const val EVERYTHING_ELSE_NAME: String = "Everything else"
 
 /**
  * The sticker an item's twin shows in a filed book: its live-drawn sticker, its catalog key, or the capsule
- * while it is still unresolved (D5). Frozen at filing.
+ * while it is still unresolved or matched nothing (D5, [IconCatalog.showsCapsule]: the same rule as the live book's
+ * IconCatalog.displayRef, so a twin never turns from capsule into the kraft "Shopping bag" at filing). Frozen at filing.
  */
 fun GroceryItem.bookIcon(): IconRef = when {
     customIconId != null -> IconRef(icon, customIconId)
-    iconFit == IconFit.PENDING -> IconRef(IconCatalog.CAPSULE)
+    IconCatalog.showsCapsule(icon, iconFit) -> IconRef(IconCatalog.CAPSULE)
     else -> IconRef(icon)
 }
 

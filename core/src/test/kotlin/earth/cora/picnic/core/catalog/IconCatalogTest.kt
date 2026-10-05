@@ -5,6 +5,7 @@ import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.IconRef
+import earth.cora.picnic.core.model.bookIcon
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -95,6 +96,9 @@ class IconCatalogTest {
         // Matched nothing (the default key, not EXACT): still the capsule. Matched "grocery bags": the kraft bag itself.
         assertEquals(IconRef(IconCatalog.CAPSULE), catalog.displayRef(base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.APPROXIMATE), busy = false))
         assertEquals(IconRef(IconCatalog.DEFAULT_ICON), catalog.displayRef(base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.EXACT), busy = false))
+        // A filed book's twin and the finale's riders follow the same rule (they used to file the bag for "nothing matched").
+        assertEquals(IconRef(IconCatalog.CAPSULE), base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.APPROXIMATE).bookIcon())
+        assertEquals(IconRef(IconCatalog.DEFAULT_ICON), base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.EXACT).bookIcon())
     }
 
     @Test
