@@ -478,6 +478,8 @@ private fun TopLcd(
                 onHold = if (state.eggs) actions.onLcdHold else null,
                 // One width whatever it shows: SYNC, and the eggs' words while they are on (§13.1, item 259).
                 words = if (state.eggs || eggs.enabled) LCD_WORDS_EGGS else LCD_WORDS,
+                // Egg 15's bee may hatch here: its room is kept from the start, so hatching moves nothing.
+                petRoom = state.eggs || eggs.enabled,
             )
         }
     }

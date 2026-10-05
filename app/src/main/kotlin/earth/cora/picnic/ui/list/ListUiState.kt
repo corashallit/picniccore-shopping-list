@@ -309,9 +309,12 @@ sealed interface ListEvent {
  */
 internal fun GroceryItem.detailLine(): String? = earth.cora.picnic.ui.add.AddRules.detailLine(quantity, note)
 
-/** Catalog keys with [item]'s category first (catalog order otherwise; the paper bag gets plain catalog order). */
+/**
+ * Catalog keys with [item]'s category first (catalog order otherwise: an item still showing the capsule has no category
+ * yet; one matched to the real "Shopping bag" gets Household first).
+ */
 internal fun iconChoicesFor(item: GroceryItem, catalog: IconCatalog): List<String> {
-    val category = if (item.icon == IconCatalog.DEFAULT_ICON) null else catalog.categoryOf(item.icon)?.key
+    val category = if (IconCatalog.showsCapsule(item.icon, item.iconFit)) null else catalog.categoryOf(item.icon)?.key
     if (category == null) return catalog.keys
     val (first, rest) = catalog.keys.partition { catalog[it]?.category == category }
     return first + rest

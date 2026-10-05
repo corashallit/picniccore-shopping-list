@@ -157,7 +157,12 @@ class ToastHostState {
         }
         if (!message.undo) waiting.removeAll { !it.undo && it.kind == message.kind }
         waiting += message
-        while (waiting.size > MAX_QUEUE) waiting.removeAt(0)
+        // Over the cap, the oldest note goes first; an Undo is never dropped unseen (the queue grows instead).
+        while (waiting.size > MAX_QUEUE) {
+            val note = waiting.indexOfFirst { !it.undo }
+            if (note < 0) break
+            waiting.removeAt(note)
+        }
     }
 
     /** The current toast left (hold done, swiped or acted on): the next queued one shows. */
@@ -337,8 +342,8 @@ fun StickyNote(
                 .testTag(TOAST_BODY_TAG),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Balanced lines (§4.6): never a one-word last line.
-            PicnicText(message, style = PicnicTheme.type.toast.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Paragraph))
+            // Balanced lines (§4.6, the balanced Heading strategy): never a one-word last line.
+            PicnicText(message, style = PicnicTheme.type.toast.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading))
             if (actionLabel != null) {
                 // Pressed, the chip sticker drops onto its shadow in 2 steps like the kit's chips (never a ripple, §0.2,
                 // §4.7); focused, it wears their 2 dp ring.

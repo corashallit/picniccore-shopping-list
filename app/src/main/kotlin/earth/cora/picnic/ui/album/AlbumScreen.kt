@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -28,6 +29,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +44,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
@@ -60,6 +64,8 @@ import earth.cora.picnic.ui.theme.MenuItem
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.rememberLoopTime
+import earth.cora.picnic.ui.theme.groundBacking
+import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 
 /** Everything the album can ask for. Defaults do nothing. */
@@ -185,6 +191,23 @@ fun AlbumScreen(
         if (reduced) listState.scrollToItem(index) else listState.animateScrollToItem(index)
     }
 
+    // The tabs stay at the top while the page scrolls under them (Groceries runs to some 50 rows of pockets): once the
+    // list's own row starts to pass under the top, a pinned copy sits there on the binder ground (R6). It is drawn above
+    // the list rather than pinned inside it, and kept out of the keyboard's order, so Tab still goes through the pockets
+    // in their order (a lazy list's pinned header comes after every row it covers); Shift+Tab back to the list's own row
+    // brings the page's top back into view. The tabs belong to the page: as its bottom edge comes up under them they ride
+    // off with it, and once the page is gone the trip books, Perfect weeks and the back pocket have the top to themselves.
+    val tabsIndex = if (state.books.isNotEmpty()) 1 else 0
+    val lastSlice = tabsIndex + slices.size
+    val tabsPinned by remember(listState, tabsIndex, lastSlice) {
+        derivedStateOf {
+            val first = listState.firstVisibleItemIndex
+            (first > tabsIndex || (first == tabsIndex && listState.firstVisibleItemScrollOffset > 0)) && first <= lastSlice
+        }
+    }
+    // The pinned strip's own height (its selected tab's foot hangs TAB_JOIN below it).
+    var stripHeight by remember { mutableIntStateOf(0) }
+
     SecondaryScreen(
         title = stringResource(R.string.album_title),
         subtitle = if (state.loading) null else subtitle,
@@ -248,11 +271,20 @@ fun AlbumScreen(
                     })
                 }
             }
+            // The tabs, standing on the page. Once the page scrolls under the top, the pinned copy below shows in their
+            // place, and this row keeps its room and its place in the keyboard's order, unseen and silent.
             item("tabs") {
-                AlbumTabs(state.tab, onSelect = {
-                    lifted = null
-                    actions.onSelectTab(it)
-                })
+                AlbumTabs(
+                    state.tab,
+                    onSelect = {
+                        lifted = null
+                        actions.onSelectTab(it)
+                    },
+                    // Above the page whose edge the selected tab overlaps.
+                    modifier = Modifier.zIndex(1f),
+                    bleed = ScreenGutter,
+                    shown = !tabsPinned,
+                )
             }
             itemsIndexed(slices, key = { _, s -> s.key }, contentType = { _, s -> s::class }) { i, slice ->
                 val top = i == 0
@@ -310,8 +342,39 @@ fun AlbumScreen(
                 Spacer(Modifier.height(8.dp).windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)))
             }
         }
+        if (tabsPinned && !state.loading && !state.empty) {
+            AlbumTabs(
+                state.tab,
+                onSelect = {
+                    lifted = null
+                    actions.onSelectTab(it)
+                    // From deep in a page, the new page starts at its top, right under the tabs.
+                    scope.launch { listState.scrollToItem(tabsIndex) }
+                },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    // Pushed up by the page's bottom edge, the selected tab's foot staying on the page's last stretch of
+                    // vinyl, so the strip has wholly left by the time the trip books' row comes to the top.
+                    .offset {
+                        val pageBottom = listState.pageBottom(lastSlice)
+                        IntOffset(0, if (pageBottom == null) 0 else minOf(0, pageBottom - stripHeight - TAB_JOIN.roundToPx()))
+                    }
+                    .onSizeChanged { stripHeight = it.height }
+                    .groundBacking()
+                    .padding(start = ScreenGutter, end = ScreenGutter),
+                bleed = ScreenGutter,
+                keys = false,
+            )
+        }
     }
 }
+
+/**
+ * Where the item at [index] (the vinyl page's last slice) ends, in px below the list's first row's resting place (its
+ * top padding not counted: at most 0 once a later row is the first one), or null while it is not laid out.
+ */
+private fun LazyListState.pageBottom(index: Int): Int? =
+    layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }?.let { it.offset + it.size }
 
 /** Pockets per row of the vinyl page (§4.25). */
 const val POCKETS_PER_ROW: Int = 4

@@ -9,13 +9,14 @@ add('groundbeef', 'Lean ground beef', [
     F(('rect', 25.6, 32.4, 9.6, 5, 1.4), 'ramune', 'w', ol=1.2, cut=False),
 ], gloss=[G('M19 28.2L30.2 19.4', 2), DOT(32.2, 18.2, .9), G('M8.6 31.6H16', 2.2)], qty='454 g pack', aisle='meat')
 
-# ham: classic glazed ham with a scored diamond pattern and a white bone
-add('ham', 'Spiral ham', [
-    TUBE('M34 17.6L39.6 10.6', 'sakura', 4.6, 'w'),
-    F(('circle', 40.2, 8, 2.4), 'sakura', 'w', ol=1.5), F(('circle', 42.4, 10.6, 2.4), 'sakura', 'w', ol=1.5),
-    F(('path', smooth([(7.4, 30), (10.6, 20.4), (19.6, 15), (30.4, 14.4), (37.4, 19.6), (39.8, 28.6), (35.4, 38.6), (24, 42), (12.4, 39)])), 'sakura', 'm', band=.22,
-      tex=['M12 24L22 34', 'M16 18L32 34', 'M24 15.6L37 28.6', 'M14 34L30 18', 'M20 37.4L36 21.4', 'M11 29.4L24 16.4'], tex_t='p', tex_w=1.6),
-], gloss=[G('M10.6 27Q12 21.4 17.4 18.4'), DOT(10.4, 31)], qty='1.5 kg', aisle='meat')
+# sliced deli meat (catalog deli_meat): three thin round slices shingled in a fan, each a flat pink disc in a fat pale rim
+# with a little marbling: sliced meat from the counter, never a whole ham
+def deli_slice(cx, cy, r):
+    marble = [f'M{fmt(cx - 4.2)} {fmt(cy - 1.4)}q1.8 -1.6 3.6 0', f'M{fmt(cx + .2)} {fmt(cy + 3)}q1.8 -1.6 3.6 0', f'M{fmt(cx + 1.4)} {fmt(cy - 4.2)}q1.2 -1 2.4 0']
+    return [F(('circle', cx, cy, r), 'sakura', 'p'),
+            F(('circle', cx, cy, r - 3), 'sakura', 'm', ol=1.4, cut=False, band=None, tex=marble, tex_t='p', tex_w=1.5)]
+add('ham', 'Sliced deli meat', [*deli_slice(30.6, 17.4, 10.6), *deli_slice(24.6, 24.6, 10.6), *deli_slice(17.8, 31.4, 10.6)],
+    qty='175 g pack', aisle='deli')
 
 # sausages: three linked peach sausages
 SAU = 'M-9 -4.2H9C11.4 -4.2 12.6 -2.2 12.6 0C12.6 2.2 11.4 4.2 9 4.2H-9C-11.4 4.2 -12.6 2.2 -12.6 0C-12.6 -2.2 -11.4 -4.2 -9 -4.2Z'
@@ -116,11 +117,16 @@ add('muffins', 'Blueberry muffins', [
     F(('path', 'M10.6 26.6H37.4L34.8 39.6Q34.4 42 31.8 42H16.2Q13.6 42 13.2 39.6Z'), 'periwinkle', 'p', band=.24, det=['M17 29V39.6', 'M21.4 29V40', 'M26.6 29V40', 'M31 29V39.6'], det_t='m', det_w=1.6),
 ], gloss=[G('M12.4 20Q13.6 15.4 18 13.4'), DOT(21.8, 12.6)], qty='6 pack', aisle='bakery')
 
-# tortillas: stack of flour tortillas (front view, 1:3 ellipses)
+# tortillas: a short stack of thin flour tortillas, its top open and spotted, and in front of it one folded in four, a
+# soft wedge standing on the base with its layers showing along the round edge: thin wraps, never pancakes or a bun
 add('tortillas', 'Flour tortillas', [
-    *[F(('ellipse', 24, y, 17, 5.6), 'cocoa', 'p', band=.4, band_t='m') for y in (35.4, 30, 24.6)],
-    F(('ellipse', 24, 19.2, 17, 5.6), 'cocoa', 'p', tex=['M15 17.6h.1M27.4 16.4h.1M33 20.4h.1M20.6 21.2h.1'], tex_t='m', tex_w=2.2),
-], gloss=[G('M10.4 18.4Q12 15.8 16 14.8', 2.2), DOT(19.4, 14.2)], qty='10 pack', aisle='bakery')
+    *[F(('ellipse', 28.4, y, 13.4, 6.4), 'cocoa', 'p', band=.42, band_t='m') for y in (29.4, 26.8, 24.2)],
+    F(('ellipse', 28.4, 21.6, 13.4, 6.4), 'cocoa', 'p',
+      tex=['M21.4 20.6h.1M27.4 17.8h.1M34.6 18.8h.1M37.4 22.6h.1M30.6 23.4h.1'], tex_t='m', tex_w=2.4),
+    F(('path', 'M7.4 42V20.4C19.4 20.4 29 30 29 42Z'), 'cocoa', 'p',
+      tex=['M11.2 26.6h.1M11.8 35.6h.1M17.2 31h.1M22.4 38.2h.1M16.2 39.4h.1'], tex_t='m', tex_w=2.6,
+      det=['M7.4 23.4C17.6 23.6 25.8 31.6 26 42'], det_t='m', det_w=1.5),
+], qty='10 pack', aisle='bakery')
 
 # doughnuts: two ring donuts, sakura icing with sprinkles
 def donut(cx, cy, r):

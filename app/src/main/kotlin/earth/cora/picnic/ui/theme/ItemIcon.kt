@@ -89,12 +89,15 @@ object StickerLibrary {
     fun entry(key: String): StickerEntry? = byKey[key]
 
     /**
-     * The library art for [key]: its own, else its category's generic, else the capsule (unknown and pending items,
-     * D5: `paper_bag` is no longer a placeholder).
+     * The library art for [key]: its own, else its category's generic, else the capsule (unknown keys, D5). `paper_bag`
+     * draws its own kraft "Shopping bag": rows ask for the capsule through IconCatalog.displayRef while an item is
+     * pending or matched nothing, so the key reaches here only when it was meant.
      */
     fun resolve(key: String, catalog: IconCatalog): StickerEntry? {
-        if (key == StickerManifest.CAPSULE || key == IconCatalog.DEFAULT_ICON) return capsule
-        return byKey[key] ?: byKey[catalog.fallbackFor(key)] ?: capsule
+        if (key == StickerManifest.CAPSULE) return capsule
+        // An unknown key's fallback is the default key itself: that is "nothing matched", the capsule, not the bag.
+        val generic = catalog.fallbackFor(key).takeIf { it != IconCatalog.DEFAULT_ICON }
+        return byKey[key] ?: generic?.let(byKey::get) ?: capsule
     }
 
     fun isCapsule(entry: StickerEntry?): Boolean = entry?.key == StickerManifest.CAPSULE

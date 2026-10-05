@@ -35,20 +35,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.theme.Glyph
-import earth.cora.picnic.ui.theme.INLINE_GLYPHS
 import earth.cora.picnic.ui.theme.MenuItem
 import earth.cora.picnic.ui.theme.OverflowMenu
 import earth.cora.picnic.ui.theme.PadPatch
@@ -60,8 +65,10 @@ import earth.cora.picnic.ui.theme.PicnicIconButton
 import earth.cora.picnic.ui.theme.PicnicSurface
 import earth.cora.picnic.ui.theme.PicnicSwitch
 import earth.cora.picnic.ui.theme.PicnicText
+import androidx.compose.ui.text.AnnotatedString
+import earth.cora.picnic.ui.theme.spokenWithoutGlyphs
+import earth.cora.picnic.ui.theme.INLINE_GLYPHS
 import earth.cora.picnic.ui.theme.PicnicTheme
-import earth.cora.picnic.ui.theme.PicnicTopBar
 import earth.cora.picnic.ui.theme.PuffyText
 import earth.cora.picnic.ui.theme.SectionDivider
 import earth.cora.picnic.ui.theme.ToastHost
@@ -100,17 +107,7 @@ fun SecondaryScreen(
     NoMaterialPress { PicnicBackground(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             val barInsets = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-            if (subtitle != null && subtitle.any { it in INLINE_GLYPHS }) {
-                GlyphSubtitleTopBar(title, subtitle, onBack, barInsets, actions, subtitleTrailing)
-            } else {
-                PicnicTopBar(
-                    title = title,
-                    subtitle = subtitle,
-                    modifier = barInsets,
-                    navigation = { BackButton(onBack) },
-                    actions = actions,
-                )
-            }
+            SubtitleTopBar(title, subtitle, onBack, barInsets, actions, subtitleTrailing)
             Box(
                 Modifier
                     .weight(1f)
@@ -126,17 +123,17 @@ fun SecondaryScreen(
 }
 
 /**
- * [PicnicTopBar]'s pieces for a subtitle that carries inline glyphs ("★ 64 of 216 collected · 3 holo"): the same Back
- * button and puffy title (one line, 24 → 20 sp, then an ellipsis, §4.2), then the subtitle on its pad patch in a
- * row of its own under the title, so it never shares its width with the actions (the album's LCD and More) and is never
- * cut; [trailing] (the album's LCD, with large text) follows it there, or wraps under it. [PicnicText] draws its star as
- * an inline vector (§2.7).
+ * Every secondary screen's top (§4.2), as [PicnicTopBar] lays it out: the Back button, the puffy title (one line, 24 →
+ * 20 sp, then an ellipsis) and the [actions] ("Done", the album's LCD and More) centred on the title's line, so Back
+ * never drifts off it; then the [subtitle] on its pad patch in a row of its own, indented under the title, so it never
+ * shares its width with the actions and is never cut; [trailing] (the album's LCD, with large text) follows it there,
+ * or wraps under it. [PicnicText] draws an inline star as a vector (§2.7).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun GlyphSubtitleTopBar(
+private fun SubtitleTopBar(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     onBack: () -> Unit,
     modifier: Modifier,
     actions: @Composable RowScope.() -> Unit,
@@ -159,14 +156,17 @@ private fun GlyphSubtitleTopBar(
             }
             actions()
         }
-        FlowRow(
-            Modifier.padding(start = 52.dp, end = 8.dp, top = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
-            trailing?.invoke()
+        if (subtitle != null || trailing != null) {
+            FlowRow(
+                Modifier.padding(start = 52.dp, end = 8.dp, top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Broken between its parts where it wraps ("walking order" / "colours · baskets"), never at a dot.
+                if (subtitle != null) PadPatch { PartsText(subtitle.split(PARTS_SEPARATOR), style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
+                trailing?.invoke()
+            }
         }
     }
 }
@@ -219,11 +219,17 @@ fun PadCard(
             verticalArrangement = Arrangement.spacedBy(spacing),
         ) {
             if (title != null) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (glyph != null) Glyph(glyph, contentDescription = null, tint = glyphTint, size = 22.dp)
+                val titleStyle = PicnicTheme.type.cardTitle
+                // The glyph centres on the title's first line, so a title that wraps at large text ("Your OpenAI / key")
+                // keeps its glyph beside its first words instead of floating between the lines.
+                val firstLine = with(LocalDensity.current) { titleStyle.lineHeight.toDp() }
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (glyph != null) {
+                        Glyph(glyph, contentDescription = null, tint = glyphTint, size = 22.dp, modifier = Modifier.padding(top = ((firstLine - 22.dp) / 2).coerceAtLeast(0.dp)))
+                    }
                     Text(
                         title,
-                        style = PicnicTheme.type.cardTitle.copy(color = c.ink),
+                        style = titleStyle.copy(color = c.ink),
                         modifier = Modifier.weight(1f).semantics { heading() },
                     )
                     trailing()
@@ -317,4 +323,59 @@ fun MoreMenuButton(items: List<MenuItem>, expanded: Boolean, onExpandedChange: (
             }
         }
     }
+}
+
+/** What joins a line's parts: "walking order · colours · baskets". */
+const val PARTS_SEPARATOR: String = " · "
+
+/**
+ * [parts] joined with " · " on as few lines as fit, broken only between them and as evenly as can be ("19 of 19
+ * stickers" / "perfect · receipt"): a dot never starts or ends a line, and no part is left alone under the others when a
+ * more even break fits. A part too long for a line wraps inside itself, in balanced lines. Inline ★ and ♡ are drawn as
+ * vectors ([PicnicText]); TalkBack reads the parts with their dots, however the lines fall.
+ */
+@Composable
+fun PartsText(parts: List<String>, style: TextStyle, modifier: Modifier = Modifier) {
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(modifier) {
+        val max = constraints.maxWidth
+        val text = remember(parts, style, max) {
+            breakBetweenParts(parts, max) { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width }
+        }
+        val balanced = style.copy(lineBreak = LineBreak.Heading)
+        if (parts.any { part -> part.any { it in INLINE_GLYPHS } }) {
+            // TalkBack reads the parts with their separators wherever the lines break (PicnicText reads lines as one).
+            val spoken = spokenWithoutGlyphs(parts.joinToString(PARTS_SEPARATOR))
+            Box(Modifier.clearAndSetSemantics { this.text = AnnotatedString(spoken) }) { PicnicText(text, style = balanced) }
+        } else {
+            Text(text, style = balanced)
+        }
+    }
+}
+
+/**
+ * [parts] as one text, a line break in place of " · " wherever that makes the fewest lines of at most [max] px (a part
+ * too long for a line counts the lines it wraps to), then the most even ones. [width] measures one unbroken line.
+ */
+internal fun breakBetweenParts(parts: List<String>, max: Int, width: (String) -> Int): String {
+    if (parts.size < 2 || max <= 0) return parts.joinToString(PARTS_SEPARATOR)
+    var best = parts.joinToString(PARTS_SEPARATOR)
+    var bestLines = Int.MAX_VALUE
+    var bestWidest = Int.MAX_VALUE
+    // Every way to break between the parts (a handful at most).
+    for (mask in 0 until (1 shl (parts.size - 1).coerceAtMost(8))) {
+        val lines = mutableListOf(parts.first())
+        for (i in 1 until parts.size) {
+            if (i <= 8 && mask and (1 shl (i - 1)) != 0) lines += parts[i] else lines[lines.lastIndex] = lines.last() + PARTS_SEPARATOR + parts[i]
+        }
+        val widths = lines.map(width)
+        val count = widths.sumOf { w -> ((w + max - 1) / max).coerceAtLeast(1) }
+        val widest = widths.max()
+        if (count < bestLines || (count == bestLines && widest < bestWidest)) {
+            bestLines = count
+            bestWidest = widest
+            best = lines.joinToString("\n")
+        }
+    }
+    return best
 }

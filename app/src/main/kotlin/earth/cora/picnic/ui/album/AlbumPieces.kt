@@ -51,13 +51,24 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.platform.testTag
 import earth.cora.picnic.ui.a11y.focusRingIndication
+import earth.cora.picnic.ui.common.PartsText
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -148,32 +159,63 @@ object AlbumFaces {
  * Tabs and the vinyl page.
  * ------------------------------------------------------------------------------------------------ */
 
-/** How the album's tabs fit the width: as roomy index tabs, as tighter ones, or wrapped onto two rows as label chips. */
-internal enum class TabFit { Roomy, Compact, Wrapped }
+/** How the album's tabs fit the width: as roomy index tabs, or tighter ones (which scroll sideways if still too wide). */
+internal enum class TabFit { Roomy, Compact }
 
 /** A tab's side padding inside its face for [fit]. */
 private fun tabPadding(fit: TabFit, selected: Boolean): Dp = when (fit) {
     TabFit.Roomy -> if (selected) 16.dp else 14.dp
-    TabFit.Compact, TabFit.Wrapped -> if (selected) 10.dp else 9.dp
+    TabFit.Compact -> if (selected) 10.dp else 9.dp
 }
 
 /**
- * The index tabs (§6.10): Groceries · Picnic · Seasonal on sakura, lemon and peach; each a Role.Tab. They always show
- * whole (§15): when the three no longer fit the width at their roomy padding (large text), the padding tightens; when even
- * that is too wide (font scale 1.3 and up on a 360 dp phone), they wrap onto two rows as kiss-cut label chips (§4.7 lists
- * the album tabs among its filter chips) and the vinyl page starts under them.
+ * The index tabs (§6.10): Groceries · Picnic · Seasonal on sakura, lemon and peach; each a Role.Tab, standing on the
+ * vinyl page's top edge. The selected tab reaches [TAB_JOIN] down over the page's white edge, so it opens into the page
+ * as a binder tab does; the row reports itself that much shorter, and the album draws it above the page. They stay on
+ * one row (§15): when the three no longer fit at their roomy padding (large text) the padding tightens, and when even
+ * that is too wide (font scale 1.3 and up on a 360 dp phone) the row scrolls sideways, keeping the selected tab in view.
+ * The scrolling row reaches [bleed] past its own width on each side (the screen gutter), so a tab slides off the
+ * screen's edge rather than being cut short of it over the binder.
+ *
+ * [shown] false keeps the row's room and its place in the keyboard's order only: the album's own row stands in, unseen
+ * and silent, while the pinned copy above the page is the one she sees and taps (and TalkBack reads). [keys] false
+ * keeps that pinned copy out of the keyboard's order: Tab goes through the page in its order, and Shift+Tab back up to
+ * the album's own row brings it into view, where it takes over again.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun AlbumTabs(selected: AlbumTab, onSelect: (AlbumTab) -> Unit, modifier: Modifier = Modifier) {
+internal fun AlbumTabs(
+    selected: AlbumTab,
+    onSelect: (AlbumTab) -> Unit,
+    modifier: Modifier = Modifier,
+    bleed: Dp = 0.dp,
+    shown: Boolean = true,
+    keys: Boolean = true,
+) {
     val labels = mapOf(
         AlbumTab.Groceries to stringResource(R.string.album_tab_groceries),
         AlbumTab.Picnic to stringResource(R.string.album_tab_picnic),
         AlbumTab.Seasonal to stringResource(R.string.album_tab_seasonal),
     )
     val type = PicnicTheme.type
+    val reduced = LocalReducedMotion.current
     val measurer = rememberTextMeasurer()
-    BoxWithConstraints(modifier.fillMaxWidth().padding(start = 10.dp, end = 6.dp)) {
+    val scroll = rememberScrollState()
+    // Each tab's span along the row (px, in the scrolled content), to bring the selected one into view.
+    val spans = remember { mutableStateMapOf<AlbumTab, IntRange>() }
+    BoxWithConstraints(
+        modifier
+            .fillMaxWidth()
+            .then(if (shown) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics {})
+            .layout { measurable, constraints ->
+                // The row runs out to the screen's edges ([bleed] each side), and the selected tab's foot overlaps the
+                // page's top edge: the page starts TAB_JOIN above the row's bottom.
+                val b = bleed.roundToPx()
+                val wide = constraints.maxWidth + 2 * b
+                val p = measurable.measure(constraints.copy(minWidth = wide, maxWidth = wide))
+                val join = TAB_JOIN.roundToPx()
+                layout(constraints.maxWidth, (p.height - join).coerceAtLeast(0)) { p.place(-b, 0) }
+            },
+    ) {
         val density = LocalDensity.current
         val labelWidths = remember(labels, selected, density, type) {
             AlbumTab.entries.associateWith { tab ->
@@ -181,58 +223,100 @@ internal fun AlbumTabs(selected: AlbumTab, onSelect: (AlbumTab) -> Unit, modifie
                 with(density) { measurer.measure(labels.getValue(tab), style, maxLines = 1).size.width.toDp() }
             }
         }
+        val room = maxWidth - bleed * 2 - TABS_START - TABS_END
         fun needed(fit: TabFit): Dp = AlbumTab.entries.fold(TAB_GAP * (AlbumTab.entries.size - 1)) { sum, tab ->
             sum + labelWidths.getValue(tab) + tabPadding(fit, tab == selected) * 2 + TAB_BORDER * 2 + 2.dp
         }
-        val fit = when {
-            needed(TabFit.Roomy) <= maxWidth -> TabFit.Roomy
-            needed(TabFit.Compact) <= maxWidth -> TabFit.Compact
-            else -> TabFit.Wrapped
+        val fit = if (needed(TabFit.Roomy) <= room) TabFit.Roomy else TabFit.Compact
+        val viewport = constraints.maxWidth
+        val span = spans[selected]
+        var settled by remember { mutableStateOf(false) }
+        LaunchedEffect(selected, span, viewport) {
+            if (span == null) return@LaunchedEffect
+            // In view within the page's width where it can be (past the gutter), the screen's edge where it cannot.
+            val start = with(density) { (bleed + TABS_START).roundToPx() }
+            val end = with(density) { (bleed + TABS_END).roundToPx() }
+            val target = when {
+                span.first - start < scroll.value -> span.first - start
+                span.last + end > scroll.value + viewport -> span.last + end - viewport
+                else -> null
+            }?.coerceIn(0, scroll.maxValue.coerceAtLeast(0))
+            if (target != null && target != scroll.value) {
+                // Where she left it the first time (and under reduced motion) it is simply there; after a tap it slides.
+                if (!settled || reduced) scroll.scrollTo(target) else scroll.animateScrollTo(target)
+            }
+            settled = true
         }
-        val tab: @Composable (AlbumTab) -> Unit = { t -> AlbumTabFace(labels.getValue(t), t, t == selected, fit) { onSelect(t) } }
-        if (fit == TabFit.Wrapped) {
-            FlowRow(
-                Modifier.fillMaxWidth().padding(bottom = 8.dp).selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(TAB_GAP),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) { AlbumTab.entries.forEach { tab(it) } }
-        } else {
-            Row(
-                Modifier.fillMaxWidth().selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(TAB_GAP),
-                verticalAlignment = Alignment.Bottom,
-            ) { AlbumTab.entries.forEach { tab(it) } }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(scroll)
+                .padding(start = bleed + TABS_START, end = bleed + TABS_END)
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(TAB_GAP),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            AlbumTab.entries.forEach { t ->
+                AlbumTabFace(
+                    labels.getValue(t), t, t == selected, fit,
+                    keys = keys,
+                    modifier = Modifier
+                        .onPlaced { c ->
+                            val x = c.positionInParent().x.toInt()
+                            spans[t] = x..(x + c.size.width)
+                        },
+                ) { onSelect(t) }
+            }
         }
     }
 }
 
 /**
- * One tab in a 48 dp target: a white kiss-cut edge and hard shadow round the family's pastel (mid when selected, and
- * taller, standing up from the page). Wrapped, it is a whole label (rounded all round) rather than a tab joined to the
- * page. Selected tabs read in DynaPuff (smallTitle), the others in Zen Maru; both ballpoint (§2.7: text on pastels).
+ * One tab in a 48 dp target: a white kiss-cut edge round the family's pastel (mid when selected, and taller, standing
+ * up from the page), its hard shadow on the right only, ending where the page begins. The selected tab reaches
+ * [TAB_JOIN] further down, over the page's edge, so the two read as one die-cut piece. Selected tabs read in DynaPuff
+ * (smallTitle), the others in Zen Maru; both ballpoint (§2.7: text on pastels).
  */
 @Composable
-private fun AlbumTabFace(text: String, tab: AlbumTab, on: Boolean, fit: TabFit, onClick: () -> Unit) {
+private fun AlbumTabFace(
+    text: String,
+    tab: AlbumTab,
+    on: Boolean,
+    fit: TabFit,
+    modifier: Modifier = Modifier,
+    keys: Boolean = true,
+    onClick: () -> Unit,
+) {
     val family = AlbumInk.family(tab)
-    val wrapped = fit == TabFit.Wrapped
-    val outer = if (wrapped) RoundedCornerShape(12.dp) else RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
-    val inner = if (wrapped) RoundedCornerShape(9.dp) else RoundedCornerShape(topStart = 9.dp, topEnd = 9.dp)
+    val shadows = PicnicTheme.shadows
+    val outer = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+    val inner = RoundedCornerShape(topStart = 9.dp, topEnd = 9.dp)
     Box(
-        Modifier
-            .heightIn(min = 48.dp)
+        modifier
+            .heightIn(min = 48.dp + TAB_JOIN)
+            .then(if (keys) Modifier else Modifier.focusProperties { canFocus = false })
             .selectable(selected = on, interactionSource = null, indication = focusRingIndication(outer), role = Role.Tab, onClick = onClick),
-        contentAlignment = if (wrapped) Alignment.Center else Alignment.BottomCenter,
+        contentAlignment = Alignment.BottomCenter,
     ) {
         Box(
             Modifier
-                .heightIn(min = if (wrapped) 40.dp else if (on) 44.dp else 38.dp)
-                .hardShadow(outer, PicnicTheme.shadows)
+                // Unselected tabs stop at the page's top edge; the selected one runs on over the edge.
+                .padding(bottom = if (on) 0.dp else TAB_JOIN)
+                .heightIn(min = if (on) 44.dp + TAB_JOIN else 38.dp)
+                .drawBehind {
+                    // The hard shadow on the right side only: none falls below the tab onto its own page.
+                    val outline = outer.createOutline(size, layoutDirection, this)
+                    val foot = if (on) TAB_JOIN.toPx() else 0f
+                    clipRect(bottom = size.height - foot) {
+                        translate(shadows.hs.x.toPx(), shadows.hs.y.toPx()) { drawOutline(outline, shadows.color) }
+                    }
+                }
                 .clip(outer)
                 .background(PicnicTheme.colors.stickerWhite)
-                .padding(start = TAB_BORDER, top = TAB_BORDER, end = TAB_BORDER, bottom = if (wrapped) TAB_BORDER else 0.dp)
+                .padding(start = TAB_BORDER, top = TAB_BORDER, end = TAB_BORDER)
                 .clip(inner)
                 .background(if (on) family.mid else family.pastel)
-                .padding(horizontal = tabPadding(fit, on), vertical = 3.dp),
+                .padding(start = tabPadding(fit, on), end = tabPadding(fit, on), top = 3.dp, bottom = 3.dp + if (on) TAB_JOIN else 0.dp),
             contentAlignment = Alignment.Center,
         ) {
             val style = if (on) PicnicTheme.type.smallTitle else PicnicTheme.type.label
@@ -240,6 +324,13 @@ private fun AlbumTabFace(text: String, tab: AlbumTab, on: Boolean, fit: TabFit, 
         }
     }
 }
+
+/** How far the selected tab runs down over the vinyl page's top edge (its 3 dp white kiss-cut). */
+internal val TAB_JOIN: Dp = 3.dp
+
+/** The tab row's side room inside its scroll (the first tab's inset from the page edge; the last one's shadow). */
+private val TABS_START: Dp = 10.dp
+private val TABS_END: Dp = 6.dp
 
 /** The tabs' kiss-cut edge and the gap between two tabs. */
 private val TAB_BORDER: Dp = 3.dp
@@ -665,7 +756,6 @@ private fun BookRow(row: BookRowUi, onOpen: () -> Unit, onAppeared: () -> Unit) 
         if (row.perfect) add(stringResource(R.string.album_book_perfect))
         if (row.receipt) add(stringResource(R.string.album_book_receipt))
     }
-    val line = parts.joinToString(" · ")
     PicnicSurface(Modifier.fillMaxWidth(), color = c.stickerWhite) {
         Row(
             Modifier
@@ -688,7 +778,7 @@ private fun BookRow(row: BookRowUi, onOpen: () -> Unit, onAppeared: () -> Unit) 
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(row.dateLabel, style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint))
-                Text(line, style = PicnicTheme.type.caption.copy(color = c.ballpoint))
+                PartsText(parts, PicnicTheme.type.caption.copy(color = c.ballpoint))
             }
         }
     }
@@ -729,8 +819,8 @@ internal fun PerfectWeeksCard(streak: Int, earned: Boolean, holo: Boolean, modif
     val ink = if (holo) c.ballpoint else c.ink
     val inkSoft = if (holo) c.ballpoint else c.inkSoft
     val weeks = if (earned) 4 else streak.coerceIn(0, 4)
-    val line = stringResource(R.string.album_perfect_week, weeks) +
-        if (earned) " · " + stringResource(R.string.album_perfect_unlocked) else ""
+    // "week 4 of 4 · sakura sheet unlocked", broken between its parts (PartsText) as the trip books' lines are.
+    val parts = listOfNotNull(stringResource(R.string.album_perfect_week, weeks), stringResource(R.string.album_perfect_unlocked).takeIf { earned })
     Box(modifier.fillMaxWidth()) {
         PicnicSurface(Modifier.fillMaxWidth()) {
             Row(
@@ -747,7 +837,7 @@ internal fun PerfectWeeksCard(streak: Int, earned: Boolean, holo: Boolean, modif
                         style = PicnicTheme.type.smallTitle.copy(color = ink),
                         modifier = Modifier.semantics { heading() },
                     )
-                    Text(line, style = PicnicTheme.type.caption.copy(color = inkSoft))
+                    PartsText(parts, PicnicTheme.type.caption.copy(color = inkSoft))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 10.dp)) {
                     WeekStamps.forEachIndexed { i, (family, pictogram) ->

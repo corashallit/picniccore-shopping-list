@@ -251,7 +251,12 @@ private fun InlineGlyph(ch: Char, modifier: Modifier) {
                 drawLine(Families.periwinkle.trace, Offset(c.x + s * 0.03f, c.y + s * 0.22f), Offset(c.x + s * 0.03f, c.y - s * 0.34f), s * 0.09f)
                 drawLine(Families.periwinkle.trace, Offset(c.x + s * 0.03f, c.y - s * 0.34f), Offset(c.x + s * 0.28f, c.y - s * 0.22f), s * 0.09f, cap = StrokeCap.Round)
             }
-            '✦' -> drawPath(sparklePath(c, s * 0.42f), Families.lemon.mid)
+            '✦' -> {
+                // Outlined like the star, so it holds its shape on lemon paper (the new-book note).
+                val sparkle = sparklePath(c, s * 0.42f)
+                drawPath(sparkle, Families.lemon.mid)
+                drawPath(sparkle, Families.lemon.trace, style = Stroke(s * 0.07f))
+            }
             else -> {
                 val star = starPath(c, s * 0.46f, s * 0.22f)
                 drawPath(star, Families.lemon.mid)
@@ -308,8 +313,8 @@ fun EmptyState(title: String, body: String, modifier: Modifier = Modifier, actio
         ) {
             StickerSheetArt()
             Text(title, style = t.emptyTitle.copy(color = c.ballpoint), textAlign = TextAlign.Center)
-            // Balanced lines (§4.6): never a one-word last line ("…say it out / loud.").
-            Text(body, style = t.body.copy(color = c.ballpoint, lineBreak = androidx.compose.ui.text.style.LineBreak.Paragraph), textAlign = TextAlign.Center)
+            // Balanced lines (§4.6, the balanced Heading strategy): never a one-word last line ("…say it out / loud.").
+            Text(body, style = t.body.copy(color = c.ballpoint, lineBreak = androidx.compose.ui.text.style.LineBreak.Heading), textAlign = TextAlign.Center)
             PicnicText(
                 "♡ " + stringResource(R.string.theme_empty_doodle) + " ♡",
                 style = t.doodle.copy(color = Families.sakura.trace),

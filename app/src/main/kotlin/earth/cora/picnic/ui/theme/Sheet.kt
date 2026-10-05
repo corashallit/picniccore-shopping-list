@@ -25,9 +25,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +39,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -73,7 +79,7 @@ val LetterSetShape: BittenEdgeShape = BittenEdgeShape(bite = 4.dp, every = 10.dp
  * pad sheet with rules and a margin line at 22 dp, 20 dp top corners, a perforated top edge and a hard shadow (0, −3);
  * a pink-gingham washi handle (60 × 16 dp, −3°) straddles the top edge and slaps on a beat after the sheet arrives
  * (1.6 → 1.2 → 1, 2 poses). Slides up 280 ms `cubic-bezier(.2, .9, .3, 1.1)` (a small overshoot); exits 260 ms; 120 ms
- * fades under reduced motion. [footer] is sticky with a white fade above it. Back and the scrim close it.
+ * fades under reduced motion. [footer] is sticky; while more lies below it, the content fades out above it. Back and the scrim close it.
  *
  * [topClearance]: the height the screen's app bar takes under the status bar (WP7's Add sheet passes the 72 dp app bar).
  * A tall sheet then stops below it, so the title, the LCD and More stay visible behind the scrim (§4.16); without it
@@ -196,28 +202,30 @@ fun LetterSetSurface(
                 .ruledLines(24.dp, c.rule.copy(alpha = 0.7f), firstLine = 64.dp, margin = c.margin.copy(alpha = 0.7f), marginX = 22.dp)
                 .drawBehind { drawPerforationRims(corner = 20.dp) },
         ) {
-            Column(
-                Modifier
-                    .weight(1f, fill = false)
-                    // The scroll's viewport starts under the perforated rim and the washi handle, so what scrolls up passes
-                    // under the paper's edge instead of over its bites and the tape (§4.16). At rest nothing moves.
-                    .padding(top = SCROLL_TOP)
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = 34.dp, end = 18.dp, top = 26.dp - SCROLL_TOP, bottom = if (footer == null) 24.dp else 8.dp),
-                content = content,
-            )
-            if (footer != null) {
-                Box(
+            // The sheet's paper: round buttons on it draw their rim (§17).
+            CompositionLocalProvider(LocalPaperColor provides c.pad) {
+                val scroll = rememberScrollState()
+                val fadeFooter = footer != null
+                Column(
                     Modifier
-                        .fillMaxWidth()
-                        .drawBehind {
-                            // The white fade above the sticky footer.
-                            drawRect(Brush.verticalGradient(listOf(c.pad.copy(alpha = 0f), c.pad), startY = -24.dp.toPx(), endY = 0f), Offset(0f, -24.dp.toPx()), Size(size.width, 24.dp.toPx()))
-                            drawRect(c.pad)
-                        }
-                        .padding(start = 22.dp, end = 18.dp, top = 8.dp, bottom = 18.dp),
-                    contentAlignment = Alignment.Center,
-                ) { footer() }
+                        .weight(1f, fill = false)
+                        // The scroll's viewport starts under the perforated rim and the washi handle, so what scrolls up passes
+                        // under the paper's edge instead of over its bites and the tape (§4.16). At rest nothing moves.
+                        .padding(top = SCROLL_TOP)
+                        .scrollEdgeFade(scroll, top = TOP_FADE, bottom = if (fadeFooter) FOOTER_FADE else 0.dp)
+                        .verticalScroll(scroll)
+                        .padding(start = 34.dp, end = 18.dp, top = 26.dp - SCROLL_TOP, bottom = if (footer == null) 24.dp else 8.dp),
+                    content = content,
+                )
+                if (footer != null) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .drawBehind { drawRect(c.pad) }
+                            .padding(start = 22.dp, end = 18.dp, top = 8.dp, bottom = 18.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { footer() }
+                }
             }
         }
         SheetHandle(
@@ -235,6 +243,36 @@ fun LetterSetSurface(
 
 /** Where the sheet's scrolling content is cut off at the top: below the 4 dp bites and the handle's tape (to ~10 dp). */
 private val SCROLL_TOP = 16.dp
+
+/** The fade above the sticky footer while more lies below it (§4.16), and the softer one under the perforated top. */
+private val FOOTER_FADE = 24.dp
+private val TOP_FADE = 12.dp
+
+/**
+ * Fades the scrolling content itself out at the viewport's edges (an alpha mask, not a pad-coloured wash), so cards
+ * thin out onto the paper and its rules instead of being tinted: over [top] while something lies above, over [bottom]
+ * while something lies below. Each fade is only as deep as what is left to scroll that way (up to its height), so it
+ * eases off as she reaches the end instead of vanishing at the last pixel; at rest at either end that edge is drawn as
+ * it is (and with neither, without a layer).
+ */
+private fun Modifier.scrollEdgeFade(scroll: ScrollState, top: Dp, bottom: Dp): Modifier =
+    graphicsLayer {
+        val fading = (top > 0.dp && scroll.value > 0) || (bottom > 0.dp && scroll.value < scroll.maxValue)
+        compositingStrategy = if (fading) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+    }.drawWithContent {
+        drawContent()
+        if (top > 0.dp && scroll.value > 0) {
+            val h = top.toPx()
+            val depth = (scroll.value / h).coerceIn(0f, 1f)
+            drawRect(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 1f - depth), Color.Black), startY = 0f, endY = h), Offset.Zero, Size(size.width, h), blendMode = BlendMode.DstIn)
+        }
+        if (bottom > 0.dp && scroll.value < scroll.maxValue) {
+            val h = bottom.toPx()
+            val y = size.height - h
+            val depth = ((scroll.maxValue - scroll.value) / h).coerceIn(0f, 1f)
+            drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Black.copy(alpha = 1f - depth)), startY = y, endY = size.height), Offset(0f, y), Size(size.width, h), blendMode = BlendMode.DstIn)
+        }
+    }
 
 /** The sheet's handle (§4.16): a pink-gingham washi strip 60 × 16 dp rotated −3°, straddling the top edge. Decorative. */
 @Composable

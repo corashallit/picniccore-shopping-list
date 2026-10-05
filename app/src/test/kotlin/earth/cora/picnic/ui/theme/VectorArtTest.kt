@@ -27,11 +27,12 @@ class VectorArtTest {
     @Test
     fun unknownAndPendingKeysResolveToTheCapsule() {
         val catalog = IconCatalog.default
-        assertEquals(StickerManifest.CAPSULE, StickerLibrary.resolve(IconCatalog.DEFAULT_ICON, catalog)?.key)
+        // The default key is the real "Shopping bag" sticker; rows show the capsule for it through displayRef.
+        assertEquals("paper_bag", StickerLibrary.resolve(IconCatalog.DEFAULT_ICON, catalog)?.key)
         assertEquals(StickerManifest.CAPSULE, StickerLibrary.resolve(StickerManifest.CAPSULE, catalog)?.key)
         assertEquals("strawberry", StickerLibrary.resolve("strawberry", catalog)?.key)
         // A key without its own art yet falls back to its category's generic (or the capsule), never to nothing.
-        assertNotNull(StickerLibrary.resolve("definitely_not_a_key", catalog))
+        assertEquals(StickerManifest.CAPSULE, StickerLibrary.resolve("definitely_not_a_key", catalog)?.key)
     }
 
     @Test

@@ -229,8 +229,9 @@ fun SunSticker(modifier: Modifier = Modifier, onTap: (() -> Unit)? = null, golde
 
 /**
  * A secondary screen's top (§4.2) and the v1 title card: no bar shape. [navigation] (the 40 dp Back round button), the
- * puffy title (24 sp → 20 sp, then ellipsis), an optional [subtitle] on a pad patch, [actions] (a text button "Done")
- * and an optional [bottom] slot. Applies no window insets itself.
+ * puffy title (one line, 24 sp → 20 sp, then ellipsis) and [actions] (a text button "Done") centred on the title's
+ * line; an optional [subtitle] on a pad patch in a row of its own, indented under the title; an optional [bottom]
+ * slot. Applies no window insets itself. (SecondaryScreen lays its bar out the same way.)
  */
 @Composable
 fun PicnicTopBar(
@@ -251,13 +252,16 @@ fun PicnicTopBar(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             navigation?.invoke()
-            Column(Modifier.weight(1f).padding(start = if (navigation == null) 0.dp else 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                PuffyText(title, style = t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp, heading = true)
-                if (subtitle != null) {
-                    PadPatch { Text(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
-                }
+            Box(Modifier.weight(1f).padding(start = if (navigation == null) 0.dp else 4.dp)) {
+                PuffyText(title, style = t.screenTitle, fill = c.ink, stroke = 6.dp, minFontSize = 20.sp, maxLines = 1, heading = true)
             }
             actions()
+        }
+        if (subtitle != null) {
+            // Under the title's first letter: past the 48 dp Back target and its 4 dp gap.
+            Box(Modifier.padding(start = if (navigation == null) 0.dp else 52.dp, end = 8.dp, top = 2.dp)) {
+                PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft, lineBreak = androidx.compose.ui.text.style.LineBreak.Heading)) }
+            }
         }
         if (bottom != null) Box(Modifier.padding(top = 4.dp)) { bottom() }
     }

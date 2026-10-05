@@ -166,6 +166,7 @@ fun PicnicSurface(
     // A focus ring on this card shows against its paper (§4.6): the ballpoint on a light card (the Glow page's own ink,
     // white, would vanish on it), white on a dark one.
     val ring = if (color.alpha < 0.5f) LocalFocusRingInk.current else if (color.luminance() > 0.5f) c.ballpoint else Color.White
+    val paper = if (color.alpha < 0.5f) LocalPaperColor.current else color
     Box(
         modifier
             .then(if (shadow) Modifier.hardShadow(shape, PicnicTheme.shadows, large) else Modifier)
@@ -173,9 +174,15 @@ fun PicnicSurface(
             .background(color)
             .then(if (border) Modifier.border(PicnicTheme.dimens.border, c.stickerWhite, shape) else Modifier),
     ) {
-        CompositionLocalProvider(LocalFocusRingInk provides ring) { content() }
+        CompositionLocalProvider(LocalFocusRingInk provides ring, LocalPaperColor provides paper) { content() }
     }
 }
+
+/**
+ * The paper under the content here: provided by a card or sheet ([PicnicSurface], the letter-set sheet); null on the
+ * binder. A round sticker button whose white face and border would sit on white paper reads it to draw its rim (§17).
+ */
+val LocalPaperColor = androidx.compose.runtime.compositionLocalOf<Color?> { null }
 
 /**
  * The pad patch (§4.1): information text on the binder never sits straight on the pinstripes. A white kiss-cut label
@@ -939,6 +946,10 @@ fun RoundStickerButton(
     val faceOffset = DpOffset(shadows.hs.x * press, shadows.hs.y * press)
     val ops = faceOps(kind, enabled = enabled, colors = c)
     val target = max(48f, faceSize.value + 8f).dp
+    // A white face in its white border on white paper (the Day pad: sheets, cards) has no edge of its own, only the
+    // shadow's crescent: a 1 dp periwinkle rim outside the border gives it one, as the postage card's (§17).
+    val paper = LocalPaperColor.current
+    val rim = enabled && paper != null && paper == c.stickerWhite && ops.filterIsInstance<FaceOp.Fill>().firstOrNull()?.color == paper
     Box(
         modifier
             .size(target)
@@ -953,6 +964,16 @@ fun RoundStickerButton(
                 .focusRing(CircleShape, focusRingInk(), focused)
                 .then(if (enabled) Modifier.hardShadow(CircleShape, shadows.color, shadows.hs) else Modifier)
                 .offset(faceOffset.x, faceOffset.y)
+                .then(
+                    if (rim) {
+                        Modifier.drawBehind {
+                            val w = 1.dp.toPx()
+                            drawCircle(PostageRim, radius = size.minDimension / 2f + w / 2f, style = Stroke(w))
+                        }
+                    } else {
+                        Modifier
+                    },
+                )
                 .clip(CircleShape)
                 .background(if (enabled) c.stickerWhite else c.disabledFace)
                 .padding(PicnicTheme.dimens.border)
@@ -1808,6 +1829,9 @@ fun KeyField(
     supportingText: String? = null,
     enabled: Boolean = true,
 ) {
+    // A cleared field masks again: the eye is disabled while empty, so a key pasted next must not arrive revealed.
+    val empty = value.isEmpty()
+    LaunchedEffect(empty) { if (empty && revealed) onRevealChange?.invoke(false) }
     PicnicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -1827,7 +1851,8 @@ fun KeyField(
                         PicnicGlyph.Eye,
                         stringResource(if (revealed) R.string.theme_key_hide else R.string.theme_key_show),
                         onClick = { onRevealChange(!revealed) },
-                        enabled = enabled,
+                        // Nothing typed, nothing to show: the saved key itself is never revealed (§4.8).
+                        enabled = enabled && value.isNotEmpty(),
                     )
                 }
                 if (onPaste != null) {

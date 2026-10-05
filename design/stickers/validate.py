@@ -82,14 +82,14 @@ MULTICOLOURED = {'sprinkles'}
 
 # approved r9 stickers that miss a rule as drawn (catalog keys); see the module docstring
 GRANDFATHERED = {
-    'base': {'bacon', 'bandages', 'carrot', 'chicken_drumstick', 'croissant', 'diapers', 'garlic', 'granola_bar', 'grapes',
-        'onion', 'pasta', 'pet_treats', 'sausages', 'tomato', 'toothpaste', 'tortillas'},
-    'live_area': {'_capsule', 'baby_food', 'baguette', 'carrot', 'cherries', 'chicken_breast', 'cucumber', 'deli_meat',
+    'base': {'bacon', 'bandages', 'carrot', 'chicken_drumstick', 'croissant', 'diapers', 'granola_bar', 'grapes',
+        'onion', 'pasta', 'pet_treats', 'sausages', 'tomato', 'toothpaste'},
+    'live_area': {'_capsule', 'baby_food', 'baguette', 'carrot', 'cherries', 'chicken_breast', 'cucumber',
         'grapes', 'honey', 'hot_sauce', 'ketchup', 'mayonnaise', 'mushrooms', 'mustard', 'olive_oil', 'onion',
         'pasta', 'peach', 'pear', 'popcorn', 'potato_chips', 'rotisserie_chicken', 'sausages', 'soy_sauce', 'sponge',
         'tomato', 'toothpaste', 'watermelon'},
     'thin': {'frozen_pizza'},
-    'corner': {'bottled_water', 'cream', 'french_fries', 'frozen_vegetables', 'garlic', 'laundry_detergent', 'olive_oil',
+    'corner': {'bottled_water', 'cream', 'french_fries', 'frozen_vegetables', 'laundry_detergent', 'olive_oil',
         'orange_juice', 'potato_chips'},
     'stray_gloss': {'bacon', 'celery', 'grapes'},
     'coverage': {'baby_wipes', 'bandages', 'bottled_water', 'butter_tart', 'diapers', 'honey'},
