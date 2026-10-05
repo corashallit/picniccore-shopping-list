@@ -221,6 +221,11 @@ d('dustbunny', 'Dust bunny', [               # the empty pantry shelf (§6.13)
     F(('circle', 39.4, 38.6, 2.4), 'periwinkle', 'p', ol=1.6),
     F(('circle', 41.2, 31.6, 1.6), 'periwinkle', 'p', ol=1.4),
 ], gloss=[G('M13.6 26.4Q14 23.4 16.2 21.8', 2.2)])
+# hand-placed gloss is held to the same rule as the generated gloss (gloss.clean): cut back where it would cross a trace
+# or a part painted over its shape
+from gloss import trim_gloss as _trim_gloss
+for _d in DECO:
+    _d.gloss = _trim_gloss(_d.parts, _d.gloss)
 DBY = {i.key: i for i in DECO}
 
 

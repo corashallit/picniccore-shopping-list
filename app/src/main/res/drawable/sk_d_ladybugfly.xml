@@ -80,11 +80,6 @@
         android:fillColor="#3E4BB0"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M18.6 29Q18.8 26 21 24.6"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"/>
   </group>
   <group android:name="dominant">
     <clip-path android:pathData="M26.1 21.61C32.11 23.94 34.83 30.39 31.88 37.28C29.89 41.93 25.04 44.02 20.97 42.18Z"/>

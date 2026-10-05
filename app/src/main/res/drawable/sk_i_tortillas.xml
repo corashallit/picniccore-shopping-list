@@ -83,21 +83,21 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M9.4 25.4C19.6 25.6 27.8 33.6 28 44"
+    <path android:pathData="M11.98 25.62C20.14 26.87 26.56 33.19 27.79 41.48"
         android:strokeColor="#CB9C73"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M12.4 30.7L12.6 27.2L13 26.4L13.8 26.1L15.2 26.4L17.3 27.2L19.3 28.2L21.3 29.6"
+    <path android:pathData="M21.8 22.4L23.8 21.6L26.9 20.8L30.1 20.6L33.5 20.7"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M13.2 34.39C13.2 34.51 13.17 34.63 13.12 34.74C13.07 34.85 12.99 34.94 12.9 35.02C12.8 35.09 12.7 35.14 12.58 35.17C12.46 35.2 12.34 35.2 12.22 35.17C12.1 35.14 12 35.09 11.9 35.02C11.81 34.94 11.73 34.85 11.68 34.74C11.63 34.63 11.6 34.51 11.6 34.39C11.6 34.27 11.63 34.15 11.68 34.04C11.73 33.93 11.81 33.84 11.9 33.76C12 33.69 12.1 33.64 12.22 33.61C12.34 33.58 12.46 33.58 12.58 33.61C12.7 33.64 12.8 33.69 12.9 33.76C12.99 33.84 13.07 33.93 13.12 34.04C13.17 34.15 13.2 34.27 13.2 34.39Z"
+    <path android:pathData="M37.96 21.11C37.96 21.23 37.93 21.35 37.88 21.46C37.83 21.57 37.75 21.66 37.66 21.74C37.56 21.81 37.46 21.86 37.34 21.89C37.22 21.92 37.1 21.92 36.98 21.89C36.86 21.86 36.76 21.81 36.66 21.74C36.57 21.66 36.49 21.57 36.44 21.46C36.39 21.35 36.36 21.23 36.36 21.11C36.36 20.99 36.39 20.87 36.44 20.76C36.49 20.65 36.57 20.56 36.66 20.48C36.76 20.41 36.86 20.36 36.98 20.33C37.1 20.3 37.22 20.3 37.34 20.33C37.46 20.36 37.56 20.41 37.66 20.48C37.75 20.56 37.83 20.65 37.88 20.76C37.93 20.87 37.96 20.99 37.96 21.11Z"
         android:fillColor="#FFFFFF"/>
-    <path android:pathData="M20.7 22.3L23.4 21.1L26.9 20.2L29.8 20L33.7 20.1"
+    <path android:pathData="M12.5 32.8L12.5 28.2"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"

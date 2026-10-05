@@ -65,19 +65,19 @@
         android:strokeWidth="1.7"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M35 41.2Q38 41.8 41 40.4"
+    <path android:pathData="M35.58 41.3Q38.29 41.66 41 40.4"
         android:strokeColor="#FFDCC6"
         android:strokeWidth="1.3"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M13.4 32.4L13.5 30.7L13.8 29.8L14.5 29L15.6 28.5L17.1 28.4L27.8 28.4"
+    <path android:pathData="M13.4 32.4L13.7 30.1L14.3 29.1L15.7 28.6L18.6 28.4"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M14.2 36.1C14.2 36.22 14.17 36.34 14.12 36.45C14.07 36.56 13.99 36.65 13.9 36.73C13.8 36.8 13.7 36.85 13.58 36.88C13.46 36.91 13.34 36.91 13.22 36.88C13.1 36.85 13 36.8 12.9 36.73C12.81 36.65 12.73 36.56 12.68 36.45C12.63 36.34 12.6 36.22 12.6 36.1C12.6 35.98 12.63 35.86 12.68 35.75C12.73 35.64 12.81 35.55 12.9 35.47C13 35.4 13.1 35.35 13.22 35.32C13.34 35.29 13.46 35.29 13.58 35.32C13.7 35.35 13.8 35.4 13.9 35.47C13.99 35.55 14.07 35.64 14.12 35.75C14.17 35.86 14.2 35.98 14.2 36.1Z"
+    <path android:pathData="M14.1 36.1C14.1 36.22 14.07 36.34 14.02 36.45C13.97 36.56 13.89 36.65 13.8 36.73C13.7 36.8 13.6 36.85 13.48 36.88C13.36 36.91 13.24 36.91 13.12 36.88C13 36.85 12.9 36.8 12.8 36.73C12.71 36.65 12.63 36.56 12.58 36.45C12.53 36.34 12.5 36.22 12.5 36.1C12.5 35.98 12.53 35.86 12.58 35.75C12.63 35.64 12.71 35.55 12.8 35.47C12.9 35.4 13 35.35 13.12 35.32C13.24 35.29 13.36 35.29 13.48 35.32C13.6 35.35 13.7 35.4 13.8 35.47C13.89 35.55 13.97 35.64 14.02 35.75C14.07 35.86 14.1 35.98 14.1 36.1Z"
         android:fillColor="#FFFFFF"/>
   </group>
   <group android:name="dominant">

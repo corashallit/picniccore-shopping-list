@@ -537,6 +537,10 @@ for _p in [_os.path.join(_here, _f) for _f in ('icons_b1.py', 'icons_b2.py', 'ic
     if _os.path.exists(_p):
         exec(open(_p).read())
 IBY = {i.key: i for i in ICONS}
+# inner band, label and gusset lines stop short of the outlines (see tidy.py), before the gloss sees them
+import tidy as _tidy
+for _i in ICONS:
+    _tidy.inset_lines(_i)
 # candy gloss is generated, never hand-placed (see gloss.py)
 from gloss import autogloss
 GLOSS_REPORT = []

@@ -29,7 +29,7 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M26 16L26 32"
+    <path android:pathData="M26 16L26 31.8"
         android:strokeColor="#8EDB76"
         android:strokeWidth="1.6"
         android:strokeLineCap="round"
@@ -80,17 +80,17 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M13.6 24.6L14 23.3L14.4 22.3L15.6 21.2L17 19.6L18 18.9L19.6 18.2L21 17.3L22.1 17L24 16.9L25.7 16.4L26.8 16.5L28.6 17L30.6 17"
+    <path android:pathData="M13.9 23.8L14.2 22.5L15.6 21.2L17.1 19.3L17.9 18.9"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M12.1 33.1L13.6 30.5L14.3 29.8L14.9 29.4L15.8 29.3L18.1 30.1"
+    <path android:pathData="M31.1 33.2L32.3 31.5L33.3 30.6L35.6 29.4L36.3 29.2L37.1 29.3"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M31.1 33.2L32.3 31.5L33.3 30.6L35.6 29.4L36.3 29.2L37.1 29.3"
+    <path android:pathData="M14.2 30.3L15.1 29.7L15.7 29.7L17 30.1L18.5 30.9"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"

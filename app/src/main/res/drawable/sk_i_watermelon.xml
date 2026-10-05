@@ -56,13 +56,11 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M12.7 31.9L11.8 29.4L11.9 28.5L12.6 27.8L16.3 27.7L31.1 27.6"
+    <path android:pathData="M18.4 31.6L17.3 29.8L16.2 27.2"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.6"
+        android:strokeWidth="2.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M15.47 35.04C15.47 35.16 15.44 35.28 15.39 35.39C15.34 35.5 15.26 35.59 15.17 35.67C15.07 35.74 14.97 35.79 14.85 35.82C14.73 35.85 14.61 35.85 14.49 35.82C14.37 35.79 14.27 35.74 14.17 35.67C14.08 35.59 14 35.5 13.95 35.39C13.9 35.28 13.87 35.16 13.87 35.04C13.87 34.92 13.9 34.8 13.95 34.69C14 34.58 14.08 34.49 14.17 34.41C14.27 34.34 14.37 34.29 14.49 34.26C14.61 34.23 14.73 34.23 14.85 34.26C14.97 34.29 15.07 34.34 15.17 34.41C15.26 34.49 15.34 34.58 15.39 34.69C15.44 34.8 15.47 34.92 15.47 35.04Z"
-        android:fillColor="#FFFFFF"/>
   </group>
   <group android:name="dominant">
     <clip-path android:pathData="M7.6 22.6L44.4 22.6C44.4 34.6 36 44 26 44C16 44 7.6 34.6 7.6 22.6Z"/>

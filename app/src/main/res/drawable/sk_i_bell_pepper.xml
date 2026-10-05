@@ -39,12 +39,12 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M21.8 18.4C19.8 24 20 34.4 22.6 42.6"
+    <path android:pathData="M21.44 19.55C19.84 25.34 20.17 34.93 22.6 42.6"
         android:strokeColor="#C3264F"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M30.2 18.4C32.2 24 32 34.4 29.4 42.6"
+    <path android:pathData="M30.56 19.55C32.16 25.34 31.83 34.93 29.4 42.6"
         android:strokeColor="#C3264F"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
@@ -57,12 +57,12 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M13.6 25.7L14.2 23.1L15.1 21.2L16.3 19.7L17.6 18.9L18.4 18.9L21.4 20.2L24.2 20.8L27.3 20.9L29.8 20.5"
+    <path android:pathData="M13.7 27.5L14.3 24L15.5 21.3L17.1 19.4L18.9 18.6"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M14.27 29.41C14.27 29.53 14.24 29.65 14.19 29.76C14.14 29.87 14.06 29.96 13.97 30.04C13.87 30.11 13.77 30.16 13.65 30.19C13.53 30.22 13.41 30.22 13.29 30.19C13.17 30.16 13.07 30.11 12.97 30.04C12.88 29.96 12.8 29.87 12.75 29.76C12.7 29.65 12.67 29.53 12.67 29.41C12.67 29.29 12.7 29.17 12.75 29.06C12.8 28.95 12.88 28.86 12.97 28.78C13.07 28.71 13.17 28.66 13.29 28.63C13.41 28.6 13.53 28.6 13.65 28.63C13.77 28.66 13.87 28.71 13.97 28.78C14.06 28.86 14.14 28.95 14.19 29.06C14.24 29.17 14.27 29.29 14.27 29.41Z"
+    <path android:pathData="M14.36 31.13C14.36 31.25 14.33 31.37 14.28 31.48C14.23 31.59 14.15 31.68 14.06 31.76C13.96 31.83 13.86 31.88 13.74 31.91C13.62 31.94 13.5 31.94 13.38 31.91C13.26 31.88 13.16 31.83 13.06 31.76C12.97 31.68 12.89 31.59 12.84 31.48C12.79 31.37 12.76 31.25 12.76 31.13C12.76 31.01 12.79 30.89 12.84 30.78C12.89 30.67 12.97 30.58 13.06 30.5C13.16 30.43 13.26 30.38 13.38 30.35C13.5 30.32 13.62 30.32 13.74 30.35C13.86 30.38 13.96 30.43 14.06 30.5C14.15 30.58 14.23 30.67 14.28 30.78C14.33 30.89 14.36 31.01 14.36 31.13Z"
         android:fillColor="#FFFFFF"/>
   </group>
   <group android:name="dominant">

@@ -40,12 +40,12 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M20.6 28.4L23.6 28.4"
+    <path android:pathData="M21.1 28.4L23.6 28.4"
         android:strokeColor="#FF9FC8"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M20.6 32.4L25 32.4"
+    <path android:pathData="M20.8 32.4L24.5 32.4"
         android:strokeColor="#FF9FC8"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
@@ -74,12 +74,12 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M21.4 30.3L21.8 26.2L22 25.8L22.4 25.2L22.8 25L24 24.8L27.8 24.8"
+    <path android:pathData="M20.7 35.4L21.6 24.4"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.6"
+        android:strokeWidth="2.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M21.93 33.97C21.93 34.09 21.9 34.21 21.85 34.32C21.8 34.43 21.72 34.52 21.63 34.6C21.53 34.67 21.43 34.72 21.31 34.75C21.19 34.78 21.07 34.78 20.95 34.75C20.83 34.72 20.73 34.67 20.63 34.6C20.54 34.52 20.46 34.43 20.41 34.32C20.36 34.21 20.33 34.09 20.33 33.97C20.33 33.85 20.36 33.73 20.41 33.62C20.46 33.51 20.54 33.42 20.63 33.34C20.73 33.27 20.83 33.22 20.95 33.19C21.07 33.16 21.19 33.16 21.31 33.19C21.43 33.22 21.53 33.27 21.63 33.34C21.72 33.42 21.8 33.51 21.85 33.62C21.9 33.73 21.93 33.85 21.93 33.97Z"
+    <path android:pathData="M21.42 38.98C21.42 39.1 21.39 39.22 21.34 39.33C21.29 39.44 21.21 39.53 21.12 39.61C21.02 39.68 20.92 39.73 20.8 39.76C20.68 39.79 20.56 39.79 20.44 39.76C20.32 39.73 20.22 39.68 20.12 39.61C20.03 39.53 19.95 39.44 19.9 39.33C19.85 39.22 19.82 39.1 19.82 38.98C19.82 38.86 19.85 38.74 19.9 38.63C19.95 38.52 20.03 38.43 20.12 38.35C20.22 38.28 20.32 38.23 20.44 38.2C20.56 38.17 20.68 38.17 20.8 38.2C20.92 38.23 21.02 38.28 21.12 38.35C21.21 38.43 21.29 38.52 21.34 38.63C21.39 38.74 21.42 38.86 21.42 38.98Z"
         android:fillColor="#FFFFFF"/>
   </group>
   <group android:name="dominant">

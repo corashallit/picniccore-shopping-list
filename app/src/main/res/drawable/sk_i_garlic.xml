@@ -40,22 +40,22 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M26 17.2C21.6 22.4 20.6 32.6 22.8 41.2"
+    <path android:pathData="M24.31 19.74C21.69 24.71 21.04 32.04 22.27 38.79"
         android:strokeColor="#B597F2"
         android:strokeWidth="1.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M26 17.2C30.4 22.4 31.4 32.6 29.2 41.2"
+    <path android:pathData="M27.69 19.74C30.31 24.71 30.96 32.04 29.73 38.79"
         android:strokeColor="#B597F2"
         android:strokeWidth="1.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M19.2 21.8C15.6 27 15.8 34.6 18 40.6"
+    <path android:pathData="M18.17 23.55C16 27.95 15.99 33.53 17.31 38.43"
         android:strokeColor="#B597F2"
         android:strokeWidth="1.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M32.8 21.8C36.4 27 36.2 34.6 34 40.6"
+    <path android:pathData="M33.83 23.55C36 27.95 36.01 33.53 34.69 38.43"
         android:strokeColor="#B597F2"
         android:strokeWidth="1.6"
         android:strokeLineCap="round"
@@ -67,13 +67,11 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M16.2 26L17.6 24.6L19.7 23.1L24.3 20.3L25.9 19.5L27.1 19.9L29.3 21.3"
+    <path android:pathData="M13.6 32.5L13.8 30.2L14.3 28.4"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.6"
+        android:strokeWidth="2.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M15.16 29.16C15.16 29.28 15.13 29.4 15.08 29.51C15.03 29.62 14.95 29.71 14.86 29.79C14.76 29.86 14.66 29.91 14.54 29.94C14.42 29.97 14.3 29.97 14.18 29.94C14.06 29.91 13.96 29.86 13.86 29.79C13.77 29.71 13.69 29.62 13.64 29.51C13.59 29.4 13.56 29.28 13.56 29.16C13.56 29.04 13.59 28.92 13.64 28.81C13.69 28.7 13.77 28.61 13.86 28.53C13.96 28.46 14.06 28.41 14.18 28.38C14.3 28.35 14.42 28.35 14.54 28.38C14.66 28.41 14.76 28.46 14.86 28.53C14.95 28.61 15.03 28.7 15.08 28.81C15.13 28.92 15.16 29.04 15.16 29.16Z"
-        android:fillColor="#FFFFFF"/>
   </group>
   <group android:name="dominant">
     <clip-path android:pathData="M26 13.8C27.6 17.2 30.2 18.4 34 20.6C41.6 25 43 33.4 38.6 38.8C37 40.6 35 41.4 32.6 41.4L19.4 41.4C17 41.4 15 40.6 13.4 38.8C9 33.4 10.4 25 18 20.6C21.8 18.4 24.4 17.2 26 13.8Z"/>

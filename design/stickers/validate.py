@@ -38,7 +38,7 @@ from shapely.geometry import Point
 from shapely.ops import unary_union
 
 import engine
-from engine import C, deep
+from engine import C, deep, apply_tf, parse_tf
 import emit_android as E
 
 TOKENS = {E.WHITE}
@@ -188,10 +188,10 @@ def check_gloss(lint, stickers, gloss_report, critters):
             spans.append((cov, key))
             if cov > .36:
                 lint.errors.append(f'gloss: {key} main gloss covers {cov:.0%} of its contour (25-35 %)')
-            elif cov < COVERAGE_MIN:
+            elif cov < COVERAGE_MIN and not info['main'].get('clipped'):
                 lint.fail('coverage', key, f'gloss: {key} main gloss covers {cov:.1%} of its contour (25-35 %): '
                                            f'a shape drawn above cuts the run short, or the shape has no clear upper-left curve')
-            if not info.get('dot'):
+            if not info.get('dot') and not info.get('dot_blocked'):
                 lint.fail('dot', key, f'gloss: {key} main gloss has no dot (the dot would leave the shape)')
     for icon, key, *_ in list(critters) + list(stickers):
         if icon.key in HEADS:
@@ -470,6 +470,77 @@ def check_baskets(lint, baskets):
         lint.errors.append(f'basket: no art for {k}')
 
 
+def check_gloss_clean(lint, label, parts, gloss):
+    """gloss on trace pixels: every gloss mark keeps off its host's colour-trace and off every part painted over its
+    shape (labels, icons, trace-coloured detail lines, the parts drawn in front), stays out of necks and rays, never
+    turns sharply (no hooks or hairpins); every dot keeps 1u off any stroke (gloss.clean). Detail lines in a non-trace
+    colour (a banana's ridge, a pale vein) may sit under a gloss stroke, never under a dot."""
+    import gloss as GL
+    if not gloss:
+        return
+    pp = GL.paints(parts)
+    bad = []
+    for n, g in enumerate(gloss):
+        why = GL.clean(pp, g, soft_ok=True, trace_gap=.35)
+        if why:
+            bad.append(f'{"stroke" if g[0] == "g" else "dot"} {n} {why}')
+    if bad:
+        lint.errors.append(f'gloss: {label} ' + '; '.join(bad))
+
+
+def check_cut(lint, label, sil, w, h, r):
+    """the white border (the silhouette stroked CUT_W) encloses no holes and stays inside the canvas"""
+    if sil is None or sil.is_empty:
+        return
+    white = sil.buffer(r)
+    holes = E._filled(white).difference(white)
+    if holes.area > .02:
+        c = holes.centroid
+        lint.errors.append(f'cut: {label} white border has a hole of {holes.area:.2f} u² at ({c.x:.1f},{c.y:.1f})')
+    x0, y0, x1, y1 = white.bounds
+    if x0 < -.02 or y0 < -.02 or x1 > w + .02 or y1 > h + .02:
+        lint.errors.append(f'cut: {label} white border leaves the {w} x {h} canvas ({x0:.2f},{y0:.2f}..{x1:.2f},{y1:.2f})')
+
+
+def check_line_caps(lint, icon, key):
+    """lines whose caps sit on an outline: a detail line's or a printed line's round end never lies on a visible
+    colour-trace of another colour (a band line's red cap on a blue can's outline; tidy.inset_lines cuts such ends back
+    to tidy.LINE_GAP off it), and never pokes past the outline's outer edge. An end meeting a trace of its own colour
+    is a T-junction and merges into it."""
+    import gloss as GL
+    import tidy
+    from shapely.ops import unary_union
+    pp = GL.paints(icon.parts)
+    art = unary_union([q.fill for q in pp if q.p.cut and q.fill is not None and not q.fill.is_empty])
+    hits = []
+    cache = {}
+    for i, p in enumerate(icon.parts):
+        paths = []
+        if p.kind == 'fill':
+            paths = [(d, p.det_w) for d in p.det]
+        elif p.kind == 'line' and not p.cut:
+            paths = [(p.s[1], p.w)]
+        if not paths:
+            continue
+        col = tidy.colour_of_line(p)
+        if col not in cache:
+            cache[col] = tidy.visible_traces(pp, unlike=col)
+        traces = cache[col]
+        cover = [r.paint for r in pp[i + 1:] if not r.paint.is_empty]
+        cover = unary_union(cover) if cover else None
+        for d, w in paths:
+            for segs in tidy._segments(d):
+                for end in (segs[0][0], segs[-1][-1]):
+                    q = apply_tf(parse_tf(p.tf), *end) if p.tf else end
+                    cap = Point(q).buffer(w / 2)
+                    if cover is not None:
+                        cap = cap.difference(cover)          # an end under a part drawn later is not seen
+                    if (traces is not None and cap.intersection(traces).area > .05) or cap.difference(art.buffer(1.0)).area > .05:
+                        hits.append(f'part {i} at ({q[0]:.1f},{q[1]:.1f})')
+    if hits:
+        lint.errors.append(f'lines: {key} has line ends on an outline: ' + ', '.join(hits[:6]))
+
+
 def run(report):
     lint = Lint()
     from icons import GLOSS_REPORT, ICONS
@@ -494,7 +565,22 @@ def run(report):
     check_hairlines(lint, stickers)
     check_no_text(lint, ICONS + DECO)
     check_baskets(lint, report['baskets'])
+    # gloss on trace pixels, white-border holes, the white border inside the canvas, line ends on outlines
+    for icon, key, groups, dom, sil in stickers:
+        check_gloss_clean(lint, f'sk_i_{key}', icon.parts, icon.gloss)
+        check_cut(lint, f'sk_i_{key}', sil, 52, 52, E.CUT_W / 2)
+        check_line_caps(lint, icon, key)
+    for icon, key, groups, dom, sil in report['decor']:
+        check_gloss_clean(lint, f'sk_d_{key}', icon.parts, icon.gloss)
+        check_cut(lint, f'sk_d_{key}', sil, 52, 52, E.CUT_W / 2)
+    for b, kind, layers, lsil in report['baskets']:
+        check_gloss_clean(lint, f'sk_b_{kind}_front', b.front, b.gloss)
+        check_gloss_clean(lint, f'sk_b_{kind}_lid_closed', b.lid_closed, b.lid_gloss)
+        for name, sil in lsil.items():
+            check_cut(lint, f'sk_b_{kind}_{name}', sil, 80, 64, E.CUT_W / 2)
     import launcher
+    ham = launcher.hamper()
+    check_gloss_clean(lint, 'sk_l_launcher_foreground (hamper)', ham.parts, ham.gloss)
     lint.errors += launcher.safe_zone_errors()
     for path, xml in report['out'].items():
         if '<text' in xml:

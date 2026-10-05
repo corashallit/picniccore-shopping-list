@@ -350,4 +350,10 @@ BASKETS += [
            lid_closed=[F(('rect', 3.4, 10.6, 57.2, 13, 4.4), 'grape', 'm', band=.24, band_t='deep'), F(('rect', 28, 19, 8, 6.4, 2), 'lemon', 'm', ol=1.4)],
            gloss=[G('M9.2 30V37', 2.4), DOT(9.2, 40)]),
 ]
+# hand-placed gloss is held to the same rule as the generated gloss (gloss.clean): the front wall's gloss keeps off the
+# parts drawn in front of it (a flap, a post, a trim), the lid's off its own parts
+from gloss import trim_gloss as _trim_gloss
+for _b in BASKETS:
+    _b.gloss = _trim_gloss(_b.front, _b.gloss)
+    _b.lid_gloss = _trim_gloss(_b.lid_closed, _b.lid_gloss)
 BBY = {b.key: b for b in BASKETS}
