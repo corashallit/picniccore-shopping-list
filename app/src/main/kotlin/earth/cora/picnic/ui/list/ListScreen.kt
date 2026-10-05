@@ -502,8 +502,9 @@ fun ListRoute(
         }
     }
     // The one-time hold hint (§6.1, Cora 5 October): the first time her list shows items sorted into aisles, at a quiet
-    // moment (no other note, nothing over the list, no Next card or celebration), through the notes' own channel, so it
-    // takes their timing, reduced motion and the polite announcement. Shown once; a held row retires it (onOpenEdit).
+    // moment (no other note, nothing over the list, no check-off hop, Next card or celebration playing), through the
+    // notes' own channel, so it takes their place, timing, reduced motion and polite announcement, and the eggs keep
+    // clear of it as of any note. Shown once; a held row retires it (onOpenEdit).
     val hint = stringResource(R.string.list_hint_hold)
     val hintOk = stringResource(R.string.list_hint_hold_ok)
     LaunchedEffect(state.holdHint) {
@@ -511,7 +512,8 @@ fun ListRoute(
         snapshotFlow {
             val p = vm.engine.current.value
             toasts.current == null && toasts.queue.isEmpty() && state.editing == null && !showLists && !screen.menuOpen &&
-                !screen.newTripOpen && !screen.tripBookOpen && !addState.sheetOpen && p.nextCard == null && p.celebration == null
+                !screen.newTripOpen && !screen.tripBookOpen && !addState.sheetOpen && p.nextCard == null && p.celebration == null &&
+                p.flights.isEmpty()
         }.first { it }
         toasts.show(ToastMessage(hint, kind = HINT_KIND, actionLabel = hintOk, undo = false, onAction = {}))
         vm.holdHintShown()

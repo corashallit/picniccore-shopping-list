@@ -860,26 +860,6 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
                     },
             )
         }
-        // "Also here" (Cora, 5 October; §6.7): what this store keeps in this aisle where you would not look for it. One
-        // line of up to Aisles.NOTE_MAX characters, saved on Done or when the field lets go. Only My store shows it.
-        var noteFocused by remember { mutableStateOf(false) }
-        PicnicTextField(
-            value = note,
-            onValueChange = { v -> note = v.replace('\n', ' ').take(Aisles.NOTE_MAX) },
-            label = stringResource(R.string.aisles_note_field),
-            placeholder = stringResource(R.string.aisles_note_placeholder),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { commitNote() }),
-            supportingText = stringResource(R.string.aisles_note_hint, Aisles.NOTE_MAX),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag(AislesTags.noteField())
-                .onFocusChanged {
-                    if (noteFocused && !it.isFocused) commitNote()
-                    noteFocused = it.isFocused
-                },
-        )
         val white = PicnicTheme.colors.stickerWhite
         SwatchGrid(stringResource(R.string.aisles_colour), Families.rotation) { i, family ->
             SwatchCell(look.family == family, familyNames.getOrElse(i) { family.name }, onClick = { actions.onFamily(id, family.name) }) {
@@ -917,6 +897,27 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
                 }
             }
         }
+        // "Also here" (Cora, 5 October; §6.7): what this store keeps in this aisle where you would not look for it. One
+        // line of up to Aisles.NOTE_MAX characters, saved on Done or when the field lets go. Only My store shows it.
+        var noteFocused by remember { mutableStateOf(false) }
+        PicnicTextField(
+            value = note,
+            onValueChange = { v -> note = v.replace('\n', ' ').take(Aisles.NOTE_MAX) },
+            label = stringResource(R.string.aisles_note_field),
+            placeholder = stringResource(R.string.aisles_note_placeholder),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { commitNote() }),
+            supportingText = stringResource(R.string.aisles_note_hint, Aisles.NOTE_MAX),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp)
+                .testTag(AislesTags.noteField())
+                .onFocusChanged {
+                    if (noteFocused && !it.isFocused) commitNote()
+                    noteFocused = it.isFocused
+                },
+        )
     }
 }
 

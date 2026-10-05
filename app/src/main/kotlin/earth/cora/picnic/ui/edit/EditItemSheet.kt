@@ -280,12 +280,14 @@ internal fun EditDetails(
         }
 
         SectionDivider()
-        // Opened from the add note's "Move" (§6.2), the sheet scrolls straight to "Move to aisle" once it is laid out.
+        // Opened from the add note's "Move" (§6.2), the sheet scrolls "Move to aisle" to its top once it is laid out (a
+        // rect running far below the heading brings its top edge, not its bottom, into place), so the chips stand clear of
+        // the note a move shows above the footer.
         val moveSection = remember { BringIntoViewRequester() }
         if (state.focusMove) {
             LaunchedEffect(state.item.id) {
                 withFrameNanos { }
-                moveSection.bringIntoView()
+                moveSection.bringIntoView(androidx.compose.ui.geometry.Rect(0f, 0f, 1f, MOVE_REACH))
             }
         }
         Column(Modifier.bringIntoViewRequester(moveSection), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -422,6 +424,9 @@ private const val LARGE_TEXT = 1.5f
 
 /** From this font scale Amount and Note stand one under the other (side by side, Note's hint would be cut at 1.3). */
 private const val FIELDS_STACK = 1.15f
+
+/** How far below "Move to aisle" the rect it brings into view runs (px): taller than any sheet, so its top leads. */
+private const val MOVE_REACH = 100_000f
 
 /** Stickers shown for an item with no category yet (it still shows the capsule): the first ones of the catalog. */
 internal const val MIN_GRID = 15

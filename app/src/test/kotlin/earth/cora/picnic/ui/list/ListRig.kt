@@ -127,6 +127,12 @@ class ListRig(
     val announcer: FakeAnnouncer = FakeAnnouncer(),
     /** The phone's timing settings, for the engine and the screen (the app's defaults unless a test sets the phone's). */
     val timeouts: Timeouts = DefaultTimeouts,
+    /**
+     * The one-time move notes as a fresh install has them (the hold hint due, the first move's fuller note not shown).
+     * Off by default: the rest of the list's tests run on a phone that has seen them, so the hint never queues ahead of
+     * the note a test is about.
+     */
+    firstTime: Boolean = false,
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     val store = InMemoryStateStore(initial)
@@ -142,7 +148,10 @@ class ListRig(
     private val newId: () -> String = { "new-${next++}" }
     val aisleSync = AisleSync(store, assistant, ListFixture.catalog.baskets) { now }
     val engine = MotionChoreographer(feedback, announcer, timeouts)
-    val settings = InMemorySettingsRepository(storedToken = "sk-test-0123456789abcdef")
+    val settings = InMemorySettingsRepository(
+        initial = earth.cora.picnic.settings.AppSettings(moveNoteShown = !firstTime, holdHintDone = !firstTime),
+        storedToken = "sk-test-0123456789abcdef",
+    )
     val vm = ListViewModel(
         store = store,
         album = this.album,
