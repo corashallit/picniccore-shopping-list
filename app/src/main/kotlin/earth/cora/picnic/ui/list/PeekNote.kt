@@ -23,7 +23,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -78,7 +77,11 @@ internal fun PeekNote(section: SectionUi, modifier: Modifier = Modifier, maxHeig
             val loose = constraints.copy(minWidth = 0, minHeight = 0)
             val gap = 3.dp.roundToPx()
             val title = subcompose("title") {
-                Text(section.displayName, style = t.smallTitle.copy(color = c.ballpoint, fontSize = 14.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // The aisle's whole name, wrapping onto balanced lines with "&" kept with the word after it (§0.4).
+                Text(
+                    earth.cora.picnic.ui.theme.keepWithNextWord(section.displayName),
+                    style = t.smallTitle.copy(color = c.ballpoint, fontSize = 14.sp, lineBreak = androidx.compose.ui.text.style.LineBreak.Heading),
+                )
             }.single().measure(loose)
             val lines = section.rows.mapIndexed { i, r ->
                 subcompose("row:$i") {

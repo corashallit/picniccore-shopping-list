@@ -3,8 +3,8 @@
     <!-- Easter eggs, Surprise lab, receipt strings: WP9 (docs/DESIGN_STICKER.md §12, §13.2, §16). Say plain true things. -->
 
     <!-- Toasts (§16). -->
-    <string name="egg_toast_rain">Rain on the way · bring the tote!</string>
-    <string name="egg_toast_bonus">BONUS STAGE! ♪</string>
+    <string name="egg_toast_rain">Rain on the way · bring\u00A0the\u00A0tote!</string>
+    <string name="egg_toast_bonus">BONUS STAGE! ♪ · tap\u00A0a\u00A0stamp\u00A0to\u00A0stop</string>
     <string name="egg_toast_back_pocket">Your album’s back pocket opened!</string>
     <string name="egg_toast_look">Look</string>
     <string name="egg_toast_receipt">Receipt saved to your sticker\u00A0book\u00A0♡</string>

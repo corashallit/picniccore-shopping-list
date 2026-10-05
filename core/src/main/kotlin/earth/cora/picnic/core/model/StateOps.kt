@@ -121,7 +121,8 @@ data class AddOutcome(val added: List<String>, val alreadyThere: List<String>, v
  *   on your list");
  * - otherwise a CHECKED match is un-checked instead of adding a second row ([AddOutcome.revived]: "Milk is back
  *   on your list"; its twin peels out of the book and the trip's lastActivityAt moves to [now]); quantities are
- *   never rewritten;
+ *   never rewritten. The add flows go through [addItemsStartingNewBook], which files a finished shop's book first,
+ *   so a revive only ever peels a sticker out of the shop in progress;
  * - otherwise the item is appended ([AddOutcome.added]), unless an earlier item of [items] had the same name, its
  *   name is blank, or its id is already used anywhere.
  * Aisle ids are kept as given (callers already applied corrections; unknown ids render as Unsorted). Ends with
@@ -202,7 +203,8 @@ data class AutoNewBook(val book: TripBook, val undo: NewBookUndo)
 /**
  * What [undoNewBook] needs to take an automatic new book back: the old [trip], the items "Clear what I got"
  * removed (with their indices) and the list's previous [lastClosedAt] and [openAisle]. [itemId] is the tapped item
- * of a check-off; null when an add started the book (addItemsStartingNewBook).
+ * of a check-off, or the item an un-check or a tear-off took out of a finished shop's book ([tookSticker]); null when
+ * an add started the book (addItemsStartingNewBook).
  */
 data class NewBookUndo(
     val listId: String,
@@ -211,7 +213,10 @@ data class NewBookUndo(
     val cleared: List<IndexedValue<GroceryItem>>,
     val lastClosedAt: Long?,
     val openAisle: String?,
-)
+) {
+    /** The gesture took [itemId]'s sticker out of a finished shop's book (an un-check or a tear-off, §7.1). */
+    val tookSticker: Boolean get() = itemId != null && cleared.any { it.value.id == itemId }
+}
 
 /**
  * The automatic new book [auto] still stands (§0.4 Q9): its list still carries the fresh book it started (the tapped
@@ -228,28 +233,50 @@ fun AppState.newBookStands(auto: AutoNewBook): Boolean {
 }
 
 /**
+ * Files [list]'s book as it stands and clears what was got (newTrip(CLEAR_GOTTEN)), then applies [then] to the fresh
+ * list. The result carries the filed book and the [NewBookUndo] (with [itemId], the gesture's item, if any). Null when
+ * the list has no book to file.
+ */
+private fun AppState.fileBookFirst(list: GroceryList, itemId: String?, now: Long, then: (AppState) -> AppState): Pair<AppState, AutoNewBook>? {
+    val oldTrip = list.trip ?: return null
+    val cleared = list.items.withIndex().filter { it.value.checked }
+    val (fresh, book) = newTrip(list.id, NewTripMode.CLEAR_GOTTEN, now)
+    if (book == null) return null
+    return then(fresh) to AutoNewBook(book, NewBookUndo(list.id, itemId, oldTrip, cleared, list.lastClosedAt, list.openAisle))
+}
+
+/**
  * The check-off tap (§0.4 Q9, TripRulesTest.autoNewBookAfterIdle). When it CHECKS an item on a trip whose last
  * activity is more than 12 h old (TripRules.startsNewBook), the old book is filed and what was got last time is
  * cleared (newTrip(CLEAR_GOTTEN)), and the item is checked onto a fresh trip: the result carries the filed book
  * (write it to the album BEFORE this state, §7.2; TripFiling.toggle does both) and the [NewBookUndo] for the
  * toast's Undo. When that check-off also completes the fresh trip (its only item), the fresh trip's finale is marked
- * shown at once: no finale, no bonus (TripRulesTest.autoNewBookSameTapCompletion). Every other tap is [toggleChecked]
- * with no [AutoNewBook].
+ * shown at once: no finale, no bonus (TripRulesTest.autoNewBookSameTapCompletion).
+ * When it UN-CHECKS an item of a trip whose shop is over (TripRules.shopIsOver: idle, or more than 30 min after the
+ * finale; she needs it again), the book is filed as it stands (the tapped sticker still in it, so a finished shop
+ * keeps its PERFECT), what was got is cleared, and the tapped item comes back unchecked on the fresh list at its place
+ * among the rows left (TripRulesTest.uncheckAfterTheShopFilesTheBook). Every other tap is [toggleChecked] with no
+ * [AutoNewBook].
  */
 fun AppState.toggleCheckedStartingNewBook(listId: String, itemId: String, now: Long): Pair<AppState, AutoNewBook?> {
     val list = list(listId) ?: return this to null
     val item = list.items.firstOrNull { it.id == itemId } ?: return this to null
-    val oldTrip = list.trip
-    if (item.checked || oldTrip == null || !TripRules.startsNewBook(list, now)) return toggleChecked(listId, itemId, now) to null
-    val cleared = list.items.withIndex().filter { it.value.checked }
-    val (fresh, book) = newTrip(listId, NewTripMode.CLEAR_GOTTEN, now)
-    val toggled = fresh.toggleChecked(listId, itemId, now)
-    if (book == null) return toggled to null
-    // The same tap that started the book finished it (a one-thing top-up the evening after a shop): its finale counts as
-    // shown, so no celebration plays, no bonus sticker is spent and the new book's Undo note stays readable; the aisle's
-    // own in-place chain still plays (§0.4 Q9, §7.1).
-    val checked = if (toggled.list(listId)?.trip?.completedAt != null) toggled.markFinaleShown(listId, now) else toggled
-    return checked to AutoNewBook(book, NewBookUndo(listId, itemId, oldTrip, cleared, list.lastClosedAt, list.openAisle))
+    if (item.checked) {
+        if (!TripRules.shopIsOver(list, now)) return toggleChecked(listId, itemId, now) to null
+        // Its place among the rows that stay (the unchecked ones before it).
+        val at = list.items.takeWhile { it.id != itemId }.count { !it.checked }
+        val again = item.copy(checked = false, checkedAt = null, bookSlot = null)
+        return fileBookFirst(list, itemId, now) { fresh -> fresh.restoreItem(listId, again, at, now) }
+            ?: (toggleChecked(listId, itemId, now) to null)
+    }
+    if (list.trip == null || !TripRules.startsNewBook(list, now)) return toggleChecked(listId, itemId, now) to null
+    return fileBookFirst(list, itemId, now) { fresh ->
+        val toggled = fresh.toggleChecked(listId, itemId, now)
+        // The same tap that started the book finished it (a one-thing top-up the evening after a shop): its finale counts
+        // as shown, so no celebration plays, no bonus sticker is spent and the new book's Undo note stays readable; the
+        // aisle's own in-place chain still plays (§0.4 Q9, §7.1).
+        if (toggled.list(listId)?.trip?.completedAt != null) toggled.markFinaleShown(listId, now) else toggled
+    } ?: (toggleChecked(listId, itemId, now) to null)
 }
 
 /**
@@ -259,19 +286,24 @@ fun AppState.toggleCheckedStartingNewBook(listId: String, itemId: String, now: L
  * (newTrip(CLEAR_GOTTEN)); then [items] are added to the fresh list, so a name that was got last time is a new row
  * rather than a sticker peeled out of last week's book. The book opens again at the next check-off. The result
  * carries the filed book (write it to the album BEFORE this state, §7.2; TripFiling.addItems does both) and the
- * [NewBookUndo] for the toast's Undo. An add that changes nothing (only rows already on the list), or one within
+ * [NewBookUndo] for the toast's Undo. Within 12 h the same happens when the add would revive a name that was got on
+ * a shop that is over (TripRules.shopIsOver: more than 30 min after its finale), so the name becomes a fresh row and the
+ * finished book keeps its PERFECT. An add that changes nothing (only rows already on the list), or any other add within
  * 12 h, is [addItems] with no [AutoNewBook].
  */
 fun AppState.addItemsStartingNewBook(listId: String, items: List<GroceryItem>, now: Long): Triple<AppState, AddOutcome, AutoNewBook?> {
     val (plain, outcome) = addItems(listId, items, now)
     val list = list(listId) ?: return Triple(plain, outcome, null)
-    val oldTrip = list.trip
-    if (plain === this || oldTrip == null || !TripRules.startsNewBook(list, now)) return Triple(plain, outcome, null)
-    val cleared = list.items.withIndex().filter { it.value.checked }
-    val (fresh, book) = newTrip(listId, NewTripMode.CLEAR_GOTTEN, now)
-    if (book == null) return Triple(plain, outcome, null)
-    val (added, freshOutcome) = fresh.addItems(listId, items, now)
-    return Triple(added, freshOutcome, AutoNewBook(book, NewBookUndo(listId, null, oldTrip, cleared, list.lastClosedAt, list.openAisle)))
+    if (plain === this || list.trip == null) return Triple(plain, outcome, null)
+    // A name she got on a finished shop (more than 30 min after its finale) is wanted again: the shop's book is filed
+    // first, so the revive never peels a sticker out of it (§7.1).
+    val files = TripRules.startsNewBook(list, now) || (outcome.revived.isNotEmpty() && TripRules.shopIsOver(list, now))
+    if (!files) return Triple(plain, outcome, null)
+    var freshOutcome = outcome
+    val (added, auto) = fileBookFirst(list, null, now) { fresh ->
+        fresh.addItems(listId, items, now).also { freshOutcome = it.second }.first
+    } ?: return Triple(plain, outcome, null)
+    return Triple(added, freshOutcome, auto)
 }
 
 /**
@@ -280,21 +312,29 @@ fun AppState.addItemsStartingNewBook(listId: String, items: List<GroceryItem>, n
  * first among them) is checked into the OLD book instead, taking its lowest free spots in check-off order. Items
  * added meanwhile stay. A check-off's undo is activity on the trip (lastActivityAt = [now]); an add's undo
  * ([NewBookUndo.itemId] null) checks nothing, so the trip keeps its old lastActivityAt and the items added stay out
- * of a finished book (TripRules.bookItems). The caller also takes the book back out of the album (Album.unfile) after
- * this state is saved, and only while [newBookStands] (TripFiling.undoNewBook). Unknown list -> this.
+ * of a finished book (TripRules.bookItems). The undo of an un-check or a tear-off on a finished shop
+ * ([NewBookUndo.tookSticker]) drops the item's fresh unchecked copy, so the item comes back checked in its old spot,
+ * and the trip keeps its old lastActivityAt too. The caller also takes the book back out of the album (Album.unfile)
+ * after this state is saved, and only while [newBookStands] (TripFiling.undoNewBook). Unknown list -> this.
  */
 fun AppState.undoNewBook(undo: NewBookUndo, now: Long): AppState {
-    val present = lists.flatMapTo(HashSet()) { l -> l.items.map { it.id } }
     val oldStickers = undo.cleared.mapTo(HashSet()) { it.value.id }
+    // An un-check's fresh unchecked copy gives way to the sticker it was.
+    val dropped = undo.itemId.takeIf { undo.tookSticker }
+    val present = lists.flatMapTo(HashSet()) { l -> l.items.mapNotNull { if (l.id == undo.listId && it.id == dropped) null else it.id } }
     return updateList(undo.listId) { list ->
         // Stickers of the fresh book give up their spots; they take the old book's lowest free ones (reconcile).
-        val items = list.items.map { if (it.checked && it.id !in oldStickers) it.copy(bookSlot = null) else it }.toMutableList()
+        val items = list.items
+            .filterNot { it.id == dropped }
+            .map { if (it.checked && it.id !in oldStickers) it.copy(bookSlot = null) else it }
+            .toMutableList()
         for ((index, item) in undo.cleared.sortedBy { it.index }) {
             if (item.id !in present) items.add(index.coerceIn(0, items.size), item)
         }
+        val checkedOne = undo.itemId != null && !undo.tookSticker
         val restored = list.copy(
             items = items,
-            trip = if (undo.itemId != null) undo.trip.copy(lastActivityAt = now) else undo.trip,
+            trip = if (checkedOne) undo.trip.copy(lastActivityAt = now) else undo.trip,
             lastClosedAt = undo.lastClosedAt,
             openAisle = undo.openAisle,
         )
@@ -310,6 +350,19 @@ fun AppState.undoNewBook(undo: NewBookUndo, now: Long): AppState {
  */
 fun AppState.removeItem(listId: String, itemId: String, now: Long): AppState = updateListReconciled(listId, now) { list ->
     if (list.items.none { it.id == itemId }) list else list.copy(items = list.items.filterNot { it.id == itemId })
+}
+
+/**
+ * The tear-off (§8.6) on a finished shop (§7.1): tearing off a CHECKED row of a trip whose shop is over
+ * (TripRules.shopIsOver) files the book as it stands first, so the shop keeps every sticker; "Clear what I got" then
+ * takes the row off with the rest of what was got. The result carries the filed book and the [NewBookUndo] (its Undo
+ * puts the book and the row back). Every other tear-off is [removeItem] with no [AutoNewBook].
+ */
+fun AppState.removeItemStartingNewBook(listId: String, itemId: String, now: Long): Pair<AppState, AutoNewBook?> {
+    val list = list(listId) ?: return this to null
+    val item = list.items.firstOrNull { it.id == itemId } ?: return this to null
+    if (!item.checked || !TripRules.shopIsOver(list, now)) return removeItem(listId, itemId, now) to null
+    return fileBookFirst(list, itemId, now) { it } ?: (removeItem(listId, itemId, now) to null)
 }
 
 /**

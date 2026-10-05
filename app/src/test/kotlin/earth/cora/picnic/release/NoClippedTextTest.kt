@@ -19,12 +19,9 @@ import org.robolectric.annotation.GraphicsMode
  * scale 1.3 and 2.0, the phone's own (non-linear) scaling and the goldens' linear one, Day and Glow, and on the 411 dp
  * phone; and at 1.0. A text is clipped when its layout lost words (a line cut by maxLines, lines taller than the box, an
  * ellipsis, ink past the box: the visual overflow the layout reports, measured against the box the text really has),
- * when it reports TextOverflowed (PuffyText, LcdText, the index tabs and every kit piece that ellipsizes in a drawing of
- * its own), or when a drawn run ends in an ellipsis after a space ("Deli & …": an ellipsis keeps no gap before it).
- *
- * One exception, from §4.10: an index tab whose name does not fit even at its 1.0 size (16 sp at 1.0; under a large font
- * it goes on shrinking to 16 dp first) ellipsizes, at a word, TalkBack reading the whole name. So a name whole at 1.0
- * (every name of the List's fixture) is whole at 1.3 and 2.0.
+ * when it reports TextOverflowed (PuffyText, LcdText and every kit piece that ellipsizes in a drawing of its own), or
+ * when a drawn run ends in an ellipsis after a space ("Deli & …": an ellipsis keeps no gap before it). The index tabs
+ * never cut a name: one too long for a line wraps (§4.10, §0.4).
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -73,9 +70,6 @@ class NoClippedTextTest(private val fixture: Fixture) {
         /** "Deli & …": a space (or a no-break one) left before an ellipsis. */
         private val SPACE_THEN_ELLIPSIS = Regex("""[\s ]…$""")
 
-        /** An index tab's name at its smallest (§4.10: 16 sp at 1.0). */
-        const val TAB_FLOOR_DP = 16f
-
         /** Every clipped text of [capture], as "words: why". */
         fun clippedTexts(capture: Capture): List<String> {
             val d = capture.density
@@ -90,14 +84,7 @@ class NoClippedTextTest(private val fixture: Fixture) {
                     val widest = (0 until r.lineCount).maxOfOrNull { r.getLineRight(it) - r.getLineLeft(it) } ?: 0f
                     if (widest > n.width + d) out += "\"$label\": a line ${widest.toInt()} px wide in its ${n.width} px box"
                 }
-                if (n.overflowed) {
-                    // §4.10: a tab name that does not fit even at its 1.0 size (16 sp at 1.0, 16 dp under a large font)
-                    // ellipsizes, cut at a word (the space before "…" checked below); drawn any larger, it was cut too soon.
-                    // The tab's own name (DynaPuff, §2.7), not words of what overlaps it (the add bar's "Write a note…").
-                    val inTab = capture.screen.runs.filter { it.family == KitFonts.DYNAPUFF && n.bounds.contains(Offset(it.bounds.centerX(), it.bounds.centerY())) && it.text.replace("\uFEFF", "").trimEnd().endsWith("\u2026") }
-                    val atFloor = n.tabSp != null && inTab.isNotEmpty() && inTab.all { it.dp(d) <= TAB_FLOOR_DP + 0.05f }
-                    if (!atFloor) out += "\"$label\": TextOverflowed" + if (n.tabSp != null) " (a tab cut at ${inTab.map { "%.1f dp".format(it.dp(d)) }})" else ""
-                }
+                if (n.overflowed) out += "\"$label\": TextOverflowed"
             }
             for (run in capture.screen.runs) {
                 // A line Android ellipsizes ends in "…" and zero-width no-break spaces for the letters it dropped.

@@ -255,7 +255,8 @@ class AlbumTest {
         compose.onNodeWithText("21 of 22 stickers", substring = true).assertExists()
 
         compose.onNodeWithText("Sat 26 Sep", substring = true).performClick()
-        compose.onNodeWithText("19 of 19 stickers · 8 of 8 aisles stamped · 41 min").assertExists()
+        // The facts break only between facts (a line of its own each where they do not share one).
+        compose.onNode(SemanticsMatcher("the trip's facts") { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.replace("\n", " ") == "19 of 19 stickers · 8 of 8 aisles stamped · 41 min" } }).assertExists()
         compose.onNodeWithContentDescription("Produce: stamped").assertExists()
         compose.onNodeWithText("Receipt").assertExists()
         compose.onAllNodesWithText("Hillcrest Market", substring = true).fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }
@@ -304,7 +305,8 @@ class AlbumTest {
         }
         compose.onNodeWithTag(FiledBookTags.RECEIPT).performScrollTo()
             .assertContentDescriptionEquals("Trip receipt: Saturday 26 September, Hillcrest, 1 sticker, 1 basket, 1 minute, 0 shiny")
-        compose.onNodeWithText("1 of 1 sticker · 1 of 1 aisle stamped · 1 min").assertExists()
+        // The facts break only between facts (a line of their own each where they do not share one).
+        compose.onNode(SemanticsMatcher("the trip's facts") { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.replace("\n", " ") == "1 of 1 sticker · 1 of 1 aisle stamped · 1 min" } }).assertExists()
     }
 
     /** §6.10: the books follow a long pocket page; the link above the tabs takes her straight to them. */

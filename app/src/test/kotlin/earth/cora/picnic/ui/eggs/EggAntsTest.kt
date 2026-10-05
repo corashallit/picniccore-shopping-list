@@ -26,7 +26,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Item 257 (egg 17): once per app process, when the list holds three or more UNCHECKED distinct `picnic` keys and the
+ * Item 257 (egg 17): at most once a day (§0.4), when the list holds three or more UNCHECKED distinct `picnic` keys and the
  * keyboard is closed, five ants march right to left along the add bar's perforation (the middle one, 30 dp, carrying a
  * strawberry; the others 22 dp), 21 two-frame steps over 4.2 s, 0.42 s apart, never across the text field.
  */
@@ -44,9 +44,10 @@ class EggAntsTest {
         GroceryItem(id = id, name = name, icon = icon, addedAt = PracticeFixture.NOW, source = ItemSource.TYPED)
 
     @Test
-    fun threeUncheckedPicnicKeysOncePerProcess() {
+    fun threeUncheckedPicnicKeysOncePerDay() {
         // The fixture has two unchecked picnic things (strawberries, baguette): no ants.
-        val e = EngineRig()
+        val repo = earth.cora.picnic.settings.InMemorySettingsRepository(earth.cora.picnic.settings.AppSettings(eggs = true, weather = false, sounds = false))
+        val e = EngineRig(repo = repo)
         try {
             assertFalse(EggRules.antsWanted(e.list, catalog))
             e.engine.onListShown(e.listId)
@@ -64,6 +65,23 @@ class EggAntsTest {
             assertNull(e.eggs.antsId)
         } finally {
             e.close()
+        }
+        // Android ends the process between most openings: a new one the same day stays quiet (the day is persisted),
+        // and the next day they march again.
+        val withPicnic = PracticeFixture.state().addItems(list, listOf(item("w", "Watermelon", "watermelon")), PracticeFixture.NOW).first
+        val sameDay = EngineRig(state = withPicnic, repo = repo, clock = FakeClock(PracticeFixture.NOW + 3 * 60 * 60 * 1000L))
+        try {
+            sameDay.engine.onListShown(sameDay.listId)
+            assertNull("a new process the same day", sameDay.eggs.antsId)
+        } finally {
+            sameDay.close()
+        }
+        val nextDay = EngineRig(state = withPicnic, repo = repo, clock = FakeClock(PracticeFixture.NOW + 24 * 60 * 60 * 1000L))
+        try {
+            nextDay.engine.onListShown(nextDay.listId)
+            assertNotNull("the next day", nextDay.eggs.antsId)
+        } finally {
+            nextDay.close()
         }
     }
 

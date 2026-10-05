@@ -151,7 +151,9 @@ class InMemoryPlaceCache(var stored: StoredPlace? = null) : PlaceCache {
 
 /**
  * The "Use my area" [PlaceSource] (§0.4 Q6, PlaceSourceTest). [useMyArea] reads the Surprises switch; the [locator]'s
- * fix is rounded to 0.1° before anything else sees it; a stored place younger than [REFRESH_MILLIS] is reused.
+ * fix is rounded to 0.1° before anything else sees it; a stored place younger than [REFRESH_MILLIS] is reused; a lookup
+ * that found no fix is not tried again for [MISS_MILLIS] (the stored place or Toronto meanwhile), so a phone with
+ * location services off is not asked every minute.
  */
 class AreaPlaceSource(
     private val useMyArea: suspend () -> Boolean,
@@ -160,6 +162,9 @@ class AreaPlaceSource(
     private val clock: () -> Long,
 ) : PlaceSource {
     private val mutex = Mutex()
+
+    /** When the last lookup found no fix (guarded by [mutex]); cleared by a fix and by [forget]. */
+    private var lastMissAt: Long? = null
 
     override suspend fun place(): Place = mutex.withLock {
         try {
@@ -177,6 +182,8 @@ class AreaPlaceSource(
      * it off deletes the stored area). Waits for a lookup in progress, so that lookup can't store it again. Never throws.
      */
     suspend fun forget() = mutex.withLock {
+        // Switched off (or refused): the next time it is on, the phone is asked at once.
+        lastMissAt = null
         try {
             if (cache.read() != null) cache.write(null)
         } catch (e: CancellationException) {
@@ -216,6 +223,7 @@ class AreaPlaceSource(
         val now = clock()
         val stored = cache.read()
         if (stored != null && now - stored.at in 0 until REFRESH_MILLIS) return stored.place
+        if (lastMissAt?.let { now - it in 0 until MISS_MILLIS } == true) return stored?.place ?: Place.TORONTO
         val fix = try {
             locator.locate()
         } catch (e: CancellationException) {
@@ -223,7 +231,12 @@ class AreaPlaceSource(
         } catch (e: Exception) {
             PicnicLog.w("no coarse fix", e)
             null
-        } ?: return stored?.place ?: Place.TORONTO
+        }
+        if (fix == null) {
+            lastMissAt = now
+            return stored?.place ?: Place.TORONTO
+        }
+        lastMissAt = null
         val place = EcSites.placeFor(fix)
         cache.write(StoredPlace(place.lat, place.lon, place.cityCode, now))
         return place
@@ -232,6 +245,9 @@ class AreaPlaceSource(
     companion object {
         /** The fix is refreshed at most every 6 h (§0.4). */
         const val REFRESH_MILLIS: Long = 6L * 60 * 60 * 1000
+
+        /** After a lookup with no fix, the phone is not asked again for 30 min. */
+        const val MISS_MILLIS: Long = 30L * 60 * 1000
 
         /** The phone's implementation: LocationManager + a small DataStore ("place"). One per process (AppContainer). */
         fun create(context: Context, settings: SettingsRepository, clock: () -> Long): AreaPlaceSource {

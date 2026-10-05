@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
  * fixed in core's ModelDefaults; reduced motion follows the system. The key itself is never part of this
  * class: only whether one is set and a masked hint.
  * DataStore keys (DataStoreSettingsRepository): eggs, sounds, haptics, next_stop_card, celebration, weather,
- * use_my_area, dusk_binder, surprise_lab; and seen_books (the album's shown trip books, §7.8). Consumers ask [allows] for a Surprises switch, so SurprisesGatingTest
+ * use_my_area, dusk_binder, surprise_lab, ants_day (egg 17's last parade); and seen_books (the album's shown trip books,
+ * §7.8). Consumers ask [allows] for a Surprises switch, so SurprisesGatingTest
  * covers every gate in one table.
  */
 data class AppSettings(
@@ -98,6 +99,12 @@ interface SettingsRepository {
     /** The Surprise lab is unlocked (7 taps on the version line, §6.9); persisted. */
     suspend fun setSurpriseLab(unlocked: Boolean)
 
+    /** Egg 17: the day (her local date) the ant parade last marched, or null; it marches at most once a day (§12.2). */
+    suspend fun antsDay(): java.time.LocalDate?
+
+    /** Egg 17: the ants marched on [day]. */
+    suspend fun markAntsDay(day: java.time.LocalDate)
+
     /**
      * Filed trip books (TripBook.id) whose album row has played its magic appear (§7.8: a newly filed book's row blooms
      * in once, the next time the album opens). Device-local, like the rest of these settings.
@@ -141,6 +148,14 @@ class InMemorySettingsRepository(
 
     override suspend fun setSurpriseLab(unlocked: Boolean) {
         state.value = state.value.copy(surpriseLab = unlocked)
+    }
+
+    private var ants: java.time.LocalDate? = null
+
+    override suspend fun antsDay(): java.time.LocalDate? = ants
+
+    override suspend fun markAntsDay(day: java.time.LocalDate) {
+        ants = day
     }
 
     private val seen = MutableStateFlow<Set<String>>(emptySet())

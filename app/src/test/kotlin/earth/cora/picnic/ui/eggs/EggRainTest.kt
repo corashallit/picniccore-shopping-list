@@ -167,18 +167,21 @@ class EggRainTest {
         val r = EggRig(compose).start()
         val t0 = r.fire(16)
         assertTrue(r.eggs.umbrella)
-        assertEquals("Rain on the way · bring the tote!", r.model.toasts.current?.text)
+        assertEquals("Rain on the way · bring\u00A0the\u00A0tote!", r.model.toasts.current?.text)
         r.advanceTo(t0 + 600)
         val umbrella = r.probe.frames.last { it.tag == "umbrella" }
         val bar = r.anchor(earth.cora.picnic.ui.list.motion.AnchorRegistry.ADD_BAR)
         assertTrue("at the add bar's left end", umbrella.center.x < bar.left + bar.width * 0.25f)
         // A big umbrella (the mockup's), standing on the bar's left shoulder: its canopy over the bar's edge.
-        assertTrue("at least 40 dp (${umbrella.bounds.width / 3f} dp)", umbrella.bounds.width >= 40 * 3f)
-        assertTrue("it stands on the bar", umbrella.bounds.bottom in bar.top..bar.top + 16 * 3f && umbrella.bounds.top < bar.top)
+        assertTrue("a big umbrella: its leaning canopy at least 26 dp across (${umbrella.bounds.width / 3f} dp)", umbrella.bounds.width >= 26 * 3f)
+        // On the bar's edge: its canopy rises at most about 16 dp above the bar (the band where the list fades into it),
+        // its handle in the bar's top band, above the field's words.
+        assertTrue("it stands on the bar's edge (${umbrella.bounds}, bar $bar)", umbrella.bounds.top in bar.top - 16.5f * 3f..bar.top && umbrella.bounds.bottom in bar.top..bar.top + 24 * 3f)
         // Clear of the tape, which has moved along the bar, and of every word.
         val tape = compose.onNodeWithTag(earth.cora.picnic.ui.add.ADD_BAR_WASHI_TAG, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         assertFalse("clear of the tape", tape.overlaps(umbrella.bounds.deflate(2f)))
-        textBoxes(compose).forEach { (w, box) -> assertFalse("over \"$w\"", box.overlaps(umbrella.bounds.deflate(2f))) }
+        textBoxes(compose).filterNot { (_, box) -> inTheBarsFade(box, bar.top, 14 * 3f) }
+            .forEach { (w, box) -> assertFalse("over \"$w\"", box.overlaps(umbrella.bounds.deflate(2f))) }
         // The list keeps room at its end for the canopy.
         assertEquals(WashiPattern.Raindrop, AddRules.addBarTape(r.eggs))
     }
@@ -198,10 +201,12 @@ class EggRainTest {
             compose.onAllNodesWithTag(EggTags.UMBRELLA, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
         fun onTheShoulder(what: String) {
             val bar = r.anchor(AnchorRegistry.ADD_BAR)
-            val u = umbrella() ?: throw AssertionError("$what: the umbrella shows")
+            umbrella() ?: throw AssertionError("$what: the umbrella shows")
+            // As drawn: its outline, turned (its node's box is the whole turned square).
+            val u = r.probe.frames.last { it.tag == "umbrella" }.bounds
             assertTrue("$what: at the bar's left end ($u, bar $bar)", u.center.x < bar.left + bar.width * 0.25f)
-            assertTrue("$what: it stands on the bar ($u, bar $bar)", u.bottom in bar.top..bar.top + 24 * 3f && u.top < bar.top)
-            val under = wordBoxes(compose, r.anchors).filter { (_, box) -> box.overlaps(u.deflate(6f)) }.map { it.first }
+            assertTrue("$what: it stands on the bar's edge ($u, bar $bar)", u.top in bar.top - 16.5f * 3f..bar.top && u.bottom in bar.top..bar.top + 24 * 3f)
+            val under = wordBoxes(compose, r.anchors).filter { (_, box) -> box.overlaps(u.deflate(6f)) && !inTheBarsFade(box, bar.top, 14 * 3f) }.map { it.first }
             assertEquals("$what: no word under it", emptyList<String>(), under)
         }
         onTheShoulder("before")

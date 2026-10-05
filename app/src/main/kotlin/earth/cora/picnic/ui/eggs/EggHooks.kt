@@ -268,7 +268,7 @@ fun BoxScope.NapCatInBasket(state: SurpriseState, sectionId: String, kind: Baske
         val rimFraction = (BasketManifest.art(kind.key)?.rimY ?: 30f) / BasketManifest.VIEWPORT_HEIGHT
         val rimY = box.height * rimFraction + 6 * d
         val center = Offset(box.width / 2f - 2 * d, rimY - 9 * d)
-        NapCatPiece(sectionId, center, rimY, engine, origin)
+        NapCatPiece(sectionId, center, rimY, engine, origin, shoulderX = box.width * NAP_Z_SHOULDER)
     }
 }
 

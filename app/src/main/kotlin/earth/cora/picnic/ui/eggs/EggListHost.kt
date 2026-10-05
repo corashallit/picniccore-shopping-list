@@ -13,10 +13,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -40,7 +44,11 @@ import earth.cora.picnic.ui.list.motion.MotionChoreographer
 import earth.cora.picnic.ui.theme.FixedMotionScale
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.PicnicMotion
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import earth.cora.picnic.ui.theme.ToastHostState
 import kotlin.math.abs
 
@@ -75,6 +83,9 @@ class EggListScope internal constructor(
 
     /** The docked add bar has folded into the FAB (it slides away, then leaves): the umbrella steps off with it. */
     internal var barFolded: Boolean by mutableStateOf(false)
+
+    /** Moves whenever the list lays out anew: a reveal waiting for its row (eggs 6 and 13) looks again then. */
+    internal var listLayouts: Int by mutableIntStateOf(0)
     internal val room = ListRoom()
     internal val rollHome = RollHome()
     internal val ladybugHome = LadybugHome(anchors)
@@ -194,6 +205,7 @@ fun EggListHost(
                 engine, anchors, toasts, motion, feedback, onOpenAlbum = { openAlbum() }, listPlacesDecor = listPlacesDecor,
                 // Read as snapshot state: the umbrella follows the bar as it slides, rises with the keyboard or grows.
                 addBar = { scope.umbrellaBar },
+                listLayouts = { scope.listLayouts },
             )
         }
     }
@@ -204,6 +216,7 @@ fun EggListHost(
     // Egg 4 never runs under reduced motion (§12.3), so the accelerometer is not even listened to then.
     ShakeEffect(enabled = eggs.enabled && !LocalReducedMotion.current) { engine.onShake() }
     LaunchedEffect(engine, imeVisible) { engine.onImeVisible(imeVisible) }
+    LaunchedEffect(listState) { snapshotFlow { listState.layoutInfo }.collect { scope.listLayouts++ } }
 
     val index by rememberUpdatedState(indexOfSection)
     val peekPx = with(density) { peek.roundToPx() }
@@ -211,14 +224,31 @@ fun EggListHost(
     // A toast resting above the bar covers the list's room too: a scene lands clear of it.
     val toastTop: () -> Float? = { toasts?.takeIf { it.current != null }?.restingTop }
     // Egg 3: the list scrolls to the rolling item's aisle (§12.2), then brings its row (or its folded strip) wholly above
-    // the bar.
+    // the bar; once the roll has settled it goes back to where she was (she is mid-shop in another aisle), unless she
+    // scrolled meanwhile. The way back outlives the roll's own state (cleared as it settles), so it runs in [hostScope].
     val rolling = eggs.rolling
+    val hostScope = rememberCoroutineScope()
+    val rollBack = remember { arrayOfNulls<Job>(1) }
     LaunchedEffect(rolling?.id) {
         val r = rolling ?: return@LaunchedEffect
         val i = index(r.sectionId)
         if (i < 0) return@LaunchedEffect
+        rollBack[0]?.cancel()
+        val startedAt = withFrameMillis { it }
+        val backIndex = listState.firstVisibleItemIndex
+        val backOffset = listState.firstVisibleItemScrollOffset
         bringIntoRoom(listState, anchors, i, peekPx, gapPx, plateIndex = i, scrollFirst = { true }, cover = toastTop) {
             anchors.bounds(EggAnchors.line(r.itemId))?.let { it to true } ?: anchors.bounds(EggAnchors.strip(r.sectionId))?.let { it to false }
+        }
+        val leftIndex = listState.firstVisibleItemIndex
+        val leftOffset = listState.firstVisibleItemScrollOffset
+        if (leftIndex == backIndex && leftOffset == backOffset) return@LaunchedEffect
+        val wait = RollingMotion.DURATION + ROLL_BACK_PAUSE_MS - (withFrameMillis { it } - startedAt)
+        rollBack[0] = hostScope.launch {
+            // Any scroll while the roll plays is hers (the egg's own is over): she has moved on, so the list stays.
+            val scrolled = withTimeoutOrNull(wait.coerceAtLeast(0L)) { snapshotFlow { listState.isScrollInProgress }.first { it } } != null
+            val still = listState.firstVisibleItemIndex == leftIndex && abs(listState.firstVisibleItemScrollOffset - leftOffset) <= gapPx
+            if (!scrolled && still) listState.animateScrollToItem(backIndex, backOffset)
         }
     }
     // The receipt's room under the paper eases in and out (instant under reduced motion).
@@ -321,6 +351,9 @@ private const val ROOM_RELEASE_MS = 220
 
 /** A strip scene (the nap, the snack) keeps this many entries before it in view when the list scrolls to it. */
 private const val CONTEXT_STRIPS = 2
+
+/** Egg 3: the list goes back to where she was this long after the roll has settled. */
+private const val ROLL_BACK_PAUSE_MS = 300L
 
 /** The list's room ends this far above the add bar's top (the scenes are brought in clear of the bar's fade). */
 private val ROOM_GAP: Dp = 6.dp

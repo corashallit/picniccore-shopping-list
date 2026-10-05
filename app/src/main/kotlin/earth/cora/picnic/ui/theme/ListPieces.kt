@@ -51,13 +51,11 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import earth.cora.picnic.ui.a11y.textOverflowed
 
 /*
  * The list's paper pieces (docs/DESIGN_STICKER.md §4.10, §4.11, rules R1 and R6): the index tab with its fitted name,
@@ -71,43 +69,66 @@ import earth.cora.picnic.ui.a11y.textOverflowed
  * The index tab (§4.10).
  * ------------------------------------------------------------------------------------------------ */
 
-/** The tab name as fitted: its size, and whether it had to ellipsize (TabLayoutTest). */
+/** The tab name as fitted: its size, and whether it wraps onto more lines at that size (TabLayoutTest). */
 @Immutable
-data class TabFit(val fontSizeSp: Float, val ellipsized: Boolean)
+data class TabFit(val fontSizeSp: Float, val wraps: Boolean)
 
-/** The baseline of an [IndexTab]'s name (not its numeral's), as an alignment line its parent can read. */
+/** The baseline of an [IndexTab]'s name's first line (not its numeral's), as an alignment line its parent can read. */
 val TabNameBaseline: HorizontalAlignmentLine = HorizontalAlignmentLine(::minOf)
 
 /**
- * A tab name cut to fit (§4.10): the longest run of whole words that [fits] with "…" after it, any trailing "&", "·",
- * "," or "/" dropped with the space before the cut ("Deli & cheese" → "Deli…"); a first word too long on its own is
- * cut inside it ("Breakf…"). [name] itself when it fits.
+ * An aisle name as it is laid out where it may wrap (§4.10, §0.4): "&" and "+" are held to the word after them (a
+ * no-break space), so a line never ends in one ("Meat / & seafood", "Pasta, rice / & international").
  */
-fun tabEllipsis(name: String, fits: (String) -> Boolean): String {
-    if (fits(name)) return name
-    fun trimmed(s: String) = s.trimEnd { it.isWhitespace() || it in DANGLING }
-    val boundaries = (name.length - 1 downTo 1).filter { name[it - 1].isWhitespace() && !name[it].isWhitespace() }
-    for (cut in boundaries) {
-        val head = trimmed(name.substring(0, cut))
-        if (head.isNotEmpty() && fits(head + ELLIPSIS)) return head + ELLIPSIS
-    }
-    for (n in name.length - 1 downTo 1) {
-        if (name[n - 1].isHighSurrogate()) continue
-        val head = trimmed(name.substring(0, n))
-        if (head.isNotEmpty() && fits(head + ELLIPSIS)) return head + ELLIPSIS
-    }
-    return ELLIPSIS
-}
+fun keepWithNextWord(name: String): String = name.replace(" & ", " & ").replace(" + ", " + ")
 
-private const val ELLIPSIS = "\u2026"
-private const val DANGLING = "&·,/+"
+/**
+ * [name]'s lines in [room] px (§4.10, §0.4): the name itself when [width] says it fits on one line; else broken between
+ * words into the fewest lines, balanced (the widest line as narrow as it can be, a longer first line on a tie), "&"
+ * and "+" kept with the word after them ([keepWithNextWord]; without [glue], words only). Null when a word on its own
+ * (with its "&") is wider than [room].
+ */
+fun tabLines(name: String, room: Int, glue: Boolean = true, width: (String) -> Int): List<String>? {
+    if (width(name) <= room) return listOf(name)
+    val words = (if (glue) keepWithNextWord(name) else name).split(' ').filter { it.isNotEmpty() }
+    if (words.size < 2) return null
+    val n = words.size
+    val widths = HashMap<Int, Int>()
+    fun w(i: Int, j: Int): Int = widths.getOrPut(i * (n + 1) + j) { width(words.subList(i, j).joinToString(" ")) }
+    if ((0 until n).any { w(it, it + 1) > room }) return null
+    // From word i to the end: the fewest lines, then the narrowest widest line, and where its first line ends.
+    val lines = IntArray(n + 1)
+    val widest = IntArray(n + 1)
+    val next = IntArray(n + 1)
+    for (i in n - 1 downTo 0) {
+        lines[i] = Int.MAX_VALUE
+        var j = i + 1
+        while (j <= n && w(i, j) <= room) {
+            val l = 1 + lines[j]
+            val m = maxOf(w(i, j), widest[j])
+            if (l < lines[i] || (l == lines[i] && m <= widest[i])) {
+                lines[i] = l
+                widest[i] = m
+                next[i] = j
+            }
+            j++
+        }
+    }
+    val out = ArrayList<String>()
+    var i = 0
+    while (i < n) {
+        out += words.subList(i, next[i]).joinToString(" ")
+        i = next[i]
+    }
+    return out
+}
 
 /** The fitted tab label's size (sp), for tests. */
 val TabNameFontSize: SemanticsPropertyKey<Float> = SemanticsPropertyKey("TabNameFontSize")
 
 /**
  * Fits [name] on one line in [maxWidthPx] (§4.10): the style's 20 sp if it fits, else 1 sp smaller each step down to
- * [toSp] (16 sp; under a large font, the name's 1.0 size, [tabNameFloorSp]), else [toSp] ellipsized. Sizes are the
+ * [toSp] (16 sp; under a large font, the name's 1.0 size, [tabNameFloorSp]), else [toSp], where it wraps. Sizes are the
  * style's sp, scaled by the font scale like every other text.
  */
 fun fitTabName(measurer: TextMeasurer, name: String, style: TextStyle, maxWidthPx: Int, fromSp: Float = 20f, toSp: Float = 16f): TabFit {
@@ -123,10 +144,10 @@ fun fitTabName(measurer: TextMeasurer, name: String, style: TextStyle, maxWidthP
 }
 
 /**
- * The size (sp) a tab name shrinks to before it is cut (§4.10): 16 sp; under a large font, on down to the size that
- * draws 16 sp at 1.0 (16 dp), so a name whole at 1.0 is whole at 1.3 and 2.0 too (item 281: the List loses no word under
- * a large font), and no name is ever drawn under its 1.0 size (§2.7, as the store-aisle chip, item 337). Only a name cut
- * at 1.0 is cut under a large font, at the same size.
+ * The size (sp) a tab name shrinks to before it wraps (§4.10): 16 sp; under a large font, on down to the size that
+ * draws 16 sp at 1.0 (16 dp), so a name on one line at 1.0 is on one line at 1.3 and 2.0 too (item 281), and no name is
+ * ever drawn under its 1.0 size (§2.7, as the store-aisle chip, item 337). Only a name that wraps at 1.0 wraps under a
+ * large font, at the same size.
  */
 fun tabNameFloorSp(density: androidx.compose.ui.unit.Density): Float = with(density) { 16.dp.toSp().value }.coerceAtMost(16f)
 
@@ -179,8 +200,10 @@ enum class TabSize(val height: Dp, val circle: Dp) {
 /**
  * An aisle's index tab (§4.10): the aisle pastel, a 3 dp white border, radius 12 / 4, hs; the number circle (the
  * walking [position]; the capsule for "Everything else") and the [displayName] (DynaPuff 700, fitted 20 → 16 sp, then
- * ellipsized), the pattern on the right 26 dp only, never under the name. [ballpoint]: the open tray's and the pinned
- * plate's label (the strongest text on the list); otherwise the aisle trace. The tab is at most [maxWidth] wide.
+ * wrapped onto more lines at 16 sp, between words, balanced, "&" kept with the word after it; never cut), the pattern
+ * on the right 26 dp only (12 dp where a word would not fit beside 26, or where that saves a third line; none where "&"
+ * and its word would not fit even beside 12), never under the name. [ballpoint]: the open tray's and the pinned plate's label (the strongest text on the list); otherwise the
+ * aisle trace. The tab is at most [maxWidth] wide, and as tall as its lines.
  * Decorative: its strip or tray carries the full name for TalkBack.
  */
 @Composable
@@ -223,8 +246,8 @@ private fun TabFace(
     val measurer = rememberTextMeasurer(cacheSize = 8)
     val base = PicnicTheme.type.aisleTab.copy(color = if (ballpoint) c.ballpoint else look.family.trace)
     // The number circle grows with a large font (the kit's NumberCircle, §2.7), but gives way to the name: it takes only
-    // what leaves the whole name room at 16 sp, down to its drawn 24 dp (its numeral then set to clear the ring). The name
-    // is what she reads (§4.10); the number repeats it.
+    // what leaves the whole name room on one line at 16 sp, down to its drawn 24 dp (its numeral then set to clear the
+    // ring). The name is what she reads (§4.10); the number repeats it.
     val number = position.takeIf { it > 0 }
     val grown = rememberNumberCircleSize(number, look, size.circle)
     val nameLeast = rememberTabNameLeast(displayName, density)
@@ -234,15 +257,34 @@ private fun TabFace(
     val room = if (maxWidth == Dp.Infinity) Int.MAX_VALUE else with(density) { (maxWidth - fixed).roundToPx().coerceAtLeast(1) }
     val floor = tabNameFloorSp(density)
     val fit = remember(displayName, base, room, floor) { fitTabName(measurer, displayName, base, room, toSp = floor) }
-    // Too long even at 16 sp: cut at a word boundary, never leaving a dangling "&" (§4.10: "Deli…", not "Deli & …").
-    val shown = remember(displayName, base, room, fit) {
-        if (!fit.ellipsized) {
-            displayName
-        } else {
-            val style = base.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp)
-            tabEllipsis(displayName) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width <= room }
+    val style = base.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp)
+    // Too long for one line even at 16 sp: it wraps between words into balanced lines, "&" with the word after it
+    // (§4.10, §0.4: "Meat / & seafood"), laid out line by line so the tab hugs its widest line. A word too wide for the
+    // room on its own ("& international" beside a strip's basket), or a name that would take a third line ("Canned goods
+    // / & soups"), gets the 14 dp the pattern end gives up when it narrows from 26 to 12 dp. Where "&" and its word still
+    // do not fit (a large font), the pattern end goes altogether and the tab closes 6 dp after the name: the "&" keeps
+    // its word. Only when even that is too narrow does the "&" end a line, and a word wider than the whole tab on its own
+    // (rare) wraps inside itself, so no letter is lost.
+    fun more(d: Dp) = if (room == Int.MAX_VALUE) room else room + with(density) { d.roundToPx() }
+    val narrowRoom = more(PATTERN_END - PATTERN_END_NARROW)
+    val bareRoom = more(PATTERN_END)
+    val wrapped = remember(displayName, style, room, fit, look.pattern) {
+        fun lines(r: Int, glue: Boolean = true) = tabLines(displayName, r, glue) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width }
+        val canNarrow = look.pattern != TabPattern.Plain
+        val wide = if (fit.wraps) lines(room) else listOf(displayName)
+        val narrower = if (canNarrow && (wide == null || wide.size > 2)) lines(narrowRoom) else null
+        when {
+            narrower != null && (wide == null || narrower.size < wide.size) -> narrower to PATTERN_END_NARROW
+            wide != null -> wide to PATTERN_END
+            !canNarrow -> lines(room, glue = false) to PATTERN_END
+            else -> lines(bareRoom)?.let { it to 0.dp }
+                ?: lines(narrowRoom, glue = false)?.let { it to PATTERN_END_NARROW }
+                ?: (lines(bareRoom, glue = false) to 0.dp)
         }
     }
+    val lines = wrapped.first
+    // A word wider than the whole tab wraps inside itself in all the room there is.
+    val patternWidth = if (lines == null && look.pattern != TabPattern.Plain && room != Int.MAX_VALUE) 0.dp else wrapped.second
     Row(
         Modifier
             .probe(probe, probeKey, fit.fontSizeSp)
@@ -250,7 +292,6 @@ private fun TabFace(
             .heightIn(min = size.height)
             .clearAndSetSemantics {
                 this[TabNameFontSize] = fit.fontSizeSp
-                if (fit.ellipsized) textOverflowed = true
             }
             .hardShadow(shapes.tab, PicnicTheme.shadows)
             .clip(shapes.tab)
@@ -258,21 +299,19 @@ private fun TabFace(
             .padding(3.dp)
             .clip(shapes.tab)
             .background(look.family.pastel)
-            .tabPattern(look, width = 26.dp, alpha = 0.5f)
+            .then(if (patternWidth > 0.dp) Modifier.tabPattern(look, width = patternWidth, alpha = 0.5f) else Modifier)
             .heightIn(min = size.height - 6.dp)
-            .padding(start = 6.dp, end = tabEnd(look), top = 1.dp, bottom = 1.dp),
+            .padding(start = 6.dp, end = tabEnd(look) - (PATTERN_END - patternWidth), top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         TabNumber(number, look, size, maxSize = if (circle >= grown) Dp.Infinity else circle, numberModifier)
         Text(
-            shown,
-            style = base.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp),
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
+            lines?.joinToString("\n") ?: displayName,
+            style = if (lines == null) style.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading) else style,
+            softWrap = lines == null,
             modifier = nameModifier.layout { m, c ->
-                // The name's baseline, for what sits beside the tab on it (egg 5's "snack?", §4.10 doodle).
+                // The first line's baseline, for what sits beside the tab on it (egg 5's "snack?", §4.10 doodle).
                 val p = m.measure(c)
                 layout(p.width, p.height, mapOf(TabNameBaseline to p[FirstBaseline])) { p.place(0, 0) }
             },
@@ -284,9 +323,9 @@ private fun TabFace(
 private fun tabChrome(look: AisleLook, circle: Dp): Dp = 3.dp * 2 + 6.dp + circle + 6.dp + tabEnd(look)
 
 /**
- * The narrowest an [IndexTab] for [position] can be and still show its whole [displayName] (at its smallest fitted
- * size, 16 sp), its number circle as drawn here (it grows with a large font): for a row that gives way to the name
- * before the name is cut (the tray header's store chip, §4.10).
+ * The narrowest an [IndexTab] for [position] can be and still show its whole [displayName] on one line (at 16 sp), its
+ * number circle as drawn here (it grows with a large font): for a row that gives way to the name before it wraps (the
+ * tray header's store chip, §4.10).
  */
 @Composable
 fun indexTabLeastWidth(position: Int, displayName: String, look: AisleLook, size: TabSize): Dp {
@@ -296,8 +335,31 @@ fun indexTabLeastWidth(position: Int, displayName: String, look: AisleLook, size
 }
 
 /**
- * The room [displayName] needs whole on one line at its smallest fitted size (16 sp) here, two px over its width, so
- * the tab's own fit (name width <= its room, rounded to px) takes it whole.
+ * The narrowest an [IndexTab] for [position] can be and still hold [displayName] on at most two lines, between words,
+ * at 16 sp, "&" kept with the word after it, its number circle as drawn here (as [indexTabLeastWidth]). The tray
+ * header's store chip stays beside a name that fits it this way, and gives way to one that would need a third line,
+ * or under a large font a smaller size (§4.10).
+ */
+@Composable
+fun indexTabTwoLineWidth(position: Int, displayName: String, look: AisleLook, size: TabSize): Dp {
+    val density = LocalDensity.current
+    val circle = rememberNumberCircleSize(position.takeIf { it > 0 }, look, size.circle)
+    val measurer = rememberTextMeasurer(cacheSize = 8)
+    val base = PicnicTheme.type.aisleTab
+    val name = remember(displayName, base, density) {
+        val style = base.copy(fontSize = 16.sp, lineHeight = (16f * 1.2f).sp)
+        fun width(text: String) = measurer.measure(text, style, softWrap = false, maxLines = 1).size.width
+        val words = keepWithNextWord(displayName).split(' ').filter { it.isNotEmpty() }
+        val two = (1 until words.size).minOfOrNull { k -> maxOf(width(words.subList(0, k).joinToString(" ")), width(words.subList(k, words.size).joinToString(" "))) }
+        val px = minOf(width(displayName), two ?: Int.MAX_VALUE)
+        with(density) { (px + 2).toDp() }
+    }
+    return name + tabChrome(look, circle)
+}
+
+/**
+ * The room [displayName] needs whole on one line at 16 sp here, two px over its width, so the tab's own fit (name
+ * width <= its room, rounded to px) takes it whole.
  */
 @Composable
 private fun rememberTabNameLeast(displayName: String, density: androidx.compose.ui.unit.Density): Dp {
@@ -309,8 +371,15 @@ private fun rememberTabNameLeast(displayName: String, density: androidx.compose.
     }
 }
 
+/**
+ * The tab's pattern end (§4.10): 26 dp, narrowed to 12 dp where a word would not fit beside 26 or a third line would,
+ * and left off where "&" and its word would not fit even beside 12 (the tab then closes 6 dp after the name).
+ */
+private val PATTERN_END: Dp = 26.dp
+private val PATTERN_END_NARROW: Dp = 12.dp
+
 /** The tab's right padding: the 26 dp pattern strip plus 6 dp; a plain tab ("Everything else") closes at 12 dp. */
-private fun tabEnd(look: AisleLook): Dp = if (look.pattern == TabPattern.Plain) 12.dp else 32.dp
+private fun tabEnd(look: AisleLook): Dp = if (look.pattern == TabPattern.Plain) 12.dp else PATTERN_END + 6.dp
 
 /**
  * The tab's number circle (§2.7): the kit's [NumberCircle] at [TabSize.circle] (24 dp white, a 2 dp trace ring, DynaPuff

@@ -23,7 +23,10 @@ object TripRules {
      * - Returns the same instance when nothing changed.
      */
     fun reconcile(list: GroceryList, now: Long, storeName: String = ""): GroceryList {
-        val items = BookSlots.compact(repairItems(list.items, now))
+        val repaired = repairItems(list.items, now)
+        // The book has one spot per item it counts (bookItems): rows written down after the finale add no spots, so a
+        // sticker torn out of a finished book leaves no hole past its last spot (BookSlotsTest.tearOffAfterTheFinale).
+        val items = BookSlots.compact(repaired, spots = bookItems(list.copy(items = repaired)).size)
         val stickers = items.count { it.checked }
         var trip = list.trip
         if (stickers == 0) {
@@ -64,6 +67,22 @@ object TripRules {
     fun startsNewBook(list: GroceryList, now: Long): Boolean {
         val trip = list.trip ?: return false
         return now - trip.lastActivityAt > IDLE_MILLIS
+    }
+
+    /** How long after its finale a shop can still be corrected in the store (a mis-tapped last item, §7.1). */
+    const val SHOP_OVER_MILLIS: Long = 30L * 60 * 1000
+
+    /**
+     * The trip's shop is over (§7.1): the trip is idle ([startsNewBook]), or its finale was shown more than
+     * [SHOP_OVER_MILLIS] ago. A change that would take a sticker out of a book whose shop is over (an un-check, a
+     * revive by name, a tear-off) files that book first, so what she writes down after a finished shop never costs that
+     * shop's book. False without a trip.
+     */
+    fun shopIsOver(list: GroceryList, now: Long): Boolean {
+        val trip = list.trip ?: return false
+        if (startsNewBook(list, now)) return true
+        val finale = trip.finaleShownAt ?: return false
+        return now - finale > SHOP_OVER_MILLIS
     }
 
     /**

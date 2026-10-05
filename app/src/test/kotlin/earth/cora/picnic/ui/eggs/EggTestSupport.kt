@@ -247,6 +247,13 @@ fun wordBoxes(compose: ComposeContentTestRule, anchors: AnchorRegistry): List<Pa
     return textBoxes(compose) + keepOuts
 }
 
+/**
+ * Egg 16 (§12.2): the umbrella's canopy rises into the band where the list fades into the add bar, so a list word that
+ * shows only there, washed out, running into the bar (cut at its top, [textBoxes]), may lie under it: true for such a
+ * box, starting at most [band] px above [barTop]. The bar's own words start below its top and never count.
+ */
+fun inTheBarsFade(box: Rect, barTop: Float, band: Float): Boolean = box.bottom <= barTop + 0.5f && box.top >= barTop - band
+
 /** [EggListUnderTest.Real]: the Surprise lab's practice list, WP5's ListScreen over [r]'s sandbox (PracticeListScreen). */
 @Composable
 private fun RealListUnderTest(r: EggRig) {

@@ -51,7 +51,7 @@ class BookA11yTest {
         compose.onNodeWithTag(TripBookTags.SHEET).assertExists()
     }
 
-    /** Item 159: "<Name> added to today's sticker book" / "<Name> peeled out of today's sticker book", once each. */
+    /** Item 159: "<Name> added to today’s sticker book" / "<Name> peeled out of today’s sticker book", once each. */
     @Test
     fun announcements() {
         val rig = ListRig(ListFixture.state().setOpenAisle(ListFixture.LIST_ID, "produce"))
@@ -61,8 +61,8 @@ class BookA11yTest {
         compose.onNodeWithTag(ListTags.row("bananas")).performClick()
         compose.waitForIdle()
         val said = rig.announcer.messages
-        assertEquals(1, said.count { it == "Strawberries added to today's sticker book" })
-        assertEquals(1, said.count { it == "Bananas peeled out of today's sticker book" })
-        assertEquals("one line per twin", 2, said.count { it.contains("today's sticker book") })
+        assertEquals(1, said.count { it == "Strawberries added to today’s sticker book" })
+        assertEquals(1, said.count { it == "Bananas peeled out of today’s sticker book" })
+        assertEquals("one line per twin", 2, said.count { it.contains("today’s sticker book") })
     }
 }

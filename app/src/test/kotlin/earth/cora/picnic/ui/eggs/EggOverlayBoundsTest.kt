@@ -81,6 +81,11 @@ class EggOverlayBoundsTest(private val egg: Int, private val variant: ThemeVaria
                     val line = row?.let { r.anchors.bounds(EggAnchors.line(it.id)) }
                     over.filterNot { (_, box) -> line != null && line.inflate(1f).contains(box.topLeft) && line.inflate(1f).contains(box.bottomRight) }
                         .forEach { (words, _) -> wrong += "the roll home under \"$words\", not its own row's words" }
+                } else if (tag == "umbrella") {
+                    // Its canopy rises into the band where the list fades into the bar (§12.2 egg 16): the list's words
+                    // washed out there may lie under it; no other word may.
+                    val barTop = r.anchors.bounds(AnchorRegistry.ADD_BAR)?.top ?: Float.MAX_VALUE
+                    over.filterNot { (_, box) -> inTheBarsFade(box, barTop, 14 * 3f) }.forEach { (words, _) -> wrong += "$kind over \"$words\"" }
                 } else if (clipped.any { tag.startsWith(it) }) {
                     // Wherever a clipped piece crosses words, they are one of the boxes its clip cuts out.
                     over.filterNot { (_, box) -> cutOut.any { it.inflate(1f).contains(box.topLeft) && it.inflate(1f).contains(box.bottomRight) } }

@@ -703,17 +703,18 @@ private fun AisleLabel(
 }
 
 /**
- * The label's name (Zen Maru 700 16 sp, wrapping, never cut) and its "store aisle 2" (13 sp): on the name's last line
- * when it fits there, else on the next line.
+ * The label's name (Zen Maru 700 16 sp, wrapping onto balanced lines, never cut) and its "store aisle 2" (13 sp): on
+ * the name's last line when it fits there, else on the next line.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LabelName(name: String, storeAisle: Int?, modifier: Modifier) {
     val c = PicnicTheme.colors
     FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Balanced lines, "&" kept with the word after it (§0.4), as on the list's tabs.
         Text(
-            name,
-            style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 16.sp, lineHeight = LabelLine),
+            earth.cora.picnic.ui.theme.keepWithNextWord(name),
+            style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 16.sp, lineHeight = LabelLine, lineBreak = androidx.compose.ui.text.style.LineBreak.Heading),
             modifier = Modifier.alignByBaseline(),
         )
         if (storeAisle != null) {

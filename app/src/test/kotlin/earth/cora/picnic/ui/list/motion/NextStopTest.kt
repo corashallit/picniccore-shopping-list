@@ -111,7 +111,8 @@ class NextStopTest {
         compose.waitForIdle()
         fun words(tag: String): List<String> {
             fun walk(n: androidx.compose.ui.semantics.SemanticsNode): List<String> =
-                (n.config.getOrNull(SemanticsProperties.Text)?.map { it.text } ?: emptyList()) +
+                // A wrapped name is laid out line by line ("Pasta, rice" / "& international", §0.4): its words are the name's.
+                (n.config.getOrNull(SemanticsProperties.Text)?.map { it.text.replace('\n', ' ').replace('\u00A0', ' ') } ?: emptyList()) +
                     (n.config.getOrNull(SemanticsProperties.ContentDescription) ?: emptyList()) + n.children.flatMap { walk(it) }
             return walk(compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode())
         }

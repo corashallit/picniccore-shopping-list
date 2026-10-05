@@ -129,7 +129,8 @@ class AppSurpriseEngine(
     private var listShown = false
     private var shownListId: String? = null
     private var imeOpen = false
-    private var antsSeen = false
+    /** Egg 17: the day (her local date) the ants last marched, once read from or written to the settings. */
+    private val antsDay = java.util.concurrent.atomic.AtomicReference<LocalDate?>(null)
     private var startTucked = false
     /** Egg 13: each drawing's roll, from its start (the icon repository calls from its own threads). */
     private val goldRolls = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
@@ -149,18 +150,29 @@ class AppSurpriseEngine(
                 derive()
                 // Egg 14's rules run on what the album holds whenever the eggs come on (at start, or turned back on):
                 // trips filed while they were off still open the back pocket and the sakura sheet (§12.2).
-                if (eggsOn && (before == null || !before.eggs)) albumNow?.let(::applyAlbumRules)
+                val eggsCameOn = eggsOn && (before == null || !before.eggs)
+                if (eggsCameOn) albumNow?.let(::applyAlbumRules)
+                // "Use my area" off (or off at start): the forecast city worked out from her area goes too (§0.4 Q6,
+                // WeatherService.forgetCity).
+                val areaOff = !s.useMyArea && (before == null || before.useMyArea)
                 when {
                     // A cold start straight into the list: the list said it was showing before the switches had loaded,
                     // when no egg could know it was on. Its checks run now (SNACK?, the forecast, the ants).
-                    before == null && listShown && eggsOn -> listShownChecks(snackDue = true)
+                    before == null && listShown && eggsOn -> {
+                        refresh()
+                        listShownChecks(snackDue = true)
+                    }
                     // "Use my area" on or off: golden hour and the forecast follow the new place at once, not tomorrow
                     // (the forecast is asked again when its city changed, WeatherService).
                     before != null && before.useMyArea != s.useMyArea -> {
                         refresh()
                         if (listShown) checkWeather()
                     }
+                    // The eggs came on (or the first settings arrived): golden hour is worked out now, not at the next tick.
+                    eggsCameOn -> refresh()
                 }
+                // Either order with a forecast check is fine: a check for another city asks again and keeps only Toronto's.
+                if (areaOff) weather?.let { service -> scope.launch { safely { service.forgetCity() } } }
             }
         }
         scope.launch {
@@ -172,6 +184,7 @@ class AppSurpriseEngine(
                     tuckAllOnStart(s)
                 }
                 if (before != null && before.currentListId != s.currentListId) onListSwitched(s.currentListId)
+                dropGoneReveals(s)
                 dropFiledReceipt(s)
                 derive()
             }
@@ -256,8 +269,9 @@ class AppSurpriseEngine(
             goldenMinutesLeft = sunset?.let { goldenMinutesLeft(at, it) },
         )
         // The place is read again on every refresh (the minute tick; AreaPlaceSource answers from its 6 h store), so a
-        // new area, or "Use my area" turned on or off, moves golden hour at once.
-        scope.launch {
+        // new area, or "Use my area" turned on or off, moves golden hour at once. With Easter eggs off nothing can use it
+        // (golden hour is an egg, §2.5), so the place is not asked for.
+        if (eggsOn) scope.launch {
             val place = try {
                 places.place()
             } catch (e: CancellationException) {
@@ -606,21 +620,32 @@ class AppSurpriseEngine(
         _state.update { it.copy(lcdWord = LcdWord(nextId(), EggRules.SNACK, EggRules.SNACK_MS)) }
     }
 
-    /** Egg 17: once per app process, ≥ 3 unchecked picnic things, never with the keyboard open or reduced motion. */
+    /**
+     * Egg 17: at most once a day (her local date; §0.4: Android ends the process between most openings, so "once per
+     * process" was nearly every opening), with ≥ 3 unchecked picnic things, never with the keyboard open or reduced
+     * motion. The day it marched is kept in the settings (DataStore), so a new process the same day stays quiet. The
+     * Surprise lab plays it on demand: each try is a fresh sandbox with its own in-memory settings.
+     */
     private fun checkAnts() {
-        if (antsSeen || imeOpen || reducedMotion || !eggsOn || !listShown) return
+        if (imeOpen || reducedMotion || !eggsOn || !listShown) return
+        val today = Instant.ofEpochMilli(clock()).atZone(localZone).toLocalDate()
+        if (antsDay.get() == today) return
         scope.launch {
-            val s = try {
-                store.current()
+            val (s, last) = try {
+                store.current() to settings.antsDay()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 return@launch
             }
+            if (last == today) antsDay.compareAndSet(null, today)
             val list = s.list(s.currentListId)
-            if (!EggRules.antsWanted(list, catalog) || antsSeen || imeOpen) return@launch
-            antsSeen = true
+            if (last == today || !EggRules.antsWanted(list, catalog) || imeOpen) return@launch
+            // One parade, whichever check got here first.
+            val seen = antsDay.get()
+            if (seen == today || !antsDay.compareAndSet(seen, today)) return@launch
             _state.update { it.copy(antsId = nextId(), ants = true) }
+            safely { settings.markAntsDay(today) }
         }
     }
 
@@ -682,6 +707,29 @@ class AppSurpriseEngine(
         val fx = _state.value.receipt
         if (fx != null && fx.listId != listId) tuckPrinted(silent = true)
         if (_state.value.bonusStage) endBonusStage()
+        dropPendingReveals()
+    }
+
+    /**
+     * The shiny burst and the jackpot reveal wait for their row to be on screen (EggOverlays); one still waiting when the
+     * list is switched expires unplayed. (Not when the trip is filed: an add that starts a new book files it in the very
+     * commit that rolls a shiny, and the item stays on the list to be found.)
+     */
+    private fun dropPendingReveals() {
+        if (_state.value.jackpot == null && _state.value.shinyBursts.isEmpty()) return
+        _state.update { it.copy(jackpot = null, shinyBursts = emptyList()) }
+        derive()
+    }
+
+    /** A pending reveal whose item has left the current list (torn off, cleared) expires. */
+    private fun dropGoneReveals(s: AppState) {
+        val st = _state.value
+        if (st.jackpot == null && st.shinyBursts.isEmpty()) return
+        val ids = s.list(s.currentListId)?.items?.mapTo(HashSet()) { it.id } ?: return
+        val jackpot = st.jackpot?.takeIf { it.itemId in ids }
+        val shiny = st.shinyBursts.filter { it.itemId in ids }
+        if (jackpot == st.jackpot && shiny.size == st.shinyBursts.size) return
+        _state.update { it.copy(jackpot = jackpot, shinyBursts = shiny) }
     }
 
     /**

@@ -84,18 +84,20 @@ object EggRules {
 
     // ---- Egg 9: birthday ----
 
-    private val BIRTHDAY_KEYS = setOf("cake", "candle")
-    private val BIRTHDAY_WORDS = listOf("birthday", "gateau d'anniversaire", "bougies")
+    private val BIRTHDAY_WORDS = listOf("birthday", "b-day", "bday", "anniversaire")
+    private val PLAIN_CAKES = setOf("cake", "cakes", "gateau", "gateaux")
 
     /**
-     * A birthday item: key `cake` or `candle` (the catalog's `birthday` tag), or a name containing "birthday",
-     * "gâteau d'anniversaire" or "bougies" (accents and case folded). Its check-off hanko reads HAPPY / B-DAY!.
+     * A birthday item (egg 9): a name containing "birthday", "b-day", "bday" or "anniversaire" (accents and case
+     * folded: "bougies d'anniversaire", "gâteau d'anniversaire"), or a plain cake on the list (key `cake` and the name
+     * just "cake", "cakes" or "gâteau"). Cheesecake, carrot cake, tealights and scented candles are everyday buys, not a
+     * birthday. Its check-off hanko reads HAPPY / B-DAY!. [catalog] is unused (kept for the callers' signature).
      */
+    @Suppress("UNUSED_PARAMETER")
     fun isBirthday(item: GroceryItem, catalog: IconCatalog? = null): Boolean {
-        if (item.icon in BIRTHDAY_KEYS) return true
-        if (catalog != null && "birthday" in catalog.tagsOf(item.icon)) return true
-        val name = fold(item.name).replace('’', '\'')
-        return BIRTHDAY_WORDS.any { it in name }
+        val name = fold(item.name).trim()
+        if (BIRTHDAY_WORDS.any { it in name }) return true
+        return item.icon == "cake" && name in PLAIN_CAKES
     }
 
     /** Confetti rains this long (§12.2 egg 9). */

@@ -108,10 +108,18 @@ data class ListUiState(
 }
 
 /**
- * One list in the switcher (§6.4). [bookStickers]: stickers in its open trip's book (its checked items while it has a
- * trip, else 0); the delete confirm sheet says "Its sticker book goes into your album." when it is above 0 (checklist 144).
+ * One list in the switcher (§6.4). [items]: everything on it (the delete confirm sheet says "Its 9 items go with it.");
+ * [bookStickers]: stickers in its open trip's book (its checked items while it has a trip, else 0); the delete confirm
+ * sheet adds "Its sticker book goes into your album." when it is above 0 (checklist 144).
  */
-data class ListSummary(val id: String, val title: String, val remaining: Int, val current: Boolean, val bookStickers: Int = 0)
+data class ListSummary(
+    val id: String,
+    val title: String,
+    val remaining: Int,
+    val current: Boolean,
+    val bookStickers: Int = 0,
+    val items: Int = remaining,
+)
 
 /** One stop (§4.10): a folded strip, or the open tray with its rows in place. */
 @Immutable
@@ -123,7 +131,7 @@ data class SectionUi(
     val position: Int,
     /** The tab's name: the aisle name without its store prefix (§4.10); "Everything else" for the Unsorted stop. */
     val displayName: String,
-    /** The full aisle name, for TalkBack (tabs and strips read it even when the tab ellipsizes). */
+    /** The full aisle name, for TalkBack (tabs and strips read it in one go, however the tab wraps it). */
     val fullName: String,
     /** The store's own aisle number (the "A2" chip), or null. */
     val storeAisle: Int?,
@@ -270,10 +278,14 @@ sealed interface ListEvent {
     data class Deleted(val item: GroceryItem, val index: Int, val listId: String = "") : ListEvent
 
     /**
-     * The first check-off (or, [byAdd], the first add) after 12 h idle started a new book (§0.4 Q9): the toast with
-     * Undo.
+     * The first check-off after 12 h idle started a new book (§0.4 Q9), or ([byAdd]) the book was filed without a
+     * sticker going into the new one: the first add after 12 h, or an un-check, a revive or a tear-off on a finished shop
+     * (§7.1). The toast with Undo.
      */
     data class NewBook(val listId: String, val byAdd: Boolean = false, val undo: () -> Unit) : ListEvent
+
+    /** A list was deleted from the switcher (§6.4): "Big shop deleted". */
+    data class ListDeleted(val title: String) : ListEvent
 
     /** Another list is on screen (§6.4): what the last one's notes offered (the nudge, a new book's Undo) is moot. */
     data class Switched(val listId: String) : ListEvent
@@ -496,6 +508,7 @@ internal fun buildListUiState(
                 remaining = l.items.count { !it.checked },
                 current = l.id == list.id,
                 bookStickers = if (l.trip == null) 0 else l.items.count { it.checked },
+                items = l.items.size,
             )
         },
         sections = sections,

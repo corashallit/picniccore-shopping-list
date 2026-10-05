@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -89,6 +90,7 @@ import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.TrayPart
 import earth.cora.picnic.ui.theme.chipFloorScale
 import earth.cora.picnic.ui.theme.indexTabLeastWidth
+import earth.cora.picnic.ui.theme.indexTabTwoLineWidth
 import earth.cora.picnic.ui.theme.focusRing
 import earth.cora.picnic.ui.theme.showsFocusRing
 import earth.cora.picnic.ui.theme.drawDashedCircle
@@ -227,6 +229,9 @@ internal fun FoldedStrip(
     // Keyboard / switch access: the strip face wears the 2 dp ink ring 3 dp outside it (§4.4, §15).
     val interaction = remember { MutableInteractionSource() }
     val ringed = showsFocusRing(interaction)
+    // The meta line's text as laid out (set as it is measured): a wrapped text's box is as wide as its room, so where
+    // its lines really end is read from here (the ribbon and bow keep clear of the words, not of the box).
+    val metaLayout = remember { arrayOfNulls<androidx.compose.ui.text.TextLayoutResult>(1) }
     Layout(
         modifier = modifier
             .fillMaxWidth()
@@ -283,6 +288,7 @@ internal fun FoldedStrip(
                 Text(
                     metaText,
                     style = t.stripMeta.copy(color = c.inkSoft, lineBreak = LineBreak.Paragraph),
+                    onTextLayout = { metaLayout[0] = it },
                     modifier = Modifier
                         .alignByBaseline()
                         .testTag(ListTags.stripMeta(section.id))
@@ -422,7 +428,7 @@ internal fun FoldedStrip(
         val face = measurable("face")!!.measure(Constraints.fixed(w, h))
         // The ribbon: from the end of the text + 12 dp, at most the basket's left edge − 22 dp; else a bow on the
         // basket's left shoulder, never over text (§4.10). A meta line under the basket leaves no room for the band.
-        val textEnd = if (below) lineEnd else max(lineEnd, start + meta.width)
+        val textEnd = if (below) lineEnd else max(lineEnd, start + metaInkWidth(meta.width, metaLayout[0]))
         val bandX = textEnd + px(12.dp)
         val fits = !below && bandX <= basketX - px(22.dp)
         val ribbon = if (fits) measurable("ribbon")?.measure(Constraints.fixedHeight(h)) else null
@@ -439,15 +445,28 @@ internal fun FoldedStrip(
             if (wordShown) word!!.place(start + wordX, textTop + wordY)
             // The ribbon box is 30 dp wide with its 10 dp band at 10–20 dp.
             ribbon?.place(bandX - px(10.dp), 0)
-            // On the basket's left shoulder, and never back over the end of a long name. The bow follows the basket (it
-            // stands on the strip's bottom edge, or on the tab's line under large text): 12 dp below the basket's top, as
-            // at 1.0, where the strip is 56 dp and the basket overhangs it by 8 dp.
-            bow?.place(maxOf(basketX - px(14.dp), textEnd + px(1.dp)), basketY + px(BOW_BELOW_BASKET_TOP))
             basketM.place(basketX, basketY)
+            // Tied on the basket's left shoulder, in front of it so it always shows whole (a shelf's post or a crate's
+            // rim never hides a lobe), and never back over the end of a long name: its ink (not its box, whose first
+            // 5 dp are clear) keeps 1 dp from the text. The text ends at least 8 dp before the basket, so the bow stands
+            // at most 2 dp right of its spot and its ink stops short of the GOT IT stamp's letters. The bow follows the
+            // basket (it stands on the strip's bottom edge, or on the tab's line under large text): 12 dp below the
+            // basket's top, as at 1.0, where the strip is 56 dp and the basket overhangs it by 8 dp.
+            bow?.place(maxOf(basketX - px(14.dp), textEnd + px(1.dp) - px(BOW_INK_START)), basketY + px(BOW_BELOW_BASKET_TOP))
             chevron.place(chevronX, chevronY)
             ladybug?.place(0, 0)
         }
     }
+}
+
+/**
+ * How wide a strip's meta line really is: its row's [width] less what its wrapped text's box leaves blank after its
+ * longest line (Compose lays a wrapped text out as wide as its room), from the text's [layout] as last measured.
+ */
+private fun metaInkWidth(width: Int, layout: androidx.compose.ui.text.TextLayoutResult?): Int {
+    if (layout == null || layout.lineCount < 2 || layout.size.width > width) return width
+    val longest = (0 until layout.lineCount).maxOf { layout.getLineRight(it) }
+    return width - (layout.size.width - kotlin.math.ceil(longest).toInt()).coerceAtLeast(0)
 }
 
 /**
@@ -511,14 +530,17 @@ internal fun TrayHeader(
     val heading = trayHeading(section)
     val fold by rememberUpdatedState(onFold)
     val badgeGap = basketGap(section, 4.dp)
-    // The narrowest tab that still shows the whole name: the store chip gives way to it (below).
+    // The narrowest tab that shows the whole name on one line, and the narrowest that holds it on two: the store chip
+    // gives way to them (below).
     val tabLeast = indexTabLeastWidth(section.position, section.displayName, section.look, TabSize.Tray)
+    val tabTwoLines = indexTabTwoLineWidth(section.position, section.displayName, section.look, TabSize.Tray)
     val chevronInteraction = remember { MutableInteractionSource() }
     val chevronRinged = showsFocusRing(chevronInteraction)
     Layout(
         modifier = modifier
             .fillMaxWidth()
-            .height(TrayMetrics.headerHeight)
+            // 56 dp, taller when the tab's name wraps onto more lines (§4.10): the band grows round it.
+            .heightIn(min = TrayMetrics.headerHeight)
             .testTag(ListTags.header(section.id))
             .then(if (pinned) Modifier.groundBacking() else Modifier)
             .traySlice(TrayPart.Header, section.look, ring, shadows.color, c.pad, c.rule),
@@ -529,7 +551,7 @@ internal fun TrayHeader(
                 look = section.look,
                 size = TabSize.Tray,
                 ballpoint = true,
-                // The tab is the tray's heading: TalkBack reads the whole name even when the tab ellipsizes (§15).
+                // The tab is the tray's heading: TalkBack reads the whole name in one go, however the tab wraps it (§15).
                 modifier = Modifier.layoutId("tab").testTag(ListTags.headerTab(section.id)).semantics {
                     contentDescription = heading
                     heading()
@@ -599,26 +621,29 @@ internal fun TrayHeader(
         },
     ) { measurables, constraints ->
         val w = constraints.maxWidth
-        val h = constraints.maxHeight
         val px = { d: Dp -> d.roundToPx() }
         val bandTop = px(TrayMetrics.ring + TrayMetrics.border)
-        val bandH = px(TrayMetrics.band)
         val chevron = measurables.first { it.layoutId == "chevron" }.measure(Constraints.fixed(px(48.dp), px(48.dp)))
         val basketM = measurables.first { it.layoutId == "basket" }.measure(Constraints())
         val chevronX = w - px(TrayMetrics.border) - px(2.dp) - chevron.width
         val basketX = chevronX - px(badgeGap) - basketM.width
         val start = px(TrayMetrics.border) + px(6.dp)
-        // The name is what she reads (§4.10): under a large font the store chip gives way before the name is cut. It is
-        // drawn smaller (StoreAisleChip: down to its 1.0 size, never under 13 sp) to leave the tab its whole name at
-        // 16 sp; at 1.0, or with room to spare, it keeps its natural width. When even its 1.0 size would cut the name
-        // (a long name at any scale; "Baking" from about 1.5 on a 360 dp phone, the tab's number circle grown too), the
-        // chip leaves the header and the name takes its room: it is not placed, the heading still reads "…, store aisle
-        // 2", and the folded strip's meta line shows the number.
+        // The name is what she reads (§4.10), and the chip's A-number is what she reads on the store's signs: the chip
+        // stays whenever the name can sit beside it on one line or two. Under a large font it is drawn smaller first
+        // (StoreAisleChip: down to its 1.0 size, never under 13 sp) to keep the name on one line; at 1.0, or with room to
+        // spare, it keeps its natural width. When the name cannot share one line with it even then, the chip keeps its
+        // 1.0 size and the name wraps beside it onto two ("Baking / & spices"). A name that would need a third line beside
+        // it ("Breakfast, / coffee & tea" does not fit even two) takes the chip's room instead: the chip is not placed,
+        // the heading still reads "…, store aisle 1", and the folded strip's meta line shows the number.
         val chip = measurables.firstOrNull { it.layoutId == "chip" }?.let { m ->
             val natural = m.maxIntrinsicWidth(Constraints.Infinity)
             val least = kotlin.math.ceil(natural * chipFloorScale()).toInt()
             val room = basketX - px(CHIP_TO_BASKET) - px(CHIP_GAP) - start - tabLeast.roundToPx()
-            if (room < least) null else m.measure(Constraints(maxWidth = room.coerceIn(least, natural)))
+            when {
+                room >= least -> m.measure(Constraints(maxWidth = room.coerceIn(least, natural)))
+                basketX - px(CHIP_TO_BASKET) - least - px(CHIP_GAP) - start >= tabTwoLines.roundToPx() -> m.measure(Constraints(maxWidth = least))
+                else -> null
+            }
         }
         // The tab ends 8 dp before the store chip (or the basket, §4.10); a chip may run on to 2 dp from the basket's box
         // (its art has its own margin), so a short name keeps its letters at large text ("Baking" at 1.3).
@@ -627,6 +652,9 @@ internal fun TrayHeader(
         val tab = measurables.first { it.layoutId == "tab" }.measure(Constraints(maxWidth = tabMax))
         val doodle = measurables.firstOrNull { it.layoutId == "doodle" }?.measure(Constraints())
         val bee = measurables.firstOrNull { it.layoutId == "bee" }?.measure(Constraints())
+        // The band is 50 dp, and grows round a tab whose name wraps (6 dp above and below it, as round the 38 dp tab).
+        val bandH = maxOf(px(TrayMetrics.band), tab.height + 2 * px(BAND_AROUND_TAB))
+        val h = maxOf(constraints.minHeight, bandTop + bandH)
         layout(w, h) {
             val tabY = bandTop + (bandH - tab.height) / 2
             tab.place(start, tabY)
@@ -652,6 +680,12 @@ internal fun TrayHeader(
 internal val BOW_BELOW_BASKET_TOP: Dp = 12.dp
 
 /**
+ * Where the bow sticker's ink starts inside its 30 dp box (sk_d_ribbon: its cut line runs from 5.3 to 24.7 dp across):
+ * what must keep clear of the text is the ink, not the box.
+ */
+internal val BOW_INK_START: Dp = 5.dp
+
+/**
  * From this font scale a folded strip whose meta line would wrap beside the basket stacks instead: the basket and the
  * chevron on the tab's line, the meta line the strip's whole width under them (§15, item 337).
  */
@@ -659,6 +693,9 @@ internal const val STACKED_FONT_SCALE: Float = 1.5f
 
 /** How far below the strip's bottom edge egg 2's ladybug walks, past StripLadybug's own 2 dp (the centre of its lane). */
 private val LADYBUG_LANE_DROP: Dp = 2.5.dp
+
+/** The band's room above and below its tab: (50 − 38) / 2 dp. */
+private val BAND_AROUND_TAB: Dp = 6.dp
 
 /** The room between the tray tab's end and the store chip (§4.10): 8 dp. */
 private val CHIP_GAP: Dp = 8.dp

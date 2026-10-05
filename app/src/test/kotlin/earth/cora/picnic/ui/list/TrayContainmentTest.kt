@@ -128,9 +128,10 @@ class TrayContainmentTest {
     }
 
     /**
-     * §4.10, §8.4 (trip review): while the next stop's tray unfolds and the strips below slide down to make room, the
-     * strip below never covers the opening tray's cap. In every frame where the cap and the next strip overlap, the
-     * overlap shows the cap (drawn over the strip), not the strip's own face.
+     * §4.10, §8.4, §10 (trip review, review 4b A6): while the next stop's tray unfolds behind the Next card, it grows by
+     * height and the strips below move with it in the same frames, so the strip below never meets the opening tray's cap
+     * (it used to slide under the tray for about 300 ms). Were they ever to overlap, the overlap must show the cap (drawn
+     * over the strip), not the strip's own face.
      */
     @Test
     fun openingTrayCapDrawsOverTheStripBelow() {
@@ -155,7 +156,7 @@ class TrayContainmentTest {
         }
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
-        assertTrue("the strip below slides past the opening tray's cap", overlaps.isNotEmpty())
+        assertTrue("the strip below keeps clear of the opening tray's cap (overlaps at ${overlaps.map { it.t }} ms)", overlaps.isEmpty())
         // The strip's own face, settled: what the overlap would show if the strip were drawn over the cap.
         val settled = compose.boundsOf(ListTags.strip("dairy-eggs")).roundToIntRect()
         val face = compose.onRoot().captureToImage().asAndroidBitmap()

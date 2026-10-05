@@ -58,12 +58,14 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -89,6 +91,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -428,7 +431,7 @@ fun ListRoute(
     val screen = rememberListScreenState()
     var showLists by rememberSaveable { mutableStateOf(false) }
     val addFlows = rememberAddFlows(addVm)
-    val tears = remember(resources) { TearToasts(resources, vm::undoDelete) }
+    val tears = remember(resources) { TearToasts(resources, vm::undoDeletes) }
     SideEffect {
         vm.strings = ListStrings(
             addedToBook = { resources.getString(R.string.list_book_added_spoken, it) },
@@ -479,6 +482,7 @@ fun ListRoute(
                         minHoldMs = NUDGE_FLOOR,
                     ),
                 )
+                is ListEvent.ListDeleted -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_list_deleted, event.title), kind = "list"))
                 is ListEvent.Refreshed -> refreshedToast(resources, event)?.let { toasts.show(it) }
                 is ListEvent.Message -> toasts.show(ToastMessage(event.text, kind = "save"))
             }
@@ -612,7 +616,7 @@ internal fun refreshedText(resources: Resources, e: ListEvent.Refreshed): String
  * The tear-off's sticky notes (§8.6, §4.15): "Oat cereal torn out" with Undo; a second tear-off during its hold merges
  * into "2 items torn out", whose Undo restores both.
  */
-internal class TearToasts(private val resources: Resources, private val undo: (GroceryItem, Int, String?) -> Unit) {
+internal class TearToasts(private val resources: Resources, private val undoAll: (List<ListEvent.Deleted>) -> Unit) {
     private val torn = HashMap<Long, List<ListEvent.Deleted>>()
 
     fun toast(e: ListEvent.Deleted): ToastMessage {
@@ -631,8 +635,8 @@ internal class TearToasts(private val resources: Resources, private val undo: (G
             text = text,
             kind = TEAR_KIND,
             actionLabel = resources.getString(R.string.list_undo),
-            // Restore newest first, so each goes back at the index it had when it was torn out.
-            onAction = { all.asReversed().forEach { undo(it.item, it.index, it.listId) } },
+            // All in one write, newest first, so each goes back at the index it had when it was torn out.
+            onAction = { undoAll(all) },
             merge = ::merge,
         )
         return if (id == null) base else base.copy(id = id)
@@ -867,10 +871,9 @@ private fun EggListScope.ListScreenContent(
                             else -> CompositionLocalProvider(LocalBringIntoViewSpec provides keyboardView(lazyState, entries, dockHeight)) {
                                 AisleList(
                                     state, p, engine, actions, screen, lazyState, entries, dockHeight, collapse,
+                                    // Egg 16: the umbrella's room is only at the list's end (listBottomPadding), so the last
+                                    // strip can scroll clear of its canopy; the viewport itself stays as it is (§12.2).
                                     topExtra = listTopExtra, bottomPadding = listBottomPadding(dockHeight),
-                                    // Egg 16: the list keeps out of the umbrella's band above the docked bar (not while it
-                                    // is folded into the FAB: the umbrella stands on the bar).
-                                    umbrellaBand = if (eggs.umbrella && collapse?.collapsed != true) barHeight + UMBRELLA_BAND else null,
                                 )
                             }
                         }
@@ -1127,8 +1130,6 @@ private fun AisleList(
     topExtra: Dp = 0.dp,
     /** The add bar + 26 dp, + the umbrella's room while it rains (EggListScope.listBottomPadding). */
     bottomPadding: Dp = dockHeight + 26.dp,
-    /** Egg 16: while the umbrella shows, the viewport ends this far above the screen's bottom (the bar + its band). */
-    umbrellaBand: Dp? = null,
 ) {
     val reduced = LocalReducedMotion.current
     val density = LocalDensity.current
@@ -1138,6 +1139,27 @@ private fun AisleList(
     // The current aisle wears the lemon ring, the bee and the ladybug (§4.10, D2). While a chain holds a finished aisle
     // open (the engine's override), it keeps them until it folds; a finished aisle she reopens herself is not current.
     val currentId = if (openId != null && openId != state.openSectionId) openId else state.nowSectionId
+    // The next stop opening behind the Next card (§8.5, §10) unfolds by height, as one sheet: its rows and cap grow from
+    // nothing to their height over the fold's 240 ms while everything below moves with them in the same frames, so no
+    // strip ever slides under the new tray. Timed on the engine's clock from the frame it opened (the hand-off's chain
+    // runs it).
+    val openedAt = remember { HashMap<String, Long>() }
+    val lastOpen = remember { arrayOfNulls<String>(1) }
+    if (openId != lastOpen[0]) {
+        if (openId != null) openedAt[openId] = Snapshot.withoutReadObservation { clock.now }
+        lastOpen[0] = openId
+    }
+    val handOff = p.scroll?.takeIf { it.itemId == null && it.sectionId == openId }
+    val unfoldT0 = if (reduced || handOff == null) null else openedAt[handOff.sectionId]?.takeIf { it >= handOff.t0 - UNFOLD_SLACK_MS }
+    val unfoldId = if (unfoldT0 != null) openId else null
+    // Its rows and cap unfold as one sheet (one per unfold), which keeps their whole heights as they are measured.
+    val sheet = remember(unfoldT0, unfoldId) { if (unfoldT0 != null && unfoldId != null) UnfoldSheet(unfoldT0, "cap:$unfoldId") else null }
+    if (sheet != null) SideEffect { sheet.rows = entries.filter { it is Entry.RowItem && it.sectionId == unfoldId }.map { it.key } }
+    // While it unfolds every item keeps step with the layout, frame by frame: no placement animation at all (even one
+    // that lands at once shows its start for a frame, and the lazy list swaps it for a soft spring when it interrupts a
+    // slide still running, which left the strips below lagging under the growing tray).
+    val unfolding = unfoldT0 != null && Snapshot.withoutReadObservation { clock.now } < unfoldT0 + UNFOLD_MS + UNFOLD_SETTLE_MS
+    val still = reduced || screen.layoutSnaps > 0 || unfolding
     // WP6's check-off chains have played out (no hop in flight, no burst, no celebration): egg 8's cat may curl up.
     val chainsDone = p.flights.isEmpty() && p.bursts.isEmpty() && p.celebration == null
     val ladybugStrip = LocalListEggs.current.ladybug?.sectionId
@@ -1264,18 +1286,17 @@ private fun AisleList(
      * sliver of the strip before it shows above it (items 178, 313). A stop near the list's end may not have enough list
      * after it to get there: the end first gains a viewport's height of room (out of sight below), the scroll lands flush
      * in one move (one jump under reduced motion), and the room is then trimmed to exactly what the landing needs, which
-     * moves nothing. So no frame ever shows the strip above sliced.
+     * moves nothing. So no frame ever shows the strip above sliced. The trim lands inside the programmatic scroll, the
+     * rows held still: the remeasure it causes never starts a slide (the open tray's rows would drop to the screen's foot
+     * and slide back up under their band).
      */
     suspend fun scrollFlush(index: Int) {
         val base = endRoom
         val view = listState.layoutInfo.let { it.viewportEndOffset - it.viewportStartOffset }
         endRoom = base + view
-        try {
-            withFrameMillis { }
-            programmatic {
-                if (snap) listState.scrollToItem(index, topPadPx) else listState.animateScrollToItem(index, topPadPx)
-            }
-        } finally {
+        var trimmed = false
+        fun trim() {
+            trimmed = true
             val info = listState.layoutInfo
             val last = info.visibleItemsInfo.maxByOrNull { it.index }
             endRoom = if (last == null || last.index != info.totalItemsCount - 1) {
@@ -1284,6 +1305,17 @@ private fun AisleList(
                 val surplus = last.offset + last.size + info.afterContentPadding - info.viewportEndOffset
                 (endRoom - surplus).coerceIn(base, base + view)
             }
+        }
+        try {
+            withFrameMillis { }
+            programmatic {
+                if (snap) listState.scrollToItem(index, topPadPx) else listState.animateScrollToItem(index, topPadPx)
+                // The landing laid out, then the trim, with the rows held still.
+                withFrameMillis { }
+                trim()
+            }
+        } finally {
+            if (!trimmed) trim()
         }
     }
 
@@ -1478,20 +1510,12 @@ private fun AisleList(
         }
     }
 
-    // Egg 16: while the umbrella stands on the add bar's shoulder, its canopy rises above the bar (42 dp at the top of its
-    // pop). The list's words keep out of that band: the viewport ends above it, so no row or strip ever lies under the
-    // canopy at any scroll position, and the list's end needs only a small gap then (§12.2).
-    val umbrella = umbrellaBand != null
     val listRoom = LocalListRoom.current
     // Clipped to the viewport: the bunting starts above it (−34 dp) and comes out from under the top stack (R6).
     Box(
         Modifier
             .fillMaxSize()
-            .padding(bottom = umbrellaBand ?: 0.dp)
             .clipToBounds()
-            // Egg 16: where the viewport ends above the umbrella's band, the list fades out into the binder as it does
-            // into the add bar's pad (§6.1), never a hard cut across a strip.
-            .then(if (umbrella) Modifier.fadeOutAtBottom(UMBRELLA_FADE) else Modifier)
             .onGloballyPositioned {
                 val b = it.boundsInWindow()
                 screen.listBounds = b
@@ -1555,7 +1579,7 @@ private fun AisleList(
                 start = 8.dp,
                 end = 8.dp,
                 top = LIST_TOP_PAD,
-                bottom = (if (umbrella) UMBRELLA_END_GAP else bottomPadding) + with(density) { endRoom.toDp() },
+                bottom = bottomPadding + with(density) { endRoom.toDp() },
             ),
         ) {
             entries.forEachIndexed { index, e ->
@@ -1586,7 +1610,7 @@ private fun AisleList(
                             ambient = beat,
                             ambientClock = ambient.clock,
                             modifier = Modifier
-                                .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis)
+                                .itemMotion(this, still, placementMs = PicnicMotion.layout.durationMillis)
                                 .keyFocusIn(screen, e.key, s.id)
                                 // A peeked basket, or egg 2's ladybug walking under this strip, draws over the strip below
                                 // (and over the open tray's band beside it).
@@ -1639,7 +1663,8 @@ private fun AisleList(
                             ambientClock = ambient.clock,
                             current = e.s.id == currentId,
                             modifier = Modifier
-                                .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = SLOT_CLOSE_MS)
+                                .itemMotion(this, still, placementMs = SLOT_CLOSE_MS)
+                                .unfoldSlice(sheet.takeIf { unfoldId == e.s.id }, e.key, clock)
                                 .keyFocusIn(screen, e.key, e.s.id)
                                 .focusRequester(screen.rowFocus(e.row.id))
                                 // The open tray draws over the folded strips that slide past it as it opens (the strip
@@ -1663,7 +1688,8 @@ private fun AisleList(
                             e.s,
                             current = e.s.id == currentId,
                             modifier = Modifier
-                                .itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = SLOT_CLOSE_MS)
+                                .itemMotion(this, still, placementMs = SLOT_CLOSE_MS)
+                                .unfoldSlice(sheet.takeIf { unfoldId == e.s.id }, e.key, clock)
                                 .zIndex(Z_TRAY)
                                 .unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced),
                         )
@@ -1674,10 +1700,10 @@ private fun AisleList(
                         Spacer(Modifier.fillMaxWidth().height(with(LocalDensity.current) { 1.toDp() }))
                     }
                     is Entry.Gap -> item(key = e.key, contentType = "gap") {
-                        Spacer(Modifier.itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis).fillMaxWidth().height(7.dp))
+                        Spacer(Modifier.itemMotion(this, still, placementMs = PicnicMotion.layout.durationMillis).fillMaxWidth().height(7.dp))
                     }
                     Entry.Note -> item(key = e.key, contentType = "note") {
-                        EndNote(state.total, Modifier.itemMotion(this, reduced || screen.layoutSnaps > 0, placementMs = PicnicMotion.layout.durationMillis), anchors = anchors)
+                        EndNote(state.total, Modifier.itemMotion(this, still, placementMs = PicnicMotion.layout.durationMillis), anchors = anchors)
                     }
                 }
             }
@@ -1686,37 +1712,6 @@ private fun AisleList(
         if (screen.pull > 0f && !reduced) Bunting(screen.pull / pullPx, Modifier.align(Alignment.TopCenter))
     }
 }
-
-/**
- * The umbrella's band above the docked bar (egg 16): its 44 dp sticker centred 13 dp above the bar's top reaches 35 dp up,
- * 42 dp at the top of its pop (×1.3).
- */
-private val UMBRELLA_BAND: Dp = 44.dp
-
-/** While it rains the viewport already ends above the umbrella's canopy: the list's end keeps this small gap (§6.1). */
-private val UMBRELLA_END_GAP: Dp = 12.dp
-
-/** How far up from the viewport's end above the umbrella's band the list fades out (egg 16). */
-private val UMBRELLA_FADE: Dp = 20.dp
-
-/** The content fades from opaque to clear over the last [fade] at the bottom (alpha mask: the binder shows through). */
-private fun Modifier.fadeOutAtBottom(fade: Dp): Modifier = this
-    .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
-    .drawWithContent {
-        drawContent()
-        val f = fade.toPx().coerceAtMost(size.height)
-        drawRect(
-            androidx.compose.ui.graphics.Brush.verticalGradient(
-                0f to androidx.compose.ui.graphics.Color.Black,
-                1f to androidx.compose.ui.graphics.Color.Transparent,
-                startY = size.height - f,
-                endY = size.height,
-            ),
-            topLeft = Offset(0f, size.height - f),
-            size = androidx.compose.ui.geometry.Size(size.width, f),
-            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
-        )
-    }
 
 /** Whether a finger is on the list (the pull to refresh follows only her own drags). */
 private interface PullGate {
@@ -1758,14 +1753,73 @@ private const val OPEN_WAIT_FRAMES: Int = 90
 private const val OPEN_ROWS_IN_VIEW: Int = 3
 private const val SLOT_CLOSE_MS: Int = 380
 
-/** Placement only: rows and strips move smoothly when the layout changes; reduced motion swaps at once. */
-private fun Modifier.itemMotion(scope: LazyItemScope, reduced: Boolean, placementMs: Int): Modifier = with(scope) {
-    if (reduced) {
+/**
+ * Placement only: rows and strips move smoothly when the layout changes. [still] (reduced motion, a programmatic scroll
+ * or the list keeping its place, a tray unfolding): they take their new places at once, keeping step with the layout.
+ */
+private fun Modifier.itemMotion(scope: LazyItemScope, still: Boolean, placementMs: Int): Modifier = with(scope) {
+    if (still) {
         this@itemMotion.animateItem(fadeInSpec = null, placementSpec = null, fadeOutSpec = null)
     } else {
         this@itemMotion.animateItem(fadeInSpec = null, placementSpec = tween(placementMs, easing = PicnicMotion.layout.easing), fadeOutSpec = null)
     }
 }
+
+/**
+ * The rows and cap of the tray opening behind the Next card, unfolding as one sheet from [t0] (§8.5). [full] keeps each
+ * slice's whole height (px) as the list measures it; [rows] are the tray's row keys in list order, [cap] its cap's key.
+ */
+private class UnfoldSheet(val t0: Long, val cap: String) {
+    var rows: List<String> = emptyList()
+    val full = HashMap<String, Int>()
+}
+
+/**
+ * A slice of the opening tray's [sheet] (§8.5): laid out whole, the sheet's rows and cap together take
+ * [PicnicMotion.layout]'s share of their summed height on the engine's [clock]. The cap's bottom edge (the end cap,
+ * the ring and the shadow) shows first and closes the sheet from the start; the rows unroll above it from the top down,
+ * so only the row at the growing edge is cut, never every row at once. A row not reached yet keeps a pixel (its panel
+ * and wall), so the list never drops it. Only the slice's top and bottom are clipped: the current aisle's lemon ring
+ * and shadow run on outside its sides, as on a still tray.
+ */
+private fun Modifier.unfoldSlice(sheet: UnfoldSheet?, key: String, clock: earth.cora.picnic.ui.list.motion.MotionClock): Modifier =
+    if (sheet == null) {
+        this
+    } else {
+        this
+            .drawWithContent { clipRect(-size.width, 0f, size.width * 2f, size.height) { this@drawWithContent.drawContent() } }
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                sheet.full[key] = placeable.height
+                val t = ((clock.now - sheet.t0).toFloat() / UNFOLD_MS).coerceIn(0f, 1f)
+                val cap = key == sheet.cap
+                if (t >= 1f || (!cap && key !in sheet.rows)) return@layout layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                val capH = sheet.full[sheet.cap] ?: 0
+                var rowsH = 0
+                var before = 0
+                for (k in sheet.rows) {
+                    if (k == key) before = rowsH
+                    rowsH += sheet.full[k] ?: 0
+                }
+                val shown = ((capH + rowsH) * PicnicMotion.layout.easing.transform(t)).roundToInt()
+                val capShown = minOf(capH, shown)
+                if (cap) {
+                    val h = capShown.coerceAtLeast(1)
+                    layout(placeable.width, h) { placeable.place(0, h - placeable.height) }
+                } else {
+                    val reach = shown - capShown - before
+                    val h = reach.coerceIn(1, placeable.height)
+                    layout(placeable.width, h) { placeable.place(0, if (reach <= 0) h - placeable.height else 0) }
+                }
+            }
+    }
+
+/** The opening tray's unfold (§8.5: 240 ms `layout`), and the frames the list keeps step after it. */
+private val UNFOLD_MS: Int = PicnicMotion.layout.durationMillis
+private const val UNFOLD_SETTLE_MS: Int = 48
+
+/** The hand-off's tray opens with its scroll request, within a frame or two of it. */
+private const val UNFOLD_SLACK_MS: Long = 50
 
 /**
  * The sticker bunting (§6.1): hearts and stars on a dashed 1.6 dp cord that sags as she pulls (−34 → +10 dp).

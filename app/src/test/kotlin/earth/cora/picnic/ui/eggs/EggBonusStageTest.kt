@@ -182,7 +182,7 @@ class EggBonusStageTest {
         assertTrue(r.eggs.bonusStage)
         assertTrue(r.eggs.pixelStickers)
         assertEquals("BONUS★ on the LCD", EggRules.BONUS, r.eggs.lcdWord?.text)
-        assertEquals("BONUS STAGE! ♪", r.model.toasts.current?.text)
+        assertEquals("BONUS STAGE! ♪ · tap\u00A0a\u00A0stamp\u00A0to\u00A0stop", r.model.toasts.current?.text)
         // The jingle every 4 s while the list shows.
         r.advanceTo(t0 + 8_500)
         val jingles = r.feedback.times(Cue.BONUS_JINGLE)

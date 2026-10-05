@@ -40,7 +40,7 @@ import org.robolectric.annotation.GraphicsMode
  * order, through the real path: the List destination's own view models, WP6's engine and the toasts' host, into the
  * Announcer the app hands them (here a FakeAnnouncer on the test clock, with the production 1 s de-duplication). A
  * check-off's own state is never one of them (the row's checkbox says that).
- * - A trip to its end: the check-off ("… added to today's sticker book"), the aisle done, the Next stop, the last
+ * - A trip to its end: the check-off ("… added to today’s sticker book"), the aisle done, the Next stop, the last
  *   check-off, its aisle, and the trip complete.
  * - The first check-off after 12 idle hours: the check-off, then the new book's note in words; its Undo says what it
  *   undid.
@@ -85,10 +85,10 @@ class AnnouncementsFlowTest {
         compose.advanceMs(1_500)
         assertEquals(
             listOf(
-                "Baking powder added to today's sticker book",
+                "Baking powder added to today’s sticker book",
                 "Baking done",
                 "Next: aisle 5, Breakfast",
-                "Maple syrup added to today's sticker book",
+                "Maple syrup added to today’s sticker book",
                 "Breakfast done",
                 "List complete! 24 stickers in 41 minutes. Perfect!",
             ),
@@ -110,13 +110,13 @@ class AnnouncementsFlowTest {
         assertTrue("the new book's note drops in", compose.framesUntil(3_000) { r.announcer.spoken.size >= 3 })
         compose.advanceMs(1_000)
         val note = "New sticker book for today, your last shop is in the album"
-        assertEquals(listOf(nudge, "Baking powder added to today's sticker book", note), r.announcer.spoken)
+        assertEquals(listOf(nudge, "Baking powder added to today’s sticker book", note), r.announcer.spoken)
         // Its Undo, as a double tap with TalkBack presses it.
         compose.onNode(hasText("Undo") and hasClickAction()).performClick()
         compose.advanceMs(1_500)
         assertEquals(
             "the Undo says what it undid, first",
-            listOf(nudge, "Baking powder added to today's sticker book", note, "Undone: $note"),
+            listOf(nudge, "Baking powder added to today’s sticker book", note, "Undone: $note"),
             r.announcer.spoken.take(4),
         )
         // Back in the old book, Baking powder was Baking's last thing: its aisle is done there, and the next stop

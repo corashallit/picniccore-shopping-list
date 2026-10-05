@@ -20,8 +20,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Index tabs and ribbons on the real list (docs/DESIGN_STICKER.md §4.10; items 76, 79): with the app's 14 default aisles
- * the tab names fit 20 → 16 sp then ellipsize, never reaching the basket or the store chip, while TalkBack hears the
- * whole name; a finished strip's ribbon (or its bow) is never over text.
+ * the tab names fit 20 → 16 sp then wrap between words (§0.4: never cut, "&" never ends a line), never reaching the
+ * basket or the store chip, while TalkBack hears the whole name; a finished strip's ribbon (or its bow) is never over
+ * text.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -45,6 +46,19 @@ class TabLayoutTest {
 
     private fun Rect.overlaps(o: Rect) = left < o.right - 0.5f && o.left < right - 0.5f && top < o.bottom - 0.5f && o.top < bottom - 0.5f
 
+    /** The lines of the name drawn on the tab tagged [tabTag] (its text node, in the unmerged tree). */
+    private fun tabNameLines(tabTag: String): List<String> = compose.onAllNodes(
+        androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(tabTag)) and
+            androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
+        useUnmergedTree = true,
+    ).fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString("") }.single { n -> n.any { it.isLetter() } }.split('\n')
+
+    /** §0.4: the whole [name] on the tab, broken only between words, no line ending in "&". */
+    private fun assertWhole(name: String, lines: List<String>, at: String) {
+        assertEquals("$at: $name is whole on its tab ($lines)", name, lines.joinToString(" ").replace('\u00A0', ' '))
+        for (line in lines.dropLast(1)) assertTrue("$at: $name: no line ends in \"&\" ($lines)", !line.trimEnd().endsWith("&"))
+    }
+
     /** Item 76. */
     @Test
     fun defaultAislesFit() {
@@ -53,6 +67,7 @@ class TabLayoutTest {
         compose.show(rig, probe)
         assertEquals("all 14 aisles are stops", 14, rig.vm.state.value.sections.size)
         var shrunk = 0
+        var wrapped = 0
         visit(rig) { s, open ->
             if (open) {
                 val tab = probe["trayTab:${s.id}"]
@@ -62,6 +77,7 @@ class TabLayoutTest {
                 assertTrue("${s.displayName}: the tray tab ends 8 dp before the ${if (chip != null) "store chip" else "basket"} (${tab.right} ≤ $limit)", tab.right <= limit + 0.5f)
                 val font = probe.fonts.getValue("trayTab:${s.id}")
                 assertTrue("${s.displayName}: 16–20 sp ($font)", font in 16f..20f)
+                assertWhole(s.displayName, tabNameLines(ListTags.headerTab(s.id)), "tray")
             } else {
                 val tab = probe["tab:${s.id}"]
                 val basket = probe["basket:${s.id}"]
@@ -69,6 +85,12 @@ class TabLayoutTest {
                 val font = probe.fonts.getValue("tab:${s.id}")
                 assertTrue("${s.displayName}: 16–20 sp ($font)", font in 16f..20f)
                 if (font < 20f) shrunk++
+                val lines = tabNameLines(ListTags.stripTab(s.id))
+                assertWhole(s.displayName, lines, "strip")
+                if (lines.size > 1) wrapped++
+                // The strip grows round a wrapped name: the tab and the meta line under it stay inside the strip.
+                val strip = compose.boundsOf(ListTags.strip(s.id))
+                assertTrue("${s.displayName}: the strip holds its tab and meta", tab.top >= strip.top - 0.5f && probe["meta:${s.id}"].bottom <= strip.bottom + 0.5f)
                 // TalkBack hears the whole display name (with "&" read as "and") and the store number.
                 val label = compose.onNodeWithTag(ListTags.strip(s.id)).fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)!!.single()
                 assertTrue("$label names ${s.displayName}", label.contains(s.displayName.replace("&", "and")))
@@ -76,6 +98,7 @@ class TabLayoutTest {
             }
         }
         assertTrue("the long names shrink below 20 sp ($shrunk)", shrunk > 0)
+        assertTrue("the longest names wrap ($wrapped)", wrapped > 0)
         // Every tray, not only the one open at load: open each aisle in turn and check its band (§4.10: the tab ends
         // 8 dp before the store chip, or before the basket when there is no chip).
         for (s in rig.vm.state.value.sections) {
@@ -92,7 +115,37 @@ class TabLayoutTest {
             assertTrue("${s.displayName} (open): the chip ends before the basket", (chip?.right ?: tab.right) <= basket.left + 0.5f)
             val font = probe.fonts.getValue("trayTab:${s.id}")
             assertTrue("${s.displayName} (open): 16–20 sp ($font)", font in 16f..20f)
+            assertWhole(s.displayName, tabNameLines(ListTags.headerTab(s.id)), "open tray")
+            // The band grows round a wrapped tab: the tab stays inside the header, 6 dp clear of its band's edges.
+            val header = compose.boundsOf(ListTags.header(s.id))
+            assertTrue("${s.displayName} (open): the tab ${tab} inside the band $header", tab.top >= header.top + 6 * dp - 0.5f && tab.bottom <= header.bottom - 6 * dp + 0.5f)
+            // The store chip stays beside a name that fits by it on two lines ("Baking / & spices"): it is the A-number on
+            // the store's signs.
+            if (s.displayName == "Baking & spices") assertTrue("${s.displayName} (open): the store chip stays", chip != null)
         }
+    }
+
+    /**
+     * §0.4 at large text on a slightly narrower phone (352 dp: at 1.3 "& international" does not fit a strip's tab beside
+     * even the 12 dp pattern end): the pattern end goes instead, and "&" keeps its word on every folded strip and on
+     * the open tray.
+     */
+    @Test
+    @Config(qualifiers = "w352dp-h760dp-xxhdpi")
+    fun ampersandKeepsItsWordAtFs130() {
+        val rig = ListRig(ListFixture.everyDefaultAisle())
+        compose.show(rig, fontScale = 1.3f)
+        visit(rig) { s, open ->
+            assertWhole(s.displayName, tabNameLines(if (open) ListTags.headerTab(s.id) else ListTags.stripTab(s.id)), "352 dp, fs 1.3")
+        }
+    }
+
+    /** The strip meta line's text as laid out. */
+    private fun metaLayout(id: String): androidx.compose.ui.text.TextLayoutResult {
+        val node = compose.onNodeWithTag(ListTags.stripMeta(id), useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        return layouts.single()
     }
 
     /** What [ribbons] found: finished strips tied with the full ribbon, and with the bow alone. */
@@ -110,14 +163,23 @@ class TabLayoutTest {
             val ribbon = probe.bounds["ribbon:${s.id}"]
             val bow = probe.bounds["bow:${s.id}"]
             assertTrue("$at, ${s.displayName}: tied with a ribbon or a bow", ribbon != null || bow != null)
-            val text = listOfNotNull(probe["tab:${s.id}"], probe["meta:${s.id}"], probe.bounds["stripChip:${s.id}"])
+            // The meta line's words, line by line (a wrapped text's box runs on past its longest line).
+            val meta = probe["meta:${s.id}"]
+            val metaText = metaLayout(s.id)
+            val metaLines = (0 until metaText.lineCount).map { Rect(meta.left + metaText.getLineLeft(it), meta.top + metaText.getLineTop(it), meta.left + metaText.getLineRight(it), meta.top + metaText.getLineBottom(it)) }
+            val text = listOfNotNull(probe["tab:${s.id}"], probe.bounds["stripChip:${s.id}"]) + metaLines
             val basket = probe["basket:${s.id}"]
-            // The bow sticker is drawn 12 dp above its box (StripRibbon): check where it shows, not only its box.
+            // The bow sticker is drawn 12 dp above its box (StripRibbon); its ink (sk_d_ribbon's cut line) runs 5.3 to
+            // 24.7 dp across the 30 dp sticker and 9.7 to 25 dp down it. What must keep off the text is that ink.
             val drawnBow = bow?.translate(0f, -12 * dp)
-            for (r in listOfNotNull(ribbon, bow, drawnBow)) {
+            val bowInk = drawnBow?.let { Rect(it.left + 5.3f * dp, it.top + 9.7f * dp, it.left + 24.7f * dp, it.top + 25f * dp) }
+            for (r in listOfNotNull(ribbon, bowInk)) {
                 for (t in text) assertTrue("$at, ${s.displayName}: the ribbon $r is over text $t", !r.overlaps(t))
                 assertTrue("$at, ${s.displayName}: the ribbon stays left of the basket's right edge", r.left < basket.right)
             }
+            // The bow stays whole: at most 2 dp right of its spot on the shoulder (14 dp into the basket's box), so its
+            // knot is tucked no further behind the basket than on a short name.
+            if (bow != null) assertTrue("$at, ${s.displayName}: the bow at most 2 dp right of its spot (${(bow.left - basket.left) / dp} dp)", bow.left <= basket.left - 12 * dp + 0.5f)
             val strip = compose.boundsOf(ListTags.strip(s.id))
             if (ribbon != null) {
                 bands++
@@ -227,23 +289,24 @@ class TabLayoutTest {
     }
 
     /**
-     * §4.10 tab fit: a name too long even at 16 sp is cut at a word boundary and never leaves a dangling "&" or "·"
-     * ("Deli…", not "Deli & …"); a first word too long on its own is cut inside it.
+     * §4.10, §0.4 tab fit: a name too long for one line even at 16 sp wraps between words into the fewest lines, balanced,
+     * "&" kept with the word after it; a word wider than the whole room on its own leaves the wrapping to the text.
      */
     @Test
-    fun tabEllipsisCutsAtAWordBoundary() {
-        fun cut(name: String, room: Int) = earth.cora.picnic.ui.theme.tabEllipsis(name) { it.length <= room }
-        assertEquals("Deli\u2026", cut("Deli & meat", 8))
-        assertEquals("Dairy\u2026", cut("Dairy & eggs", 9))
-        assertEquals("Snacks\u2026", cut("Snacks · chips", 10))
-        assertEquals("Dairy & eggs\u2026", cut("Dairy & eggs & more", 15))
-        assertEquals("Breakfa\u2026", cut("Breakfast & cereal", 8))
-        assertEquals("Frozen", cut("Frozen", 6))
+    fun tabLinesBreakBetweenWordsBalanced() {
+        fun lines(name: String, room: Int) = earth.cora.picnic.ui.theme.tabLines(name, room) { it.length }?.map { it.replace('\u00A0', ' ') }
+        assertEquals(listOf("Frozen"), lines("Frozen", 6))
+        assertEquals(listOf("Meat", "& seafood"), lines("Meat & seafood", 12))
+        assertEquals(listOf("Pasta, rice", "& international"), lines("Pasta, rice & international", 20))
+        assertEquals(listOf("Breakfast,", "coffee & tea"), lines("Breakfast, coffee & tea", 18))
+        assertEquals(listOf("Health,", "beauty & baby"), lines("Health, beauty & baby", 16))
+        assertEquals(listOf("Bulk", "& natural", "foods"), lines("Bulk & natural foods", 9))
+        assertEquals(null, lines("Supercalifragilistic shop", 10))
     }
 
     /**
-     * Item 337 at font scale 2.0 (§4.10, §15), and item 281: a tab name shrinks to its 1.0 size before it is cut, so the
-     * fixture's names (all whole at 1.0) are whole at 2.0 too; a name that is cut is cut at a word ("Deli…", never "Deli & …").
+     * Item 337 at font scale 2.0 (§4.10, §15), and item 281: a tab name shrinks to its 1.0 size before it wraps, so the
+     * fixture's names (all on one line at 1.0) are on one line at 2.0 too; none is ever cut (§0.4).
      * A meta line that would wrap a word a line beside the basket takes the strip's whole width under the tab instead,
      * the basket on the tab's line, and "in the basket" stays together; no line of a meta holds a lone word.
      */
@@ -256,21 +319,11 @@ class TabLayoutTest {
         val probe = RecordingProbe()
         compose.show(rig, probe, fontScale = 2f)
         var stacked = 0
-        var cut = 0
+        var wrapped = 0
         visit(rig) { s, _ ->
-            val name = compose.onAllNodes(
-                androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag(ListTags.stripTab(s.id))) and
-                    androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
-                useUnmergedTree = true,
-            ).fetchSemanticsNodes().map { it.config[SemanticsProperties.Text].joinToString("") }.single { n -> n.any { it.isLetter() } }
-            if (name != s.displayName) {
-                cut++
-                assertTrue("${s.displayName}: cut with an ellipsis ($name)", name.endsWith("\u2026"))
-                val head = name.removeSuffix("\u2026")
-                assertTrue("${s.displayName}: no dangling & or · or space ($name)", head.isNotEmpty() && head.last() !in "&· \u00A0")
-                val next = s.displayName.getOrNull(head.length)
-                assertTrue("${s.displayName}: whole words ($name)", s.displayName.startsWith(head) && (next == null || !next.isLetterOrDigit() || head.none { it == ' ' }))
-            }
+            val name = tabNameLines(ListTags.stripTab(s.id))
+            assertWhole(s.displayName, name, "fs 2.0")
+            if (name.size > 1) wrapped++
             val metaNode = compose.onNodeWithTag(ListTags.stripMeta(s.id), useUnmergedTree = true).fetchSemanticsNode()
             val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
             metaNode.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
@@ -290,7 +343,7 @@ class TabLayoutTest {
             }
             assertTrue("${s.displayName}: the strip holds its words", compose.boundsOf(ListTags.strip(s.id)).let { it.bottom >= meta.bottom - 0.5f })
         }
-        assertEquals("no name is cut at 2.0: each shrinks to its 1.0 size first", 0, cut)
+        assertEquals("no name wraps at 2.0: each shrinks to its 1.0 size first", 0, wrapped)
         assertTrue("some strips stack their meta under the basket at 2.0 ($stacked)", stacked > 0)
     }
 

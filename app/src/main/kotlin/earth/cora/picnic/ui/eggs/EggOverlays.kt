@@ -164,6 +164,11 @@ fun BoxScope.EggOverlays(
      * the FAB). Read as snapshot state, so the umbrella follows the bar as it moves.
      */
     addBar: () -> Rect? = { anchors.bounds(AnchorRegistry.ADD_BAR) },
+    /**
+     * Eggs 6 and 13: a count that moves whenever the list lays out anew (a scroll, an aisle opening, the list shown; read
+     * as snapshot state), so a reveal waiting for its row looks again then, and only then.
+     */
+    listLayouts: () -> Int = { 0 },
 ) {
     val state by engine.state.collectAsState()
     val reduced = LocalReducedMotion.current
@@ -215,6 +220,9 @@ fun BoxScope.EggOverlays(
     if (!state.enabled) return
 
     var origin by remember { mutableStateOf(Offset.Zero) }
+    // A toast resting above the bar covers the list's room too (window px): a reveal waits until its row is clear of it
+    // (one not placed yet covers it all, for the frame or two it takes).
+    val toastTop: () -> Float? = { toasts?.takeIf { it.current != null }?.let { it.restingTop ?: Float.NEGATIVE_INFINITY } }
     Box(
         modifier
             .matchParentSize()
@@ -224,7 +232,7 @@ fun BoxScope.EggOverlays(
       androidx.compose.runtime.CompositionLocalProvider(LocalOverlayOrigin provides origin) {
         val local = { r: Rect -> r.translate(-origin) }
         val keepOut = { keepOutRects(anchors).map(local) }
-        state.duskFx?.let { DuskSun(it, anchors.bounds(AnchorRegistry.SUN)?.let(local), keepOut, engine, feedback) }
+        state.duskFx?.let { DuskSun(it, anchors.bounds(AnchorRegistry.SUN)?.let(local), keepOut, engine, feedback, state.goldenMinutesLeft) }
         // Egg 1's burst keeps to the free side of the moon: clear of the words, the LCD and More, so nothing is cut.
         state.duskFx?.let { fx ->
             DuskBurst(fx, anchors.bounds(AnchorRegistry.SUN)?.let(local)) {
@@ -246,11 +254,11 @@ fun BoxScope.EggOverlays(
             state.petalsId?.let { Petals(it, anchors, local, engine) }
             state.antsId?.let { Ants(it, anchors, local, engine) }
             state.confettiId?.let { Confetti(it, anchors, local, engine) }
-            state.shinyBursts.forEach { ShinyBurst(it, anchors, local, engine) }
+            state.shinyBursts.forEach { ShinyBurst(it, anchors, local, engine, listLayouts, toastTop) }
         }
         // The produce rolling across the page goes round every word (its row draws the roll home beneath its words).
         state.rolling?.let { Rolling(it, anchors, local, engine, feedback) }
-        state.jackpot?.let { Jackpot(it, anchors, local, engine, feedback) }
+        state.jackpot?.let { Jackpot(it, anchors, local, engine, feedback, listLayouts, toastTop) }
         state.receipt?.let { ReceiptPrint(it, anchors, local, engine, feedback) }
         state.receiptTuckId?.let { ReceiptPoof(it, engine) }
         // No receipt waiting and none poofing (tucked in silently, or the poof is over): the list's room goes.
@@ -375,7 +383,7 @@ private val LocalOverlayOrigin = staticCompositionLocalOf { Offset.Zero }
  * subtitle, the LCD), so no glyph, stroke or LCD pixel is ever painted over, at any pose (§2.7, item 334; §4.1).
  */
 @Composable
-private fun DuskSun(fx: DuskFx, sun: Rect?, keepOut: () -> List<Rect>, engine: SurpriseEngine, feedback: Feedback) {
+private fun DuskSun(fx: DuskFx, sun: Rect?, keepOut: () -> List<Rect>, engine: SurpriseEngine, feedback: Feedback, goldenMinutesLeft: Int?) {
     val total = when {
         fx.reduced -> DuskMotion.FADE_MS
         fx.toDusk -> DuskMotion.DURATION
@@ -397,16 +405,26 @@ private fun DuskSun(fx: DuskFx, sun: Rect?, keepOut: () -> List<Rect>, engine: S
     val d = LocalDensity.current.density
     val center = box.center
     val stickerPx = DUSK_STICKER_DP * d
-    val horizon = Rect(box.left, box.top, box.right, center.y + DuskMotion.HORIZON_DP * d)
+    // In golden hour the sun by the title sits lower, 0.5 dp for each minute gone (§12.2 egg 12, SunSticker): it sets
+    // from there and an undo brings it back there, so it never hops. The horizon goes down with it.
+    val sink = goldenMinutesLeft?.let { (30 - it).coerceIn(0, 30) * 0.5f } ?: 0f
+    val sunAt = center + Offset(0f, sink * d)
+    // The horizon is a small cloud the sun sinks behind and the moon rises from (never a cut in empty air), laid where it
+    // clears every word (the subtitle sits just under the sun); the cut runs through its middle.
+    val cloud = if (fx.reduced) null else duskCloudAt(Offset(center.x, center.y + (DuskMotion.HORIZON_DP + sink) * d), center.y, d, keepOut())
+    val horizonY = minOf(center.y + (DuskMotion.HORIZON_DP + sink) * d, cloud?.center?.y ?: Float.MAX_VALUE)
+    val horizon = Rect(box.left, box.top, box.right, horizonY)
     val (name, pose) = when {
         fx.reduced -> {
             val a = (t.toFloat() / DuskMotion.FADE_MS).coerceIn(0f, 1f)
-            (if (fx.toDusk) "moon" else "sun") to EggPose(center, alpha = a)
+            if (fx.toDusk) "moon" to EggPose(center, alpha = a) else "sun" to EggPose(sunAt, alpha = a)
         }
-        fx.toDusk -> DuskMotion.sunDrop(t)?.let { "sun" to EggPose(center + Offset(0f, it * d)) }
+        fx.toDusk -> DuskMotion.sunDrop(t)?.let { "sun" to EggPose(sunAt + Offset(0f, it * d)) }
             ?: DuskMotion.moonDrop(t)?.let { "moon" to EggPose(center + Offset(0f, it * d)) }
             ?: return
-        else -> DuskMotion.undo(t).let { (moon, drop) -> (if (moon) "moon" else "sun") to EggPose(center + Offset(0f, drop * d)) }
+        else -> DuskMotion.undo(t).let { (moon, drop) ->
+            if (moon) "moon" to EggPose(center + Offset(0f, drop * d)) else "sun" to EggPose(sunAt + Offset(0f, drop * d))
+        }
     }
     Box(
         Modifier
@@ -428,10 +446,76 @@ private fun DuskSun(fx: DuskFx, sun: Rect?, keepOut: () -> List<Rect>, engine: S
     // What can show of it: the sticker's box inside its horizon (the probe's `duskSun`).
     val drawn = Rect(Offset.Zero, Size.Zero).sized(pose.center, stickerPx).intersect(horizon)
     if (drawn.width > 0f && drawn.height > 0f) Probe("duskSun", t, drawn, 0f, origin())
+    // The cloud fades in over the first 120 ms and out once the moon (or, on an undo, the sun) is up.
+    if (cloud != null) {
+        val alpha = duskCloudAlpha(t, fx.toDusk)
+        if (alpha > 0f) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .decorative()
+                    .drawWithContent {
+                        val cut = keepOut()
+                        if (cut.isEmpty()) {
+                            drawContent()
+                        } else {
+                            clipPath(Path().apply { cut.forEach { addRect(it) } }, ClipOp.Difference) { this@drawWithContent.drawContent() }
+                        }
+                    },
+            ) {
+                val size = cloud.width / (DUSK_CLOUD_ART_W * d)
+                PlacedSticker("cloud", EggPose(cloud.center - Offset(0f, DUSK_CLOUD_ART_DY * size * d), alpha = alpha), size.dp)
+            }
+            Probe("duskCloud", t, cloud, 0f, origin())
+        }
+    }
 }
+
+/**
+ * Where egg 1's horizon cloud goes (px, its art's bounds): centred on [want] (under the sun, on its horizon); where a
+ * word is in the way (the subtitle sits just under the sun) a smaller cloud, a little aside, or as little higher as it
+ * takes, so the moon still has its rise above it: never higher than 6 dp under the sun's centre [sunY]. It clears every
+ * word in [words] by 1 dp; null when nothing fits (no cloud then, the plain horizon).
+ */
+internal fun duskCloudAt(want: Offset, sunY: Float, density: Float, words: List<Rect>): Rect? {
+    val clear = words.map { it.inflate(density) }
+    for (up in 0..((want.y - sunY) / density - 6f).toInt().coerceAtLeast(0)) {
+        for (size in DUSK_CLOUD_SIZES) {
+            val w = size * DUSK_CLOUD_ART_W * density
+            val h = size * DUSK_CLOUD_ART_H * density
+            for (aside in intArrayOf(0, 3, -3, 6, -6)) {
+                val c = Offset(want.x + aside * density, want.y - up * density)
+                val r = Rect(c.x - w / 2f, c.y - h / 2f, c.x + w / 2f, c.y + h / 2f)
+                if (clear.none { it.overlaps(r) }) return r
+            }
+        }
+    }
+    return null
+}
+
+/** The cloud's sizes (dp, its sticker box), largest first: its art is a little wider than the 22 dp sun at the first. */
+private val DUSK_CLOUD_SIZES = floatArrayOf(32f, 28f, 24f, 20f)
 
 /** The sticker by the title (§4.2): 22 dp. */
 private const val DUSK_STICKER_DP: Float = 22f
+
+/** The cloud art inside its box (sk_d_cloud, white border included): 69 % wide, 41 % tall, 2.5 % below the middle. */
+private const val DUSK_CLOUD_ART_W: Float = 0.69f
+private const val DUSK_CLOUD_ART_H: Float = 0.41f
+private const val DUSK_CLOUD_ART_DY: Float = 0.025f
+
+/**
+ * The horizon cloud's alpha at [t] in egg 1's change: in over the first 120 ms; out over the last pose, as the moon
+ * comes to rest (1000–1200 ms) or, on the undo, as the sun does (600–720 ms).
+ */
+internal fun duskCloudAlpha(t: Long, toDusk: Boolean): Float {
+    val total = if (toDusk) DuskMotion.DURATION else DuskMotion.UNDO_MS
+    val out = if (toDusk) DuskMotion.SINK_MS + DuskMotion.RISE_MS * 2 / 3 else DuskMotion.UNDO_MS * 5 / 6
+    // From a third at once: the sun's first pose already dips under the horizon.
+    val fadeIn = (0.35f + 0.65f * t / 120f).coerceIn(0f, 1f)
+    val fadeOut = 1f - ((t - out).toFloat() / (total - out)).coerceIn(0f, 1f)
+    return minOf(fadeIn, fadeOut)
+}
 
 /**
  * Egg 1's six-star sparkle burst as the moon rises, laid out on the free side of the moon ([DuskMotion.burstSpots]):
@@ -507,29 +591,54 @@ private fun Umbrella(addBar: Rect) {
     val d = LocalDensity.current.density
     val pose = umbrellaPose(addBar, t, reduced, d)
     PlacedSticker("umbrella", pose, UMBRELLA_DP.dp, page = "umbrella", tag = EggTags.UMBRELLA)
-    Probe("umbrella", t, Rect(Offset.Zero, Size.Zero).sized(pose.center, UMBRELLA_DP * d * pose.scaleX), pose.rotation, origin())
+    Probe("umbrella", t, umbrellaBounds(pose, d), pose.rotation, origin())
 }
 
 /**
- * The 44 dp sakura umbrella stands on the bar's left shoulder (§12.2 egg 16, as the mockup's live phone has it: a big
- * umbrella at the bar's top-left, tilted −12°), over the perforation and the gutter: its handle in the bar's top band
- * (the tape moves along the bar while it shows, after the doodle: AddBar's `tapeAfterDoodle`), its canopy above the bar, where the list keeps
- * clear room while it rains ([UMBRELLA_LIST_ROOM]). Reduced motion: it fades in (120 ms).
+ * The umbrella as drawn (px): the bounds of its outline (the canopy's top and tips, the handle's hook, the white border
+ * included) turned with [pose], not its whole square box, which reaches well past the art at a tilt.
+ */
+internal fun umbrellaBounds(pose: EggPose, density: Float): Rect {
+    val turn = Math.toRadians(pose.rotation.toDouble())
+    val cos = kotlin.math.cos(turn).toFloat()
+    val sin = kotlin.math.sin(turn).toFloat()
+    val scale = pose.scaleX * density * UMBRELLA_DP / 44f
+    val points = UMBRELLA_OUTLINE.map { (x, y) -> Offset(pose.center.x + (x * cos - y * sin) * scale, pose.center.y + (x * sin + y * cos) * scale) }
+    return Rect(points.minOf { it.x }, points.minOf { it.y }, points.maxOf { it.x }, points.maxOf { it.y })
+}
+
+/**
+ * The umbrella's outline at rest (dp from the 44 dp sticker's centre, its white border included): the canopy's top, its
+ * two tips, the hook and the handle's foot (sk_d_umbrella's 52-unit art, drawn at 44 dp).
+ */
+private val UMBRELLA_OUTLINE: List<Offset> = listOf(
+    Offset(0f, -19.8f), Offset(17.2f, 0.9f), Offset(-17.2f, 0.9f), Offset(-7.6f, 12.9f), Offset(-3.2f, 17.3f), Offset(2.2f, 15.6f),
+)
+
+/**
+ * The 42 dp sakura umbrella stands on the bar's left shoulder (§12.2 egg 16: a big umbrella at the bar's top-left, leaning
+ * −30° into the gutter), centred on the perforation: its handle in the bar's top band, clear of the field's words (the tape
+ * moves along the bar while it shows, after the doodle: AddBar's `tapeAfterDoodle`), its canopy rising at most about
+ * 16 dp above the bar's top, inside the band where the list already fades into the bar, so no strip turns to haze under
+ * it; the list keeps a little more room at its end ([UMBRELLA_LIST_ROOM]). Reduced motion: it fades in (120 ms).
  */
 internal fun umbrellaPose(addBar: Rect, t: Long, reduced: Boolean, density: Float): EggPose {
-    val center = Offset(addBar.left + 27 * density, addBar.top - 13 * density)
+    val center = Offset(addBar.left + 25 * density, addBar.top)
     if (reduced) return EggPose(center, UMBRELLA_TILT, alpha = (t / 120f).coerceIn(0f, 1f))
     val beat = EggBeats.magicAppear(t)
     return beat.copy(center = center, rotation = UMBRELLA_TILT + beat.rotation)
 }
 
 /** The umbrella's size at rest (dp). */
-internal const val UMBRELLA_DP: Float = 44f
+internal const val UMBRELLA_DP: Float = 42f
 
-private const val UMBRELLA_TILT: Float = -12f
+private const val UMBRELLA_TILT: Float = -30f
 
-/** While the umbrella shows, the list keeps this much more room at its end (dp), so no row ends under its canopy. */
-val UMBRELLA_LIST_ROOM: androidx.compose.ui.unit.Dp = 38.dp
+/**
+ * While the umbrella shows, the list keeps this much more room at its end, so the last strip can scroll clear of its
+ * canopy (the viewport itself is unchanged).
+ */
+val UMBRELLA_LIST_ROOM: androidx.compose.ui.unit.Dp = 16.dp
 
 /* ------------------------------------------------------------------------------------------------
  * Egg 8: the nap cat in the still-empty basket; a tap sends it off.
@@ -544,8 +653,14 @@ private fun NapCat(sectionId: String, anchors: AnchorRegistry, local: (Rect) -> 
     val d = LocalDensity.current.density
     val rimY = (mouth?.y ?: (basket.top + basket.height * 0.45f)) + 6 * d
     val center = Offset(basket.center.x - 2 * d, rimY - 9 * d)
-    NapCatPiece(sectionId, center, rimY, engine, o)
+    NapCatPiece(sectionId, center, rimY, engine, o, shoulderX = basket.left + basket.width * NAP_Z_SHOULDER)
 }
+
+/**
+ * Where on the basket's width (0–1) the nap cat's "z" rises: its left shoulder, by the cat's face, into the strip's free
+ * room before the basket, clear of an open lid standing behind it (the cooler's) and of the to-get badge at the right.
+ */
+internal const val NAP_Z_SHOULDER: Float = 0.1f
 
 /**
  * The cat waits for the check-off chain that finished the other stops (the hop, the stamp's burst) to play out, then a
@@ -565,11 +680,12 @@ internal fun rememberNapSettled(sectionId: String, chainsDone: Boolean): Boolean
 
 /**
  * The curled cat at [center] (px in the enclosing box), clipped at the basket's rim [rimY] so it lies IN the basket,
- * breathing, with "z" / "Z" floating up, and its 48 dp tap target ([SurpriseEngine.onNapTap]). [probeOrigin] maps the
- * box to the window for the test probe.
+ * breathing, with "z" / "Z" floating up and out from the basket's left shoulder ([shoulderX], just above the rim: an open
+ * lid standing behind the basket, the cooler's, the cat's ears and the badge stay clear of it), and its 48 dp tap target
+ * ([SurpriseEngine.onNapTap]). [probeOrigin] maps the box to the window for the test probe.
  */
 @Composable
-internal fun NapCatPiece(sectionId: String, center: Offset, rimY: Float, engine: SurpriseEngine, probeOrigin: Offset) {
+internal fun NapCatPiece(sectionId: String, center: Offset, rimY: Float, engine: SurpriseEngine, probeOrigin: Offset, shoulderX: Float) {
     val reduced = LocalReducedMotion.current
     val since by rememberEffectTime("nap:$sectionId", 320)
     val breathing by rememberLoopTime(enabled = !reduced)
@@ -586,7 +702,8 @@ internal fun NapCatPiece(sectionId: String, center: Offset, rimY: Float, engine:
     }
     if (!reduced) {
         val (z, big) = NapMotion.z(breathing)
-        val zAt = Offset(center.x - 8 * d - z * 10 * d, center.y - 14 * d - z * 22 * d)
+        // Its top-left corner: from just above the rim at the left shoulder, up and out to the left.
+        val zAt = Offset(shoulderX - 7 * d - z * 8 * d, rimY - 22 * d - z * 14 * d)
         Text(
             if (big) "Z" else "z",
             style = PicnicTheme.type.doodle.copy(fontSize = 13.sp, color = PicnicTheme.colors.doodle),
@@ -760,8 +877,63 @@ private fun Confetti(id: Long, anchors: AnchorRegistry, local: (Rect) -> Rect, e
  * Egg 6: the shiny row's 8-sticker burst, out over the gutter (away from its text).
  * ------------------------------------------------------------------------------------------------ */
 
+/**
+ * Eggs 6 and 13 (§12.2): a reveal on a row waits for its row. True once the row is laid out inside the list's room (its
+ * aisle open, on screen, the list in front); until then the effect is kept pending in SurpriseState and nothing plays or
+ * sounds, so a 1-in-100 moment is never spent out of sight. Nothing scrolls to it (§12.1). Once shown it stays shown.
+ */
 @Composable
-private fun ShinyBurst(fx: ShinyFx, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine) {
+private fun rememberRowShown(fxId: Long, itemId: String, anchors: AnchorRegistry, layouts: () -> Int, cover: () -> Float?): Boolean {
+    val d = LocalDensity.current.density
+    val shown = remember(fxId) { mutableStateOf(false) }
+    if (!shown.value) {
+        // Looked at again whenever the list lays out anew or a toast comes or goes, for a few frames (the anchors record
+        // at placement), then it rests: a reveal can wait for hours without keeping the screen busy.
+        val laidOut = layouts()
+        val coverTop = cover()
+        LaunchedEffect(fxId, laidOut, coverTop) {
+            // It must stay in room a few frames: the add's own toast comes up just after the commit, and its coming
+            // restarts this look with the room it leaves.
+            var held = 0
+            repeat(ROW_LOOK_FRAMES + ROW_HOLD_FRAMES) {
+                held = if (rowInRoom(anchors, itemId, coverTop, d)) held + 1 else 0
+                if (held >= ROW_HOLD_FRAMES) {
+                    shown.value = true
+                    return@LaunchedEffect
+                }
+                withFrameMillis { }
+            }
+        }
+    }
+    return shown.value
+}
+
+/** Frames a waiting reveal looks for its row after each layout of the list, and how many it must stay in room. */
+private const val ROW_LOOK_FRAMES = 3
+private const val ROW_HOLD_FRAMES = 2
+
+/**
+ * The row's sticker is laid out inside the list's viewport with room for its reveal (the burst's reach, the 60 dp
+ * hanko) above the add bar and above a toast resting there ([coverTop], window px).
+ */
+private fun rowInRoom(anchors: AnchorRegistry, itemId: String, coverTop: Float?, density: Float): Boolean {
+    val row = anchors.bounds(AnchorRegistry.rowKey(itemId)) ?: return false
+    val list = anchors.bounds(EggAnchors.LIST) ?: return true
+    val bottom = minOf(list.bottom, anchors.bounds(AnchorRegistry.ADD_BAR)?.top ?: list.bottom, coverTop ?: list.bottom)
+    return row.top >= list.top && row.center.y + REVEAL_REACH_DP * density <= bottom
+}
+
+/** How far below a row's middle its reveal reaches (dp): the 60 dp JACK / POT! hanko's half, and a little. */
+private const val REVEAL_REACH_DP = 32f
+
+@Composable
+private fun ShinyBurst(fx: ShinyFx, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine, layouts: () -> Int, cover: () -> Float?) {
+    if (!rememberRowShown(fx.id, fx.itemId, anchors, layouts, cover)) return
+    ShinyBurstShown(fx, anchors, local, engine)
+}
+
+@Composable
+private fun ShinyBurstShown(fx: ShinyFx, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine) {
     val t by rememberEffectTime(fx.id, HankoBurst.DURATION) { engine.effectDone(fx.id) }
     val row = anchors.bounds(AnchorRegistry.rowKey(fx.itemId))?.let(local) ?: return
     val d = LocalDensity.current.density
@@ -892,7 +1064,14 @@ private fun Rolling(fx: RollingFx, anchors: AnchorRegistry, local: (Rect) -> Rec
  * ------------------------------------------------------------------------------------------------ */
 
 @Composable
-private fun Jackpot(fx: JackpotFx, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine, feedback: Feedback) {
+private fun Jackpot(fx: JackpotFx, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine, feedback: Feedback, layouts: () -> Int, cover: () -> Float?) {
+    // The reveal (and its "pon!") waits for the row: a drawing often finishes while the aisle is folded (§12.2 egg 13).
+    if (!rememberRowShown(fx.id, fx.itemId, anchors, layouts, cover)) return
+    JackpotShown(fx, anchors, local, engine, feedback)
+}
+
+@Composable
+private fun JackpotShown(fx: JackpotFx, anchors: AnchorRegistry, local: (Rect) -> Rect, engine: SurpriseEngine, feedback: Feedback) {
     val total = JackpotMotion.DURATION
     val t by rememberEffectTime(fx.id, total) { engine.effectDone(fx.id) }
     LaunchedEffect(fx.id) {
