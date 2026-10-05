@@ -656,10 +656,10 @@ private fun summaryCardAlpha(sc: SceneClock): Float {
 }
 
 /**
- * The card's last row: the washi progress bar and its label while the summary waits to close, along the card's bottom
- * edge. Once kept, the bar goes and the Done button shows centred in the card's bottom band, on the card it closes. The
- * row is as tall as either needs from the start (Done is laid out unseen while the bar runs), so nothing on the card or
- * below it moves.
+ * The card's last row: the washi progress bar along the card's bottom edge, its label centred in the band above it,
+ * while the summary waits to close. Once kept, the bar goes and the Done button shows centred in that same band, on the
+ * card it closes. The row is as tall as Done needs from the start (Done is laid out unseen while the bar runs), so
+ * nothing on the card or below it moves, and the band never stands empty.
  */
 @Composable
 private fun SummaryBarRow(sc: SceneClock, copy: CelebrationCopy, anchors: SceneAnchors, onSummaryCard: (Rect) -> Unit, onDone: () -> Unit) {
@@ -697,14 +697,17 @@ private fun SummaryBarRow(sc: SceneClock, copy: CelebrationCopy, anchors: SceneA
         },
         modifier = Modifier.fillMaxWidth(),
     ) { measurables, constraints ->
-        val bar = measurables[0].measure(constraints.copy(minHeight = 0))
         val done = measurables[1].measure(androidx.compose.ui.unit.Constraints(maxWidth = constraints.maxWidth))
         // The card ends halfway down the washi strip; Done sits inside it, DONE_ROOM clear above and below.
         val inside = (STRIP / 2).roundToPx()
         val room = DONE_ROOM.roundToPx()
-        val h = maxOf(bar.height, done.height + 2 * room + inside)
+        // The bar takes the whole row: its strip on the card's edge, its label in the band above the strip where Done
+        // shows once kept, so the row reads as one band whose words swap.
+        val row = (done.height + 2 * room + inside).coerceAtMost(constraints.maxHeight)
+        val bar = measurables[0].measure(constraints.copy(minHeight = row))
+        val h = bar.height
         layout(constraints.maxWidth, h) {
-            bar.place(0, h - bar.height)
+            bar.place(0, 0)
             if (kept) done.place((constraints.maxWidth - done.width) / 2, (h - inside - done.height) / 2)
         }
     }
@@ -1617,48 +1620,58 @@ private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, anchors: SceneAnch
 /**
  * The washi-tape progress bar (§0.4 Q7): its label "Closing… tap to keep it" on a lemon slip, and under it a strip of
  * lemon-dot washi that fills with sakura stripe left to right over the summary hold (8 steps under reduced motion). The
- * label sits above the strip so no part of the fill is ever hidden.
+ * label sits above the strip so no part of the fill is ever hidden, centred in the band where Done shows once kept.
  */
 @Composable
 private fun ClosingBar(sc: SceneClock, copy: CelebrationCopy, summaryAt: Long, anchors: SceneAnchors, modifier: Modifier, placeholder: Boolean = false) {
-    val c = PicnicTheme.colors
     // The bar fills over the hold the engine waits ("Time to take action" included), so it is full as it closes.
     val hold = sc.cele.summaryHoldMs.takeIf { it > 0 } ?: sc.plan.summaryHold
     val start = if (sc.reduced) 120L else summaryAt
-    Column(
-        modifier
+    androidx.compose.ui.layout.Layout(
+        modifier = modifier
             .then(if (placeholder) Modifier.clearAndSetSemantics { } else Modifier.testTag(CelebrationTags.CLOSING))
             .graphicsLayer {
                 val e = sc.clock.now - sc.cele.t0 - start
                 alpha = if (e < 0 || placeholder) 0f else 1f
             },
-        verticalArrangement = Arrangement.spacedBy(3.dp),
+        content = { ClosingBarParts(sc, copy, start, hold, anchors, placeholder) },
+    ) { measurables, constraints ->
+        // The strip at the bottom (straddling the card's edge), the label centred in the band above it, at least 3 dp
+        // clear of the strip: in a row taller than the two (as tall as Done needs), the label sits where Done will.
+        val strip = measurables[1].measure(androidx.compose.ui.unit.Constraints.fixed(constraints.maxWidth, STRIP.roundToPx()))
+        val label = measurables[0].measure(androidx.compose.ui.unit.Constraints(maxWidth = constraints.maxWidth))
+        val gap = 3.dp.roundToPx()
+        val h = maxOf(constraints.minHeight, label.height + gap + strip.height)
+        layout(constraints.maxWidth, h) {
+            val band = h - strip.height - gap
+            label.place((constraints.maxWidth - label.width) / 2, ((band - label.height) / 2).coerceAtLeast(0))
+            strip.place(0, h - strip.height)
+        }
+    }
+}
+
+/** The closing bar's label and its washi strip (laid out by [ClosingBar]). */
+@Composable
+private fun ClosingBarParts(sc: SceneClock, copy: CelebrationCopy, start: Long, hold: Long, anchors: SceneAnchors, placeholder: Boolean) {
+    val c = PicnicTheme.colors
+    Box(
+        Modifier
+            .then(if (placeholder) Modifier else Modifier.plate(anchors, CelebrationTags.CLOSING_LABEL))
+            .clip(RoundedCornerShape(5.dp))
+            .background(Families.lemon.pastel)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
     ) {
-        Box(
-            Modifier
-                .padding(start = 4.dp)
-                .then(if (placeholder) Modifier else Modifier.plate(anchors, CelebrationTags.CLOSING_LABEL))
-                .clip(RoundedCornerShape(5.dp))
-                .background(Families.lemon.pastel)
-                .padding(horizontal = 6.dp, vertical = 2.dp),
-        ) {
-            PicnicText(
-                copy.closing,
-                style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 17.sp),
-                maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            )
-        }
-        Canvas(
-            Modifier
-                .fillMaxWidth()
-                .height(STRIP)
-                .graphicsLayer { rotationZ = -1.2f },
-        ) {
-            drawWashi(WashiPattern.LemonDots)
-            val p = closingProgress(sc, start, hold)
-            if (p > 0f) clipRect(right = size.width * p) { drawWashi(WashiPattern.SakuraStripe) }
-        }
+        PicnicText(
+            copy.closing,
+            style = PicnicTheme.type.label.copy(color = c.ballpoint, fontSize = 13.sp, lineHeight = 17.sp),
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+    }
+    Canvas(Modifier.graphicsLayer { rotationZ = -1.2f }) {
+        drawWashi(WashiPattern.LemonDots)
+        val p = closingProgress(sc, start, hold)
+        if (p > 0f) clipRect(right = size.width * p) { drawWashi(WashiPattern.SakuraStripe) }
     }
 }
 

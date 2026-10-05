@@ -79,13 +79,13 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
 
     @Test
     @Config(qualifiers = "w360dp-h1300dp-xxhdpi")
-    fun stripsDefaultAisles() = compose.recordPiece(name("strips_default_aisles"), variant) {
+    fun stripsDefaultAisles() = compose.recordPiece(name("strips_default_aisles"), variant, pad = LIST_INSET) {
         StripsOf(ListFixture.ui(ListFixture.everyDefaultAisle()).sections)
     }
 
     @Test
     @Config(qualifiers = "w360dp-h1300dp-xxhdpi")
-    fun trayDefaultAisles() = compose.recordPiece(name("tray_default_aisles"), variant, pad = 14.dp) {
+    fun trayDefaultAisles() = compose.recordPiece(name("tray_default_aisles"), variant, pad = LIST_INSET) {
         val clock = remember { MotionClock() }
         val anchors = remember { AnchorRegistry() }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -117,7 +117,7 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
 
     private fun largeText(base: String, scale: Float, content: @Composable () -> Unit) {
         org.junit.Assume.assumeTrue(variant == ThemeVariant.Day)
-        compose.recordPiece(base, variant, fontScale = scale, pad = 14.dp, content = content)
+        compose.recordPiece(base, variant, fontScale = scale, pad = LIST_INSET, content = content)
     }
 
     @Composable
@@ -139,14 +139,14 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
     }
 
     @Test
-    fun stripDone() = compose.recordPiece(name("strip_done"), variant) {
+    fun stripDone() = compose.recordPiece(name("strip_done"), variant, pad = LIST_INSET) {
         val ui = ListFixture.ui(ListFixture.everyDefaultAisle().toggleChecked(ListFixture.LIST_ID, "d6", ListFixture.NOW).toggleChecked(ListFixture.LIST_ID, "d10", ListFixture.NOW))
         StripsOf(ui.sections.filter { it.complete })
     }
 
     /** Item 79 at font scale 1.3 (§4.10, §15): the taller strips keep the band from top to bottom, the bows on the baskets. */
     @Test
-    fun stripDoneFs130() = compose.recordPiece(name("strip_done_fs130"), variant, fontScale = 1.3f) {
+    fun stripDoneFs130() = compose.recordPiece(name("strip_done_fs130"), variant, fontScale = 1.3f, pad = LIST_INSET) {
         val ui = ListFixture.ui(ListFixture.everyDefaultAisle().toggleChecked(ListFixture.LIST_ID, "d6", ListFixture.NOW).toggleChecked(ListFixture.LIST_ID, "d10", ListFixture.NOW))
         StripsOf(ui.sections.filter { it.complete })
     }
@@ -345,6 +345,12 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
     }
 
     companion object {
+        /**
+         * The list's own side inset (AisleList's content padding, 8 dp): the default-aisle strips and trays are drawn as
+         * wide as on the phone, so where their names wrap and whether the store chip stays is what she sees.
+         */
+        private val LIST_INSET = 8.dp
+
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{1}")
         fun params() = dayAndGlowScreens()

@@ -125,6 +125,29 @@ class TabLayoutTest {
         }
     }
 
+    /**
+     * §0.4 at large text on a slightly narrower phone (352 dp: at 1.3 "& international" does not fit a strip's tab beside
+     * even the 12 dp pattern end): the pattern end goes instead, and "&" keeps its word on every folded strip and on
+     * the open tray.
+     */
+    @Test
+    @Config(qualifiers = "w352dp-h760dp-xxhdpi")
+    fun ampersandKeepsItsWordAtFs130() {
+        val rig = ListRig(ListFixture.everyDefaultAisle())
+        compose.show(rig, fontScale = 1.3f)
+        visit(rig) { s, open ->
+            assertWhole(s.displayName, tabNameLines(if (open) ListTags.headerTab(s.id) else ListTags.stripTab(s.id)), "352 dp, fs 1.3")
+        }
+    }
+
+    /** The strip meta line's text as laid out. */
+    private fun metaLayout(id: String): androidx.compose.ui.text.TextLayoutResult {
+        val node = compose.onNodeWithTag(ListTags.stripMeta(id), useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        return layouts.single()
+    }
+
     /** What [ribbons] found: finished strips tied with the full ribbon, and with the bow alone. */
     private data class Tied(val bands: Int, val bows: Int)
 
@@ -140,14 +163,23 @@ class TabLayoutTest {
             val ribbon = probe.bounds["ribbon:${s.id}"]
             val bow = probe.bounds["bow:${s.id}"]
             assertTrue("$at, ${s.displayName}: tied with a ribbon or a bow", ribbon != null || bow != null)
-            val text = listOfNotNull(probe["tab:${s.id}"], probe["meta:${s.id}"], probe.bounds["stripChip:${s.id}"])
+            // The meta line's words, line by line (a wrapped text's box runs on past its longest line).
+            val meta = probe["meta:${s.id}"]
+            val metaText = metaLayout(s.id)
+            val metaLines = (0 until metaText.lineCount).map { Rect(meta.left + metaText.getLineLeft(it), meta.top + metaText.getLineTop(it), meta.left + metaText.getLineRight(it), meta.top + metaText.getLineBottom(it)) }
+            val text = listOfNotNull(probe["tab:${s.id}"], probe.bounds["stripChip:${s.id}"]) + metaLines
             val basket = probe["basket:${s.id}"]
-            // The bow sticker is drawn 12 dp above its box (StripRibbon): check where it shows, not only its box.
+            // The bow sticker is drawn 12 dp above its box (StripRibbon); its ink (sk_d_ribbon's cut line) runs 5.3 to
+            // 24.7 dp across the 30 dp sticker and 9.7 to 25 dp down it. What must keep off the text is that ink.
             val drawnBow = bow?.translate(0f, -12 * dp)
-            for (r in listOfNotNull(ribbon, bow, drawnBow)) {
+            val bowInk = drawnBow?.let { Rect(it.left + 5.3f * dp, it.top + 9.7f * dp, it.left + 24.7f * dp, it.top + 25f * dp) }
+            for (r in listOfNotNull(ribbon, bowInk)) {
                 for (t in text) assertTrue("$at, ${s.displayName}: the ribbon $r is over text $t", !r.overlaps(t))
                 assertTrue("$at, ${s.displayName}: the ribbon stays left of the basket's right edge", r.left < basket.right)
             }
+            // The bow stays whole: at most 2 dp right of its spot on the shoulder (14 dp into the basket's box), so its
+            // knot is tucked no further behind the basket than on a short name.
+            if (bow != null) assertTrue("$at, ${s.displayName}: the bow at most 2 dp right of its spot (${(bow.left - basket.left) / dp} dp)", bow.left <= basket.left - 12 * dp + 0.5f)
             val strip = compose.boundsOf(ListTags.strip(s.id))
             if (ribbon != null) {
                 bands++

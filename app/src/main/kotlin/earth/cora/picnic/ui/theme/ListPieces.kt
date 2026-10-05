@@ -201,8 +201,8 @@ enum class TabSize(val height: Dp, val circle: Dp) {
  * An aisle's index tab (§4.10): the aisle pastel, a 3 dp white border, radius 12 / 4, hs; the number circle (the
  * walking [position]; the capsule for "Everything else") and the [displayName] (DynaPuff 700, fitted 20 → 16 sp, then
  * wrapped onto more lines at 16 sp, between words, balanced, "&" kept with the word after it; never cut), the pattern
- * on the right 26 dp only (12 dp where a word would not fit beside 26, or where that saves a third line), never under
- * the name. [ballpoint]: the open tray's and the pinned plate's label (the strongest text on the list); otherwise the
+ * on the right 26 dp only (12 dp where a word would not fit beside 26, or where that saves a third line; none where "&"
+ * and its word would not fit even beside 12), never under the name. [ballpoint]: the open tray's and the pinned plate's label (the strongest text on the list); otherwise the
  * aisle trace. The tab is at most [maxWidth] wide, and as tall as its lines.
  * Decorative: its strip or tray carries the full name for TalkBack.
  */
@@ -261,26 +261,30 @@ private fun TabFace(
     // Too long for one line even at 16 sp: it wraps between words into balanced lines, "&" with the word after it
     // (§4.10, §0.4: "Meat / & seafood"), laid out line by line so the tab hugs its widest line. A word too wide for the
     // room on its own ("& international" beside a strip's basket), or a name that would take a third line ("Canned goods
-    // / & soups"), gets the 14 dp the pattern end gives up when it narrows from 26 to 12 dp. A word wider than the whole
-    // tab on its own (rare) wraps inside itself, so no letter is lost.
-    val narrowRoom = if (room == Int.MAX_VALUE) room else room + with(density) { (PATTERN_END - PATTERN_END_NARROW).roundToPx() }
+    // / & soups"), gets the 14 dp the pattern end gives up when it narrows from 26 to 12 dp. Where "&" and its word still
+    // do not fit (a large font), the pattern end goes altogether and the tab closes 6 dp after the name: the "&" keeps
+    // its word. Only when even that is too narrow does the "&" end a line, and a word wider than the whole tab on its own
+    // (rare) wraps inside itself, so no letter is lost.
+    fun more(d: Dp) = if (room == Int.MAX_VALUE) room else room + with(density) { d.roundToPx() }
+    val narrowRoom = more(PATTERN_END - PATTERN_END_NARROW)
+    val bareRoom = more(PATTERN_END)
     val wrapped = remember(displayName, style, room, fit, look.pattern) {
         fun lines(r: Int, glue: Boolean = true) = tabLines(displayName, r, glue) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width }
         val canNarrow = look.pattern != TabPattern.Plain
         val wide = if (fit.wraps) lines(room) else listOf(displayName)
         val narrower = if (canNarrow && (wide == null || wide.size > 2)) lines(narrowRoom) else null
         when {
-            narrower != null && (wide == null || narrower.size < wide.size) -> narrower to true
-            wide != null -> wide to false
-            // A word with its "&" wider than the whole tab ("& international" at a large font on a narrow phone): the
-            // "&" ends a line rather than a word breaking.
-            canNarrow -> lines(narrowRoom, glue = false) to true
-            else -> lines(room, glue = false) to false
+            narrower != null && (wide == null || narrower.size < wide.size) -> narrower to PATTERN_END_NARROW
+            wide != null -> wide to PATTERN_END
+            !canNarrow -> lines(room, glue = false) to PATTERN_END
+            else -> lines(bareRoom)?.let { it to 0.dp }
+                ?: lines(narrowRoom, glue = false)?.let { it to PATTERN_END_NARROW }
+                ?: (lines(bareRoom, glue = false) to 0.dp)
         }
     }
     val lines = wrapped.first
-    val narrow = wrapped.second || (lines == null && look.pattern != TabPattern.Plain && room != Int.MAX_VALUE)
-    val patternWidth = if (narrow) PATTERN_END_NARROW else PATTERN_END
+    // A word wider than the whole tab wraps inside itself in all the room there is.
+    val patternWidth = if (lines == null && look.pattern != TabPattern.Plain && room != Int.MAX_VALUE) 0.dp else wrapped.second
     Row(
         Modifier
             .probe(probe, probeKey, fit.fontSizeSp)
@@ -295,7 +299,7 @@ private fun TabFace(
             .padding(3.dp)
             .clip(shapes.tab)
             .background(look.family.pastel)
-            .tabPattern(look, width = patternWidth, alpha = 0.5f)
+            .then(if (patternWidth > 0.dp) Modifier.tabPattern(look, width = patternWidth, alpha = 0.5f) else Modifier)
             .heightIn(min = size.height - 6.dp)
             .padding(start = 6.dp, end = tabEnd(look) - (PATTERN_END - patternWidth), top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -367,7 +371,10 @@ private fun rememberTabNameLeast(displayName: String, density: androidx.compose.
     }
 }
 
-/** The tab's pattern end (§4.10): 26 dp, narrowed to 12 dp where a word would not fit beside 26 or a third line would. */
+/**
+ * The tab's pattern end (§4.10): 26 dp, narrowed to 12 dp where a word would not fit beside 26 or a third line would,
+ * and left off where "&" and its word would not fit even beside 12 (the tab then closes 6 dp after the name).
+ */
 private val PATTERN_END: Dp = 26.dp
 private val PATTERN_END_NARROW: Dp = 12.dp
 

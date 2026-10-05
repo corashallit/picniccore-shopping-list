@@ -229,6 +229,9 @@ internal fun FoldedStrip(
     // Keyboard / switch access: the strip face wears the 2 dp ink ring 3 dp outside it (§4.4, §15).
     val interaction = remember { MutableInteractionSource() }
     val ringed = showsFocusRing(interaction)
+    // The meta line's text as laid out (set as it is measured): a wrapped text's box is as wide as its room, so where
+    // its lines really end is read from here (the ribbon and bow keep clear of the words, not of the box).
+    val metaLayout = remember { arrayOfNulls<androidx.compose.ui.text.TextLayoutResult>(1) }
     Layout(
         modifier = modifier
             .fillMaxWidth()
@@ -285,6 +288,7 @@ internal fun FoldedStrip(
                 Text(
                     metaText,
                     style = t.stripMeta.copy(color = c.inkSoft, lineBreak = LineBreak.Paragraph),
+                    onTextLayout = { metaLayout[0] = it },
                     modifier = Modifier
                         .alignByBaseline()
                         .testTag(ListTags.stripMeta(section.id))
@@ -424,7 +428,7 @@ internal fun FoldedStrip(
         val face = measurable("face")!!.measure(Constraints.fixed(w, h))
         // The ribbon: from the end of the text + 12 dp, at most the basket's left edge − 22 dp; else a bow on the
         // basket's left shoulder, never over text (§4.10). A meta line under the basket leaves no room for the band.
-        val textEnd = if (below) lineEnd else max(lineEnd, start + meta.width)
+        val textEnd = if (below) lineEnd else max(lineEnd, start + metaInkWidth(meta.width, metaLayout[0]))
         val bandX = textEnd + px(12.dp)
         val fits = !below && bandX <= basketX - px(22.dp)
         val ribbon = if (fits) measurable("ribbon")?.measure(Constraints.fixedHeight(h)) else null
@@ -441,15 +445,28 @@ internal fun FoldedStrip(
             if (wordShown) word!!.place(start + wordX, textTop + wordY)
             // The ribbon box is 30 dp wide with its 10 dp band at 10–20 dp.
             ribbon?.place(bandX - px(10.dp), 0)
-            // On the basket's left shoulder, and never back over the end of a long name. The bow follows the basket (it
-            // stands on the strip's bottom edge, or on the tab's line under large text): 12 dp below the basket's top, as
-            // at 1.0, where the strip is 56 dp and the basket overhangs it by 8 dp.
-            bow?.place(maxOf(basketX - px(14.dp), textEnd + px(1.dp)), basketY + px(BOW_BELOW_BASKET_TOP))
             basketM.place(basketX, basketY)
+            // Tied on the basket's left shoulder, in front of it so it always shows whole (a shelf's post or a crate's
+            // rim never hides a lobe), and never back over the end of a long name: its ink (not its box, whose first
+            // 5 dp are clear) keeps 1 dp from the text. The text ends at least 8 dp before the basket, so the bow stands
+            // at most 2 dp right of its spot and its ink stops short of the GOT IT stamp's letters. The bow follows the
+            // basket (it stands on the strip's bottom edge, or on the tab's line under large text): 12 dp below the
+            // basket's top, as at 1.0, where the strip is 56 dp and the basket overhangs it by 8 dp.
+            bow?.place(maxOf(basketX - px(14.dp), textEnd + px(1.dp) - px(BOW_INK_START)), basketY + px(BOW_BELOW_BASKET_TOP))
             chevron.place(chevronX, chevronY)
             ladybug?.place(0, 0)
         }
     }
+}
+
+/**
+ * How wide a strip's meta line really is: its row's [width] less what its wrapped text's box leaves blank after its
+ * longest line (Compose lays a wrapped text out as wide as its room), from the text's [layout] as last measured.
+ */
+private fun metaInkWidth(width: Int, layout: androidx.compose.ui.text.TextLayoutResult?): Int {
+    if (layout == null || layout.lineCount < 2 || layout.size.width > width) return width
+    val longest = (0 until layout.lineCount).maxOf { layout.getLineRight(it) }
+    return width - (layout.size.width - kotlin.math.ceil(longest).toInt()).coerceAtLeast(0)
 }
 
 /**
@@ -661,6 +678,12 @@ internal fun TrayHeader(
  * the bow's top lines up with the basket's top and the knot sits on the basket's left shoulder (§4.10).
  */
 internal val BOW_BELOW_BASKET_TOP: Dp = 12.dp
+
+/**
+ * Where the bow sticker's ink starts inside its 30 dp box (sk_d_ribbon: its cut line runs from 5.3 to 24.7 dp across):
+ * what must keep clear of the text is the ink, not the box.
+ */
+internal val BOW_INK_START: Dp = 5.dp
 
 /**
  * From this font scale a folded strip whose meta line would wrap beside the basket stacks instead: the basket and the
