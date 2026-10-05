@@ -447,6 +447,66 @@ fun AppState.moveItemToAisle(listId: String, itemId: String, aisleId: String?, n
 }
 
 /**
+ * What a move changed (Cora, 5 October; §6.3, §4.15), for its toast's Undo ([undoMove]): the item's aisle and "placed by
+ * hand" before it, where it went ([movedTo], null = Everything else), the learned corrections before and after, and the
+ * normalized name the correction is about.
+ */
+data class MoveUndo(
+    val listId: String,
+    val itemId: String,
+    val aisleId: String?,
+    val manuallyPlaced: Boolean,
+    val movedTo: String?,
+    val name: String,
+    val correctionsBefore: List<Correction>,
+    val correctionsAfter: List<Correction>,
+)
+
+/**
+ * [moveItemToAisle], with what its Undo needs. The undo is null when nothing moved (an unknown item or aisle, or the
+ * aisle it is already in).
+ */
+fun AppState.moveItemToAisleWithUndo(listId: String, itemId: String, aisleId: String?, now: Long): Pair<AppState, MoveUndo?> {
+    val item = list(listId)?.items?.firstOrNull { it.id == itemId } ?: return this to null
+    val moved = moveItemToAisle(listId, itemId, aisleId, now)
+    if (moved === this || moved.findItem(itemId)?.aisleId == item.aisleId && moved.corrections == corrections) return moved to null
+    return moved to MoveUndo(listId, itemId, item.aisleId, item.manuallyPlaced, aisleId, normalizeName(item.name), corrections, moved.corrections)
+}
+
+/**
+ * Undo of a move (§4.15, MoveUndoTest): the item goes back to its old aisle (as placed by hand or not), unless it was
+ * moved again since or is gone; the learned correction the move recorded goes and the one it replaced, if any, comes
+ * back. When nothing else touched the corrections meanwhile they are put back exactly as they were (so a correction the
+ * 200 cap pushed out returns too). An aisle that no longer exists sends the item to Everything else. Ends with
+ * TripRules.reconcile.
+ */
+fun AppState.undoMove(undo: MoveUndo, now: Long): AppState {
+    val ids = store.aisles().mapTo(HashSet()) { it.id }
+    val item = list(undo.listId)?.items?.firstOrNull { it.id == undo.itemId }
+    val restored = if (item != null && item.aisleId == undo.movedTo) {
+        updateListReconciled(undo.listId, now) { list ->
+            list.updateItem(undo.itemId) { it.copy(aisleId = undo.aisleId?.takeIf { id -> id in ids }, manuallyPlaced = undo.manuallyPlaced) }
+        }
+    } else {
+        this
+    }
+    val newCorrections = when {
+        corrections == undo.correctionsAfter -> undo.correctionsBefore
+        else -> {
+            val added = undo.correctionsAfter.lastOrNull { it.name == undo.name }
+            val previous = undo.correctionsBefore.lastOrNull { it.name == undo.name }
+            var out = if (added != null && added !in undo.correctionsBefore) corrections - added else corrections
+            if (previous != null && out.none { it.name == undo.name }) {
+                val at = out.indexOfFirst { it.at > previous.at }.takeIf { it >= 0 } ?: out.size
+                out = out.toMutableList().apply { add(at, previous) }
+            }
+            out
+        }
+    }
+    return if (newCorrections == restored.corrections) restored else restored.copy(corrections = newCorrections)
+}
+
+/**
  * The user picked a catalog icon in the edit sheet: icon = key, iconFit = EXACT, customIconId = null,
  * and an IconOverride(normalizeName(item.name), key, now) is recorded (replacing any override for that
  * name; capped at StateOps.MAX_ICON_OVERRIDES). Keys that are not in the catalog are a no-op. The
@@ -648,7 +708,8 @@ fun AppState.commitAislesText(text: String, guessBasket: (Aisle) -> BasketKind, 
 }
 
 /**
- * Renames one aisle (§6.7, RenameAisleTest): rewrites its line in aislesText (its bullet and indentation kept) and
+ * Renames one aisle (§6.7, RenameAisleTest): rewrites its line in aislesText (its bullet, indentation and "Also here"
+ * note kept; a [newName] typed with "(also: …)" brings that note instead) and
  * remaps item.aisleId (all lists), aisleBaskets, aisleStyles, corrections and every list's openAisle from [oldId]
  * to the new slug id; when duplicate names renumber their "-2" ids, those follow too. The new id is
  * store.aisles()[position - 1].id. A blank name, an unknown id or the same name -> this. Ends with TripRules.reconcile.
@@ -656,11 +717,14 @@ fun AppState.commitAislesText(text: String, guessBasket: (Aisle) -> BasketKind, 
 fun AppState.renameAisle(oldId: String, newName: String, now: Long): AppState {
     val lines = Aisles.parseLines(store.aislesText)
     val target = lines.firstOrNull { it.aisle.id == oldId } ?: return this
-    val name = Aisles.cleanName(newName)
-    if (name.isEmpty() || name == target.aisle.name) return this
+    // A name typed with a note of its own ("Produce (also: soap)") brings that note; otherwise the aisle keeps its note.
+    val (name, typedNote) = Aisles.splitNote(Aisles.cleanName(newName))
+    if (name.isEmpty() || (name == target.aisle.name && typedNote == null)) return this
     val textLines = store.aislesText.lines().toMutableList()
-    val prefix = textLines[target.lineIndex].trimEnd().removeSuffix(target.aisle.name)
-    textLines[target.lineIndex] = prefix + name
+    // Only the name changes: the indent and bullet before it and the "Also here" note after it stay.
+    val raw = textLines[target.lineIndex]
+    val renamed = (raw.substring(0, target.nameStart) + name + raw.substring(target.nameEnd)).trimEnd()
+    textLines[target.lineIndex] = if (typedNote == null) renamed else Aisles.withNote(renamed, target.nameStart + name.length, typedNote)
     val text = textLines.joinToString("\n")
     val newAisles = Aisles.parse(text)
     if (newAisles.size != lines.size) return this
@@ -669,8 +733,28 @@ fun AppState.renameAisle(oldId: String, newName: String, now: Long): AppState {
 }
 
 /**
+ * The aisle editor's "Also here" field (Cora, 5 October; §6.7, AisleNotesTest): sets [aisleId]'s note to [note] by
+ * rewriting the end of its line in aislesText ("Produce (also: toothpaste, floss)"; blank removes it). The note is kept
+ * to Aisles.NOTE_MAX characters. Only the note changes: the name, every id, every item's aisle, the baskets, styles
+ * and corrections stay exactly as they are (items already on the list are re-filed only by "Re-sort my list").
+ * An unknown id or the same note -> this.
+ */
+fun AppState.setAisleNote(aisleId: String, note: String?): AppState {
+    val target = Aisles.parseLines(store.aislesText).firstOrNull { it.aisle.id == aisleId } ?: return this
+    val clean = note?.let(Aisles::cleanNote)?.ifEmpty { null }
+    if (clean == target.aisle.note) return this
+    val textLines = store.aislesText.lines().toMutableList()
+    textLines[target.lineIndex] = Aisles.withNote(textLines[target.lineIndex], target.nameEnd, clean)
+    val text = textLines.joinToString("\n")
+    // Never a change of ids: a note that would turn into part of the name (it cannot) leaves the text as it was.
+    if (Aisles.parse(text).map { it.id } != store.aisles().map { it.id }) return this
+    return copy(store = store.copy(aislesText = text))
+}
+
+/**
  * Drag-reorder in the aisle editor (§6.7, MoveAisleTest): moves aisle [from] to [to] (0-based walking positions)
- * by rewriting the order of the aisle lines in aislesText (comments and blank lines stay where they are), then
+ * by rewriting the order of the aisle lines in aislesText (whole lines, so each "Also here" note goes with its aisle;
+ * comments and blank lines stay where they are), then
  * remaps every reference (items, baskets, styles, corrections, every list's openAisle) through the old -> new id
  * map, so everything follows its aisle even when duplicate names renumber their "-2" ids. Aisles without a basket
  * get [guessBasket]. Out-of-range or equal positions -> this.
