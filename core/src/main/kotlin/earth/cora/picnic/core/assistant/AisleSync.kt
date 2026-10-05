@@ -42,11 +42,19 @@ class AisleSync(
     private val mutex = Mutex()
 
     /**
+     * Items the model has answered for in this process (it placed them, or left them in Everything else): [sortPending]
+     * does not ask about them again until the aisles change ([sync], [resortAll]) or the process restarts, so a
+     * connection that comes and goes never sends the same names over and over. Guarded by [mutex].
+     */
+    private val settled = HashSet<String>()
+
+    /**
      * After the aisle text changed (the caller already did store.update { setAislesText(text, baskets::guess) }):
      * 1. assignBasketsOrGuess(current aisles) -> store.update { setAisleBaskets(...) }.
      * 2. state.itemsNeedingAisle() -> assistant.recategorize(...) -> store.update { applyAisleAssignments(...) }.
      */
     suspend fun sync(): AisleSyncReport = mutex.withLock {
+        settled.clear()
         val aisles = store.current().store.aisles()
         var error: LlmError? = null
         var basketsFromModel = false
@@ -79,6 +87,7 @@ class AisleSync(
      * renamed or removed while the model was answering is not a target any more, and its items keep the aisle they have.
      */
     suspend fun resortAll(): AisleSyncReport = mutex.withLock {
+        settled.clear()
         val state = store.current()
         val ids = state.store.aisles().mapTo(HashSet()) { it.id }
         val candidates = state.lists.flatMap { it.items }
@@ -113,6 +122,20 @@ class AisleSync(
         placeItems(onlyIds = itemIds.toHashSet())
     }
 
+    /**
+     * Catch-up (the connection came back, or a cold start with a key; docs/DESIGN_STICKER.md §0.4, 5 October): every item
+     * in every list that still needs an aisle ([itemsNeedingAisle]: no aisle, or one that is gone; never one she put in
+     * Everything else by hand, checked or not) is recategorized exactly as [sortItems] does, so learned corrections and
+     * her manual placements win. No baskets. Items the model already answered for in this process are not asked about
+     * again (until the aisles change or the process restarts). Never throws LlmError (offline: nothing moves, the error
+     * is reported, and the items are asked about at the next catch-up).
+     */
+    suspend fun sortPending(): AisleSyncReport = mutex.withLock {
+        val waiting = store.current().itemsNeedingAisle().map { it.id }.filterNot { it in settled }
+        if (waiting.isEmpty()) return@withLock AisleSyncReport(false, 0, 0, null)
+        placeItems(onlyIds = waiting.toHashSet())
+    }
+
     private suspend fun placeItems(onlyIds: Set<String>?): AisleSyncReport {
         val state = store.current()
         val needing = state.itemsNeedingAisle().filter { onlyIds == null || it.id in onlyIds }
@@ -123,6 +146,7 @@ class AisleSync(
         } catch (e: LlmError) {
             return AisleSyncReport(false, 0, needing.size, e)
         }
+        needing.mapTo(settled) { it.id }
         // Only ids we asked about; anything the assistant skipped stays Unsorted.
         var placed = 0
         return try {

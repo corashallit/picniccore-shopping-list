@@ -13,6 +13,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.Connection as HttpConnection
+import okhttp3.EventListener
 import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -105,6 +107,11 @@ fun interface LlmLog {
  * - Sends `Authorization: Bearer <token>`; never logs headers, bodies or the token.
  * - Suspends with cancellation: cancelling the coroutine cancels the OkHttp call.
  * - Per-call timeout (OkHttp call timeout) = the [timeout] argument; connect timeout LlmTimeouts.CONNECT.
+ * - [isOnline] (the app's network monitor) is asked before every call: false -> LlmError.Offline at once, and no
+ *   request is sent, so nothing waits for a timeout with the phone in airplane mode.
+ * - A transport failure before the call got a connection (DNS, refused, a connect timeout, a failed TLS handshake,
+ *   even when the call timeout ran out meanwhile) -> LlmError.Network(beforeConnect = true); a connected call that runs
+ *   out of time -> LlmError.Timeout. An OkHttp EventListener marks the connection, so no exception text is parsed.
  * - Retries (max 2 extra attempts, backoff 1 s / 2 s + jitter, honours Retry-After up to 20 s):
  *   429 rate limits (not insufficient_quota / spend or usage limits), 500, 502, 503, 504.
  *   [imageEdit] is never retried.
@@ -119,6 +126,11 @@ class OpenAiClient(
     private val token: TokenSource,
     private val retryPolicy: RetryPolicy = RetryPolicy.DEFAULT,
     private val log: LlmLog = LlmLog.Default,
+    /**
+     * False when the phone has no network at all (the app's network monitor; it must not block). Read before every
+     * call; the default (always true) is the developer CLI's and the tests'.
+     */
+    private val isOnline: () -> Boolean = { true },
 ) {
     private val http: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -126,8 +138,14 @@ class OpenAiClient(
             // Reasoning calls send nothing until they finish: only the per-call timeout applies.
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .writeTimeout(0, TimeUnit.MILLISECONDS)
+            // Marks the calls that got a connection, so a failure before it reads as unreachable, never as "too long".
+            .eventListenerFactory { call -> call.request().tag(ConnectionMark::class.java)?.let(::MarkingListener) ?: EventListener.NONE }
+            .apply(httpCustomizer)
             .build()
     }
+
+    /** Tests only: adjusts the OkHttp client before its first call builds it (a socket factory that never connects). */
+    internal var httpCustomizer: (OkHttpClient.Builder) -> Unit = {}
 
     /**
      * Core-internal hook for developer tooling (the live eval's token and cost accounting): sees every
@@ -268,7 +286,19 @@ class OpenAiClient(
         val bearer = raw?.trim()?.removePrefix("Bearer ")?.trim()
         if (bearer.isNullOrEmpty()) throw LlmError.NotConfigured("no API key")
         if (bearer.any { it.code <= 0x20 || it.code >= 0x7f }) throw LlmError.NotConfigured("API key contains invalid characters")
+        // No network at all: say so at once instead of waiting for a connect timeout (nothing is sent).
+        if (!online()) {
+            log.log("offline: no request sent")
+            throw LlmError.Offline()
+        }
         return Connection(base, bearer, cfg.safetyIdentifier?.takeIf { it.isNotBlank() })
+    }
+
+    /** The hook's answer; a hook that throws counts as online (the call then fails or works on its own). */
+    private fun online(): Boolean = try {
+        isOnline()
+    } catch (e: RuntimeException) {
+        true
     }
 
     private suspend fun sendJson(conn: Connection, method: String, path: String, body: JsonObject, timeout: Duration): ApiResult {
@@ -329,17 +359,14 @@ class OpenAiClient(
         val logPath = url.encodedPath
         var attempt = 0
         while (true) {
+            // A fresh mark per attempt: a retry that never connects is unreachable, whatever the first attempt did.
+            val mark = ConnectionMark()
             val raw = try {
-                send(request, timeout)
+                send(request.newBuilder().tag(ConnectionMark::class.java, mark).build(), timeout)
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: InterruptedIOException) {
-                // OkHttp's call timeout and socket timeouts (SocketTimeoutException is a subclass).
-                log.log("$method $logPath -> timeout")
-                throw LlmError.Timeout()
             } catch (e: IOException) {
-                log.log("$method $logPath -> ${e.javaClass.simpleName}")
-                throw LlmError.Network(e)
+                throw transportError(e, connected = mark.connected, "$method $logPath")
             }
             log.log("$method $logPath -> ${raw.code} in ${raw.latencyMs} ms (${raw.requestId ?: "no request id"})")
             if (raw.code in 200..299) return raw
@@ -355,6 +382,26 @@ class OpenAiClient(
                 }
             }
             throw ApiFailure(raw.code, error, raw.requestId, retryAfter)
+        }
+    }
+
+    /**
+     * A transport failure as its LlmError: no connection yet (DNS, refused, a connect timeout, TLS; also when the call
+     * timeout ran out while connecting) is [LlmError.Network] with beforeConnect; a connected call that ran out of time
+     * (OkHttp's call timeout, a socket timeout) is [LlmError.Timeout]; anything else is [LlmError.Network].
+     */
+    private fun transportError(e: IOException, connected: Boolean, what: String): LlmError = when {
+        !connected -> {
+            log.log("$what -> no connection (${e.javaClass.simpleName})")
+            LlmError.Network(e, beforeConnect = true)
+        }
+        e is InterruptedIOException -> {
+            log.log("$what -> timeout")
+            LlmError.Timeout()
+        }
+        else -> {
+            log.log("$what -> ${e.javaClass.simpleName}")
+            LlmError.Network(e)
         }
     }
 
@@ -397,6 +444,19 @@ class OpenAiClient(
                 }
             }
         })
+    }
+
+    /** Set by [MarkingListener] once the call holds a connection to the server (connected, and TLS done). */
+    private class ConnectionMark {
+        @Volatile
+        var connected: Boolean = false
+    }
+
+    /** One call's listener: marks its [ConnectionMark] when OkHttp hands the call a connection (new or pooled). */
+    private class MarkingListener(private val mark: ConnectionMark) : EventListener() {
+        override fun connectionAcquired(call: Call, connection: HttpConnection) {
+            mark.connected = true
+        }
     }
 
     private fun effortOf(body: JsonObject): ReasoningEffort? =

@@ -86,6 +86,17 @@ class LiveIconDrawerTest {
         assertEquals(2, assistant.requests.size)
     }
 
+    /** Offline nothing was sent and nothing would change in 3 s: the drawing gives up at once, with no pause. */
+    @Test
+    fun offlineIsNotRetried() = runTest {
+        val sleeps = mutableListOf<Duration>()
+        val assistant = FakeAssistant(ArrayDeque(listOf({ throw LlmError.Offline() })))
+        val outcome = LiveIconDrawer(assistant, FakeDecider { emptyMap() }, sleep = { sleeps += it }).draw(request)
+        assertIs<LlmError.Offline>(assertIs<DrawOutcome.Failed>(outcome).error)
+        assertEquals(1, assistant.requests.size)
+        assertTrue(sleeps.isEmpty())
+    }
+
     @Test
     fun moderationIsARefusalAndOtherErrorsAreNotRetried() = runTest {
         val refused = FakeAssistant(ArrayDeque(listOf({ throw LlmError.Refusal("blocked") })))

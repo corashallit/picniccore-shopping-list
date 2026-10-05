@@ -66,13 +66,33 @@ sealed class LlmError(
         override val friendlyMessage: String get() = "The OpenAI account behind this key is out of credit or over its monthly budget."
     }
 
-    /** DNS, TLS, connection reset, cleartext blocked, 5xx after retries. */
-    class Network(cause: Throwable?, override val requestId: String? = null) : LlmError("Network error: ${cause?.javaClass?.simpleName}", cause) {
+    /**
+     * The phone has no network at all (the client's connectivity hook said so, OpenAiClient): no request was sent and
+     * nothing waited. The app tells a connection that is merely slow or broken apart from this one by [Network].
+     */
+    class Offline(override val requestId: String? = null) : LlmError("Offline: no request sent") {
+        override val friendlyMessage: String get() = "You’re offline right now. Try again once you’re back online."
+        override val retryable: Boolean get() = true
+    }
+
+    /**
+     * DNS, TLS, connection refused or reset, a connect timeout, cleartext blocked, 5xx after retries. [beforeConnect] is
+     * true when the call never got a connection to the server (DNS, refused, a connect timeout, a failed TLS handshake):
+     * the request was not sent, so nothing reached OpenAI.
+     */
+    class Network(
+        cause: Throwable?,
+        override val requestId: String? = null,
+        val beforeConnect: Boolean = false,
+    ) : LlmError("Network error: ${cause?.javaClass?.simpleName}" + if (beforeConnect) " (no connection)" else "", cause) {
         override val friendlyMessage: String get() = "Couldn’t reach OpenAI. Check your connection?"
         override val retryable: Boolean get() = true
     }
 
-    /** Call exceeded its timeout (LlmTimeouts: ingest 120 s, transcribe 60 s, image 120 s). */
+    /**
+     * A connected call exceeded its timeout (LlmTimeouts: ingest 120 s, transcribe 60 s, image 120 s). A call that never
+     * got a connection is [Network], whatever ran out first.
+     */
     class Timeout(override val requestId: String? = null) : LlmError("Timed out") {
         override val friendlyMessage: String get() = "That took too long. Try again, or try a shorter request."
         override val retryable: Boolean get() = true
@@ -106,3 +126,12 @@ sealed class LlmError(
         override val friendlyMessage: String get() = "The assistant couldn’t help with that one."
     }
 }
+
+/**
+ * The request never reached OpenAI: the phone is offline, or the call got no connection (DNS, refused, a connect
+ * timeout). Safe to redo later without asking twice: nothing was sent.
+ */
+val LlmError.unreached: Boolean get() = this is LlmError.Offline || (this is LlmError.Network && beforeConnect)
+
+/** A failure of the connection itself (offline, unreachable, or a connected call that ran out of time): worth redoing once online. */
+val LlmError.transport: Boolean get() = this is LlmError.Offline || this is LlmError.Network || this is LlmError.Timeout
