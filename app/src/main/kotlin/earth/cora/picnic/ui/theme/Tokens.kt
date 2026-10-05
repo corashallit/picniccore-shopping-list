@@ -240,7 +240,10 @@ data class PicnicColors(
     val lcdGrid: Color = Color(0xFFB6D4A4),
     /** Pressed / selected row band, keyword highlight. */
     val highlighter: Color = highlight,
-    /** Sticker-sheet backing paper (editor, empty state, value pills, disabled fill, tear slot). */
+    /**
+     * Sticker-sheet backing paper (editor, empty state, value pills, disabled fill, tear slot): lavender in Day, the
+     * release paper `#2C2A72` in Glow (dark paper: its content takes Glow's inks, §2.4.1).
+     */
     val backing: Color = surfaceSunken,
     /** Unchecked checkbox dashes. */
     val spotDash: Color = outline,
@@ -330,9 +333,12 @@ private val DayBook = BookColors(
     text = Color(0xFF25307C),
 )
 
+/** Glow's release paper (§2.6), the violet behind the book's sticker spots; also Glow's sticker-sheet backing (§2.4). */
+private val GlowReleasePaper = Color(0xFF2C2A72)
+
 private val GlowBook = BookColors(
     page = Color(0xFF222861),
-    releasePaper = Color(0xFF2C2A72),
+    releasePaper = GlowReleasePaper,
     paperDots = Color(0xFFC9FFDE).copy(alpha = 0.28f),
     spotDash = Color(0xFFC9CFF5),
     spotFill = Color(0xFF222861).copy(alpha = 0.6f),
@@ -445,7 +451,9 @@ val GlowColors = PicnicColors(
     lcd = Color(0xFFC9E5B8),
     lcdGrid = Color(0xFFB6D4A4),
     highlighter = Color(0xFFFFF3A6),
-    backing = Color(0xFFEEF0FA),
+    // The sticker-sheet backing is the book's release paper in Glow (§2.4, Cora 4 October): a violet slab with white
+    // words, not a bright lavender one on the navy binder. Light objects on it keep the Day inks (OnPaper, §2.4.1).
+    backing = GlowReleasePaper,
     spotDash = Color(0xFFC9CFF5),
     spotFill = Color.Transparent,
     ghostFill = Color(0xFF3A438A),

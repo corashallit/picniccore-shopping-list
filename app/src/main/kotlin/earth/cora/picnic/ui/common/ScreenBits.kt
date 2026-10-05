@@ -90,15 +90,15 @@ fun Chevron(modifier: Modifier = Modifier) {
 
 /**
  * The dashed "add" sticker spot (§4.26 "Add aisle", §6.4 "New list"): an empty kiss-cut spot, white at 50 % on its
- * page, a 2 dp dashed periwinkle-trace outline (radius 10, exact dashes, DashSpec), a plus and the [text]. One button.
+ * paper, a 2 dp dashed periwinkle-trace outline (radius 10, exact dashes, DashSpec), a plus and the [text]. One button.
+ * On dark paper (Glow's page and backing) the spot is white at 8 % with periwinkle-mid dashes and white words.
  */
 @Composable
-fun DashedAddSpot(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, onBacking: Boolean = false) {
+fun DashedAddSpot(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val c = PicnicTheme.colors
-    // On the sticker-sheet backing (light in every variant) the spot keeps its Day inks.
-    val dark = c.isDark && !onBacking
+    val dark = c.isDark
     val dash = if (dark) Families.periwinkle.mid else Families.periwinkle.trace
-    val ink = if (onBacking) c.ballpoint else c.ink
+    val ink = c.ink
     val white = c.stickerWhite
     Row(
         modifier

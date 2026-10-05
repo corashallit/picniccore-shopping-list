@@ -41,12 +41,11 @@ import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LocalReducedMotion
-import earth.cora.picnic.ui.theme.LocalThemeVariant
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicMotion
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.StickerFamily
-import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.hardShadow
 import earth.cora.picnic.ui.theme.rememberLoopTime
@@ -95,22 +94,24 @@ fun ThinkingBox(
             if (popped && popAge in 0..(2L * PicnicMotion.pose)) onPop(clock.id)
         }
     }
-    PaperTheme {
-        val c = PicnicTheme.colors
-        val shape = PicnicTheme.shapes.section
-        // The capsule sits beside the headline; the steps run the box's full width under them, so a quoted search or
-        // "Compared 3 recipes · makes 12" keeps to one or two lines.
-        Column(
-            modifier
-                .fillMaxWidth()
-                .testTag(THINKING_TAG)
-                .hardShadow(shape, PicnicTheme.shadows)
-                .clip(shape)
-                .background(c.backing)
-                .border(PicnicTheme.dimens.border, c.stickerWhite, shape)
-                .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
+    val c = PicnicTheme.colors
+    val shape = PicnicTheme.shapes.section
+    // The capsule sits beside the headline; the steps run the box's full width under them, so a quoted search or
+    // "Compared 3 recipes · makes 12" keeps to one or two lines.
+    Column(
+        modifier
+            .fillMaxWidth()
+            .testTag(THINKING_TAG)
+            .hardShadow(shape, PicnicTheme.shadows)
+            .clip(shape)
+            .background(c.backing)
+            .border(PicnicTheme.dimens.border, c.stickerWhite, shape)
+            .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        // The box is the sticker-sheet backing (lavender in Day, Glow's violet with its night shadow); its words take
+        // the backing's inks, read on it (§2.4.1).
+        OnPaper(c.backing) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
                     ItemIcon(
@@ -140,11 +141,11 @@ fun ThinkingBox(
                     )
                     PicnicText(
                         headline,
-                        style = PicnicTheme.type.label.copy(fontSize = 15.sp, lineHeight = 20.sp, color = c.ballpoint),
+                        style = PicnicTheme.type.label.copy(fontSize = 15.sp, lineHeight = 20.sp, color = PicnicTheme.colors.ink),
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
                     if (reduced && waiting) {
-                        Text(stringResource(R.string.theme_loader_working), style = PicnicTheme.type.caption.copy(color = c.ballpointSoft))
+                        Text(stringResource(R.string.theme_loader_working), style = PicnicTheme.type.caption.copy(color = PicnicTheme.colors.inkSoft))
                     }
                 }
             }
@@ -158,7 +159,10 @@ fun ThinkingBox(
     }
 }
 
-/** One step: its tick lands at 1.3 in 2 frames while the line darkens from ballpointSoft to ballpoint (§4.18). */
+/**
+ * One step: its tick lands at 1.3 in 2 frames while the line goes from the backing's soft ink to its ink (§4.18):
+ * ballpointSoft to ballpoint in Day, lavender to white in Glow.
+ */
 @Composable
 private fun StepLine(text: String, age: Long, reduced: Boolean) {
     val c = PicnicTheme.colors
@@ -173,13 +177,13 @@ private fun StepLine(text: String, age: Long, reduced: Boolean) {
         Glyph(
             PicnicGlyph.Check,
             contentDescription = null,
-            tint = if (landed) c.ballpoint else c.ballpointSoft,
+            tint = if (landed) c.ink else c.inkSoft,
             size = 16.dp,
             modifier = Modifier.padding(top = 2.dp).graphicsLayer { scaleX = tickScale; scaleY = tickScale },
         )
         Text(
             text,
-            style = PicnicTheme.type.body.copy(fontSize = 15.sp, lineHeight = 20.sp, color = if (landed) c.ballpoint else c.ballpointSoft),
+            style = PicnicTheme.type.body.copy(fontSize = 15.sp, lineHeight = 20.sp, color = if (landed) c.ink else c.inkSoft),
         )
     }
 }
@@ -215,20 +219,6 @@ fun stepText(step: ThinkingStep): String = when (step) {
     is ThinkingStep.CheckedPantry -> stringResource(R.string.add_step_pantry, step.leftOut)
     is ThinkingStep.SortedAisles ->
         if (step.aisles > 0) pluralStringResource(R.plurals.add_step_sorted, step.aisles, step.aisles) else stringResource(R.string.add_step_checked)
-}
-
-/**
- * White paper and light boxes (the recipe card, the polaroid, the thinking box, the trays) read the same in every
- * variant: in Glow their insides use the Day tokens (ballpoint text, Day spots and rings), since paper and stickers
- * never change colour in the dark (§2.2).
- */
-@Composable
-fun PaperTheme(content: @Composable () -> Unit) {
-    if (LocalThemeVariant.current == ThemeVariant.Glow) {
-        earth.cora.picnic.ui.theme.PicnicTheme(variant = ThemeVariant.Day, content = content)
-    } else {
-        content()
-    }
 }
 
 /** A skipped row's sticker (§4.17): 45 % with 60 % desaturation (a colour matrix on one layer; nothing is blurred). */

@@ -65,6 +65,7 @@ import earth.cora.picnic.ui.theme.Holo
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LoaderKind
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicLoader
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -146,7 +147,7 @@ fun Polaroid(photo: SnapPhoto?, reading: Boolean, modifier: Modifier = Modifier)
                     Image(thumb, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else if (photo == null) {
                     // Only an empty polaroid says so; a photo still being decoded (or one too odd to show small) is blank.
-                    PaperTheme {
+                    OnPaper(Color.White) {
                         FixedFontScale {
                             Text(
                                 stringResource(R.string.add_snap_no_photo),
@@ -159,7 +160,7 @@ fun Polaroid(photo: SnapPhoto?, reading: Boolean, modifier: Modifier = Modifier)
             }
             // The 26 dp lip; it would grow (rather than cut the caption) if the print ever needed more.
             Box(Modifier.fillMaxWidth().heightIn(min = 26.dp), contentAlignment = Alignment.CenterStart) {
-                PaperTheme {
+                OnPaper(Color.White) {
                     FixedFontScale {
                         var lost by remember { mutableStateOf(false) }
                         Text(
@@ -287,7 +288,11 @@ fun PoppedTray(rows: List<ReviewRow>, order: List<Int>, clock: RevealClock?, onT
     )
 }
 
-/** A pastel tray of sticker cells with a puffy title and a count (the Snap and Speak trays). */
+/**
+ * A pastel tray of sticker cells with a puffy title and a count (the Snap and Speak trays, §4.19, §4.20). A tray like the
+ * list's (§2.4.1): its shadow, pastel band and white border stand on the sheet; the header is on the pastel (ballpoint in
+ * every variant); the cells lie on the page panel (white; Glow's navy page with its own inks).
+ */
 @Composable
 internal fun StickerTray(
     title: String,
@@ -298,19 +303,19 @@ internal fun StickerTray(
     onToggleKeep: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    PaperTheme {
-        val c = PicnicTheme.colors
-        val t = PicnicTheme.type
-        val shape = PicnicTheme.shapes.section
-        val columns = if (androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.3f) 1 else 2
-        Column(
-            modifier
-                .fillMaxWidth()
-                .hardShadow(shape, PicnicTheme.shadows)
-                .clip(shape)
-                .background(family.pastel)
-                .border(PicnicTheme.dimens.border, c.stickerWhite, shape),
-        ) {
+    val c = PicnicTheme.colors
+    val t = PicnicTheme.type
+    val shape = PicnicTheme.shapes.section
+    val columns = if (androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.3f) 1 else 2
+    Column(
+        modifier
+            .fillMaxWidth()
+            .hardShadow(shape, PicnicTheme.shadows)
+            .clip(shape)
+            .background(family.pastel)
+            .border(PicnicTheme.dimens.border, c.stickerWhite, shape),
+    ) {
+        OnPaper(family.pastel) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 10.dp, end = 12.dp, top = 8.dp, bottom = 6.dp).semantics(mergeDescendants = true) { heading() },
                 verticalAlignment = Alignment.CenterVertically,
@@ -336,17 +341,19 @@ internal fun StickerTray(
                     if (count.isNotEmpty()) Text(count, style = t.label.copy(color = c.ballpoint), maxLines = 1)
                 }
             }
-            // Only the stickers that have popped take a place: the tray fills as they land.
-            val shownRows = rows.filter { clock?.rowShown(it.key) ?: true }
-            if (shownRows.isNotEmpty()) {
-                Column(
-                    Modifier
-                        .padding(horizontal = 5.dp)
-                        .fillMaxWidth()
-                        .clip(PicnicTheme.shapes.sectionInner)
-                        .background(c.pad)
-                        .border(1.5.dp, family.mid.copy(alpha = 0.6f), PicnicTheme.shapes.sectionInner),
-                ) {
+        }
+        // Only the stickers that have popped take a place: the tray fills as they land.
+        val shownRows = rows.filter { clock?.rowShown(it.key) ?: true }
+        if (shownRows.isNotEmpty()) {
+            Column(
+                Modifier
+                    .padding(horizontal = 5.dp)
+                    .fillMaxWidth()
+                    .clip(PicnicTheme.shapes.sectionInner)
+                    .background(c.pad)
+                    .border(1.5.dp, family.mid.copy(alpha = 0.6f), PicnicTheme.shapes.sectionInner),
+            ) {
+                OnPaper(c.pad) {
                     shownRows.chunked(columns).forEachIndexed { line, pair ->
                         Row(
                             Modifier
@@ -359,18 +366,18 @@ internal fun StickerTray(
                     }
                 }
             }
-            Box(
-                Modifier.fillMaxWidth().height(12.dp).decorative().drawBehind {
-                    // A row of tiny stars on the cap (the tray's pattern).
-                    val step = 12.dp.toPx()
-                    var x = step / 2
-                    while (x < size.width) {
-                        drawCircle(family.mid.copy(alpha = 0.55f), 1.6.dp.toPx(), Offset(x, size.height / 2))
-                        x += step
-                    }
-                },
-            )
         }
+        Box(
+            Modifier.fillMaxWidth().height(12.dp).decorative().drawBehind {
+                // A row of tiny stars on the cap (the tray's pattern).
+                val step = 12.dp.toPx()
+                var x = step / 2
+                while (x < size.width) {
+                    drawCircle(family.mid.copy(alpha = 0.55f), 1.6.dp.toPx(), Offset(x, size.height / 2))
+                    x += step
+                }
+            },
+        )
     }
 }
 
@@ -441,10 +448,12 @@ private fun StickerCell(row: ReviewRow, clock: RevealClock?, onToggleKeep: (Int)
         }
         val lost = rememberLostText()
         Column(Modifier.weight(1f).padding(end = 6.dp).clearedWith(lost).pressedBand(pressed, c.pressedBand)) {
-            Text(row.item.name, style = t.itemNameCompact.copy(color = if (faded) c.ballpointSoft else c.ballpoint), onTextLayout = lost.layout(0))
+            // The page panel's inks: ballpoint and ballpointSoft on white, white and lavender on Glow's navy page.
+            Text(row.item.name, style = t.itemNameCompact.copy(color = if (faded) c.inkSoft else c.ink), onTextLayout = lost.layout(0))
             if (detail != null) {
-                Text(AddRules.keepTogether(detail), style = t.itemDetailCompact.copy(color = c.ballpointSoft), onTextLayout = lost.layout(1))
+                Text(AddRules.keepTogether(detail), style = t.itemDetailCompact.copy(color = c.inkSoft), onTextLayout = lost.layout(1))
             }
         }
     }
 }
+

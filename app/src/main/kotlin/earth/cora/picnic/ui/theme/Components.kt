@@ -32,7 +32,6 @@ import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,7 +56,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
@@ -107,7 +105,6 @@ import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.toSize
 import earth.cora.picnic.R
-import earth.cora.picnic.ui.a11y.LocalFocusRingInk
 import earth.cora.picnic.ui.a11y.focusRingInk
 import earth.cora.picnic.ui.a11y.tabLeavesField
 import earth.cora.picnic.ui.a11y.textOverflowed
@@ -162,11 +159,10 @@ fun PicnicSurface(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val c = PicnicTheme.colors
-    val border = outlined && !(c.isDark && color == c.pad)
-    // A focus ring on this card shows against its paper (§4.6): the ballpoint on a light card (the Glow page's own ink,
-    // white, would vanish on it), white on a dark one.
-    val ring = if (color.alpha < 0.5f) LocalFocusRingInk.current else if (color.luminance() > 0.5f) c.ballpoint else Color.White
-    val paper = if (color.alpha < 0.5f) LocalPaperColor.current else color
+    // The card's own edge, shadow and fill are drawn with the colours of the paper it stands on (§2.4.1). A navy pad card
+    // on Glow's navy binder or page has no white border (the shadow carries the edge); on any other paper it keeps one.
+    val outer = LocalPaperColor.current
+    val border = outlined && !(c.isDark && color == c.pad && (outer == null || outer == c.pad))
     Box(
         modifier
             .then(if (shadow) Modifier.hardShadow(shape, PicnicTheme.shadows, large) else Modifier)
@@ -174,15 +170,10 @@ fun PicnicSurface(
             .background(color)
             .then(if (border) Modifier.border(PicnicTheme.dimens.border, c.stickerWhite, shape) else Modifier),
     ) {
-        CompositionLocalProvider(LocalFocusRingInk provides ring, LocalPaperColor provides paper) { content() }
+        // Its content takes the card's paper and that paper's inks (a see-through card: the paper under it).
+        OnPaper(if (color.alpha < 0.5f) outer else color) { content() }
     }
 }
-
-/**
- * The paper under the content here: provided by a card or sheet ([PicnicSurface], the letter-set sheet); null on the
- * binder. A round sticker button whose white face and border would sit on white paper reads it to draw its rim (§17).
- */
-val LocalPaperColor = androidx.compose.runtime.compositionLocalOf<Color?> { null }
 
 /**
  * The pad patch (§4.1): information text on the binder never sits straight on the pinstripes. A white kiss-cut label
@@ -1619,8 +1610,8 @@ fun SourceChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
 
 /**
  * The ruled text field (§4.8): no box. A 2 dp ballpointSoft underline, the label above (Zen Maru 700 13 sp
- * ballpointSoft), the value Zen Maru 700 16 sp ballpoint, 56 dp tall. Focus: a 3 dp strawberry-trace underline with a
- * 13 dp puffy heart at its left end. Error: a hanko underline and helper text in hanko 13 sp with a 16 dp torn-paper
+ * ballpointSoft), the value Zen Maru 700 16 sp ballpoint, 56 dp tall. Focus: a 3 dp strawberry underline (the trace;
+ * the mid on Glow's dark paper) with a 13 dp puffy heart at its left end. Error: a hanko underline and helper text in hanko 13 sp with a 16 dp torn-paper
  * glyph (key / network wording, never proxy wording). Disabled: a dotted underline, the value ballpointSoft.
  * Multi-line: rule lines continue under every line, one per text line: the pitch is the text's own line height, the
  * caller's [textStyle] line height when it sets one (the aisles text's 24 sp, a transcript's 22 sp) and
@@ -1786,13 +1777,17 @@ internal fun Density.lineHeightPx(lineHeight: androidx.compose.ui.unit.TextUnit,
     return kotlin.math.ceil(px)
 }
 
-/** The field's underline: rest 2 dp ballpointSoft; focus 3 dp strawberry trace + a 13 dp puffy heart; error hanko; disabled dotted. */
+/**
+ * The field's underline: rest 2 dp ballpointSoft; focus 3 dp in the strawberry accent ink + a 13 dp puffy heart; error
+ * hanko; disabled dotted. The accent ink follows the paper (§4.8): the trace on light paper, the mid on Glow's page and
+ * backing, where the trace falls to about 2.4.
+ */
 @Composable
 private fun FieldUnderline(focused: Boolean, error: Boolean, enabled: Boolean) {
     val c = PicnicTheme.colors
     val color = when {
         error -> c.hanko
-        focused -> Families.strawberry.trace
+        focused -> if (c.isDark) Families.strawberry.mid else Families.strawberry.trace
         else -> c.inkSoft
     }
     val thickness = if (focused || error) 3.dp else 2.dp

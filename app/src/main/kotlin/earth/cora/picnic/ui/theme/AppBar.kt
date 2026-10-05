@@ -305,39 +305,43 @@ fun OverflowMenu(
             pop.animateTo(1f, if (reduced) tween(PicnicMotion.rmFade.durationMillis) else tween(PicnicMotion.menuPop.durationMillis, easing = PicnicMotion.menuPop.easing))
         }
     }
-    PicnicSurface(
-        modifier
-            .width(width)
-            .graphicsLayer {
-                transformOrigin = TransformOrigin(1f, 0f)
-                if (reduced) {
-                    alpha = pop.value
-                } else {
-                    val s = 0.9f + 0.1f * pop.value
-                    scaleX = s
-                    scaleY = s
-                    alpha = pop.value.coerceIn(0f, 1f)
-                }
-            },
-        large = true,
-    ) {
-        // Bounded, the rows scroll inside the card; without a bound (a caller in a scrolling column) it keeps its height.
-        Column(
-            Modifier
-                .then(if (maxHeight.isSpecified) Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()) else Modifier)
-                .padding(vertical = 6.dp),
+    // A floating layer (a pantry sticker's pop card opens over the light cabinet): it re-roots on the binder's colours,
+    // then lays its own pad card (§2.4.1).
+    OnPaper(null) {
+        PicnicSurface(
+            modifier
+                .width(width)
+                .graphicsLayer {
+                    transformOrigin = TransformOrigin(1f, 0f)
+                    if (reduced) {
+                        alpha = pop.value
+                    } else {
+                        val s = 0.9f + 0.1f * pop.value
+                        scaleX = s
+                        scaleY = s
+                        alpha = pop.value.coerceIn(0f, 1f)
+                    }
+                },
+            large = true,
         ) {
-            if (title != null) {
-                Text(
-                    title,
-                    style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp).semantics { heading() },
-                )
-                Box(Modifier.padding(horizontal = 14.dp).fillMaxWidth().height(1.5.dp).background(PicnicTheme.colors.rule))
+            // Bounded, the rows scroll inside the card; without a bound (a caller in a scrolling column) it keeps its height.
+            Column(
+                Modifier
+                    .then(if (maxHeight.isSpecified) Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()) else Modifier)
+                    .padding(vertical = 6.dp),
+            ) {
+                if (title != null) {
+                    Text(
+                        title,
+                        style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ink),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp).semantics { heading() },
+                    )
+                    Box(Modifier.padding(horizontal = 14.dp).fillMaxWidth().height(1.5.dp).background(PicnicTheme.colors.rule))
+                }
+                for (item in items) MenuRow(item, onDismissRequest)
             }
-            for (item in items) MenuRow(item, onDismissRequest)
         }
     }
 }

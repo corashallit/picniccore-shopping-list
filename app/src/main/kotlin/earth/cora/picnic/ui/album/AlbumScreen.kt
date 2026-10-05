@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -49,7 +48,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
-import earth.cora.picnic.ui.a11y.LocalFocusRingInk
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.a11y.keyboardScrollsOn
 import earth.cora.picnic.ui.common.MoreMenuButton
 import earth.cora.picnic.ui.common.ScreenGutter
@@ -295,8 +294,9 @@ fun AlbumScreen(
                         .vinylSlice(top = top, bottom = bottom)
                         .padding(start = 8.dp, end = 8.dp, top = if (top) 8.dp else 3.dp, bottom = if (bottom) 10.dp else 3.dp),
                 ) {
-                    // The vinyl is light in both themes: a pocket's focus ring there is the ballpoint (§4.6).
-                    CompositionLocalProvider(LocalFocusRingInk provides PicnicTheme.colors.ballpoint) {
+                    // The vinyl is light in both themes: what stands on it takes the Day inks, and a pocket's focus ring there
+                    // is the ballpoint (§2.4.1, §4.6).
+                    OnPaper(PicnicTheme.colors.albumVinyl) {
                         when (slice) {
                             is PageSlice.Title -> VinylTitle(slice.text)
                             is PageSlice.Season -> SeasonCard(

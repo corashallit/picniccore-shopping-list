@@ -342,30 +342,33 @@ fun StickyNote(
                 .testTag(TOAST_BODY_TAG),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Balanced lines (§4.6, the balanced Heading strategy): never a one-word last line. A " · " never starts a
-            // line: a no-break space glues the dot to the word before it ("Rain on the way · / bring the tote!"), as
-            // the add flows' steps do; TalkBack reads the message as written.
-            PicnicText(
-                message.replace(" · ", "\u00A0· "),
-                style = PicnicTheme.type.toast.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading),
-                spoken = message,
-            )
-            if (actionLabel != null) {
-                // Pressed, the chip sticker drops onto its shadow in 2 steps like the kit's chips (never a ripple, §0.2,
-                // §4.7); focused, it wears their 2 dp ring.
-                val interaction = remember { MutableInteractionSource() }
-                val pressed by interaction.collectIsPressedAsState()
-                val focused by interaction.collectIsFocusedAsState()
-                Box(
-                    Modifier
-                        .align(Alignment.End)
-                        .minimumInteractiveComponentSize()
-                        .clickable(interaction, indication = null, role = Role.Button, onClick = onAction),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ChipFace(fill = c.stickerWhite, height = 32.dp, border = 0.dp, horizontal = 12.dp, press = rememberPressFraction(pressed), focused = focused) {
-                        actionGlyph?.let { Glyph(it, null, tint = c.ballpoint, size = 16.dp) }
-                        Text(actionLabel, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
+            // The note is lemon paper in every variant: ballpoint words and the Undo chip's ballpoint focus ring (§2.4.1).
+            OnPaper(c.toastNote) {
+                // Balanced lines (§4.6, the balanced Heading strategy): never a one-word last line. A " · " never starts a
+                // line: a no-break space glues the dot to the word before it ("Rain on the way · / bring the tote!"), as
+                // the add flows' steps do; TalkBack reads the message as written.
+                PicnicText(
+                    message.replace(" · ", "\u00A0· "),
+                    style = PicnicTheme.type.toast.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading),
+                    spoken = message,
+                )
+                if (actionLabel != null) {
+                    // Pressed, the chip sticker drops onto its shadow in 2 steps like the kit's chips (never a ripple, §0.2,
+                    // §4.7); focused, it wears their 2 dp ring.
+                    val interaction = remember { MutableInteractionSource() }
+                    val pressed by interaction.collectIsPressedAsState()
+                    val focused by interaction.collectIsFocusedAsState()
+                    Box(
+                        Modifier
+                            .align(Alignment.End)
+                            .minimumInteractiveComponentSize()
+                            .clickable(interaction, indication = null, role = Role.Button, onClick = onAction),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ChipFace(fill = c.stickerWhite, height = 32.dp, border = 0.dp, horizontal = 12.dp, press = rememberPressFraction(pressed), focused = focused) {
+                            actionGlyph?.let { Glyph(it, null, tint = c.ballpoint, size = 16.dp) }
+                            Text(actionLabel, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
+                        }
                     }
                 }
             }

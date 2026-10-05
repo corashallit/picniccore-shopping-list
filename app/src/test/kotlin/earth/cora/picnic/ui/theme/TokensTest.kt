@@ -106,6 +106,11 @@ class TokensTest {
         assertEquals("the unchecked spot is hollow", 0f, c.spotFill.alpha)
         assertHex("ghost fill", "#3A438A", c.ghostFill)
         assertHex("ghost dashes", "#C9CFF5", c.ghostDash)
+        // The sticker-sheet backing is the book's release paper (Cora, 4 October); disabled faces keep the rule navy.
+        assertHex("backing", "#2C2A72", c.backing)
+        assertEquals("the backing is the release paper", c.book.releasePaper, c.backing)
+        assertHex("disabledFace", "#3A438A", c.disabledFace)
+        assertHex("onDisabledFace", "#C9CFF5", c.onDisabledFace)
         // Text on tray pastels stays ballpoint in the dark; the LCD stays light.
         assertHex("ballpoint", "#25307C", c.ballpoint)
         assertHex("lcd", "#C9E5B8", c.lcd)

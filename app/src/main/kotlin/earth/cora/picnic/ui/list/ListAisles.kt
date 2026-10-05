@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
 import earth.cora.picnic.ui.a11y.decorative
+import earth.cora.picnic.ui.a11y.focusRingInk
 import earth.cora.picnic.ui.eggs.EggAnchors
 import earth.cora.picnic.ui.eggs.EggRules
 import earth.cora.picnic.ui.eggs.NapCatInBasket
@@ -79,6 +80,7 @@ import earth.cora.picnic.ui.theme.IndexTab
 import earth.cora.picnic.ui.theme.LocalPieceProbe
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.LocalTimeouts
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PadPatch
 import earth.cora.picnic.ui.theme.PicnicText
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -545,77 +547,81 @@ internal fun TrayHeader(
             .then(if (pinned) Modifier.groundBacking() else Modifier)
             .traySlice(TrayPart.Header, section.look, ring, shadows.color, c.pad, c.rule),
         content = {
-            IndexTab(
-                position = section.position,
-                displayName = section.displayName,
-                look = section.look,
-                size = TabSize.Tray,
-                ballpoint = true,
-                // The tab is the tray's heading: TalkBack reads the whole name in one go, however the tab wraps it (§15).
-                modifier = Modifier.layoutId("tab").testTag(ListTags.headerTab(section.id)).semantics {
-                    contentDescription = heading
-                    heading()
-                }.then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)) }),
-                probeKey = "trayTab:${section.id}",
-                nameModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) },
-                numberModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "num:" + section.id) },
-            )
-            section.storeAisle?.let {
-                // Decorative here: the tab's heading already reads "…, store aisle 2" (§15), so TalkBack says it once. The
-                // chip sizes itself as the kit does (§4.7: its face and glyph scale with its label, keeping its proportions).
-                Box(Modifier.layoutId("chip").testTag(ListTags.storeChip(section.id)).decorative().then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "chip:" + section.id) })) {
-                    StoreAisleChip(it, Modifier.probe(probe, "chip:${section.id}"))
+            // The band's content stands on its pastel (§2.4.1): Day inks in every variant (the doodle, the chevron's
+            // white face and its ballpoint focus ring). The bee straddles the band's edge over the binder: outside.
+            OnPaper(section.look.family.pastel) {
+                IndexTab(
+                    position = section.position,
+                    displayName = section.displayName,
+                    look = section.look,
+                    size = TabSize.Tray,
+                    ballpoint = true,
+                    // The tab is the tray's heading: TalkBack reads the whole name in one go, however the tab wraps it (§15).
+                    modifier = Modifier.layoutId("tab").testTag(ListTags.headerTab(section.id)).semantics {
+                        contentDescription = heading
+                        heading()
+                    }.then(with(anchors) { Modifier.anchor(EggAnchors.tab(section.id)) }),
+                    probeKey = "trayTab:${section.id}",
+                    nameModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "tab:" + section.id) },
+                    numberModifier = with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "num:" + section.id) },
+                )
+                section.storeAisle?.let {
+                    // Decorative here: the tab's heading already reads "…, store aisle 2" (§15), so TalkBack says it once. The
+                    // chip sizes itself as the kit does (§4.7: its face and glyph scale with its label, keeping its proportions).
+                    Box(Modifier.layoutId("chip").testTag(ListTags.storeChip(section.id)).decorative().then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "chip:" + section.id) })) {
+                        StoreAisleChip(it, Modifier.probe(probe, "chip:${section.id}"))
+                    }
                 }
-            }
-            if (snack) {
-                // Egg 5 at midnight: the snack star and "snack?" take the doodle's place after the tab (its own width).
-                Box(Modifier.layoutId("doodle")) { SnackDoodle(eggs, section.id) }
-            } else {
-                section.doodle?.let {
-                    Text(
-                        it,
-                        style = PicnicTheme.type.doodle.copy(color = c.doodle),
-                        maxLines = 1,
-                        modifier = Modifier.layoutId("doodle").rotate(-4f).decorative().then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "doodle:" + section.id) }),
-                    )
+                if (snack) {
+                    // Egg 5 at midnight: the snack star and "snack?" take the doodle's place after the tab (its own width).
+                    Box(Modifier.layoutId("doodle")) { SnackDoodle(eggs, section.id) }
+                } else {
+                    section.doodle?.let {
+                        Text(
+                            it,
+                            style = PicnicTheme.type.doodle.copy(color = PicnicTheme.colors.doodle),
+                            maxLines = 1,
+                            modifier = Modifier.layoutId("doodle").rotate(-4f).decorative().then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "doodle:" + section.id) }),
+                        )
+                    }
                 }
-            }
-            Box(Modifier.layoutId("basket")) {
-                with(anchors) {
-                    MotionBasket(
-                        kind = section.basket,
-                        look = section.look,
-                        gotten = section.gotten,
-                        toGet = section.toGet,
-                        complete = section.complete,
-                        presentation = basket,
-                        clock = clock,
-                        size = BasketSize.Tray.size,
-                        tray = true,
-                        modifier = Modifier.testTag(ListTags.basket(section.id)).probe(probe, "trayBasket:${section.id}").basketAnchor(section.id, section.basket, priority = 1).basketHello(eggs, section.id),
-                    )
+                Box(Modifier.layoutId("basket")) {
+                    with(anchors) {
+                        MotionBasket(
+                            kind = section.basket,
+                            look = section.look,
+                            gotten = section.gotten,
+                            toGet = section.toGet,
+                            complete = section.complete,
+                            presentation = basket,
+                            clock = clock,
+                            size = BasketSize.Tray.size,
+                            tray = true,
+                            modifier = Modifier.testTag(ListTags.basket(section.id)).probe(probe, "trayBasket:${section.id}").basketAnchor(section.id, section.basket, priority = 1).basketHello(eggs, section.id),
+                        )
+                    }
+                    // Egg 8: the nap cat in this aisle's still-empty basket.
+                    NapCatInBasket(eggs, section.id, section.basket, surprises, chainsDone = chainsDone)
                 }
-                // Egg 8: the nap cat in this aisle's still-empty basket.
-                NapCatInBasket(eggs, section.id, section.basket, surprises, chainsDone = chainsDone)
-            }
-            Box(
-                Modifier
-                    .layoutId("chevron")
-                    .size(48.dp)
-                    .testTag(ListTags.chevron(section.id))
-                    .focusRequester(chevronFocus)
-                    // Focusable by touch too, so her unfold can hand focus to it (§15, item 193).
-                    .focusProperties { canFocus = true }
-                    .clickable(chevronInteraction, indication = null, role = Role.Button, onClickLabel = collapse) { fold() }
-                    .clearAndSetSemantics {
-                        contentDescription = collapse
-                        role = Role.Button
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                // Keyboard / switch access: the ring 3 dp outside the chevron's 30 dp face (§4.4), centred on it.
-                Box(Modifier.offset((-1).dp, (-1).dp).size(30.dp).focusRing(CircleShape, c.ink, chevronRinged))
-                ChevronFace(up = true)
+                Box(
+                    Modifier
+                        .layoutId("chevron")
+                        .size(48.dp)
+                        .testTag(ListTags.chevron(section.id))
+                        .focusRequester(chevronFocus)
+                        // Focusable by touch too, so her unfold can hand focus to it (§15, item 193).
+                        .focusProperties { canFocus = true }
+                        .clickable(chevronInteraction, indication = null, role = Role.Button, onClickLabel = collapse) { fold() }
+                        .clearAndSetSemantics {
+                            contentDescription = collapse
+                            role = Role.Button
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // Keyboard / switch access: the ring 3 dp outside the chevron's 30 dp face (§4.4), centred on it.
+                    Box(Modifier.offset((-1).dp, (-1).dp).size(30.dp).focusRing(CircleShape, focusRingInk(), chevronRinged))
+                    ChevronFace(up = true)
+                }
             }
             if (current) Bee(Modifier.layoutId("bee"))
         },

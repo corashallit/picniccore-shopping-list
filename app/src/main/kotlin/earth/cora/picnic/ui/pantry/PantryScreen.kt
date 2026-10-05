@@ -86,6 +86,7 @@ import earth.cora.picnic.ui.theme.ChipFace
 import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.FixedMotionScale
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LetterSetSheet
 import earth.cora.picnic.ui.theme.LocalIconCatalog
@@ -371,8 +372,12 @@ private fun Cabinet(content: @Composable () -> Unit) {
             .clip(RoundedCornerShape(9.dp))
             .background(Families.cocoa.pastel),
     ) {
-        Valance()
-        Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp)) { content() }
+        // What stands in the cabinet stands on its cocoa paper: ballpoint words, ballpoint focus rings (§2.4.1). A
+        // sticker's pop card is a floating menu and re-roots on the binder's navy (OverflowMenu).
+        OnPaper(Families.cocoa.pastel) {
+            Valance()
+            Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp)) { content() }
+        }
     }
 }
 

@@ -64,6 +64,7 @@ import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.LetterSetSheet
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -327,8 +328,14 @@ private fun AddTab(
     val shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
     val recordingText = stringResource(R.string.add_tab_recording)
     val large = LocalDensity.current.fontScale >= VERY_LARGE_TEXT
-    // A dimmed tab looks like a disabled pill (§4.6): the backing fill, ballpointSoft words, no shadow.
-    val ink = if (enabled) c.ballpoint else c.ballpointSoft
+    // A dimmed tab looks like a disabled pill (§4.6): the disabled face and its soft words (Day: the backing and
+    // ballpointSoft; Glow: the rule navy and lavender), its white frame, no shadow.
+    val ink = if (enabled) c.ballpoint else c.onDisabledFace
+    val face = when {
+        selected -> family.mid
+        enabled -> family.pastel
+        else -> c.disabledFace
+    }
     val style = if (selected) t.secondaryButton.copy(color = ink) else t.label.copy(fontSize = 14.sp, lineHeight = 18.sp, color = ink)
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -349,13 +356,7 @@ private fun AddTab(
                     .background(c.stickerWhite)
                     .padding(start = 3.dp, end = 3.dp, top = 3.dp)
                     .clip(shape)
-                    .background(
-                        when {
-                            selected -> family.mid
-                            enabled -> family.pastel
-                            else -> c.backing
-                        },
-                    )
+                    .background(face)
                     .padding(horizontal = if (large) 2.dp else 6.dp)
                     // 38 dp at rest (3 dp border + 35 dp); the selected tab is 6 dp taller, its label centred. Both grow
                     // with the label (never clipped) and keep the 6 dp step.
@@ -364,15 +365,18 @@ private fun AddTab(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
             ) {
-                if (!large) Glyph(glyph, null, tint = ink, size = 20.dp)
-                BasicText(
-                    label,
-                    style = style,
-                    maxLines = 1,
-                    // Large text shrinks the label to fit its tab, never under the 13 sp floor (§2.7).
-                    autoSize = TextAutoSize.StepBased(minFontSize = 13.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
-                    modifier = Modifier.testTag(ADD_TAB_LABEL_TAG).pressedBand(pressed, c.pressedBand),
-                )
+                // The face is the label's paper: its pressed band is the face's own (the highlighter on a pastel or mid face).
+                OnPaper(face) {
+                    if (!large) Glyph(glyph, null, tint = ink, size = 20.dp)
+                    BasicText(
+                        label,
+                        style = style,
+                        maxLines = 1,
+                        // Large text shrinks the label to fit its tab, never under the 13 sp floor (§2.7).
+                        autoSize = TextAutoSize.StepBased(minFontSize = 13.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp),
+                        modifier = Modifier.testTag(ADD_TAB_LABEL_TAG).pressedBand(pressed, PicnicTheme.colors.pressedBand),
+                    )
+                }
             }
             if (recording) {
                 Box(
