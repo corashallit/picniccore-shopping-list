@@ -405,13 +405,15 @@ class PuffyTextBoundsTest {
         show(ThemeVariant.Day, 1f) { Box(Modifier.background(ground).padding(12.dp).testTag("frame")) { Draw(next, next.width, "title") } }
         assertEquals("NEXT seen again scans nothing", start + 1, PuffyPinholes.scans)
         PuffyPatchCache.clear()
+        // Counted, not read from "the last scan": a late scan from another composition must not flip the answer.
+        val offMain = PuffyPinholes.offMainScans
         show(ThemeVariant.Day, 1f) {
             CompositionLocalProvider(LocalPinholeWork provides PinholeWork.Background) {
                 Box(Modifier.background(ground).padding(12.dp).testTag("frame")) { Draw(next, next.width, "title") }
             }
         }
-        compose.waitUntil(5_000) { PuffyPinholes.scans == start + 2 }
-        assertTrue("in the app, the scan runs off the main thread", !PuffyPinholes.lastScanOnMain)
+        compose.waitUntil(10_000) { PuffyPinholes.offMainScans > offMain }
+        assertTrue("in the app, the scan runs off the main thread", PuffyPinholes.offMainScans > offMain)
         compose.waitUntil(5_000) { compose.onNodeWithTag("frame").captureToImage().asAndroidBitmap().sameAs(inline) }
     }
 

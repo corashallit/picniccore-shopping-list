@@ -570,8 +570,11 @@ internal object PuffyPinholes {
     /** The shore in px at [density]: the ground's clearance and one antialiased pixel. */
     fun shorePx(density: Float): Int = neckPx(density) + 1
 
-    /** Tests: how many scans have run, whether the last one ran on the main thread, and how many px it filled. */
-    @Volatile internal var scans = 0
+    /** Tests: how many scans have run, how many of them ran off the main thread, whether the last one ran on it, and how many px it filled. */
+    private val scanCount = java.util.concurrent.atomic.AtomicInteger()
+    private val offMainScanCount = java.util.concurrent.atomic.AtomicInteger()
+    internal val scans: Int get() = scanCount.get()
+    internal val offMainScans: Int get() = offMainScanCount.get()
 
     @Volatile internal var lastScanOnMain = false
 
@@ -636,8 +639,9 @@ internal object PuffyPinholes {
 
     /** The patch for [s]: pure, any thread. */
     fun patch(s: Silhouette): PinholePatch {
-        scans++
+        scanCount.incrementAndGet()
         lastScanOnMain = android.os.Looper.myLooper() == android.os.Looper.getMainLooper()
+        if (!lastScanOnMain) offMainScanCount.incrementAndGet()
         val fill = holes(s.alpha, s.w, s.h, s.pen, s.neck, s.shore, s.inGlyph)
         lastScanFilled = fill?.count { it } ?: 0
         if (fill == null) return PinholePatch.None
