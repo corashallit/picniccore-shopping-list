@@ -59,7 +59,7 @@ EXTRAS = {
 }
 
 # critter heads (centre x, centre y, radius) in DSL units: no gloss inside (§3.1, §20.3 item 30)
-HEADS = {'cat': (15.8, 31.4, 9.6), 'bee': (14.6, 28.2, 7), 'ladybug': (24, 13.4, 6.4), 'ladybugfly': (24, 15.4, 6), 'ant': (12.4, 32, 3.6),
+HEADS = {'cat': (15.8, 31.4, 9.6), 'bee': (17.5, 28.4, 7), 'ladybug': (24, 13.4, 6.4), 'ladybugfly': (24, 15.4, 6), 'ant': (12.4, 32, 3.6),
          'antcrumb': (12.4, 32, 3.6), 'dustbunny': (22.4, 29.6, 6.4),   # the dust bunny's face; its gloss is on the fluff
          # item stickers with a head (no face on a list sticker, but a white stroke in the head still reads as one)
          'candy': (32.6, 26.4, 4.6)}

@@ -28,13 +28,15 @@ d('heart', 'Heart', [F(('path', heart_path(24, 25, 17)), 'sakura', 'm', band=.22
   gloss=[G('M12 20.4Q12.6 15.4 17.6 14.4'), DOT(11.6, 24.6)])
 d('cloud', 'Cloud', [F(('path', 'M11.4 36C5.6 36 4.6 28 9.8 26.4C9 19.6 16.6 15.8 21.2 19.6C23.4 12.8 34 12.6 35.8 20.4C42.4 19.8 45 28.4 39.6 31.6C41.4 35 38.6 36 36.6 36Z'), 'ramune', 'w', band=.24, band_t='p')],
   gloss=[G('M10.4 30Q10.8 27.4 13 26.8', 2.2), G('M23.4 20Q24.8 16.8 28.2 16.4')])
+# the face sits wholly inside the body's trace, the stripes behind it on the back half, the stinger tucked behind the
+# body, and the gloss and its dot inside the right shoulder (inset 2.6u), clear of the stripes (the head is HEADS['bee'])
 d('bee', 'Bee', [
     F(('ellipse', 18.4, 15.6, 6.4, 8.6, -28), 'ramune', 'w', ol=1.8),
     F(('ellipse', 29.2, 14.4, 6.4, 8.6, 22), 'ramune', 'w', ol=1.8),
-    F(('ellipse', 24, 29, 14.4, 11.4), 'lemon', 'm', band=.2, tex=['M20 16V42', 'M28.4 16V42'], tex_t='#7A4A28', tex_w=3.6),
-    LINE('M38.4 29.4L42.4 30.2', 'cocoa', 2.2),
-    *face(14.6, 28.2, 'lemon', 3.2, .9),
-], gloss=[G('M33.6 21.8Q36.8 23.4 37.8 26.8', 2.2), DOT(38, 30, .8)])
+    LINE('M35.4 28.8L42.4 30.2', 'cocoa', 2.2),
+    F(('ellipse', 24, 29, 14.4, 11.4), 'lemon', 'm', band=.2, tex=['M25.7 16V42', 'M31.3 16V42'], tex_t='#7A4A28', tex_w=2.8),
+    *face(17.5, 28.4, 'lemon', 3.0, .85),
+], gloss=[G('M34.2 24.5Q36 26.9 35.8 29.6', 2.2), DOT(34.6, 32.8, .8)])
 d('ladybug', 'Ladybug', [
     F(('circle', 24, 13.4, 6.4), 'periwinkle', 'tr', ol=0),
     LINE('M21 8.4C19.6 5.6 17.4 5 16 5.8M27 8.4C28.4 5.6 30.6 5 32 5.8', 'periwinkle', 1.6),
@@ -136,18 +138,21 @@ d('scissors', 'Scissors', [
     F(('circle', 12, 13, 2.2), 'periwinkle', 'w', ol=1.6, cut=False), F(('circle', 12, 35, 2.2), 'periwinkle', 'w', ol=1.6, cut=False),
     F(('circle', 23.6, 24, 1.6), 'periwinkle', 'm', ol=1.2, cut=False),
 ])
+# the tail ring is drawn behind the body, both ends tucked inside it, with a white gap between ring and body; the loaf's
+# left end is tucked behind the head (no doubled outline); the ears are mirror images about the face's axis (x 15.8)
+# with their bases sunk in the head; the gloss and its dot sit inside the right shoulder (inset 3u), clear of the stripes
 d('cat', 'Sleeping tabby', [
-    F(('path', 'M6.6 33C6.6 24.6 13.8 19.6 22 19.6C31.6 19.6 39.4 24.4 39.4 31.6C39.4 37.6 33.4 41.4 23.4 41.4C13.4 41.4 6.6 39 6.6 33Z'), 'peach', 'm', band=.2,
-      tex=['M22 18V26', 'M27.6 18.6V26', 'M33 21V27.4'], tex_t='deep', tex_w=2.4),
-    TUBE('M37.8 36.4C43.6 35.2 43.4 27.4 38.4 27.6', 'peach', 4.6, 'm'),
-    F(('path', 'M8.6 26.6L9.4 18.6Q9.8 17.2 10.8 18.2L15.6 22.4Z'), 'peach', 'm', ol=1.8),
-    F(('path', 'M17.6 21.6L22 16.6Q23 15.6 23.6 17L24.6 23Z'), 'peach', 'm', ol=1.8),
+    TUBE('M34.6 35.6C37.4 38.4 42.1 37.6 42.1 31.8C42.1 27.4 37.8 25.2 34.4 27.4', 'peach', 4.6, 'm'),
+    F(('path', 'M12.8 31.4C14.8 27 18.8 19.6 25 19.6C31.4 19.6 37.6 24.4 37.6 31.6C37.6 37.6 31.4 41.4 23.4 41.4C19.6 41.4 17.4 40.4 16.4 37.6Z'),
+      'peach', 'm', band=.2, tex=['M25.8 18V25.2', 'M29.2 18.2V24.4'], tex_t='deep', tex_w=2.4),
+    F(('path', 'M8.4 27.6L9.4 18.6Q9.8 17.2 10.8 18.2L15.2 24.6Z'), 'peach', 'm', ol=1.8),
+    F(('path', 'M23.2 27.6L22.2 18.6Q21.8 17.2 20.8 18.2L16.4 24.6Z'), 'peach', 'm', ol=1.8),
     F(('ellipse', 15.8, 31.4, 9.6, 7.6), 'peach', 'p', ol=1.8),
     LINE('M10.6 30.4Q12.2 31.8 13.8 30.4M17.8 30.4Q19.4 31.8 21 30.4', 'peach', 1.4, t='tr'),
     F(('ellipse', 9.8, 33.6, 1.6, 1), 'sakura', 'm', ol=0, cut=False),
     F(('ellipse', 22, 33.6, 1.6, 1), 'sakura', 'm', ol=0, cut=False),
     LINE('M15.2 33.6l.6 .6l.6 -.6', 'peach', 1.2, t='tr'),
-], gloss=[G('M27 21.6Q30.6 20.8 33.8 22.4', 2.2), DOT(36, 23.8, .8)])
+], gloss=[G('M31.7 25.2Q33.9 27.2 34.4 29.8', 2.2), DOT(34.3, 33.3, .8)])
 d('pumpkin', 'Pumpkin', [
     F(('rect', 22, 8.4, 4, 7, 1.6), 'melon', 'm', ol=1.6),
     F(('ellipse', 15.4, 28.6, 9.6, 12), 'peach', 'm', band=.22),

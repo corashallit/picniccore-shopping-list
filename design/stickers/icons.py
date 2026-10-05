@@ -293,13 +293,15 @@ add('salmon', 'Salmon fillet', [
       'peach', 'm', band=.2, tex=['M15.4 16C12.2 23 12.2 32.4 15.4 41', 'M22 15.8C18.8 23 18.8 32.4 22 41', 'M28.6 15.8C25.4 23 25.4 32.4 28.6 41', 'M35.2 16.2C32.4 22 32.4 28.4 34.2 34.6'], tex_w=2.2),
 ], gloss=[G('M10.6 25Q10.8 20 15.8 18.8'), DOT(10.6, 28.8)], qty='450 g', aisle='seafood')
 
-# 23 flour sack
+# 23 flour sack: the tie band is the sack's own top strip (the same shoulder curves as the body), so its ends are the
+# sack's outline and cannot stick out; the gathered top rises from the band's flat top; the wheat sits below the gloss
+FLOUR_SH = 'M12.2 19.6C12.75 18.4 13.6 15.4 15.2 15.4H32.8C34.4 15.4 35.25 18.4 35.8 19.6'
 add('flour', 'All-purpose flour', [
-    F(('path', 'M14.4 17.6C12.8 13 15.8 8 18 8.6C20 7 22 9.4 24 8C26 9.4 28 7 30 8.6C32.2 8 35.2 13 33.6 17.6Z'), 'cocoa', 'w', ol=2),
-    F(('path', 'M12.2 18C9.2 24 8.2 32 9 38Q9.6 42 13.6 42H34.4Q38.4 42 39 38C39.8 32 38.8 24 35.8 18Z'), 'cocoa', 'w', band=.24, band_t='p'),
-    F(('rect', 12.6, 15.4, 22.8, 4.2, 2.1), 'cocoa', 'm'),
-    LINE('M24 24.6V37.6', 'lemon', 1.6),
-    *[F(('ellipse', x, y, 1.9, 3, a), 'lemon', 'm', ol=1.3, cut=False) for x, y, a in [(24, 25.2, 0), (21.4, 28.4, -32), (26.6, 28.4, 32), (21.4, 32.4, -32), (26.6, 32.4, 32)]],
+    F(('path', 'M16.4 17.2C15.8 14 13.8 10.2 18 8.6C20 7 22 9.4 24 8C26 9.4 28 7 30 8.6C34.2 10.2 32.2 14 31.6 17.2Z'), 'cocoa', 'w', ol=2),
+    F(('path', FLOUR_SH + 'C38 24.4 39.8 32 39 38Q38.4 42 34.4 42H13.6Q9.6 42 9 38C8.2 32 10 24.4 12.2 19.6Z'), 'cocoa', 'w', band=.22, band_t='p'),
+    F(('path', FLOUR_SH + 'Z'), 'cocoa', 'm'),
+    LINE('M24 27.4V39.4', 'lemon', 1.6),
+    *[F(('ellipse', x, y, 1.9, 3, a), 'lemon', 'm', ol=1.3, cut=False) for x, y, a in [(24, 28, 0), (21.4, 31.2, -32), (26.6, 31.2, 32), (21.4, 35.2, -32), (26.6, 35.2, 32)]],
 ], gloss=[G('M12.8 22.6Q11.8 27 12 31.4'), DOT(12.4, 35)], qty='2.5 kg bag', aisle='baking')
 
 # 24 sugar bag
