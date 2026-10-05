@@ -32,7 +32,6 @@ import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,7 +56,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
@@ -107,7 +105,6 @@ import androidx.compose.ui.unit.constrainWidth
 import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.toSize
 import earth.cora.picnic.R
-import earth.cora.picnic.ui.a11y.LocalFocusRingInk
 import earth.cora.picnic.ui.a11y.focusRingInk
 import earth.cora.picnic.ui.a11y.tabLeavesField
 import earth.cora.picnic.ui.a11y.textOverflowed
@@ -162,11 +159,10 @@ fun PicnicSurface(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val c = PicnicTheme.colors
-    val border = outlined && !(c.isDark && color == c.pad)
-    // A focus ring on this card shows against its paper (§4.6): the ballpoint on a light card (the Glow page's own ink,
-    // white, would vanish on it), white on a dark one.
-    val ring = if (color.alpha < 0.5f) LocalFocusRingInk.current else if (color.luminance() > 0.5f) c.ballpoint else Color.White
-    val paper = if (color.alpha < 0.5f) LocalPaperColor.current else color
+    // The card's own edge, shadow and fill are drawn with the colours of the paper it stands on (§2.4.1). A navy pad card
+    // on Glow's navy binder or page has no white border (the shadow carries the edge); on any other paper it keeps one.
+    val outer = LocalPaperColor.current
+    val border = outlined && !(c.isDark && color == c.pad && (outer == null || outer == c.pad))
     Box(
         modifier
             .then(if (shadow) Modifier.hardShadow(shape, PicnicTheme.shadows, large) else Modifier)
@@ -174,15 +170,10 @@ fun PicnicSurface(
             .background(color)
             .then(if (border) Modifier.border(PicnicTheme.dimens.border, c.stickerWhite, shape) else Modifier),
     ) {
-        CompositionLocalProvider(LocalFocusRingInk provides ring, LocalPaperColor provides paper) { content() }
+        // Its content takes the card's paper and that paper's inks (a see-through card: the paper under it).
+        OnPaper(if (color.alpha < 0.5f) outer else color) { content() }
     }
 }
-
-/**
- * The paper under the content here: provided by a card or sheet ([PicnicSurface], the letter-set sheet); null on the
- * binder. A round sticker button whose white face and border would sit on white paper reads it to draw its rim (§17).
- */
-val LocalPaperColor = androidx.compose.runtime.compositionLocalOf<Color?> { null }
 
 /**
  * The pad patch (§4.1): information text on the binder never sits straight on the pinstripes. A white kiss-cut label

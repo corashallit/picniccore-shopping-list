@@ -99,6 +99,7 @@ import earth.cora.picnic.ui.theme.HankoText
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LocalPieceProbe
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.RarityChip
@@ -474,7 +475,7 @@ private fun Perforation(elapsed: Long, modifier: Modifier) {
                 var y = step / 2f
                 val until = if (frames == 1) size.height / 2f else size.height
                 while (y < until) {
-                    drawCircle(c.ballpointSoft, r, Offset(x, y))
+                    drawCircle(c.inkSoft, r, Offset(x, y))
                     y += step
                 }
             },
@@ -483,44 +484,49 @@ private fun Perforation(elapsed: Long, modifier: Modifier) {
 
 /**
  * The swipe hint (§4.11): right = a lemon-pastel band with a GOT IT hanko growing on the left; left = a backing band with
- * scissors and a perforation growing on the right.
+ * scissors and a perforation growing on the right. Each band's marks take its paper's inks (§2.4.1): the lemon band is
+ * light in every variant (the Day hanko), the backing is Glow's violet in the dark (white scissors, lavender dots).
  */
 @Composable
 private fun SwipeBand(right: Boolean, progress: Float, modifier: Modifier) {
     val c = PicnicTheme.colors
     val p = progress.coerceIn(0f, 1f)
-    Box(modifier.decorative().background(if (right) Families.lemon.pastel else c.backing)) {
-        if (right) {
-            HankoStamp(
-                HankoText.GotIt,
-                Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 10.dp)
-                    .graphicsLayer {
-                        scaleX = 0.6f + 0.4f * p
-                        scaleY = 0.6f + 0.4f * p
-                        rotationZ = -12f
-                    },
-                size = 34.dp,
-            )
-        } else {
-            Row(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(
+    val paper = if (right) Families.lemon.pastel else c.backing
+    Box(modifier.decorative().background(paper)) {
+        OnPaper(paper) {
+            val inks = PicnicTheme.colors
+            if (right) {
+                HankoStamp(
+                    HankoText.GotIt,
                     Modifier
-                        .width(2.dp)
-                        .fillMaxHeight()
-                        .padding(vertical = 6.dp)
-                        .drawBehind {
-                            var y = 0f
-                            val step = 6.dp.toPx()
-                            while (y < size.height) {
-                                drawCircle(c.ballpointSoft, 1.dp.toPx(), Offset(size.width / 2f, y + 1.dp.toPx()))
-                                y += step
-                            }
+                        .align(Alignment.CenterStart)
+                        .padding(start = 10.dp)
+                        .graphicsLayer {
+                            scaleX = 0.6f + 0.4f * p
+                            scaleY = 0.6f + 0.4f * p
+                            rotationZ = -12f
                         },
+                    size = 34.dp,
                 )
-                Spacer(Modifier.width(8.dp))
-                Glyph(PicnicGlyph.Scissors, null, tint = c.ballpoint, size = (18 + 6 * p).dp)
+            } else {
+                Row(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .width(2.dp)
+                            .fillMaxHeight()
+                            .padding(vertical = 6.dp)
+                            .drawBehind {
+                                var y = 0f
+                                val step = 6.dp.toPx()
+                                while (y < size.height) {
+                                    drawCircle(inks.inkSoft, 1.dp.toPx(), Offset(size.width / 2f, y + 1.dp.toPx()))
+                                    y += step
+                                }
+                            },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Glyph(PicnicGlyph.Scissors, null, tint = inks.ink, size = (18 + 6 * p).dp)
+                }
             }
         }
     }

@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
@@ -51,6 +52,7 @@ import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.NumberCircle
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -93,7 +95,9 @@ fun RecipeCard(
 ) {
     val uriHandler = LocalUriHandler.current
     PostageCard(modifier.fillMaxWidth().testTag(RECIPE_CARD_TAG)) {
-        PaperTheme {
+        // White paper in every variant: the Day inks, spots and bands; in Glow its stickers still cast the night's
+        // shadows (§2.4.1, §2.10).
+        OnPaper(Color.White) {
             val c = PicnicTheme.colors
             val t = PicnicTheme.type
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -32,7 +32,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -111,7 +110,7 @@ import earth.cora.picnic.ui.theme.AisleLooks
 import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
-import earth.cora.picnic.ui.theme.LocalPicnicColors
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.NumberCircle
 import earth.cora.picnic.ui.theme.PicnicButton
@@ -401,11 +400,13 @@ private fun StickerSheet(
     val newName = stringResource(R.string.aisles_new_name)
 
     PicnicSurface(Modifier.fillMaxWidth(), color = c.backing, large = true) {
+        // The sheet's words take the backing's ink, read on it: ballpoint on Day's lavender, white on Glow's violet.
+        val ink = PicnicTheme.colors.ink
         Column(Modifier.fillMaxWidth().padding(start = 10.dp, end = 12.dp, top = 10.dp, bottom = 14.dp)) {
             if (state.labels.isEmpty()) {
                 Text(
                     stringResource(R.string.aisles_empty),
-                    style = PicnicTheme.type.body.copy(color = c.ballpoint),
+                    style = PicnicTheme.type.body.copy(color = ink),
                     modifier = Modifier.padding(8.dp),
                 )
             }
@@ -461,7 +462,7 @@ private fun StickerSheet(
             if (state.previewing) {
                 Text(
                     stringResource(R.string.aisles_preview_note),
-                    style = PicnicTheme.type.caption.copy(color = c.ballpoint),
+                    style = PicnicTheme.type.caption.copy(color = ink),
                     modifier = Modifier.padding(start = 6.dp, bottom = 6.dp),
                 )
             }
@@ -471,7 +472,6 @@ private fun StickerSheet(
                 stringResource(R.string.aisles_add),
                 onClick = { actions.onAdd(newName) },
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                onBacking = true,
             )
             Box(Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 6.dp), contentAlignment = Alignment.Center) {
                 ResortButton(state.syncing, actions.onResort)
@@ -479,7 +479,7 @@ private fun StickerSheet(
             if (state.syncing) {
                 Text(
                     stringResource(R.string.aisles_resorting),
-                    style = PicnicTheme.type.caption.copy(color = c.ballpoint),
+                    style = PicnicTheme.type.caption.copy(color = ink),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
                 )
@@ -564,13 +564,6 @@ internal fun stadiumPoint(t: Float, w: Float, h: Float): Pair<Offset, Float> {
     return p to Math.toDegrees(atan2(cos(a), -sin(a))).toFloat()
 }
 
-/** Colours for content on a pastel label (§2.7: text on pastels is always ballpoint, in every variant). */
-@Composable
-private fun OnPastel(content: @Composable () -> Unit) {
-    val c = PicnicTheme.colors
-    CompositionLocalProvider(LocalPicnicColors provides c.copy(ink = c.ballpoint, inkSoft = c.ballpoint, rule = Families.periwinkle.pastel), content = content)
-}
-
 /**
  * One aisle label (§4.26): a kiss-cut label (40 dp for a one-line name) on the backing sheet: the drag handle (2 × 3
  * dots, 48 dp target), the number circle, the name (Zen Maru 700 16 sp) and "store aisle 2" (13 sp), the 26 dp colour +
@@ -635,7 +628,8 @@ private fun AisleLabel(
                 drawRoundRect(look.family.pastel, Offset(b, top + b), Size(size.width - 2 * b, h - 2 * b), CornerRadius(r - b))
             },
     ) {
-        OnPastel {
+        // The label's content stands on its pastel: ballpoint words, white-faced round buttons, Day bands (§2.4.1).
+        OnPaper(look.family.pastel) {
             val handle: @Composable () -> Unit = {
                 Box(
                     Modifier
@@ -669,17 +663,15 @@ private fun AisleLabel(
             val number: @Composable () -> Unit = { NumberCircle(position, look, size = 26.dp) }
             val tools: @Composable () -> Unit = {
                 Swatch(look, Modifier.size(26.dp))
-                // The round button keeps the page's own colours (its face is the pad: white in Day, navy in Glow).
-                CompositionLocalProvider(LocalPicnicColors provides c) {
-                    RoundStickerButton(
-                        glyph = if (editing) PicnicGlyph.Check else PicnicGlyph.Edit,
-                        contentDescription = if (editing) stringResource(R.string.aisles_edit_done, name) else stringResource(R.string.aisles_edit, name),
-                        onClick = { if (editing) actions.onStopEditing() else actions.onEdit(label.aisle.id) },
-                        enabled = enabled,
-                        faceSize = 32.dp,
-                        modifier = Modifier.padding(end = 2.dp),
-                    )
-                }
+                // White-faced on the light pastel in every variant, its glyph in the pastel's ballpoint (§4.6, §4.26).
+                RoundStickerButton(
+                    glyph = if (editing) PicnicGlyph.Check else PicnicGlyph.Edit,
+                    contentDescription = if (editing) stringResource(R.string.aisles_edit_done, name) else stringResource(R.string.aisles_edit, name),
+                    onClick = { if (editing) actions.onStopEditing() else actions.onEdit(label.aisle.id) },
+                    enabled = enabled,
+                    faceSize = 32.dp,
+                    modifier = Modifier.padding(end = 2.dp),
+                )
             }
             val labelSemantics = Modifier.semantics(mergeDescendants = true) {
                 contentDescription = description

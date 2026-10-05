@@ -313,13 +313,15 @@ fun EmptyState(title: String, body: String, modifier: Modifier = Modifier, actio
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // On the backing's own inks (read here, on its paper): ballpoint on Day's lavender, white on Glow's violet.
+            val ink = PicnicTheme.colors.ink
             StickerSheetArt()
-            Text(title, style = t.emptyTitle.copy(color = c.ballpoint), textAlign = TextAlign.Center)
+            Text(title, style = t.emptyTitle.copy(color = ink), textAlign = TextAlign.Center)
             // Balanced lines (§4.6, the balanced Heading strategy): never a one-word last line ("…say it out / loud.").
-            Text(body, style = t.body.copy(color = c.ballpoint, lineBreak = androidx.compose.ui.text.style.LineBreak.Heading), textAlign = TextAlign.Center)
+            Text(body, style = t.body.copy(color = ink, lineBreak = androidx.compose.ui.text.style.LineBreak.Heading), textAlign = TextAlign.Center)
             PicnicText(
                 "♡ " + stringResource(R.string.theme_empty_doodle) + " ♡",
-                style = t.doodle.copy(color = Families.sakura.trace),
+                style = t.doodle.copy(color = PicnicTheme.colors.doodle),
                 modifier = Modifier.clearAndSetSemantics { },
             )
             if (action != null) Box(Modifier.padding(top = 4.dp)) { action() }

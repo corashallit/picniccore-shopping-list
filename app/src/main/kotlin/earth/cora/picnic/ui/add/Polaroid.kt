@@ -65,6 +65,7 @@ import earth.cora.picnic.ui.theme.Holo
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LoaderKind
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicLoader
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -146,7 +147,7 @@ fun Polaroid(photo: SnapPhoto?, reading: Boolean, modifier: Modifier = Modifier)
                     Image(thumb, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else if (photo == null) {
                     // Only an empty polaroid says so; a photo still being decoded (or one too odd to show small) is blank.
-                    PaperTheme {
+                    OnPaper(Color.White) {
                         FixedFontScale {
                             Text(
                                 stringResource(R.string.add_snap_no_photo),
@@ -159,7 +160,7 @@ fun Polaroid(photo: SnapPhoto?, reading: Boolean, modifier: Modifier = Modifier)
             }
             // The 26 dp lip; it would grow (rather than cut the caption) if the print ever needed more.
             Box(Modifier.fillMaxWidth().heightIn(min = 26.dp), contentAlignment = Alignment.CenterStart) {
-                PaperTheme {
+                OnPaper(Color.White) {
                     FixedFontScale {
                         var lost by remember { mutableStateOf(false) }
                         Text(
@@ -298,7 +299,7 @@ internal fun StickerTray(
     onToggleKeep: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    PaperTheme {
+    TrayDayTheme {
         val c = PicnicTheme.colors
         val t = PicnicTheme.type
         val shape = PicnicTheme.shapes.section
@@ -446,5 +447,15 @@ private fun StickerCell(row: ReviewRow, clock: RevealClock?, onToggleKeep: (Int)
                 Text(AddRules.keepTogether(detail), style = t.itemDetailCompact.copy(color = c.ballpointSoft), onTextLayout = lost.layout(1))
             }
         }
+    }
+}
+
+/** The sticker trays keep the Day tokens in Glow (their own pass follows). */
+@Composable
+private fun TrayDayTheme(content: @Composable () -> Unit) {
+    if (earth.cora.picnic.ui.theme.LocalThemeVariant.current == earth.cora.picnic.ui.theme.ThemeVariant.Glow) {
+        PicnicTheme(variant = earth.cora.picnic.ui.theme.ThemeVariant.Day, content = content)
+    } else {
+        content()
     }
 }

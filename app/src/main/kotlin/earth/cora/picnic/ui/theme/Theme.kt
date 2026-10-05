@@ -149,7 +149,7 @@ fun PicnicTheme(
     content: @Composable () -> Unit,
 ) {
     val colors = colorsFor(variant)
-    val type = remember(variant) { typographyFor(colors) }
+    val type = typographyOf(variant)
     val shapes = PicnicShapeTokens
     CompositionLocalProvider(
         LocalPicnicColors provides colors,

@@ -187,6 +187,17 @@ fun LetterSetSurface(
     handleScale: Float = 1f,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // A floating layer: it re-roots on the binder's colours, then lays its own paper (§2.4.1).
+    OnPaper(null) { LetterSetPaper(modifier, footer, handleScale, content) }
+}
+
+@Composable
+private fun LetterSetPaper(
+    modifier: Modifier,
+    footer: (@Composable () -> Unit)?,
+    handleScale: Float,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val c = PicnicTheme.colors
     val shadows = PicnicTheme.shadows
     Box(modifier.fillMaxWidth()) {
@@ -202,8 +213,8 @@ fun LetterSetSurface(
                 .ruledLines(24.dp, c.rule.copy(alpha = 0.7f), firstLine = 64.dp, margin = c.margin.copy(alpha = 0.7f), marginX = 22.dp)
                 .drawBehind { drawPerforationRims(corner = 20.dp) },
         ) {
-            // The sheet's paper: round buttons on it draw their rim (§17).
-            CompositionLocalProvider(LocalPaperColor provides c.pad) {
+            // The sheet's paper: its content takes the pad's inks; round buttons on it draw their rim (§17).
+            OnPaper(c.pad) {
                 val scroll = rememberScrollState()
                 val fadeFooter = footer != null
                 Column(

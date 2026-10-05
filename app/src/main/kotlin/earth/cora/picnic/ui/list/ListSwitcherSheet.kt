@@ -19,7 +19,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,7 +54,7 @@ import earth.cora.picnic.ui.theme.LcdChip
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import earth.cora.picnic.ui.theme.LetterSetSheet
-import earth.cora.picnic.ui.theme.LocalPaperColor
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -218,33 +217,35 @@ private fun ListLabel(summary: ListSummary, canDelete: Boolean, onClick: () -> U
             .padding(start = 10.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            Modifier
-                .weight(1f)
-                .heightIn(min = 56.dp)
-                .clickable(interactionSource = null, indication = highlighterPress(), role = Role.Button, onClick = onClick)
-                .semantics(mergeDescendants = true) {
-                    selected = summary.current
-                    if (summary.remaining > 0) stateDescription = spokenLeft
-                },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (summary.current) DecorSticker("star", size = 16.dp, shadow = false)
-            Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-                // Text on backing / lemon paper is ballpoint in every variant (§2.4: pastels never darken).
-                Text(summary.title, style = t.itemName.copy(color = c.ballpoint))
-                if (summary.remaining == 0) Text(stringResource(R.string.lists_all_done), style = t.caption.copy(color = c.ballpoint))
-            }
-            if (summary.remaining > 0) {
-                Box(Modifier.clearAndSetSemantics { }) {
-                    LcdChip(LcdState(mode = LcdMode.Text, text = summary.remaining.toString()), pitch = 1.6.dp)
+        // The label's content stands on its own paper (§2.4.1): the lemon label is light in both themes (ballpoint words,
+        // white-faced pencil and bin, the highlighter band), the backing is Glow's violet (white words, navy buttons).
+        OnPaper(paper) {
+            val ink = PicnicTheme.colors.ink
+            Row(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 56.dp)
+                    .clickable(interactionSource = null, indication = highlighterPress(), role = Role.Button, onClick = onClick)
+                    .semantics(mergeDescendants = true) {
+                        selected = summary.current
+                        if (summary.remaining > 0) stateDescription = spokenLeft
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (summary.current) DecorSticker("star", size = 16.dp, shadow = false)
+                Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                    Text(summary.title, style = t.itemName.copy(color = ink))
+                    if (summary.remaining == 0) Text(stringResource(R.string.lists_all_done), style = t.caption.copy(color = ink))
+                }
+                if (summary.remaining > 0) {
+                    Box(Modifier.clearAndSetSemantics { }) {
+                        LcdChip(LcdState(mode = LcdMode.Text, text = summary.remaining.toString()), pitch = 1.6.dp)
+                    }
                 }
             }
-        }
-        // The pencil and bin stand on the label's own paper, not the sheet's white: their white faces have an edge there
-        // already, so no rim (§17).
-        CompositionLocalProvider(LocalPaperColor provides paper) {
+            // The pencil and bin stand on the label's own paper, not the sheet's: their faces have an edge there already,
+            // so no rim (§17).
             PicnicIconButton(PicnicGlyph.Edit, stringResource(R.string.lists_rename, summary.title), onRename)
             PicnicIconButton(PicnicGlyph.Delete, stringResource(R.string.lists_delete, summary.title), onDelete, enabled = canDelete)
         }

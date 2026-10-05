@@ -101,6 +101,7 @@ import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LocalIconCatalog
 import earth.cora.picnic.ui.theme.StickerLibrary
 import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicColors
 import earth.cora.picnic.ui.theme.PicnicSurface
 import earth.cora.picnic.ui.theme.PicnicTheme
@@ -717,7 +718,8 @@ internal fun TripBooksCard(rows: List<BookRowUi>, onOpen: (BookRowUi) -> Unit, m
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
                 stringResource(R.string.album_books_title),
-                style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint),
+                // The backing's ink, read on it: ballpoint on Day's lavender, white on Glow's violet.
+                style = PicnicTheme.type.smallTitle.copy(color = PicnicTheme.colors.ink),
                 modifier = Modifier.padding(start = 4.dp).semantics { heading() },
             )
             rows.forEach { row -> BookRow(row, onOpen = { onOpen(row) }, onAppeared = { onAppeared(row.id) }) }
@@ -747,7 +749,10 @@ internal fun BooksJump(count: Int, onClick: () -> Unit, modifier: Modifier = Mod
 val BookRowFresh: SemanticsPropertyKey<Boolean> = SemanticsPropertyKey("BookRowFresh")
 private var SemanticsPropertyReceiver.bookRowFresh: Boolean by BookRowFresh
 
-/** One filed book: up to 6 mini stickers (20 dp), the date (DynaPuff 15 sp), "19 of 19 stickers · perfect · receipt". */
+/**
+ * One filed book: up to 6 mini stickers (20 dp), the date (DynaPuff 15 sp), "19 of 19 stickers · perfect · receipt". A
+ * pad card on the backing: white in Day, Glow's navy page (with its white kiss-cut edge on the violet backing).
+ */
 @Composable
 private fun BookRow(row: BookRowUi, onOpen: () -> Unit, onAppeared: () -> Unit) {
     val c = PicnicTheme.colors
@@ -756,11 +761,12 @@ private fun BookRow(row: BookRowUi, onOpen: () -> Unit, onAppeared: () -> Unit) 
         if (row.perfect) add(stringResource(R.string.album_book_perfect))
         if (row.receipt) add(stringResource(R.string.album_book_receipt))
     }
-    PicnicSurface(Modifier.fillMaxWidth(), color = c.stickerWhite) {
+    PicnicSurface(Modifier.fillMaxWidth(), color = c.pad) {
+        val ink = PicnicTheme.colors.ink
         Row(
             Modifier
                 .fillMaxWidth()
-                // On the white card, so the pressed highlighter lies on the paper, under the minis and the words.
+                // On the card, so the pressed band lies on the paper, under the minis and the words.
                 .clickable(
                     interactionSource = null,
                     indication = highlighterPress(),
@@ -777,18 +783,21 @@ private fun BookRow(row: BookRowUi, onOpen: () -> Unit, onAppeared: () -> Unit) 
                 MiniStickers(row.minis, row.perfect)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(row.dateLabel, style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint))
-                PartsText(parts, PicnicTheme.type.caption.copy(color = c.ballpoint))
+                Text(row.dateLabel, style = PicnicTheme.type.smallTitle.copy(color = ink))
+                PartsText(parts, PicnicTheme.type.caption.copy(color = ink))
             }
         }
     }
 }
 
-/** The book's thumbnail: its first six stickers at 20 dp, two rows of three, on a little page (lemon when perfect). */
+/**
+ * The book's thumbnail: its first six stickers at 20 dp, two rows of three, on a little page in a sakura frame: the
+ * book's own page (white in Day, Glow's navy), lemon when perfect (the PERFECT book is light in both themes).
+ */
 @Composable
 private fun MiniStickers(minis: List<IconRef>, perfect: Boolean) {
     val shape = RoundedCornerShape(8.dp)
-    val paper = PicnicTheme.colors.stickerWhite
+    val paper = PicnicTheme.colors.book.page
     Column(
         Modifier
             .clip(shape)
@@ -1001,39 +1010,42 @@ internal fun BackPocketCard(modifier: Modifier = Modifier, reveal: Boolean = fal
             .testTag(BACK_POCKET_TAG),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            stringResource(R.string.album_back_pocket),
-            style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint),
-            modifier = Modifier.semantics { heading() },
-        )
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(96.dp)
-                .drawBehind {
-                    val r = 10.dp.toPx()
-                    drawRoundRect(c.stickerWhite, cornerRadius = CornerRadius(r))
-                    // The page curl at the bottom-right: the sheet's corner folded back (opening, while it reveals).
-                    val curl = 22.dp.toPx() * curlPose / BACK_POCKET_POSES
-                    if (curl > 0f) drawPageCurl(curl, vinyl, Families.sakura.mid, curlShadow, c.stickerWhite, bottom = true)
-                }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                AlbumSheets.SHEET_2_STICKERS.forEachIndexed { i, sticker ->
-                    if (stickersOut) {
-                        MagicAppearBox(key = "back-pocket-$i-$reveal", play = reveal, bloomSize = 36f) { SheetStickerArt(sticker, 44.dp) }
-                    } else {
-                        // Still in the pocket: its room kept, nothing shown.
-                        Spacer(Modifier.size(44.dp))
+        // On the vinyl (light in both themes): the Day inks, whatever the variant (§2.4.1).
+        OnPaper(vinyl) {
+            Text(
+                stringResource(R.string.album_back_pocket),
+                style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint),
+                modifier = Modifier.semantics { heading() },
+            )
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .drawBehind {
+                        val r = 10.dp.toPx()
+                        drawRoundRect(c.stickerWhite, cornerRadius = CornerRadius(r))
+                        // The page curl at the bottom-right: the sheet's corner folded back (opening, while it reveals).
+                        val curl = 22.dp.toPx() * curlPose / BACK_POCKET_POSES
+                        if (curl > 0f) drawPageCurl(curl, vinyl, Families.sakura.mid, curlShadow, c.stickerWhite, bottom = true)
+                    }
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    AlbumSheets.SHEET_2_STICKERS.forEachIndexed { i, sticker ->
+                        if (stickersOut) {
+                            MagicAppearBox(key = "back-pocket-$i-$reveal", play = reveal, bloomSize = 36f) { SheetStickerArt(sticker, 44.dp) }
+                        } else {
+                            // Still in the pocket: its room kept, nothing shown.
+                            Spacer(Modifier.size(44.dp))
+                        }
                     }
                 }
+                Text(
+                    stringResource(R.string.album_back_pocket_sheet),
+                    style = PicnicTheme.type.doodle.copy(color = c.ballpointSoft, fontSize = PicnicTheme.type.caption.fontSize),
+                    modifier = Modifier.align(Alignment.BottomStart),
+                )
             }
-            Text(
-                stringResource(R.string.album_back_pocket_sheet),
-                style = PicnicTheme.type.doodle.copy(color = c.ballpointSoft, fontSize = PicnicTheme.type.caption.fontSize),
-                modifier = Modifier.align(Alignment.BottomStart),
-            )
         }
     }
 }

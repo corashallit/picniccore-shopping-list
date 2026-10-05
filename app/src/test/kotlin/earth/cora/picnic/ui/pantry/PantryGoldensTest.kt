@@ -30,7 +30,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * My pantry goldens (checklist 325–327, §6.13 states): `pantry_{empty,few,full,text_focused,fs200,popcard,takeoff_toast}`
- * in Day, `pantry_glow`.
+ * in Day, `pantry_glow` and `pantry_popcard_glow`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -112,9 +112,10 @@ class PantryGoldensTest(private val variant: ThemeVariant, @Suppress("unused") p
         if (day) record("pantry_fs200", PantrySamples.few, fontScale = 2f)
     }
 
+    /** The pop card: Glow too, where the cabinet is light paper and the card a floating navy menu over it (§2.4.1). */
     @Test
     fun popCard() {
-        if (day) record("pantry_popcard", PantrySamples.few, popCard = "olive oil", wholeScreen = true)
+        record(if (day) "pantry_popcard" else "pantry_popcard_glow", PantrySamples.few, popCard = "olive oil", wholeScreen = true)
     }
 
     companion object {
