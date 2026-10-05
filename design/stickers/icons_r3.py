@@ -81,8 +81,8 @@ replace('pastasauce', 'Tomato pasta sauce', [
 
 # baby food: little round pot with a ridged peach lid and the feeding spoon
 replace('babyfood', 'Baby food', [
-    TUBE('M33.4 32.6L41.6 13.6', 'ramune', 2.6, 'p'),
-    F(('ellipse', 41.6, 11.4, 3.4, 4.4, 22), 'ramune', 'p', ol=1.6),
+    TUBE('M32.4 32.6L40.6 13.6', 'ramune', 2.6, 'p'),          # the spoon 1u in, so its shadow stays on the canvas
+    F(('ellipse', 40.6, 11.4, 3.4, 4.4, 22), 'ramune', 'p', ol=1.6),
     F(('path', 'M15 23.4H33Q36.6 23.4 36.8 27C37.2 33 35.4 42 26.4 42H21.6C12.6 42 10.8 33 11.2 27Q11.4 23.4 15 23.4Z'), 'peach', 'p', band=.32, band_t='m'),
     F(('rect', 10.6, 16.4, 26.8, 7.6, 3.8), 'peach', 'm', det=['M14.4 18.6V21.8M18.4 18.6V21.8M22.4 18.6V21.8M26.4 18.6V21.8M30.4 18.6V21.8M34 18.6V21.8'], det_w=1.1),
     F(('path', heart_path(24, 30.4, 3.6)), 'peach', 'w', ol=1.3, cut=False),

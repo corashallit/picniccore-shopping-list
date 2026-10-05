@@ -123,7 +123,7 @@ add('apple', 'McIntosh apples', [
     F(('path', 'M24 16C20 12.5 9.5 12 8.2 23.5C7 33.5 14 41.8 19.5 41.5C21.5 41.4 22.5 40.6 24 40.6C25.5 40.6 26.5 41.4 28.5 41.5C34 41.8 41 33.5 39.8 23.5C38.5 12 28 12.5 24 16Z'),
       'strawberry', 'm', band=.24),
     F(('ellipse', 32.6, 22.6, 4.6, 3.2, -35), 'melon', 'p', ol=0, cut=False),
-    F(('ellipse', 22.4, 31.2, .9, 1.4, 20), 'lemon', 'lp', ol=0, cut=False),
+    F(('ellipse', 20, 34, .9, 1.4, 20), 'lemon', 'lp', ol=0, cut=False),
     F(('ellipse', 27.6, 34.2, .9, 1.4, -20), 'lemon', 'lp', ol=0, cut=False),
 ], gloss=[G('M12.8 23Q13.6 18.2 18.4 16.8'), DOT(12.2, 27)], qty='1.36 kg bag', aisle='produce')
 
@@ -481,11 +481,11 @@ add('catfood', 'Cat food', [
 TH1 = 'M8 28.6C7.4 23.4 11.4 19.4 17 19.4C22.2 19.4 25.6 22.4 25.4 27C25.2 30.6 22.4 32.6 17.6 32.6C12.4 32.6 8.4 31.6 8 28.6Z'
 TH2 = 'M22.6 28.4C22.2 23.2 26 19.6 31.4 19.6C36.8 19.6 40.6 22.6 40.2 27.2C40 30.8 37 32.6 32.2 32.6C27 32.6 23 31.4 22.6 28.4Z'
 add('chickentray', 'Chicken thighs', [
-    TUBE('M10 25.6H5.6', 'strawberry', 3.6, 'w'),
-    F(('circle', 4.6, 24, 1.9), 'strawberry', 'w', ol=1.4), F(('circle', 4.6, 27.2, 1.9), 'strawberry', 'w', ol=1.4),
+    TUBE('M10 25.6H6.6', 'strawberry', 3.6, 'w'),             # the knuckles 1u in each side: the shadow stays on the canvas
+    F(('circle', 5.6, 24, 1.9), 'strawberry', 'w', ol=1.4), F(('circle', 5.6, 27.2, 1.9), 'strawberry', 'w', ol=1.4),
     F(('path', TH1), 'strawberry', 'p', tex=['M9 26C9.6 21.8 13.4 20 17.6 20.2C21 20.4 24 22 24.8 25'], tex_t='#FF9FC8', tex_w=3.6, det=['M13.6 27.4Q16.8 25.6 20.4 27.4'], det_t='#FF9FC8', det_w=2),
-    TUBE('M38 25.6H42.4', 'strawberry', 3.6, 'w'),
-    F(('circle', 43.4, 24, 1.9), 'strawberry', 'w', ol=1.4), F(('circle', 43.4, 27.2, 1.9), 'strawberry', 'w', ol=1.4),
+    TUBE('M38 25.6H41.4', 'strawberry', 3.6, 'w'),
+    F(('circle', 42.4, 24, 1.9), 'strawberry', 'w', ol=1.4), F(('circle', 42.4, 27.2, 1.9), 'strawberry', 'w', ol=1.4),
     F(('path', TH2), 'strawberry', 'p', tex=['M23.6 25.8C24.2 21.8 28 20 32.2 20.2C35.8 20.4 38.8 22 39.6 25'], tex_t='#FF9FC8', tex_w=3.6, det=['M28.2 27.4Q31.4 25.6 35 27.4'], det_t='#FF9FC8', det_w=2),
     F(('path', 'M6.6 29.8H41.4L38.6 39.8Q38 42 35.6 42H12.4Q10 42 9.4 39.8Z'), 'ramune', 'p', band=.32),
     F(('rect', 25.6, 32.4, 9.6, 5, 1.4), 'ramune', 'w', ol=1.2, cut=False),

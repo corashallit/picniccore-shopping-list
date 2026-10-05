@@ -43,7 +43,7 @@ WASHI = {
                    "<path d='M18.6 4.6l1.2 2.6l2.6-.6l-1 2.4l1.6 1.4l-2.6.4l-.4 2.4l-1.4-2.2l-1.4 2.2l-.4-2.4l-2.6-.4l1.6-1.4l-1-2.4l2.6.6z' fill='#FF6F8E' fill-opacity='.8'/>", 24, 20), 24, 20),
     'maple': (sv("<rect width='24' height='20' fill='#FFFFFF'/><rect width='5' height='20' fill='#FF6F8E' fill-opacity='.85'/>"
                  "<rect x='19' width='5' height='20' fill='#FF6F8E' fill-opacity='.85'/>"
-                 "<path d='M12 4.4l1.2 2.6l2.4-1l-.6 3.4l2.2-1.2l.4 1.6l1.6.2l-1 2.2l.8.8l-3.6 2.4l.4 1.2l-3.2-.6v3h-1.2v-3l-3.2.6l.4-1.2l-3.6-2.4l.8-.8l-1-2.2l1.6-.2l.4-1.6l2.2 1.2l-.6-3.4l2.4 1z' fill='#FF6F8E'/>", 24, 20), 24, 20),
+                 "<path d='M12 5.42l1.03 2.24l2.06-.86l-.52 2.92l1.89-1.03l.34 1.38l1.38.17l-.86 1.89l.69.69l-3.1 2.06l.34 1.03l-2.75-.52v2.58h-1.03v-2.58l-2.75.52l.34-1.03l-3.1-2.06l.69-.69l-.86-1.89l1.38-.17l.34-1.38l1.89 1.03l-.52-2.92l2.06.86z' fill='#FF6F8E'/>", 24, 20), 24, 20),   # the leaf (x 5.8-18.2) clears both bars
     'snow': (sv("<rect width='24' height='20' fill='#CCEBFF'/><g stroke='#FFFFFF' stroke-width='1.6' stroke-linecap='round'>"
                 "<path d='M7 4.4V13.6M3 6.7L11 11.3M3 11.3L11 6.7'/><path d='M18 11V17M15.4 12.5L20.6 15.5M15.4 15.5L20.6 12.5'/></g>"
                 "<circle cx='19' cy='4' r='1.2' fill='#FFFFFF'/><circle cx='3' cy='17' r='1' fill='#FFFFFF'/>", 24, 20), 24, 20),

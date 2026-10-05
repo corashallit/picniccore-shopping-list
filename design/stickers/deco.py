@@ -127,7 +127,7 @@ d('camera', 'Instant camera', [
     F(('circle', 24, 27.4, 8.2), 'ramune', 'w', ol=2),
     F(('circle', 24, 27.4, 4.4), 'ramune', 'm', ol=1.6, cut=False),
     F(('rect', 32.4, 17, 5.6, 3.6, 1.4), 'lemon', 'p', ol=1.3, cut=False),
-], gloss=[G('M9.6 19.6V25', 2.4), G('M20.2 25.6Q21 23.4 23.2 23', 1.6)])
+], gloss=[G('M9.6 19.6V25', 2.4), DOT(22.8, 26.2, .7)])   # the lens glint sits inside the inner ring
 d('basketdeco', 'Picnic basket', [
     TUBE('M13.6 24C13.6 8 34.4 8 34.4 24', 'cocoa', 4.6, 'p'),
     F(('path', 'M6 24.4H42L39.6 39.4Q39 42 36.4 42H11.6Q9 42 8.4 39.4Z'), 'cocoa', 'p', band=.26, tex=['M5 30H43', 'M5 35.6H43', 'M13 24V42', 'M19 24V42', 'M25 24V42', 'M31 24V42', 'M37 24V42']),
@@ -251,7 +251,7 @@ PICTO = {
     'sun': ''.join(f'<rect x="10.8" y="1.4" width="2.4" height="4" rx="1.2" transform="rotate({a} 12 12)"/>' for a in range(0, 360, 45)) + '<circle cx="12" cy="12" r="6"/>',
     # r9 · seasonal sheet stamps (egg 11)
     'maple': '<path d="M12 2L13.6 6.4L16.4 5L15.8 9.4L19.6 8L18.6 11L21 12L17.4 15L18 17L13 16.4L12.8 21.6H11.2L11 16.4L6 17L6.6 15L3 12L5.4 11L4.4 8L8.2 9.4L7.6 5L10.4 6.4Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>',
-    'pumpkin': '<path d="M12 7C6 7 3 10 3 14C3 18 6.5 21 12 21C17.5 21 21 18 21 14C21 10 18 7 12 7Z"/><path d="M12 7.6V20.6M7.6 8.6C6 12 6 16 7.6 20.2M16.4 8.6C18 12 18 16 16.4 20.2" stroke="#fff" stroke-width="1.4" fill="none"/><path d="M12 7.6C12 5 13 3.6 15 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
+    'pumpkin': '<path d="M12 7C6 7 3 10 3 14C3 18 6.5 21 12 21C17.5 21 21 18 21 14C21 10 18 7 12 7Z"/><path d="M12 8.4V19.8M7.6 9.4C6 12.4 6 15.6 7.6 18.8M16.4 9.4C18 12.4 18 15.6 16.4 18.8" stroke="#fff" stroke-width="1.4" fill="none"/><path d="M12 7.6C12 5 13 3.6 15 3" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>',
     'ghost': '<path d="M5 21V11C5 6.6 8 3.6 12 3.6S19 6.6 19 11V21L16.6 19.2L14.3 21L12 19.2L9.7 21L7.4 19.2Z"/><circle cx="9.4" cy="11" r="1.5" fill="#fff"/><circle cx="14.6" cy="11" r="1.5" fill="#fff"/>',
     'snowflake': '<g stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"><path d="M12 2.6V21.4M3.9 7.3L20.1 16.7M3.9 16.7L20.1 7.3"/><path d="M9.6 4.4L12 6.6L14.4 4.4M9.6 19.6L12 17.4L14.4 19.6"/></g>',
     'envelope': ('<rect x="2.4" y="5.4" width="19.2" height="13.6" rx="2.4"/>'
@@ -300,7 +300,7 @@ TB = {
     'store': ('<path d="M4.4 9.6L6.2 4.6H17.8L19.6 9.6"/><path d="M4.4 9.6Q6.3 12.2 8.2 9.6Q10.1 12.2 12 9.6Q13.9 12.2 15.8 9.6Q17.7 12.2 19.6 9.6"/>'
               '<path d="M5.8 12V19.6H18.2V12"/><path d="M10 19.6V15.4H14V19.6"/>'),
     'lists': '<path d="M9.6 6.6H19.4M9.6 12H19.4M9.6 17.4H19.4"/><path d="M5 6.6h.1M5 12h.1M5 17.4h.1" stroke-width="2.8"/>',
-    'trash': '<path d="M4.6 7H19.4"/><path d="M9.4 7V4.8H14.6V7"/><path d="M6.6 7L7.6 19.4H16.4L17.4 7"/><path d="M10.2 10.6V16M13.8 10.6V16"/>',
+    'trash': '<path d="M4.6 7H19.4"/><path d="M9.4 6V3.6H14.6V6"/><path d="M6.6 7L7.6 19.4H16.4L17.4 7"/><path d="M10.2 10.6V16M13.8 10.6V16"/>',
     'scissors': '<circle cx="6.6" cy="7" r="2.6"/><circle cx="6.6" cy="17" r="2.6"/><path d="M8.8 8.4L19.6 17M8.8 15.6L19.6 7"/>',
     'album': ('<rect x="6" y="3.6" width="13.4" height="16.8" rx="2.4"/><path d="M6 7.4H3.8M6 12H3.8M6 16.6H3.8"/>'
               f'<path d="{heart_path(12.7, 12.2, 3)}"/>'),
@@ -313,8 +313,8 @@ TB = {
                  '<path d="M16.8 8.4h.1"/><path d="M7.8 17.4H16.2"/>'),
     'jar': ('<path d="M7.4 4.2H16.6"/><path d="M8.2 4.2V7.2Q5.4 8.6 5.4 11.6V17.8Q5.4 20 7.6 20H16.4Q18.6 20 18.6 17.8V11.6Q18.6 8.6 15.8 7.2V4.2"/>'
             '<path d="M9 12.2H15V16.4H9Z"/>'),
-    'basket': '<path d="M4.6 10H19.4L17.8 18.4Q17.6 19.6 16.4 19.6H7.6Q6.4 19.6 6.2 18.4Z"/><path d="M8.6 10L11 4.8M15.4 10L13 4.8"/><path d="M9.8 13V16.4M14.2 13V16.4"/>',
-    'torn': '<path d="M6 3.6H14.4L18.4 7.6V16.6L16.4 18.6L14.2 16.8L12 18.8L9.8 16.8L7.8 18.6L6 16.8Z"/><path d="M14.4 3.6V7.6H18.4"/>',
+    'basket': '<path d="M4.6 10H19.4L17.8 18.4Q17.6 19.6 16.4 19.6H7.6Q6.4 19.6 6.2 18.4Z"/><path d="M8.6 10L12 4.6L15.4 10"/><path d="M9.8 13V16.4M14.2 13V16.4"/>',
+    'torn': '<path d="M6 3.6H14.4L18.4 7.6V16.6L16.4 18.6L14.2 16.8L12 18.8L9.8 16.8L7.8 18.6L6 16.8Z"/><path d="M14.4 3.6V7.6H18.4Z" fill="currentColor"/>',
     'paste': '<rect x="5.6" y="5" width="12.8" height="15.4" rx="2.4"/><path d="M9.4 5V3.6H14.6V5Q14.6 6.6 13 6.6H11Q9.4 6.6 9.4 5Z"/><path d="M8.8 11H15.2M8.8 14.4H13"/>',
     'heart': f'<path d="{heart_path(12, 12.6, 8.2)}"/>',
     'star': f'<path d="{star_path(12, 12.9, 9.4, 4.3)}" fill="currentColor"/>',
