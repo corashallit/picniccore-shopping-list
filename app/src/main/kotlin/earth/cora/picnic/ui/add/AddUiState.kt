@@ -240,6 +240,13 @@ data class AddCommit(
 ) {
     val canUndo: Boolean get() = added.isNotEmpty() || revived.isNotEmpty()
 
+    /**
+     * The note names the aisle its one added item was sorted into ("Added Toothpaste to Household ♡"), so it offers
+     * "Move" (§6.2, §4.15; Cora, 5 October). Not for an add to a list off screen, an add as typed, or Everything else.
+     */
+    val movable: Boolean
+        get() = added.size == 1 && !otherList && !asTypedNoKey && added.single().aisleId != null && !aisleTitle.isNullOrBlank()
+
     /** True when nothing changed (no new, revived or already-there rows). */
     val empty: Boolean get() = added.isEmpty() && revived.isEmpty() && alreadyThere.isEmpty()
 

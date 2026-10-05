@@ -13,8 +13,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * fixed in core's ModelDefaults; reduced motion follows the system. The key itself is never part of this
  * class: only whether one is set and a masked hint.
  * DataStore keys (DataStoreSettingsRepository): eggs, sounds, haptics, next_stop_card, celebration, weather,
- * use_my_area, dusk_binder, surprise_lab, ants_day (egg 17's last parade); and seen_books (the album's shown trip books,
- * §7.8). Consumers ask [allows] for a Surprises switch, so SurprisesGatingTest
+ * use_my_area, dusk_binder, surprise_lab, ants_day (egg 17's last parade); seen_books (the album's shown trip books,
+ * §7.8); move_note_shown and hold_hint_done (the one-time move notes, §6.1, §6.3). Consumers ask [allows] for a Surprises
+ * switch, so SurprisesGatingTest
  * covers every gate in one table.
  */
 data class AppSettings(
@@ -42,6 +43,10 @@ data class AppSettings(
     val duskBinder: Boolean = false,
     /** The Surprise lab is unlocked (7 taps on the version line, §6.9). */
     val surpriseLab: Boolean = false,
+    /** The first move's fuller note ("… Smart sorting puts other kinds of toothpaste there too.") has been shown (§6.3). */
+    val moveNoteShown: Boolean = false,
+    /** The one-time "Hold an item to edit it or move it to another aisle" note has been shown, or she held a row first (§6.1). */
+    val holdHintDone: Boolean = false,
 ) {
     /** Whether the Surprises switch [surprise] is on (§6.8). Each switch gates exactly its own feature (item 228). */
     fun allows(surprise: Surprise): Boolean = when (surprise) {
@@ -99,6 +104,12 @@ interface SettingsRepository {
     /** The Surprise lab is unlocked (7 taps on the version line, §6.9); persisted. */
     suspend fun setSurpriseLab(unlocked: Boolean)
 
+    /** The first move's fuller note was shown (§6.3, Cora 5 October): later moves get the short one. Persisted. */
+    suspend fun markMoveNoteShown()
+
+    /** The hold hint was shown, or she held a row before it could be (§6.1, Cora 5 October): it never comes back. Persisted. */
+    suspend fun markHoldHintDone()
+
     /** Egg 17: the day (her local date) the ant parade last marched, or null; it marches at most once a day (§12.2). */
     suspend fun antsDay(): java.time.LocalDate?
 
@@ -148,6 +159,14 @@ class InMemorySettingsRepository(
 
     override suspend fun setSurpriseLab(unlocked: Boolean) {
         state.value = state.value.copy(surpriseLab = unlocked)
+    }
+
+    override suspend fun markMoveNoteShown() {
+        state.value = state.value.copy(moveNoteShown = true)
+    }
+
+    override suspend fun markHoldHintDone() {
+        state.value = state.value.copy(holdHintDone = true)
     }
 
     private var ants: java.time.LocalDate? = null

@@ -123,4 +123,13 @@
         <item quantity="one">%1$d left in Everything else</item>
         <item quantity="other">%1$d left in Everything else</item>
     </plurals>
+    <!-- A move (Cora, 5 October; §6.3, §4.15): every move says what it changed, with Undo. "From now on" is the learned
+         correction: that item goes to that aisle on every later add and re-sort. The first move to an aisle says once that
+         smart sorting (the prompt rules) sends other kinds of the item there too; %3$s is the item's kind, lower case. -->
+    <string name="list_toast_moved">%1$s goes in %2$s from now on</string>
+    <string name="list_toast_moved_first">%1$s goes in %2$s from now on. Smart sorting puts other kinds of %3$s there too.</string>
+    <string name="list_toast_moved_unsorted">%1$s moved to Everything else</string>
+    <!-- The one-time hold hint (Cora, 5 October; §6.1): the first time her list shows items sorted into aisles. -->
+    <string name="list_hint_hold">Hold an item to edit it or move it to another aisle</string>
+    <string name="list_hint_hold_ok">Got it</string>
 </resources>

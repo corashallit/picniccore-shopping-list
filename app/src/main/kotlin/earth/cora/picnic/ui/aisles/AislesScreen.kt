@@ -96,6 +96,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import earth.cora.picnic.R
 import earth.cora.picnic.core.assistant.AisleSyncReport
 import earth.cora.picnic.core.model.AisleStyle
+import earth.cora.picnic.core.model.Aisles
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.displayName
 import earth.cora.picnic.ui.a11y.focusRingIndication
@@ -149,6 +150,8 @@ class AislesActions(
     val onStopEditing: () -> Unit = {},
     val onRename: (aisleId: String, name: String) -> Unit = { _, _ -> },
     val onStoreAisle: (aisleId: String, number: Int?) -> Unit = { _, _ -> },
+    /** The label's "Also here" note (§6.7; blank removes it). */
+    val onNote: (aisleId: String, note: String) -> Unit = { _, _ -> },
     val onFamily: (aisleId: String, family: String) -> Unit = { _, _ -> },
     val onPattern: (aisleId: String, pattern: String) -> Unit = { _, _ -> },
     val onBasket: (aisleId: String, kind: BasketKind) -> Unit = { _, _ -> },
@@ -176,6 +179,18 @@ fun AislesRoute(vm: AislesViewModel, onBack: () -> Unit) {
                         onAction = { vm.undoRemoved(event.before) },
                     ),
                 )
+                // A note changed: new items follow it now, the ones already on her list on a re-sort (a light offer;
+                // several note edits in a row fold into one note).
+                AislesEvent.NoteSaved -> toasts.show(
+                    ToastMessage(
+                        resources.getString(R.string.aisles_note_saved),
+                        kind = "aisle-note",
+                        actionLabel = resources.getString(R.string.aisles_note_resort),
+                        undo = false,
+                        onAction = vm::resort,
+                        merge = { current, incoming -> incoming.copy(id = current.id) },
+                    ),
+                )
             }
         }
     }
@@ -195,6 +210,7 @@ fun AislesRoute(vm: AislesViewModel, onBack: () -> Unit) {
             onStopEditing = vm::stopEditing,
             onRename = vm::rename,
             onStoreAisle = vm::setStoreAisle,
+            onNote = vm::setNote,
             onFamily = vm::setFamily,
             onPattern = vm::setPattern,
             onBasket = vm::setBasket,
@@ -231,6 +247,7 @@ object AislesTags {
     fun label(position: Int): String = "aisles_label_$position"
     fun handle(position: Int): String = "aisles_handle_$position"
     fun nameField(): String = "aisles_name_field"
+    fun noteField(): String = "aisles_note_field"
 }
 
 /** The gap between two labels on the sheet. */
@@ -593,11 +610,13 @@ private fun AisleLabel(
     val shadows = PicnicTheme.shadows
     val look = AisleLooks.of(position, label.style)
     val name = label.aisle.displayName()
-    val description = if (label.storeAisle != null) {
+    val base = if (label.storeAisle != null) {
         stringResource(R.string.aisles_label_store, label.aisle.name, position, label.storeAisle)
     } else {
         stringResource(R.string.aisles_label, label.aisle.name, position)
     }
+    // TalkBack hears the "Also here" note with the label, as the eye reads it under the name.
+    val description = label.aisle.note?.let { stringResource(R.string.aisles_label_note, base, it) } ?: base
     val moveUp = stringResource(R.string.aisles_move_up)
     val moveDown = stringResource(R.string.aisles_move_down)
     val shadow = if (lifted) shadows.hsLift else shadows.hs
@@ -688,7 +707,7 @@ private fun AisleLabel(
                         Spacer(Modifier.weight(1f))
                         tools()
                     }
-                    LabelName(name, label.storeAisle, Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 12.dp))
+                    LabelName(name, label.storeAisle, label.aisle.note, Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 12.dp))
                 }
             } else {
                 Row(
@@ -700,7 +719,7 @@ private fun AisleLabel(
                 ) {
                     handle()
                     number()
-                    LabelName(name, label.storeAisle, Modifier.weight(1f).padding(start = 8.dp, end = 6.dp, top = 10.dp, bottom = 10.dp))
+                    LabelName(name, label.storeAisle, label.aisle.note, Modifier.weight(1f).padding(start = 8.dp, end = 6.dp, top = 10.dp, bottom = 10.dp))
                     tools()
                 }
             }
@@ -711,11 +730,28 @@ private fun AisleLabel(
 
 /**
  * The label's name (Zen Maru 700 16 sp, wrapping onto balanced lines, never cut) and its "store aisle 2" (13 sp): on
- * the name's last line when it fits there, else on the next line.
+ * the name's last line when it fits there, else on the next line. An "Also here" [note] (Cora, 5 October) is a quiet
+ * 13 sp line under them, "also here: toothpaste, floss", wrapping, never cut; only My store shows notes.
  */
+@Composable
+private fun LabelName(name: String, storeAisle: Int?, note: String?, modifier: Modifier) {
+    if (note == null) {
+        LabelNameLine(name, storeAisle, modifier)
+    } else {
+        Column(modifier) {
+            LabelNameLine(name, storeAisle, Modifier)
+            Text(
+                stringResource(R.string.aisles_note_line, note),
+                style = PicnicTheme.type.caption.copy(color = PicnicTheme.colors.ballpoint),
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LabelName(name: String, storeAisle: Int?, modifier: Modifier) {
+private fun LabelNameLine(name: String, storeAisle: Int?, modifier: Modifier) {
     val c = PicnicTheme.colors
     FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         // Balanced lines, "&" kept with the word after it (§0.4), as on the list's tabs.
@@ -768,6 +804,7 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
     val unnamed = label.aisle.name == defaultName
     var name by remember(id) { mutableStateOf(if (unnamed) "" else label.aisle.name) }
     var number by remember(id) { mutableStateOf(label.storeAisle?.toString().orEmpty()) }
+    var note by remember(id) { mutableStateOf(label.aisle.note.orEmpty()) }
     val nameFocus = remember { FocusRequester() }
     // The name field takes focus once it is on screen: a frame later, so its focus underline (a strawberry line and the
     // heart, §4.8) is already listening for the focus it is given.
@@ -780,6 +817,7 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
         val n = number.trim().toIntOrNull()?.takeIf { it > 0 }
         if (n != label.storeAisle) actions.onStoreAisle(id, n)
     }
+    val commitNote = { if (Aisles.cleanNote(note) != label.aisle.note.orEmpty()) actions.onNote(id, note) }
     val familyNames = stringArrayResource(R.array.aisles_family_names)
     val patternNames = stringArrayResource(R.array.aisles_pattern_names)
     val basketNames = stringArrayResource(R.array.aisles_basket_names)
@@ -822,6 +860,26 @@ private fun LabelEditor(label: AisleLabelUi, look: AisleLook, actions: AislesAct
                     },
             )
         }
+        // "Also here" (Cora, 5 October; §6.7): what this store keeps in this aisle where you would not look for it. One
+        // line of up to Aisles.NOTE_MAX characters, saved on Done or when the field lets go. Only My store shows it.
+        var noteFocused by remember { mutableStateOf(false) }
+        PicnicTextField(
+            value = note,
+            onValueChange = { v -> note = v.replace('\n', ' ').take(Aisles.NOTE_MAX) },
+            label = stringResource(R.string.aisles_note_field),
+            placeholder = stringResource(R.string.aisles_note_placeholder),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { commitNote() }),
+            supportingText = stringResource(R.string.aisles_note_hint, Aisles.NOTE_MAX),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(AislesTags.noteField())
+                .onFocusChanged {
+                    if (noteFocused && !it.isFocused) commitNote()
+                    noteFocused = it.isFocused
+                },
+        )
         val white = PicnicTheme.colors.stickerWhite
         SwatchGrid(stringResource(R.string.aisles_colour), Families.rotation) { i, family ->
             SwatchCell(look.family == family, familyNames.getOrElse(i) { family.name }, onClick = { actions.onFamily(id, family.name) }) {

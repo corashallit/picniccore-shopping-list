@@ -150,6 +150,8 @@
     <string name="add_toast_shiny">★ shiny!</string>
     <string name="add_toast_nothing">Nothing to add</string>
     <string name="add_toast_undo">Undo</string>
+    <!-- The add note's second chip (Cora, 5 October; §6.2, §4.15): one item sorted into an aisle can go to another. -->
+    <string name="add_toast_move">Move</string>
     <string name="add_toast_join">%1$s · %2$s</string>
     <plurals name="add_toast_sort_failed">
         <item quantity="one">%1$s · %2$d left in Everything else</item>
