@@ -41,10 +41,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -61,6 +65,9 @@ import earth.cora.picnic.ui.theme.PicnicIconButton
 import earth.cora.picnic.ui.theme.PicnicSurface
 import earth.cora.picnic.ui.theme.PicnicSwitch
 import earth.cora.picnic.ui.theme.PicnicText
+import androidx.compose.ui.text.AnnotatedString
+import earth.cora.picnic.ui.theme.spokenWithoutGlyphs
+import earth.cora.picnic.ui.theme.INLINE_GLYPHS
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.PuffyText
 import earth.cora.picnic.ui.theme.SectionDivider
@@ -156,8 +163,8 @@ private fun SubtitleTopBar(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
-                // Balanced lines at large text: "★ 64 of 216 / collected · 3 holo", never a dot ending a line.
-                if (subtitle != null) PadPatch { PicnicText(subtitle, style = t.appBarSubtitle.copy(color = c.onPadSoft, lineBreak = LineBreak.Heading)) }
+                // Broken between its parts where it wraps ("walking order" / "colours · baskets"), never at a dot.
+                if (subtitle != null) PadPatch { PartsText(subtitle.split(PARTS_SEPARATOR), style = t.appBarSubtitle.copy(color = c.onPadSoft)) }
                 trailing?.invoke()
             }
         }
@@ -316,4 +323,59 @@ fun MoreMenuButton(items: List<MenuItem>, expanded: Boolean, onExpandedChange: (
             }
         }
     }
+}
+
+/** What joins a line's parts: "walking order · colours · baskets". */
+const val PARTS_SEPARATOR: String = " · "
+
+/**
+ * [parts] joined with " · " on as few lines as fit, broken only between them and as evenly as can be ("19 of 19
+ * stickers" / "perfect · receipt"): a dot never starts or ends a line, and no part is left alone under the others when a
+ * more even break fits. A part too long for a line wraps inside itself, in balanced lines. Inline ★ and ♡ are drawn as
+ * vectors ([PicnicText]); TalkBack reads the parts with their dots, however the lines fall.
+ */
+@Composable
+fun PartsText(parts: List<String>, style: TextStyle, modifier: Modifier = Modifier) {
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(modifier) {
+        val max = constraints.maxWidth
+        val text = remember(parts, style, max) {
+            breakBetweenParts(parts, max) { measurer.measure(it, style, maxLines = 1, softWrap = false).size.width }
+        }
+        val balanced = style.copy(lineBreak = LineBreak.Heading)
+        if (parts.any { part -> part.any { it in INLINE_GLYPHS } }) {
+            // TalkBack reads the parts with their separators wherever the lines break (PicnicText reads lines as one).
+            val spoken = spokenWithoutGlyphs(parts.joinToString(PARTS_SEPARATOR))
+            Box(Modifier.clearAndSetSemantics { this.text = AnnotatedString(spoken) }) { PicnicText(text, style = balanced) }
+        } else {
+            Text(text, style = balanced)
+        }
+    }
+}
+
+/**
+ * [parts] as one text, a line break in place of " · " wherever that makes the fewest lines of at most [max] px (a part
+ * too long for a line counts the lines it wraps to), then the most even ones. [width] measures one unbroken line.
+ */
+internal fun breakBetweenParts(parts: List<String>, max: Int, width: (String) -> Int): String {
+    if (parts.size < 2 || max <= 0) return parts.joinToString(PARTS_SEPARATOR)
+    var best = parts.joinToString(PARTS_SEPARATOR)
+    var bestLines = Int.MAX_VALUE
+    var bestWidest = Int.MAX_VALUE
+    // Every way to break between the parts (a handful at most).
+    for (mask in 0 until (1 shl (parts.size - 1).coerceAtMost(8))) {
+        val lines = mutableListOf(parts.first())
+        for (i in 1 until parts.size) {
+            if (i <= 8 && mask and (1 shl (i - 1)) != 0) lines += parts[i] else lines[lines.lastIndex] = lines.last() + PARTS_SEPARATOR + parts[i]
+        }
+        val widths = lines.map(width)
+        val count = widths.sumOf { w -> ((w + max - 1) / max).coerceAtLeast(1) }
+        val widest = widths.max()
+        if (count < bestLines || (count == bestLines && widest < bestWidest)) {
+            bestLines = count
+            bestWidest = widest
+            best = lines.joinToString("\n")
+        }
+    }
+    return best
 }

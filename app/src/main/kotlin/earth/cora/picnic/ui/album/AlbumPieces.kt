@@ -68,6 +68,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.platform.testTag
 import earth.cora.picnic.ui.a11y.focusRingIndication
+import earth.cora.picnic.ui.common.PartsText
 import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicGlyph
@@ -777,47 +778,9 @@ private fun BookRow(row: BookRowUi, onOpen: () -> Unit, onAppeared: () -> Unit) 
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(row.dateLabel, style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint))
-                PartsLine(parts, PicnicTheme.type.caption.copy(color = c.ballpoint))
+                PartsText(parts, PicnicTheme.type.caption.copy(color = c.ballpoint))
             }
         }
-    }
-}
-
-/**
- * "19 of 19 stickers · perfect · receipt" on as few lines as fit, broken only between its parts and evenly ("19 of 19
- * stickers" / "perfect · receipt"): a dot never ends a line, and no part is left alone under the others when a more even
- * break fits. A part too long for a line wraps inside itself.
- */
-@Composable
-private fun PartsLine(parts: List<String>, style: androidx.compose.ui.text.TextStyle) {
-    val measurer = rememberTextMeasurer()
-    BoxWithConstraints {
-        val max = constraints.maxWidth
-        val text = remember(parts, style, max) {
-            fun width(t: String) = measurer.measure(t, style, maxLines = 1, softWrap = false).size.width
-            // Every way to break between the parts (four at most): the fewest lines that fit, then the most even.
-            val n = parts.size
-            var best = parts.joinToString(" · ")
-            var bestLines = Int.MAX_VALUE
-            var bestWidest = Int.MAX_VALUE
-            for (mask in 0 until (1 shl (n - 1).coerceAtLeast(0))) {
-                val lines = mutableListOf(parts.firstOrNull().orEmpty())
-                for (i in 1 until n) {
-                    if (mask and (1 shl (i - 1)) != 0) lines += parts[i] else lines[lines.lastIndex] = lines.last() + " · " + parts[i]
-                }
-                val widths = lines.map { width(it) }
-                // A line too long wraps inside itself: it counts as two.
-                val count = lines.size + widths.count { it > max }
-                val widest = widths.max()
-                if (count < bestLines || (count == bestLines && widest < bestWidest)) {
-                    bestLines = count
-                    bestWidest = widest
-                    best = lines.joinToString("\n")
-                }
-            }
-            best
-        }
-        Text(text, style = style)
     }
 }
 
@@ -856,7 +819,7 @@ internal fun PerfectWeeksCard(streak: Int, earned: Boolean, holo: Boolean, modif
     val ink = if (holo) c.ballpoint else c.ink
     val inkSoft = if (holo) c.ballpoint else c.inkSoft
     val weeks = if (earned) 4 else streak.coerceIn(0, 4)
-    // "week 4 of 4 · sakura sheet unlocked", broken between its parts as the trip books' lines are.
+    // "week 4 of 4 · sakura sheet unlocked", broken between its parts (PartsText) as the trip books' lines are.
     val parts = listOfNotNull(stringResource(R.string.album_perfect_week, weeks), stringResource(R.string.album_perfect_unlocked).takeIf { earned })
     Box(modifier.fillMaxWidth()) {
         PicnicSurface(Modifier.fillMaxWidth()) {
@@ -874,7 +837,7 @@ internal fun PerfectWeeksCard(streak: Int, earned: Boolean, holo: Boolean, modif
                         style = PicnicTheme.type.smallTitle.copy(color = ink),
                         modifier = Modifier.semantics { heading() },
                     )
-                    PartsLine(parts, PicnicTheme.type.caption.copy(color = inkSoft))
+                    PartsText(parts, PicnicTheme.type.caption.copy(color = inkSoft))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 10.dp)) {
                     WeekStamps.forEachIndexed { i, (family, pictogram) ->
