@@ -211,10 +211,9 @@ class ListViewModel(
                 .combine(drawFailure) { inputs, failure -> inputs.copy(drawFailure = failure) }
                 .collect { onStates(it) }
         }
-        // A drawing she asked for that did not work: the Edit sheet says so (§0.4, 5 October).
+        // A drawing she asked for that did not work: the Edit sheet says so (§0.4, 5 October). Opening or closing the
+        // sheet, or a new try, clears it.
         viewModelScope.launch { icons.drawFailures.collect { drawFailure.value = it } }
-        // Another item in the sheet (or none): an earlier failure is moot.
-        viewModelScope.launch { editingId.collect { drawFailure.value = null } }
         // The catch-up sorted what waited for the connection: the refresh's note says so, once (§0.4, 5 October).
         viewModelScope.launch {
             catchUp.note.filterNotNull().collect { note ->
@@ -768,12 +767,14 @@ class ListViewModel(
      */
     fun openEdit(itemId: String) {
         moveFirst = false
+        drawFailure.value = null
         editingId.value = itemId
         if (!holdHintGiven && !_surprises.value.holdHintDone) holdHintShown()
     }
 
     fun closeEdit() {
         moveFirst = false
+        drawFailure.value = null
         editingId.value = null
     }
 
@@ -843,6 +844,7 @@ class ListViewModel(
      */
     fun openMove(itemId: String) {
         moveFirst = true
+        drawFailure.value = null
         editingId.value = itemId
     }
 

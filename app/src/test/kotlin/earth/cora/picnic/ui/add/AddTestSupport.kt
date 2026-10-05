@@ -84,6 +84,10 @@ fun addRig(
     now: () -> Long = { AddFixtures.NOW },
     /** File reads run here; Unconfined keeps them on the test's scheduler (Dispatchers.IO would race advanceUntilIdle). */
     io: CoroutineDispatcher = Dispatchers.Unconfined,
+    /** Whether the phone is online (rule 2b, §0.4 5 October). */
+    online: () -> Boolean = { true },
+    /** Where failed photos and voice notes are kept (none by default). */
+    keeper: earth.cora.picnic.platform.CaptureKeeper = earth.cora.picnic.platform.CaptureKeeper.None,
 ): AddRig {
     val store = InMemoryStateStore(state)
     val icons = RecordingIconRepository()
@@ -111,6 +115,8 @@ fun addRig(
         ioDispatcher = io,
         announcer = announcer,
         words = context::getString,
+        online = online,
+        keeper = keeper,
     )
     vm.showList(AddFixtures.LIST_ID)
     return AddRig(vm, store, assistant, icons, photos, recorder, surprises, feedback, announcer)

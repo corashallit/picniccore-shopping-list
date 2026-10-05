@@ -10,10 +10,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
 
 /*
@@ -45,9 +46,10 @@ interface CatchUpNotes {
 /**
  * The catch-up. [start] runs it once at the cold start (the icon cascade always resumes, offline too, for its once-per-
  * process sweep; the rest only online with a key) and then after every arrival of a connection, [debounceMs] after the
- * last one. Never two at once: a run that is going on absorbs the arrivals that come meanwhile (one more run follows),
- * and runs are at least [minGapMs] apart (a connection that flaps waits, never piles up calls). Without a key nothing
- * is sorted, decided or drawn ([hasKey]); the forecast does not need one ([weather] checks its own switch).
+ * last one. Never two at once: runs take turns on one lock, the arrivals that come during a run fold into one more run
+ * after it, and runs after arrivals are at least [minGapMs] apart (a connection that flaps waits, never piles up calls).
+ * Without a key nothing is sorted, decided or drawn ([hasKey]); the forecast does not need one ([weather] checks its own
+ * switch).
  */
 class CatchUp(
     private val network: NetworkStatus,
@@ -87,9 +89,11 @@ class CatchUp(
     @OptIn(FlowPreview::class)
     fun start() {
         if (!started.compareAndSet(false, true)) return
+        // Arrivals are followed from now, also while the cold start's run goes on (that one waits its turn after it).
+        val seen = network.arrivals.value
+        scope.launch { run(coldStart = true) }
         scope.launch {
-            run(coldStart = true)
-            network.arrivals.drop(1).debounce(debounceMs).conflate().collect {
+            network.arrivals.filter { it != seen }.debounce(debounceMs).conflate().collect {
                 val since = lastRunAt?.let { clock() - it }
                 if (since != null && since in 0 until minGapMs) delay(minGapMs - since)
                 run(coldStart = false)
@@ -98,36 +102,31 @@ class CatchUp(
     }
 
     /**
-     * One catch-up; false when it did nothing (another is running, the phone is offline, or there is no key). At a cold
-     * start the icon cascade resumes whatever the network (it asks nothing offline) and the forecast is left to the list
-     * opening (it checks it then).
+     * One catch-up, after any other that is going on; false when it did nothing (the phone is offline, or there is no
+     * key). At a cold start the icon cascade resumes whatever the network (it asks nothing offline) and the forecast is
+     * left to the list opening (it checks it then).
      */
-    suspend fun run(coldStart: Boolean): Boolean {
-        if (!running.tryLock()) return false
-        try {
-            if (coldStart) resumeStickers()
-            if (!network.online.value) return false
-            lastRunAt = clock()
-            if (!coldStart) safely("weather") { weather() }
-            if (!hasKeySafely()) return false
-            runs++
-            if (!coldStart) resumeStickers()
-            val report = try {
-                sortPending()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                PicnicLog.w("catch-up: sorting failed", e)
-                null
-            }
-            if (report != null && report.recategorized > 0) {
-                _note.value = CatchUpNote(++ids, report.recategorized, report.leftUnsorted)
-            }
-            safely("pantry stickers") { pantryStickers() }
-            return true
-        } finally {
-            running.unlock()
+    suspend fun run(coldStart: Boolean): Boolean = running.withLock {
+        if (coldStart) resumeStickers()
+        if (!network.online.value) return@withLock false
+        lastRunAt = clock()
+        if (!coldStart) safely("weather") { weather() }
+        if (!hasKeySafely()) return@withLock false
+        runs++
+        if (!coldStart) resumeStickers()
+        val report = try {
+            sortPending()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            PicnicLog.w("catch-up: sorting failed", e)
+            null
         }
+        if (report != null && report.recategorized > 0) {
+            _note.value = CatchUpNote(++ids, report.recategorized, report.leftUnsorted)
+        }
+        safely("pantry stickers") { pantryStickers() }
+        true
     }
 
     private suspend fun hasKeySafely(): Boolean = try {

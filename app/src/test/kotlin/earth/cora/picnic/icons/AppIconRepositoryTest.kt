@@ -22,6 +22,7 @@ import earth.cora.picnic.core.model.Correction
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.GroceryList
 import earth.cora.picnic.core.model.IconFit
+import earth.cora.picnic.core.model.normalizeName
 import earth.cora.picnic.core.model.setItemIcon
 import earth.cora.picnic.core.store.InMemoryStateStore
 import earth.cora.picnic.settings.AppSettings
@@ -29,6 +30,7 @@ import earth.cora.picnic.settings.InMemorySettingsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -122,6 +124,7 @@ class AppIconRepositoryTest {
         maskBundled: Boolean = true,
         albumIds: () -> Set<String> = { emptySet() },
         root: java.io.File = tmp.root,
+        online: () -> Boolean = { true },
     ): Harness {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val store = InMemoryStateStore(initial)
@@ -155,6 +158,7 @@ class AppIconRepositoryTest {
             tuning = tuning,
             compute = dispatcher,
             io = dispatcher,
+            online = online,
         )
         return Harness(repo, store, repoSettings, decider, assistant, cache, sheetCalls, processed, replaced)
     }
@@ -523,5 +527,138 @@ class AppIconRepositoryTest {
         assertTrue(h.assistant.drawn.isEmpty())
         assertTrue(h.repo.isBundled("lemon"))
         assertFalse(h.repo.isBundled("kimchi"))
+    }
+
+    // ---- offline (docs/DESIGN_STICKER.md §0.4, 5 October; items 354, 355) ----
+
+    /** Offline nothing is decided or drawn and no daily slot is used; the drawing waits and comes once online. */
+    @Test
+    fun offlineNothingIsDecidedOrDrawnUntilTheConnectionReturns() = runTest {
+        var online = false
+        val pending = item("1", "Spatula", IconFit.PENDING)
+        val approx = item("2", "Za'atar", IconFit.APPROXIMATE)
+        val h = harness(state(pending, approx), tuning = IconQueueTuning(dailyCap = 1), online = { online })
+        h.repo.submit(listOf(pending, approx))
+        settle()
+        assertTrue("no decider call offline", h.decider.calls.isEmpty())
+        assertTrue("no drawing offline", h.assistant.drawn.isEmpty())
+        assertEquals(IconFit.PENDING, h.item("1").iconFit)
+        assertEquals(listOf(normalizeName("Za'atar")), h.cache.drawLater())
+        assertTrue(h.repo.busy.value.isEmpty())
+
+        // The connection is back (the catch-up resumes the cascade): the pending name is decided, and the waiting drawing
+        // is made with the day's one slot, which offline never used.
+        online = true
+        h.decider.answer = { items -> items.associate { it.id to IconDecision("lemon", "fruit") } }
+        h.repo.resumePending()
+        settle()
+        // One call decides the pending name; the waiting drawing asks once for its brief (it lost the batcher's).
+        assertEquals(setOf(listOf("spatula"), listOf(normalizeName("Za'atar"))), h.decider.calls.map { c -> c.map { it.id } }.toSet())
+        assertEquals("lemon", h.item("1").icon)
+        assertEquals(listOf("Za'atar"), h.assistant.drawn)
+        assertNotNull(h.item("2").customIconId)
+        assertTrue("drawn: it no longer waits", h.cache.drawLater().isEmpty())
+    }
+
+    /** A drawing that fails on the way (offline, a network error, a timeout) gives its slot back and waits for the connection. */
+    @Test
+    fun aDrawingThatFailsOnTheWayGivesItsSlotBackAndWaits() = runTest {
+        for (error in listOf<LlmError>(LlmError.Offline(), LlmError.Network(null), LlmError.Timeout())) {
+            val root = tmp.newFolder()
+            val a = item("1", "Gochujang", IconFit.APPROXIMATE)
+            var fail = true
+            val h = harness(state(a), tuning = IconQueueTuning(dailyCap = 1), root = root, draw = { r -> if (fail) throw error else drawnOk(r) })
+            h.repo.submit(listOf(a))
+            settle()
+            assertNull(h.item("1").customIconId)
+            assertEquals("${error::class.simpleName}: it waits", listOf("gochujang"), h.cache.drawLater())
+
+            // Later the same day (cap 1): the slot came back, so the waiting drawing is made.
+            fail = false
+            h.repo.resumePending()
+            settle()
+            assertNotNull("${error::class.simpleName}: drawn with the refunded slot", h.item("1").customIconId)
+            assertTrue(h.cache.drawLater().isEmpty())
+        }
+    }
+
+    /** A refusal, the quota or an unusable answer keep their slot and do not wait for anything. */
+    @Test
+    fun refusalsQuotaAndBadAnswersKeepTheirSlot() = runTest {
+        val errors = listOf<LlmError>(LlmError.Refusal("blocked"), LlmError.QuotaExceeded("insufficient_quota"), LlmError.BadResponse("nope", httpStatus = 400))
+        for (error in errors) {
+            val root = tmp.newFolder()
+            val a = item("1", "Gochujang", IconFit.APPROXIMATE)
+            val b = item("2", "Doenjang", IconFit.APPROXIMATE)
+            val h = harness(state(a, b), tuning = IconQueueTuning(dailyCap = 1), root = root, draw = { r -> if (r.itemName == "Gochujang") throw error else drawnOk(r) })
+            h.repo.submit(listOf(a))
+            settle()
+            assertTrue(h.cache.drawLater().isEmpty())
+            h.repo.submit(listOf(b))
+            settle()
+            assertEquals("${error::class.simpleName}: the slot stays used", listOf("Gochujang"), h.assistant.drawn)
+        }
+    }
+
+    /** The waiting names are kept in the icon index: a fresh start (a new repository on the same files) draws them. */
+    @Test
+    fun theDrawLaterSetSurvivesARestart() = runTest {
+        val root = tmp.newFolder()
+        val a = item("1", "Za'atar", IconFit.APPROXIMATE)
+        val first = harness(state(a), root = root, online = { false })
+        first.repo.submit(listOf(a))
+        settle()
+        assertEquals(listOf(normalizeName("Za'atar")), first.cache.drawLater())
+
+        val again = harness(first.store.current(), root = root)
+        again.repo.resumePending()
+        settle()
+        assertEquals(listOf("Za'atar"), again.assistant.drawn)
+        assertNotNull(again.item("1").customIconId)
+    }
+
+    /** A name nothing wants any more (she picked a sticker meanwhile) leaves the set at the next resume. */
+    @Test
+    fun aWaitingNameNothingWantsLeavesTheSet() = runTest {
+        val a = item("1", "Za'atar", IconFit.APPROXIMATE)
+        var online = false
+        val h = harness(state(a), online = { online })
+        h.repo.submit(listOf(a))
+        settle()
+        h.store.update { it.setItemIcon("L", "1", "condiments_generic", 1L, catalog) }
+        online = true
+        h.repo.resumePending()
+        settle()
+        assertTrue(h.assistant.drawn.isEmpty())
+        assertTrue(h.cache.drawLater().isEmpty())
+    }
+
+    /** "Draw a new sticker" that did not work says so (the Edit sheet listens): offline, refused, or otherwise. */
+    @Test
+    fun aRedrawThatFailsIsReported() = runTest {
+        var online = true
+        var error: LlmError = LlmError.BadResponse("nope")
+        val a = item("1", "Gochujang", IconFit.APPROXIMATE)
+        val h = harness(state(a), online = { online }, draw = { throw error })
+        val failures = mutableListOf<DrawFailure>()
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { h.repo.drawFailures.collect { failures += it } }
+
+        h.repo.redraw("Gochujang")
+        settle()
+        error = LlmError.Refusal("blocked")
+        h.repo.redraw("Gochujang")
+        settle()
+        online = false
+        h.repo.redraw("Gochujang")
+        settle()
+        assertEquals(
+            listOf(
+                DrawFailure("gochujang"),
+                DrawFailure("gochujang", refused = true),
+                DrawFailure("gochujang", offline = true),
+            ),
+            failures,
+        )
+        assertEquals("offline nothing was sent", 2, h.assistant.drawn.size)
     }
 }

@@ -293,6 +293,27 @@ object ScreenFixtures {
             assertTrue("the note dropped in", framesUntil(3000) { exists(TOAST_TAG) })
             advance(600)
         },
+        // Offline (§0.4, 5 October): the bar's Send adds the note as typed, with the one note that says the sorting waits.
+        Fixture("list_add_offline_toast", Surface.List) {
+            val rig = ListRig(ListFixture.state(), now = ListFixture.NOW, network = earth.cora.picnic.platform.FakeNetworkStatus(online = false)).inSeason()
+            showList(rig)
+            settle()
+            compose.runOnIdle {
+                rig.addVm.setText("paper towels, dish soap")
+                rig.addVm.send()
+            }
+            assertTrue("the note dropped in", framesUntil(3000) { exists(TOAST_TAG) })
+            advance(600)
+        },
+        // Offline with a key, the menu's Refresh says that sorting and new stickers wait (§0.4, 5 October).
+        Fixture("list_refresh_offline_toast", Surface.List) {
+            val rig = ListRig(ListFixture.state(), now = ListFixture.NOW, network = earth.cora.picnic.platform.FakeNetworkStatus(online = false)).inSeason()
+            showList(rig)
+            settle()
+            compose.runOnIdle { rig.vm.refresh() }
+            assertTrue("the note dropped in", framesUntil(3000) { exists(TOAST_TAG) })
+            advance(600)
+        },
         // Baking's last item: the aisle done, the Next card up and holding (§10).
         Fixture("nextcard", Surface.List) {
             showList(listRig())
@@ -355,6 +376,43 @@ object ScreenFixtures {
             )
             settle()
         },
+        // Offline (§0.4, 5 October): the Write tab's error with Try again, Add as plain lines and the "As typed" footer.
+        Fixture("add_write_offline", Surface.AddSheet) {
+            addSheet(
+                addBase.copy(
+                    sheetOpen = true, mode = AddMode.WRITE, text = PANCAKES, sentText = PANCAKES,
+                    phase = AddPhase.Failed(
+                        AddProblem.AI, message = earth.cora.picnic.core.llm.LlmError.Offline().friendlyMessage,
+                        retryable = true, canUsePlainLines = true, offline = true,
+                    ),
+                ),
+            )
+            settle()
+        },
+        // A photo kept after a failed Snap, shown again after a restart: its words, Try again, Delete photo, Take a photo.
+        Fixture("add_snap_kept", Surface.AddSheet) {
+            addSheet(
+                addBase.copy(
+                    sheetOpen = true, mode = AddMode.SNAP, kept = earth.cora.picnic.platform.CaptureKind.PHOTO,
+                    photo = SnapPhoto(AddFixtures.paperPhoto(), AddFixtures.NOW),
+                    phase = AddPhase.Failed(AddProblem.KEPT_PHOTO, retryable = true),
+                ),
+            )
+            settle()
+        },
+        // A voice note kept with its words after the reading failed: Try again, Add as plain lines, Delete voice note.
+        Fixture("add_speak_kept", Surface.AddSheet) {
+            addSheet(
+                addBase.copy(
+                    sheetOpen = true, mode = AddMode.SPEAK, kept = earth.cora.picnic.platform.CaptureKind.VOICE, transcript = AddFixtures.TRANSCRIPT,
+                    phase = AddPhase.Failed(
+                        AddProblem.AI, message = earth.cora.picnic.core.llm.LlmError.Offline().friendlyMessage,
+                        retryable = true, canUsePlainLines = true, offline = true,
+                    ),
+                ),
+            )
+            settle()
+        },
         Fixture("add_snap", Surface.AddSheet) {
             addSheet(
                 addBase.copy(
@@ -390,6 +448,15 @@ object ScreenFixtures {
             show { OverList { EditItemSheetContent(EditSamples.milk(), { _, _, _ -> }, {}, {}, {}, {}, {}, initialPage = EditPage.Icons) } }
             settle()
         },
+        // §0.4, 5 October: drawing rests offline and says why; a drawing that did not work says so.
+        Fixture("edit_draw_offline", Surface.EditSheet) {
+            show { OverList { EditItemSheetContent(EditSamples.milk().copy(offline = true), { _, _, _ -> }, {}, {}, {}, {}, {}) } }
+            settle()
+        },
+        Fixture("edit_draw_failed", Surface.EditSheet) {
+            show { OverList { EditItemSheetContent(EditSamples.milk().copy(drawFailed = earth.cora.picnic.icons.DrawFailure("milk")), { _, _, _ -> }, {}, {}, {}, {}, {}) } }
+            settle()
+        },
         Fixture("new_trip", Surface.NewTripSheet) { listScreen(ListScreenState(newTripOpen = true)); settle() },
         Fixture("trip_book", Surface.TripBookSheet) { listScreen(ListScreenState(tripBookOpen = true)); settle() },
         // The finished trip's book with its receipt read at full size (§7.8, §13.2).
@@ -409,6 +476,11 @@ object ScreenFixtures {
         Fixture("pantry_empty", Surface.Pantry) { show { PantryScreen(PantrySamples.state(), PantryActions()) }; settle() },
         Fixture("settings", Surface.Settings) {
             show { SettingsScreen(SettingsSamples.ok, SettingsActions(), location = LocationPermission.Denied) }
+            settle()
+        },
+        // Saved while offline (§0.4, 5 October): "Saved." and the neutral line, no error on the key.
+        Fixture("settings_unchecked", Surface.Settings) {
+            show { SettingsScreen(SettingsSamples.uncheckedOffline, SettingsActions(), location = LocationPermission.Denied) }
             settle()
         },
         Fixture("settings_key_failed", Surface.Settings) {
