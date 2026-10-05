@@ -168,7 +168,7 @@ fun PantryRoute(vm: PantryViewModel, onBack: () -> Unit) {
 /**
  * My pantry (§6.13): the binder top (Back, "My pantry", its subtitle on a pad patch, "Done"); the "Add to pantry:" field
  * with its strawberry Add sticker button; the shelves in the JAR_SHELF basket's language (a gingham valance, wooden
- * boards, stickers standing on them at 52 dp with their names under the board, 4 per shelf, 5 from 412 dp); a tap opens
+ * boards, stickers standing on them at 56 dp with their names under the board, 4 per shelf, 5 from 412 dp); a tap opens
  * the pop card ("Take off the shelf", "Change sticker"); "Pantry as text:" (Klee One, ruled) previews the shelves as she
  * types and commits on Done or blur. Empty: a dusty shelf, the line and four suggestion chips.
  */
@@ -431,16 +431,18 @@ private fun Shelf(
     popCard: @Composable (ShelfSticker) -> Unit,
     sticker: @Composable (ShelfSticker) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+    // Tight (Cora, 5 October): 4 dp of headroom over a 56 dp sticker, 4 dp from the board to its names and 4 dp under
+    // them, so a name and the next shelf's stickers sit about 12 dp apart.
+    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
         Row(Modifier.fillMaxWidth()) {
             for (i in 0 until perShelf) {
-                Box(Modifier.weight(1f).height(64.dp), contentAlignment = Alignment.BottomCenter) {
+                Box(Modifier.weight(1f).height(60.dp), contentAlignment = Alignment.BottomCenter) {
                     row.getOrNull(i)?.let { sticker(it) }
                 }
             }
         }
         Board()
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
             for (i in 0 until perShelf) {
                 Box(Modifier.weight(1f).padding(horizontal = 2.dp), contentAlignment = Alignment.TopCenter) {
                     val name = row.getOrNull(i)?.name
@@ -507,7 +509,7 @@ private fun Board(modifier: Modifier = Modifier) {
 }
 
 /**
- * One shelf sticker: 52 dp, standing on the board; new ones magic-appear, a name added again pops (.9 → 1.1 → 1, 400 ms).
+ * One shelf sticker: 56 dp, standing on the board; new ones magic-appear, a name added again pops (.9 → 1.1 → 1, 400 ms).
  * A tap opens the pop card; TalkBack: a button "Salt, in your pantry" with "Take off the shelf" and "Change sticker".
  */
 @Composable
@@ -550,7 +552,7 @@ private fun ShelfStickerView(
         contentAlignment = Alignment.BottomCenter,
     ) {
         MagicAppearBox(key = sticker.key, play = fresh, onPlayed = onAppeared, modifier = Modifier.graphicsLayer { scaleX = pop.value; scaleY = pop.value }) {
-            ItemIcon(sticker.icon, contentDescription = null, size = 52.dp, drawing = sticker.busy)
+            ItemIcon(sticker.icon, contentDescription = null, size = 56.dp, drawing = sticker.busy)
         }
     }
 }
