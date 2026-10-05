@@ -6,7 +6,7 @@
 > - Replace every **[FILL IN: …]**.
 > - Delete this box and the "Notes for Cora" section at the end.
 >
-> It describes the app as built on 2026-10-03. Re-check it whenever what the app sends changes. It is not legal advice.
+> It describes the app as built on 2026-10-05. Re-check it whenever what the app sends changes. It is not legal advice.
 
 **Effective date:** [FILL IN: date of publication]
 
@@ -25,7 +25,7 @@ Kirakira Basket is a grocery-list app for Android, made by [FILL IN: your name a
 
 | What | Why | Backed up by Android? |
 |---|---|---|
-| Your lists and items, your aisles and store name, the aisle corrections you've taught the app, the icons you picked for items, your favourites, and **your pantry** (the things you keep at home, written on the My pantry screen, with the sticker each one shows) | That's the app | **Yes**, if you've turned on Android backup or move to a new phone. This file and your sticker album (next row) are the only parts of the app that are backed up. Backups are handled by Google under your Google account. |
+| Your lists and items, your aisles and store name (with any "Also here" notes you write on an aisle), the aisle corrections you've taught the app, the icons you picked for items, your favourites, and **your pantry** (the things you keep at home, written on the My pantry screen, with the sticker each one shows) | That's the app | **Yes**, if you've turned on Android backup or move to a new phone. This file and your sticker album (next row) are the only parts of the app that are backed up. Backups are handled by Google under your Google account. |
 | Your sticker album: the sticker books of the trips you've finished and the stickers you've collected (item names and their icons) | So your album keeps its pages | **Yes**, together with your lists. |
 | Settings: the "Draw new stickers with AI" switch, the Surprises switches (Easter eggs, Sounds, Haptics, "Next stop" card, Celebration, Weather surprises, Use my area), a random installation ID, a masked hint of your key (like `sk-…a1b2`), and whether Android has stopped asking you about location for the app | So the app remembers your setup (and, once Android has stopped asking, offers its settings page instead of a prompt that can't appear) | No |
 | With **Use my area** on: your approximate area, rounded to 0.1° (about 10 km), the code of the nearest Environment Canada forecast city, and when it was last checked | So sunset and the forecast fit where you are, without asking the phone more than every 6 hours | No. It is deleted when you turn Use my area off or take away the location permission. |
@@ -42,10 +42,10 @@ Only after you've added an OpenAI key in Settings. From then on, the app sends t
 
 | When you… | What is sent |
 |---|---|
-| **Ask the AI** in "Write" (for example "ingredients for pancakes") | Your text. Also, to sort the results: your aisle names in walking order, the names of unchecked items on the list (to avoid duplicates), up to 60 of your aisle corrections, the icons you've chosen for item names, and **your pantry** (the first 200 things on its shelves, as you wrote them), so a recipe can leave out what you already have. |
+| **Ask the AI** in "Write" (for example "ingredients for pancakes") | Your text. Also, to sort the results: your aisle names in walking order, each with its "Also here" note if you wrote one (for example "toothpaste" on Produce), the names of unchecked items on the list (to avoid duplicates), up to 60 of your aisle corrections, the icons you've chosen for item names, and **your pantry** (the first 200 things on its shelves, as you wrote them), so a recipe can leave out what you already have. |
 | **Snap or pick a photo** of a handwritten list | The photo, re-saved as a JPEG of at most 1600 pixels, plus the same context as above. **Location tags and other photo metadata are not sent:** the app re-encodes the image without them. |
 | **Record a voice note** | The recording (a short audio file), with a hint list so names come out spelled right: the names of items on the list (ticked ones too) and of your aisle corrections, up to 100 names. The transcript then goes on like typed text. |
-| **Add items** (including "Add as typed"), **rename** them, or **change your aisles** | Item names and aisle names, so the app can sort items into aisles, choose a basket picture for each aisle and pick an icon for each item. This happens in the background. |
+| **Add items** (including "Add as typed"), **rename** them, **change your aisles** or tap **Re-sort my list** | Item names and aisle names with their "Also here" notes, so the app can sort items into aisles; aisle names alone to choose a basket picture for each aisle; item names to pick an icon for each item. This happens in the background. |
 | **Add to your pantry** something the built-in sticker library doesn't recognise | Those pantry names, once each time you save the My pantry screen, so the app can pick a sticker for each. Pantry stickers are never drawn. |
 | Have **"Draw new stickers with AI"** on (the default) | For an item with no fitting icon: its name and the app's built-in style sheet image, to draw a small icon. At most 40 automatic drawings a day. You can turn this off in Settings. |
 | Tap **Test connection** | Nothing about you: it only asks OpenAI whether the AI model is available. |
@@ -158,7 +158,7 @@ If what the app collects or sends changes, I'll update this page and its effecti
 | Settings and the install ID; the safety identifier is a hash of it | `settings/DataStoreSettingsRepository.kt` (`llmConfig()`); core `OpenAiClient.responses()` adds `safety_identifier` to Responses calls only |
 | Requests go only to OpenAI | core `LlmConfig.DEFAULT_BASE_URL` (`https://api.openai.com/v1`); the app has no address setting (`DataStoreSettingsRepository.llmConfig()`) |
 | What Cora sees for a key she set up | OpenAI's usage dashboard for that project; setup in docs/OPENAI_KEY.md |
-| What a request contains | core `StateOps.ingestContext()` (aisles, ≤ 60 corrections, unchecked names, icon overrides, the first 200 pantry entries); `ui/add/AddViewModel.keywords()` (transcription hints); `assistant/OpenAiGroceryAssistant.kt`, `IconDecider.kt`; `icons/AppIconRepository.kt` (drawing, daily cap 40) |
+| What a request contains | core `StateOps.ingestContext()` (aisles with their "Also here" notes, written into the aisle lines by `Prompts.contextBlock`, also for recategorize; the baskets call sends names only; ≤ 60 corrections, unchecked names, icon overrides, the first 200 pantry entries); `ui/add/AddViewModel.keywords()` (transcription hints); `assistant/OpenAiGroceryAssistant.kt`, `IconDecider.kt`; `icons/AppIconRepository.kt` (drawing, daily cap 40) |
 | Photos lose their metadata; capture and voice files are deleted | `platform/Captures.kt` (`toJpeg`: decode, then `Bitmap.compress`; `sweepStale` after 24 h); `AddViewModel` deletes each file after reading it |
 | Fixed web-search location | core `llm/ModelDefaults.kt` (`WEB_SEARCH`: CA / Ontario / America/Toronto) |
 | `store: false`; no request bodies in logs | core `OpenAiClient.kt` (`LlmLog`: method, path, status, request id, latency); app `platform/PicnicLog.kt` |
