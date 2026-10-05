@@ -113,7 +113,7 @@ add('cookies', 'Chocolate chip cookies', [
 PUFFS = [(13.6, 16.4, 4.6), (20.4, 13.2, 5), (27.8, 13.2, 5), (34.4, 16.6, 4.6), (17.4, 9.4, 3.6), (24.4, 7.6, 4), (31, 9.6, 3.6)]
 add('popcorn', 'Microwave popcorn', [
     *[F(('path', blob(x, y, r, r * .9, 7, .14, int(x * 3 + y))), 'lemon', 'w', ol=1.6, band=.3, band_t='p') for x, y, r in PUFFS],
-    F(('path', 'M8.6 18.6H39.4L36 39.2Q35.6 42 32.6 42H15.4Q12.4 42 12 39.2Z'), 'strawberry', 'w', tex=['M15.6 18V42', 'M24 18V42', 'M32.4 18V42'], tex_t='m', tex_w=4.4),
+    F(('path', 'M8.6 18.6H39.4L36 39.2Q35.6 42 32.6 42H15.4Q12.4 42 12 39.2Z'), 'strawberry', 'm', tex=['M16.6 18V42', 'M24.6 18V42', 'M32.6 18V42'], tex_t='w', tex_w=4.4),
     F(('rect', 7, 16.8, 34, 4.6, 2.3), 'strawberry', 'm'),
 ], gloss=[G('M10 15Q10.8 12.4 13 11.6', 2.2), G('M12.6 22.6L13.4 30', 2.2)], qty='3 × 85 g', aisle='snacks')
 

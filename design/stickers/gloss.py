@@ -39,8 +39,15 @@ TIERS = ((MARGIN, INNER, MAIN_W, 10, None, ('strict', 'loose')),
 NARROW = (.5, .3, 2.0, 4.3, ((140, 320),), ('strict', 'loose'))
 # ... then the same stroke further in, inside a seam or a rim line that runs along the edge (a perogy, a plate)
 DEEP = tuple((m, .3, 2.0, 4.3, ((176, 304),), ('strict', 'loose')) for m in (2.0, 3.0, 4.0))
-SMALL = (.35, .3, 2.0, 3.0, ((180, 300),), ('strict', 'loose'))
+SMALL = (.45, .3, 2.0, 3.0, ((180, 300),), ('strict', 'loose'))
 SMALL_R = 5.5         # the small arc only on shapes whose inscribed radius is under this
+# the stickers drawn with no gloss at all, and why: none of their shapes has a corridor a gloss could run in without
+# crossing a line, a stripe or an outline
+NO_GLOSS = {'bacon': 'two 6u wavy strips, each split along its length by a white fat stripe'}
+# on a white body a gloss that crosses a coloured stripe shows only where it crosses (a lump on the stripe, a nick):
+# it keeps off the stripes, except on these, where it runs across many narrow stripes the way light does (a peppermint,
+# gingham)
+STRIPES_OK = {'candy', 'napkins', 'picnic_blanket'}
 # the sub-glosses' tiers (the same fields): a 2.2u stroke at least 4u long, then hugging closer, then a 2u stroke
 SUB_TIERS = ((MARGIN, INNER, SUB_W, 4.4, ((A0, A1), (186, 300)), ('strict', 'loose')),
              (.7, .4, SUB_W, 4.4, ((A0, A1), (186, 300)), ('strict', 'loose')),
@@ -247,7 +254,7 @@ class Paint:
 
     def __init__(self, p):
         self.p = p
-        self.fill, self.tex = None, None
+        self.fill, self.tex, self.tex_white = None, None, False
         geos, strokes, soft = [], [], []
         try:
             import engine as _en
@@ -262,6 +269,8 @@ class Paint:
                     strokes.append(g.boundary.buffer(p.ol / 2))
                 if p.tex:
                     self.tex = unary_union([shape_poly(('path', d), p.tf, w=p.tex_w) for d in p.tex]).intersection(g)
+                    tc = tone(p.fam, p.tex_t) if (p.tex_t and p.fam in _en.C and not str(p.tex_t).startswith('#')) else p.tex_t
+                    self.tex_white = str(tc).upper() in ('#FFFFFF', 'W')     # a white stripe merges with a gloss
             else:
                 st = shape_poly(p.s, p.tf, w=p.w)
                 geos.append(st)
@@ -311,7 +320,7 @@ def forbidden(pp, i, tex=True, soft=True):
     if soft:
         geos.append(pp[i].soft)
     if tex == 'spots':
-        geos.append(_spots(pp[i].tex))
+        geos.append(pp[i].tex if pp[i].tex_white and pp[i].tex is not None else _spots(pp[i].tex))
     elif tex and pp[i].tex is not None and not pp[i].tex.is_empty:
         geos.append(pp[i].tex)
     geos = [g for g in geos if not g.is_empty]
@@ -369,6 +378,63 @@ def _dot(pp, i, inner, pts, w, forbid, host, ol):
 def _stroke_pts(g):
     lines, _ = _gloss_line(g)
     return [list(ln.coords) for ln in lines]
+
+
+def _turning(pts):
+    """the total turn of a polyline, degrees, measured every 0.4u"""
+    ln = LineString(pts)
+    n = max(2, int(ln.length / .4))
+    q = [ln.interpolate(k * ln.length / n) for k in range(n + 1)]
+    hs = [_heading((q[k].x, q[k].y), (q[k + 1].x, q[k + 1].y)) for k in range(n)]
+    return sum(abs((hs[k + 1] - hs[k] + 180) % 360 - 180) for k in range(len(hs) - 1))
+
+
+def _hook(pts, legacy=False):
+    """a run doubled back on itself (a hairpin round a bandage's tip) reads as a hook, not a shine. legacy: an r9 run,
+    which ignored necks: one that ends heading down has gone over a shoulder and down into a bottle's neck"""
+    t = _turning(pts)
+    if t > 135:
+        return True
+    if not legacy:
+        return False
+    # a run goes up the left side and over to the right (autogloss orders it so)
+    ln = LineString(pts)
+    a, b = ln.interpolate(max(0.0, ln.length - 1.2)), ln.interpolate(ln.length)
+    return t > 60 and 38 < _heading((a.x, a.y), (b.x, b.y)) < 150
+
+
+def _simple(pts):
+    return list(LineString(pts).simplify(.45).coords)
+
+
+def _wiggly(pts):
+    """a run that follows a wavy or lumpy edge (a bean pod's bumps, a tomato's lobes): longer than its own smooth line"""
+    sm = _simple(pts)
+    return len(sm) >= 2 and _len(pts) > 1.03 * _len(sm)
+
+
+def _unhook(pts):
+    """a hooked run cut at its sharpest bend, keeping the longer arm (again, while it still hooks): the bandage's long
+    edge without its tip, the bottle's shoulder without the neck"""
+    for _ in range(3):
+        if not _hook(pts):
+            return pts
+        ln = LineString(pts)
+        n = max(4, int(ln.length / .2))
+        q = [ln.interpolate(k * ln.length / n) for k in range(n + 1)]
+        q = [(p.x, p.y) for p in q]
+        step = max(1, int(round(.6 / (ln.length / n))))
+        best, at = -1, None
+        for k in range(step, len(q) - step):
+            h0, h1 = _heading(q[k - step], q[k]), _heading(q[k], q[k + step])
+            turn = abs((h1 - h0 + 180) % 360 - 180)
+            if turn > best:
+                best, at = turn, k
+        if at is None:
+            return pts
+        a, b = q[:at + 1], q[at:]
+        pts = a if _len(a) >= _len(b) else b
+    return pts
 
 
 def _sharp(pts, limit=60):
@@ -536,6 +602,10 @@ def _cap_span(pts, inner, limit=125.0):
 
 def autogloss(icon, report=None):
     """the r9 gloss (gloss_r9) where it passes `clean`, else the clipped gloss of this module: see the docstring"""
+    if icon.key in NO_GLOSS:
+        if report is not None:
+            report.append(dict(key=icon.key, main=None, subs=[], none=NO_GLOSS[icon.key]))
+        return []
     import gloss_r9
     rep0 = []
     old = gloss_r9.autogloss(icon, rep0)
@@ -563,7 +633,9 @@ def autogloss(icon, report=None):
         if h is not None and h[0] in by_i:
             mi = h[0]
         d = by_i.get(mi)
-        info['r9'] = clean(pp, old_main, (mi, d['host'], d['ol']), tex='spots') if d else 'host'
+        info['r9'] = clean(pp, old_main, (mi, d['host'], d['ol']), tex='spots' if icon.key in STRIPES_OK else True) if d else 'host'
+        if not info['r9'] and _hook(_stroke_pts(old_main)[0], legacy=True):
+            info['r9'] = 'a hook'
         if not info['r9']:
             pts = _stroke_pts(old_main)[0]
             out.append(old_main)
@@ -595,20 +667,28 @@ def autogloss(icon, report=None):
         for d in (order or cands):
             if d['tube'] or (small and _inradius(d['host']) >= SMALL_R) or (colour and d['white']):
                 continue
-            for fk in keys:
+            for fk in (('strict',) if d['white'] and icon.key not in STRIPES_OK else keys):     # on white, a stripe crossed shows as a lump
                 for a0, a1 in ranges:
                     r = arc(d['host'], d['ol'], d[fk], w, a0, a1, margin=margin, inner_margin=inner_margin)
                     if r:
                         r = (_cap_span(r[0], r[1]), r[1], r[2])
-                    if r and _len(r[0]) >= min_len:
+                    # a hooked run keeps its longer arm (a small arc round a grape is no hook; one round a corner is)
+                    bent = (lambda pts: _sharp(pts, 50)) if small else _hook
+                    if r and bent(r[0]):
+                        r = (_unhook(r[0]), r[1], True)
+                    if r and _len(r[0]) >= min_len and not bent(r[0]):
                         return d, r, fk, w
         return None
     if main is None:
         # TIERS: the full rule first (1u off the trace, a 10u run); then slim or busy shapes (bananas, penne, a
         # labelled jar) hug closer and settle for a shorter run; a gloss never crosses a stroke at any tier
         found, kind = None, ''
-        for margin, inner_margin, w, min_len, ranges, keys in TIERS:
-            found = try_main(margin, inner_margin, w, min_len, ranges if ranges else RANGES, keys)
+        # every tier clear of the texture first; only then may a run cross a texture's long stripes
+        for keys in (('strict',), ('loose',)):
+            for margin, inner_margin, w, min_len, ranges, _keys in TIERS:
+                found = try_main(margin, inner_margin, w, min_len, ranges if ranges else RANGES, keys)
+                if found:
+                    break
             if found:
                 break
         if not found:
@@ -626,9 +706,8 @@ def autogloss(icon, report=None):
         if found:
             d, (pts, inner, clipped), fk, mw = found
             # a run along a wavy edge (a bean pod's bumps) is drawn as one smooth stroke where that stays clean
-            sm = list(LineString(pts).simplify(.45).coords)
-            if len(sm) >= 2 and _len(pts) > 1.03 * _len(sm) and not clean(pp, G(_path(sm), mw), (d['i'], d['host'], d['ol']), trace_gap=.35, gap=.15):
-                pts = sm
+            if _wiggly(pts) and not clean(pp, G(_path(_simple(pts)), mw), (d['i'], d['host'], d['ol']), trace_gap=.35, gap=.15):
+                pts = _simple(pts)
             q, rp = _dot(pp, d['i'], inner, pts, mw, d['loose'], d['host'], d['ol'])
             if q is not None:
                 pts = rp
@@ -655,7 +734,7 @@ def autogloss(icon, report=None):
         if hh is None and si.get('printed'):
             hh = (pi, pp[pi].fill, parts[pi].ol or 0)
         pts = _stroke_pts(g)[0]
-        if hh is not None and not clean(pp, g, hh, tex='spots') and all(LineString(pl).distance(LineString(pts)) >= 2.4 for pl in lines):
+        if hh is not None and not clean(pp, g, hh, tex='spots') and not _hook(pts, legacy=True) and not _wiggly(pts) and all(LineString(pl).distance(LineString(pts)) >= 2.4 for pl in lines):
             out.append(g)
             info['subs'].append(si)
             lines.append(pts)
@@ -672,7 +751,12 @@ def autogloss(icon, report=None):
                         if not r:
                             continue
                         pts = _cap_span(r[0], r[1])
-                        if _len(pts) >= min_len and all(LineString(pl).distance(LineString(pts)) >= 2.4 for pl in lines):
+                        if _wiggly(pts):          # drawn as one smooth stroke where that stays as clear
+                            sm = LineString(_simple(pts)).buffer(w / 2)
+                            if sm.within(host.buffer(-(ol / 2 + margin - .05))) and \
+                                    (fz[fk].is_empty or not sm.intersects(fz[fk].buffer(inner_margin - .05))):
+                                pts = _simple(pts)
+                        if _len(pts) >= min_len and not _hook(pts) and all(LineString(pl).distance(LineString(pts)) >= 2.4 for pl in lines):
                             return pts, w
             return None
         subs = len(info['subs'])
@@ -782,6 +866,8 @@ def lint(infos):
     errs = []
     for f in infos:
         m = f['main']
+        if f.get('none'):
+            continue
         if not m:
             errs.append(f'gloss: {f["key"]} has no main gloss')
         elif m.get('narrow') or m.get('small'):

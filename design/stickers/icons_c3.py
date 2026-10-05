@@ -313,7 +313,7 @@ add('noodles', 'Noodles & ramen', [
     F(('ellipse', 16.8, 17, 6.2, 4.8, 12), 'lemon', 'w', ol=1.6),
     F(('circle', 16.6, 17.4, 2.6), 'lemon', 'm', ol=1.2, cut=False),
     F(('path', 'M6.6 25.4H41.4C41.4 33.8 35.6 39.2 28.8 39.4H19.2C12.4 39.2 6.6 33.8 6.6 25.4Z'), 'strawberry', 'w', band=.24, band_t='p',
-      tex=['M4 30.6H44'], tex_t='#FF6F8E', tex_w=3.2),
+      tex=['M4 30.2H44'], tex_t='#FF6F8E', tex_w=3.2),
     F(('rect', 15.6, 37.6, 16.8, 4.4, 2.2), 'strawberry', 'm'),
     F(('rect', 5.4, 23.4, 37.2, 4.4, 2.2), 'strawberry', 'm'),
     F(('path', _c3_stick(23.4, 22.2, 41, 12.2, 2.4)), 'strawberry', 'm', ol=1.5),

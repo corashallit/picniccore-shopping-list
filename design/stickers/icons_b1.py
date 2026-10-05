@@ -23,7 +23,7 @@ add('buttertart', 'Butter tarts', [
     F(('ellipse', 18.4, 24.4, 2.1, 1.4, -14), 'cocoa', 'tr', ol=0, cut=False),
     F(('ellipse', 30.2, 23.8, 2.1, 1.4, 12), 'cocoa', 'tr', ol=0, cut=False),
     F(('path', SH), 'peach', 'p', band=.26, det=['M14.6 31V38.4', 'M19.8 31.4V39.4', 'M24 31.4V39.6', 'M28.2 31.4V39.4', 'M33.4 31V38.4'], det_t='m', det_w=1.6),
-    F(('path', 'M25.4 26.6C26.8 26.6 27.2 28.4 27.2 30.6C27.2 32.2 26.4 33 25.4 33C24.4 33 23.6 32.2 23.6 30.6C23.6 28.4 24 26.6 25.4 26.6Z'), 'cocoa', 'm', ol=1.5),
+    F(('ellipse', 24.4, 23, 2.2, 1.5, 4), 'cocoa', 'tr', ol=0, cut=False),
 ], gloss=[G('M12.6 24.6Q16 22.2 21.4 22', 2.2), DOT(24.4, 22), G('M11.6 31.4L12.6 36', 2.2)], qty='6 pack', aisle='bakery')
 
 # 3 L peach basket: cocoa woven punnet, three peach-mid peaches, one leaf
@@ -99,11 +99,12 @@ add('corn', 'Sweet corn', [
 
 # mushrooms: two button mushrooms
 add('mushrooms', 'White mushrooms', [
-    F(('path', 'M33.4 30H39.6L40.2 40Q40.2 42 38.2 42H34.8Q32.8 42 32.8 40Z'), 'cocoa', 'w', band=.26, band_t='p'),
-    F(('path', 'M27.4 30.6C27.4 24.4 31.6 21.4 36.4 21.4C41.2 21.4 45 24.4 45 30.6C45 31.8 44 32.2 43 32.2H29.4C28.4 32.2 27.4 31.8 27.4 30.6Z'), 'cocoa', 'p', band=.3, band_t='m'),
-    F(('path', 'M15.4 26.8H24.6L25.6 39.6Q25.6 42 23.2 42H16.8Q14.4 42 14.4 39.6Z'), 'cocoa', 'w', band=.24, band_t='p', det=['M16.6 30.2Q20 31.4 23.4 30.2'], det_w=1.2),
+    # centred on the sticker (it sat 1.2u right, its die-cut 0.4u off the canvas edge)
+    F(('path', 'M33.4 30H39.6L40.2 40Q40.2 42 38.2 42H34.8Q32.8 42 32.8 40Z'), 'cocoa', 'w', band=.26, band_t='p', tf='translate(-1.2 0)'),
+    F(('path', 'M27.4 30.6C27.4 24.4 31.6 21.4 36.4 21.4C41.2 21.4 45 24.4 45 30.6C45 31.8 44 32.2 43 32.2H29.4C28.4 32.2 27.4 31.8 27.4 30.6Z'), 'cocoa', 'p', band=.3, band_t='m', tf='translate(-1.2 0)'),
+    F(('path', 'M15.4 26.8H24.6L25.6 39.6Q25.6 42 23.2 42H16.8Q14.4 42 14.4 39.6Z'), 'cocoa', 'w', band=.24, band_t='p', det=['M16.6 30.2Q20 31.4 23.4 30.2'], det_w=1.2, tf='translate(-1.2 0)'),
     F(('path', 'M5.4 25.6C5.4 15.6 12 10.6 20 10.6C28 10.6 34.6 15.6 34.6 25.6C34.6 27.4 33.4 28.2 31.8 28.2H8.2C6.6 28.2 5.4 27.4 5.4 25.6Z'), 'cocoa', 'p', band=.24, band_t='m',
-      tex=['M13 17.6h.1M24.6 15.6h.1M28.4 21.4h.1'], tex_t='w', tex_w=2.6),
+      tex=['M13 17.6h.1M24.6 15.6h.1M28.4 21.4h.1'], tex_t='w', tex_w=2.6, tf='translate(-1.2 0)'),
 ], gloss=[G('M9.4 21Q10.4 15.6 15.6 13.4'), DOT(18.6, 12.8), G('M30.8 26.4Q31.4 24 33.4 23.2', 1.8)], qty='227 g pack', aisle='produce')
 
 # Bartlett pear

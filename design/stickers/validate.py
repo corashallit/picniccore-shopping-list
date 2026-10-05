@@ -95,7 +95,7 @@ GRANDFATHERED = {
     'coverage': set(),
     'dot': set(),
     'cross': set(),
-    'printed': {'bakery_generic', 'cheddar', 'donut', 'pasta', 'sunscreen', 'sweet_potato', 'tea', 'tissues', 'yogurt'},
+    'printed': {'bakery_generic', 'donut', 'pasta', 'sunscreen', 'sweet_potato', 'tea', 'tissues', 'yogurt'},
     'families': set(),
     'hairline': {'baby_food', 'cat_food', 'cat_litter', 'cherries', 'granola', 'grapes', 'honey', 'hot_sauce', 'ice_cream', 'jam',
         'ketchup', 'laundry_detergent', 'lemonade', 'maple_syrup', 'mayonnaise', 'oatmeal', 'orange', 'pasta_sauce', 'peach',

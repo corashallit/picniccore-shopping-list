@@ -226,7 +226,7 @@ add('breakfast_generic', 'Breakfast', [
     F(('path', _c1_xf(_C1_CRUMB, .74, 9, 41.6, -2, -6)), 'peach', 'w', ol=0, cut=False),
     F(('rect', 11.6, 19.6, 7.4, 5.4, 1.6, -10), 'lemon', 'p', ol=1.2, cut=False),
     F(('path', blob(30.4, 34.6, 10.4, 4.8, 9, .08, 4)), 'lemon', 'w', ol=2),
-    F(('circle', 31.2, 32.4, 4), 'lemon', 'm', band=.32, band_t='deep'),
+    F(('circle', 31.2, 32.2, 4.4), 'lemon', 'm', band=.32, band_t='deep'),
 ], qty='mixed', aisle='breakfast')
 
 # baking: a pink mixing bowl heaped high with flour, a wire whisk leaning in, a puff of flour rising off the heap
@@ -502,7 +502,7 @@ add('squash', 'Squash', [
 add('pumpkin', 'Pumpkins', [
     F(('ellipse', 14.6, 30.4, 8.6, 11.4), 'peach', 'm', band=.24, band_t='deep'),
     F(('ellipse', 33.4, 30.4, 8.6, 11.4), 'peach', 'm', band=.24, band_t='deep'),
-    LINE('M27.2 17.6C29.6 13.8 33.6 14.6 33 17.8C32.6 19.8 30.2 19.4 30.6 17.6', 'melon', 1.6, t='m'),
+    LINE('M27.2 17.6C29.6 13.8 33.6 14.6 33 17.8C32.6 19.8 30.2 19.4 30.6 17.6', 'melon', 1.6, t='tr'),
     F(('path', 'M28.4 15.6C30.4 11 36 9.6 39.6 11.4C37.4 15.8 32.2 17.4 28.4 15.6Z'), 'melon', 'm', ol=1.5, det=['M30.4 14.8Q34.2 13 37.8 12'], det_w=1.2),
     F(('ellipse', 24, 30, 10.4, 12), 'peach', 'm', band=.24, band_t='deep'),
     F(('path', 'M21.6 19.2C21.4 15 22.6 11 25.6 9.4L28 11.4C26.2 13.2 26 16 26.6 19.2Z'), 'melon', 'm', ol=1.6),

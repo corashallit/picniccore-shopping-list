@@ -126,7 +126,7 @@
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M11.3 41.2L11 41L17.1 40.9"
+    <path android:pathData="M11.3 41.2L17.1 40.9"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2"
         android:strokeLineCap="round"

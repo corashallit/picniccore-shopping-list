@@ -91,7 +91,7 @@ replace('babyfood', 'Baby food', [
 # peameal bacon: front-view roast (1:3 top ellipse) in a stippled cornmeal coat, one cut slice leaning on it
 replace('peameal', 'Peameal bacon', [
     F(cyl(6.6, 30.6, 17.4, 42, 4), 'lemon', 'p', band=.2,
-      tex=['M9.6 22h.1M14 24.8h.1M19 22.4h.1M24 25h.1M28 22.2h.1M11 29h.1M16.4 30.6h.1M21.6 28.6h.1M26.6 30.8h.1M9.6 34.6h.1M14.6 35.6h.1M20 34.2h.1M25 35.4h.1M29 33.6h.1'],
+      tex=['M9.8 23.8h.1M14 25.6h.1M19 23.8h.1M24 25.6h.1M27.6 23.8h.1M11 28.6h.1M16.4 30.2h.1M21.6 28.6h.1M26.4 30.2h.1M9.8 32.2h.1M20 32.2h.1M14.6 36.2h.1M25 36.2h.1'],
       tex_t='deep', tex_w=2),
     F(('ellipse', 18.6, 17.4, 12, 4), 'lemon', 'm', det=['M8.8 17.4h.1M28.4 17.4h.1M12.6 14.8h.1M24.6 14.8h.1M12.6 20h.1M24.6 20h.1'], det_t='deep', det_w=1.8),
     F(('ellipse', 18.6, 17.4, 8.6, 2.6), 'strawberry', 'p', ol=1.4, cut=False),
@@ -128,8 +128,11 @@ replace('granola', 'Maple granola', [
 # old cheddar: a wedge; lemon-pastel cut face, peach rind on the back (curved) face, no bite
 replace('cheese', 'Old cheddar', [
     F(('path', 'M8.8 38.4L33.2 14.6Q35.4 12.6 37.4 14.4L39.4 16.2Q41.4 18 41.4 21V38.6Q41.4 42 38 42H10.4Q6 42 8.8 38.4Z'), 'peach', 'm', band=.2),
-    F(('path', 'M9.8 39.6L33 16.6Q34.6 15.2 34.8 17.6V41.4H11.2Q8.6 41.4 9.8 39.6Z'), 'lemon', 'p', ol=1.6, cut=False, band=.26, band_t='m',
+    # the cut face meets the rind's own outline (a second outline beside it read doubled); one rind-coloured line parts
+    # it from the curved back
+    F(('path', 'M9.2 39.4L32.6 16.2Q34.6 14.6 34.8 17.6V41H10.6Q7.8 41 9.2 39.4Z'), 'lemon', 'p', ol=0, cut=False, band=.26, band_t='m',
       det=['M24.6 30.6h.1M29.4 26.6h.1M30.2 34.6h.1M19.6 36.4h.1'], det_t='#FFFFFF', det_w=1.8),
+    LINE('M34.8 17.6V41', 'peach', 1.6, t='tr', cut=False),
 ], '400 g block', 'dairy')
 
 # liquid honey: a skep-shaped pot (stacked rounded bands), cocoa lid knob, dipper leaning in

@@ -522,7 +522,7 @@ CAP = 'var(--cap-tr,#6542B3)'
 add('capsule', 'Something new', [
     F(('path', 'M8 25.6A16 16 0 0 1 40 25.6Z'), CAP, 'var(--cap,#B597F2)'),
     F(('path', 'M8 25.6A16 16 0 0 0 40 25.6Z'), CAP, '#FFFFFF', band='M6 35.6H42V44H6Z', band_t='var(--cap-p,#E4D6FF)'),
-    F(('rect', 6.6, 23.6, 34.8, 4.2, 2.1), CAP, '#FFFFFF'),
+    F(('rect', 8, 23.6, 32, 4.2, 2.1), CAP, '#FFFFFF'),
     F(('circle', 24, 33.6, 2.2), CAP, 'var(--cap-p,#E4D6FF)', ol=1.3, cut=False),
     F(('path', star_path(37.8, 12.4, 6.6, 3.1)), 'lemon', 'm', ol=1.5),
 ], gloss=[G('M12.6 20.4Q14.4 14.2 20.2 12'), DOT(24.4, 11.2)], qty='mystery item', aisle='unknown')

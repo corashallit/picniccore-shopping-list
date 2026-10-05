@@ -80,7 +80,7 @@ def _c2_scallion(dy, fan, ln, split, hw=2.7):
 
 add('green_onion', 'Green onions', [
     *_c2_scallion(-4.6, -6, 18.4, -9), *_c2_scallion(0, 0, 20.4, 11), *_c2_scallion(4.6, 6, 18.4, 12),
-    F(('rect', -7.2, -10.2, 4.8, 20.4, 2.4), 'sakura', 'm', tf=_C2_GO),
+    F(('rect', -7.2, -8.4, 4.8, 16.8, 2.4), 'sakura', 'm', tf=_C2_GO),
 ], qty='1 bunch', aisle='produce')
 
 # 2 ginger: a hand of tan root: one big smooth lobe on the left (so the gloss is one arc), knobby fingers pointing up
