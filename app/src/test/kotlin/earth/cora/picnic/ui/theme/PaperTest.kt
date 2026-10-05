@@ -108,15 +108,16 @@ class PaperTest {
             assertFalse("Day inks on $name", c.isDark)
             assertEquals("ballpoint on $name", DayColors.ballpoint, c.ink)
             assertEquals("Day hanko on $name", DayColors.hanko, c.hanko)
-            // The ground and every hard shadow stay the night's (§2.10).
+            // The ground stays the night's; shadows on light paper are Day's periwinkle (§2.4.1, Cora 5 October).
             assertEquals(GlowColors.binder, c.binder)
             assertEquals(GlowColors.background, c.background)
             assertEquals(GlowColors.binderStripe, c.binderStripe)
             assertEquals(GlowColors.glowStar, c.glowStar)
             assertEquals(GlowColors.scrim, c.scrim)
-            assertEquals(GlowColors.hardShadow, c.hardShadow)
-            assertEquals(GlowColors.stickerShadow, c.stickerShadow)
-            assertEquals(GlowColors.primaryShadow, c.primaryShadow)
+            assertEquals(DayColors.hardShadow, c.hardShadow)
+            assertEquals(DayColors.stickerShadow, c.stickerShadow)
+            assertEquals(DayColors.primaryShadow, c.primaryShadow)
+            assertSame("Day's shadows on $name", DayShadows, paperShadows(GlowColors, paper))
         }
         // Dark paper and the binder keep Glow's own set (the same object: nothing is provided again).
         assertSame(GlowColors, paperColors(GlowColors, null))
@@ -124,5 +125,10 @@ class PaperTest {
         assertSame(GlowColors, paperColors(GlowColors, GlowColors.backing))
         assertEquals(Color.White, paperFocusInk(GlowColors, GlowColors.backing))
         assertEquals(GlowColors.ink, paperFocusInk(GlowColors, null))
+        // ... and the night's shadows; Day, Dusk and Golden keep their own on any paper.
+        assertSame(GlowShadows, paperShadows(GlowColors, null))
+        assertSame(GlowShadows, paperShadows(GlowColors, GlowColors.backing))
+        assertSame(DayShadows, paperShadows(DayColors, Color.White))
+        assertSame(GoldenShadows, paperShadows(GoldenColors, Color.White))
     }
 }

@@ -12,12 +12,12 @@ import androidx.compose.ui.graphics.luminance
 import earth.cora.picnic.ui.a11y.LocalFocusRingInk
 
 /*
- * "The paper decides the ink; the night decides the shadow" (docs/DESIGN_STICKER.md §2.4.1, ARCHITECTURE §11.2).
+ * "The paper decides the ink and the shadow" (docs/DESIGN_STICKER.md §2.4.1, ARCHITECTURE §11.2).
  * Content takes its ink from the paper under it: light paper (white, the pastels, the mids used as faces, the lemon
- * notes, the LCD, the vinyl, the receipt) gets the Day ink set, dark paper (Glow's binder, page and backing) gets
- * Glow's. Shadows never follow the paper (in Glow every hard shadow stays the night's #0B0D24), and the variant never
- * changes. Day, Dusk and Golden have no dark paper, so for them only the paper, its focus ink and the family-pastel
- * soft-ink copy are provided, exactly as before.
+ * notes, the LCD, the vinyl, the receipt) gets the Day ink set and Day's periwinkle shadow, dark paper (Glow's binder,
+ * page and backing) gets Glow's inks and the night's #0B0D24 shadow (Cora, 5 October). The variant never changes.
+ * Day, Dusk and Golden have no dark paper, so for them only the paper, its focus ink and the family-pastel soft-ink
+ * copy are provided, exactly as before.
  */
 
 /**
@@ -53,9 +53,9 @@ val FamilyPastels: Set<Color> = Families.rotation.map { it.pastel }.toSet()
 val FamilyMids: Set<Color> = Families.rotation.map { it.mid }.toSet()
 
 /**
- * Glow's ink set for light paper: Day's inks, spots, faces and bands (isDark false, so the accent inks, the stamp
- * circles, the sticker silhouettes and the dashed add spot take their Day forms), on Glow's ground, with Glow's night
- * shadows. The variant stays Glow.
+ * Glow's ink set for light paper: Day's inks, spots, faces, bands and periwinkle shadows (isDark false, so the accent
+ * inks, the stamp circles, the sticker silhouettes and the dashed add spot take their Day forms), on Glow's ground.
+ * The variant stays Glow.
  */
 val GlowLightColors: PicnicColors = DayColors.copy(
     variant = ThemeVariant.Glow,
@@ -68,9 +68,6 @@ val GlowLightColors: PicnicColors = DayColors.copy(
     duskBands = GlowColors.duskBands,
     glowStar = GlowColors.glowStar,
     scrim = GlowColors.scrim,
-    hardShadow = GlowColors.hardShadow,
-    stickerShadow = GlowColors.stickerShadow,
-    primaryShadow = GlowColors.primaryShadow,
 )
 
 /** The §2.7 roles in [GlowLightColors]' inks, made once. */
@@ -119,11 +116,15 @@ fun paperFocusInk(root: PicnicColors, paper: Color?): Color = when {
 @Composable
 fun accentInk(family: StickerFamily): Color = if (PicnicTheme.colors.isDark) family.mid else family.trace
 
+/** The hard shadows content casts on [paper] under a [root] variant: Day's on light paper in Glow, else the variant's. */
+fun paperShadows(root: PicnicColors, paper: Color?): PicnicShadows =
+    if (root.isDark && paper != null && isLightPaper(paper)) DayShadows else shadowsFor(root.variant)
+
 /**
  * Runs [content] on [paper] (null: the binder, which re-roots a floating layer such as a menu or a sheet). Always
- * provides the paper and its focus-ring ink; provides the colours, the typography and the default text colour only
- * where they differ from the scope's, so in Day, Dusk and Golden only the paper, the focus ink and the family-pastel
- * copy ever change. Never touches the variant, the shadows or MaterialTheme. Only content goes inside: an object's own
+ * provides the paper and its focus-ring ink; provides the colours, the typography, the default text colour and the
+ * shadows only where they differ from the scope's, so in Day, Dusk and Golden only the paper, the focus ink and the
+ * family-pastel copy ever change. Never touches the variant or MaterialTheme. Only content goes inside: an object's own
  * shadow, white border and fill are drawn outside, on the paper it stands on; colours are read inside.
  */
 @Composable
@@ -131,9 +132,11 @@ fun OnPaper(paper: Color?, content: @Composable () -> Unit) {
     val root = colorsFor(PicnicTheme.variant)
     val resolved = remember(root, paper) { paperColors(root, paper) }
     val current = LocalPicnicColors.current
-    val provided = ArrayList<ProvidedValue<*>>(6)
+    val provided = ArrayList<ProvidedValue<*>>(7)
     provided += LocalPaperColor provides paper
     provided += LocalFocusRingInk provides paperFocusInk(root, paper)
+    val shadows = paperShadows(root, paper)
+    if (LocalPicnicShadows.current !== shadows) provided += LocalPicnicShadows provides shadows
     if (resolved !== current) {
         provided += LocalPicnicColors provides resolved
         val base = if (root.isDark && paper != null && isLightPaper(paper)) GlowLightColors else root
