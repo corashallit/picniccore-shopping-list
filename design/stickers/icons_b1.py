@@ -50,7 +50,7 @@ add('lettuce', 'Green leaf lettuce', [
 CTF = 'translate(22.2 23) rotate(-28)'
 add('cucumber', 'English cucumber', [
     F(('path', 'M-17 -5.4H15.6C18.4 -5.4 20 -3 20 0C20 3 18.4 5.4 15.6 5.4H-17C-19.4 5.4 -20.6 3 -20.6 0C-20.6 -3 -19.4 -5.4 -17 -5.4Z'), 'melon', 'm', band=.28, tf=CTF,
-      tex=['M-14 -2.4h.1M-6 -2.6h.1M2 -2.4h.1M10 -2.6h.1M-10 1.8h.1M-2 2h.1M6 1.8h.1M14 1.6h.1'], tex_t='p', tex_w=2),
+      tex=['M-14 -.4h.1M-6 -.5h.1M2 -.4h.1M10 -.5h.1M-10 2.6h.1M-2 2.8h.1M6 2.6h.1M14 2.4h.1'], tex_t='p', tex_w=2),   # the speckles sit low enough to leave the gloss a lane along the top
     F(('rect', -22.4, -1.8, 2.8, 3.6, 1.2), 'melon', 'tr', ol=0, tf=CTF),
     F(('circle', 34, 34.6, 7.4), 'melon', 'm', band=None, ol=2),
     F(('circle', 34, 34.6, 5.4), 'melon', 'p', ol=0, cut=False, tex=[dots_ring(34, 34.6, 2.6, 6, 30)], tex_t='#FFF3A6', tex_w=1.8),

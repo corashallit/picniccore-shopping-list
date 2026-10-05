@@ -58,11 +58,6 @@
         android:strokeWidth="2.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M24.3 11.6L25.3 11.4L28.5 13.1"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"/>
     <path android:pathData="M20 21L28.5 21"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2"

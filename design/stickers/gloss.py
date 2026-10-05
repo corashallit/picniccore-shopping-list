@@ -47,10 +47,19 @@ SMALL_R = 5.5         # the small arc only on shapes whose inscribed radius is u
 # the stickers drawn with no gloss at all, and why: none of their shapes has a corridor a gloss could run in without
 # crossing a line, a stripe or an outline
 NO_GLOSS = {'bacon': 'two 6u wavy strips, each split along its length by a white fat stripe'}
+# hand-placed glosses for the few items whose generated run reads as a hook (a small facet rounded at a corner): still
+# held to `clean`, and the generated gloss is used instead if one stops passing
+HAND = {
+    'brie': [G('M17.5 30.8Q17.8 28.4 20 27.2', 2.4), DOT(17.8, 34.2)],      # the wedge's left face: one soft curve
+    # the lane along the cucumber's top, above its speckles (the generated run went round the far end instead)
+    'cucumber': [G('M8.83 26.83L21.72 19.97', 2), DOT(6.32, 28.5, .8)],
+    # down the bottle's left wall, beside the lemon label (the generated run climbed the shoulder into the neck)
+    'lemonade': [G('M15.2 24.6Q15 29 15.2 33.4', 2.6), DOT(15.2, 36.6)],
+}
 # on a white body a gloss that crosses a coloured stripe shows only where it crosses (a lump on the stripe, a nick):
 # it keeps off the stripes, except on these, where it runs across many narrow stripes the way light does (a peppermint,
-# gingham)
-STRIPES_OK = {'candy', 'napkins', 'picnic_blanket'}
+# gingham), or over a blush printed as one broad stripe (a mango's green shoulder)
+STRIPES_OK = {'candy', 'napkins', 'picnic_blanket', 'mango'}
 # the sub-glosses' tiers (the same fields): a 2.2u stroke at least 4u long, then hugging closer, then a 2u stroke
 SUB_TIERS = ((MARGIN, INNER, SUB_W, 4.4, ((A0, A1), (186, 300)), ('strict', 'loose')),
              (.7, .4, SUB_W, 4.4, ((A0, A1), (186, 300)), ('strict', 'loose')),
@@ -689,6 +698,17 @@ def autogloss(icon, report=None):
         if report is not None:
             report.append(dict(key=icon.key, main=None, subs=[], none=NO_GLOSS[icon.key]))
         return []
+    if icon.key in HAND:
+        marks = HAND[icon.key]
+        pp = paints(icon.parts)
+        if not any(clean(pp, g, trace_gap=.35, gap=.15, tex='spots', soft_ok='along') for g in marks):
+            h = host_of(pp, mark_geom(marks[0]))
+            main = dict(part=h[0], w=marks[0][2], len=round(_len(_stroke_pts(marks[0])[0]), 1), span=0.0, clipped=True, hand=True)
+            if marks[0][2] < MAIN_W:
+                main['narrow'] = True
+            if report is not None:
+                report.append(dict(key=icon.key, main=main, subs=[], dot=any(g[0] == 'dot' for g in marks)))
+            return list(marks)
     import gloss_r9
     rep0 = []
     old = gloss_r9.autogloss(icon, rep0)
@@ -848,6 +868,9 @@ def autogloss(icon, report=None):
                             if sm.within(host.buffer(-(ol / 2 + margin - .05))) and \
                                     (fz[fk].is_empty or not sm.intersects(fz[fk].buffer(inner_margin - .05))):
                                 pts = _simple(pts)
+                        # a short sub-gloss round a small shape's corner reads as an L: it is left out
+                        if _len(pts) < 9 and _turning(pts) > 70:
+                            continue
                         if _len(pts) >= min_len and not _hook(pts) and all(LineString(pl).distance(LineString(pts)) >= 2.4 for pl in lines):
                             return pts, w
             return None

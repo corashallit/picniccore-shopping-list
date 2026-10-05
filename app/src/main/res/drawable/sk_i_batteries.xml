@@ -87,9 +87,9 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M16.8 15.7L17.2 15L17.6 14.6L20.7 14.4"
+    <path android:pathData="M16.8 14.8L17.3 14.4L18 14.2L21.3 14.2"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.2"
+        android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>
