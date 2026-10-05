@@ -9,14 +9,17 @@ A picniccore grocery list for Android, styled after early-90s magical-girl anime
 </p>
 
 <p align="center">
-  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/01_list.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01_list.png" alt="Your list, sorted aisle by aisle" width="12%"></a>
-  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/02_snap.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02_snap.png" alt="Write it, snap it, or say it out loud" width="12%"></a>
-  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/03_recipe.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03_recipe.png" alt="Turn a recipe into a shopping list" width="12%"></a>
-  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/04_pantry.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/04_pantry.png" alt="Recipes skip what is in your pantry" width="12%"></a>
-  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/05_celebration.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/05_celebration.png" alt="Finish the list for a celebration" width="12%"></a>
-  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/06_album.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/06_album.png" alt="Collect 216 stickers in your album" width="12%"></a>
-  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/07_glow.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/07_glow.png" alt="Glow-in-the-dark night theme" width="12%"></a>
-  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/08_surprises.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/08_surprises.png" alt="18 little surprises hidden in the app" width="12%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/01_list.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01_list.png" alt="Your list, sorted aisle by aisle" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/02_snap.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02_snap.png" alt="Write it, snap it, or say it out loud" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/03_recipe.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03_recipe.png" alt="Turn a recipe into a shopping list" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/04_pantry.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/04_pantry.png" alt="Recipes leave out what’s in your pantry" width="24%"></a>
+</p>
+
+<p align="center">
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/05_celebration.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/05_celebration.png" alt="Every finished list gets a celebration" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/06_album.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/06_album.png" alt="Collect 200+ stickers in your album" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/07_glow.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/07_glow.png" alt="Glow-in-the-dark night theme" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/08_surprises.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/08_surprises.png" alt="18 little surprises hidden in the app" width="24%"></a>
 </p>
 
 The store images are drawn from the app's own screenshot tests, fonts and sticker art by [`design/store/make_store_images.py`](design/store/README.md), in the layout Google Play's publishing tools expect ([`fastlane/metadata/android/en-US`](fastlane/metadata/android/en-US)).

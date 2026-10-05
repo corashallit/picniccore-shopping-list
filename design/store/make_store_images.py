@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from PIL import Image, ImageChops, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -208,34 +208,53 @@ def _close_pinholes(mask, max_area):
     return out
 
 
+WORD_GAP = 0.2   # extra space between words, in em: the white stroke would otherwise close DynaPuff's narrow space
+
+
+def _words(f, line, halo, extra):
+    """Lay `line` out word by word, each space widened by `extra` px so the stroked words keep an open gap between
+    them (§2.7: "the gaps between words stay open"). Returns ([(word, pen x)], ink left, ink right), where the ink
+    edges are the stroked first and last words' bounding box edges, relative to a pen starting at 0."""
+    space = f.getlength(' ') + extra
+    placed, x = [], 0.0
+    for word in line.split(' '):
+        if word:
+            placed.append((word, x))
+            x += f.getlength(word)
+        x += space
+    first, last = placed[0], placed[-1]
+    left = first[1] + f.getbbox(first[0], stroke_width=halo)[0]
+    right = last[1] + f.getbbox(last[0], stroke_width=halo)[2]
+    return placed, left, right
+
+
 def puffy(lines, size, fill=BALLPOINT, stroke=WHITE, shadow=STICKER_SHADOW, fname='dynapuff_bold.ttf',
-          halo=None, shadow_off=None, leading=1.15, colours=None):
+          halo=None, shadow_off=None, leading=1.15, colours=None, word_gap=WORD_GAP):
     """Centred puffy lines as one RGBA image. `halo` is half the stroke (default 12.5 % of the size: a 6 dp stroke on
     a 24 sp title); the hard shadow is the stroked word at (+0.067, +0.092) x size (hs on a 24 sp title).
-    `colours` optionally gives a fill per line."""
+    Each space is widened by `word_gap` em so neighbouring words' strokes never touch. `colours` optionally gives a
+    fill per line."""
     f = font(fname, size)
     halo = round(size * 0.125) if halo is None else halo
+    extra = round(size * word_gap)
     sx, sy = shadow_off or (round(size * 0.067), round(size * 0.092))
     pad = halo + 4
-    widths, boxes = [], []
-    for ln in lines:
-        b = f.getbbox(ln, stroke_width=halo)
-        boxes.append(b)
-        widths.append(b[2] - b[0])
+    layouts = [_words(f, ln, halo, extra) for ln in lines]
+    widths = [right - left for _, left, right in layouts]
     line_h = round(size * leading)
     asc, desc = f.getmetrics()
-    w = max(widths) + 2 * pad + sx
+    w = math.ceil(max(widths)) + 2 * pad + sx
     h = line_h * (len(lines) - 1) + asc + desc + 2 * pad + sy
     stroke_mask = Image.new('L', (w, h), 0)
     fill_layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
     ds, df = ImageDraw.Draw(stroke_mask), ImageDraw.Draw(fill_layer)
-    for i, ln in enumerate(lines):
-        b = boxes[i]
-        x = pad + (max(widths) - widths[i]) / 2 - b[0]
+    for i, (placed, left, _) in enumerate(layouts):
+        x0 = pad + (max(widths) - widths[i]) / 2 - left
         y = pad + i * line_h
-        ds.text((x, y), ln, font=f, fill=255, stroke_width=halo, stroke_fill=255)
         c = (colours[i] if colours else fill)
-        df.text((x, y), ln, font=f, fill=c)
+        for word, wx in placed:
+            ds.text((round(x0 + wx), y), word, font=f, fill=255, stroke_width=halo, stroke_fill=255)
+            df.text((round(x0 + wx), y), word, font=f, fill=c)
     stroke_mask = _close_pinholes(stroke_mask, max_area=round((halo * 1.6) ** 2))
     out = Image.new('RGBA', (w, h), (0, 0, 0, 0))
     out.paste(Image.new('RGBA', (w, h), rgb(shadow)), (sx, sy), stroke_mask)
@@ -244,11 +263,12 @@ def puffy(lines, size, fill=BALLPOINT, stroke=WHITE, shadow=STICKER_SHADOW, fnam
     return out
 
 
-def text_width(s, size, fname='dynapuff_bold.ttf', halo=None):
+def text_width(s, size, fname='dynapuff_bold.ttf', halo=None, word_gap=WORD_GAP):
+    """The stroked width of one puffy line, laid out as `puffy` lays it out (with the widened word gaps)."""
     f = font(fname, size)
     halo = round(size * 0.125) if halo is None else halo
-    b = f.getbbox(s, stroke_width=halo)
-    return b[2] - b[0]
+    _, left, right = _words(f, s, halo, round(size * word_gap))
+    return math.ceil(right - left)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -321,8 +341,8 @@ def blanket(w, h, colour, angle, border=14, radius=22, shadow_off=(12, 16)):
 # The phone: a generic rounded phone, die-cut like a sticker (white border, hard periwinkle shadow), with the
 # stickers' bonbon gloss on its frame
 # ---------------------------------------------------------------------------------------------------------------------
-SCREEN_W = 728
-SCREEN_H = round(SCREEN_W * 2280 / 1080)   # 1537
+SCREEN_W = 712
+SCREEN_H = round(SCREEN_W * 2280 / 1080)   # 1503
 BEZEL = 20
 BODY_R = 66
 SCREEN_R = 48
@@ -410,13 +430,17 @@ def screen_from(golden, crop=None):
 # The phone screenshots
 # ---------------------------------------------------------------------------------------------------------------------
 CAPTION_SIZE = 82
-CAPTION_TOP = 44
-PHONE_TOP = 296
+CAPTION_TOP = 36
+PHONE_TOP = 310
 CAPTION_MAX_W = 1000
 
-# Each: file stem, caption (two lines), golden, optional crop, family (backdrop colour), tape, decor stickers.
+# Each: file stem, caption (two lines), golden, optional crop, family (backdrop colour), optional dusk (a deeper
+# backdrop, for the night theme), tape, decor stickers.
+# crop: 03 uses a 1080 x 2280 window of the tall recipe render (recorded on an 1800 dp phone). It starts 35 px above
+# the sheet's taped top edge (a strip of the dimmed scrim, as under a phone's status bar) and ends at y 2990, in the
+# blank between 'White sugar' and its size line, so no line of text is cut.
 # Decor: (drawable or 'sparkle:<family>', size px, side 'L' / 'R', centre y, angle). A sticker sits in the margin
-# beside the phone, its art overlapping the phone's frame by at most the bezel and never reaching the screen
+# beside the phone, its art overlapping the phone's frame but stopping DECOR_GAP px short of the screen
 # (`screenshot` checks the pixels).
 SHOTS = [
     dict(stem='01_list', lines=['Your list, sorted', 'aisle by aisle'], golden='list_midtrip_day.png', fam='mint',
@@ -426,30 +450,33 @@ SHOTS = [
          tape='dots',
          decor=[('sk_d_camera', 160, 'L', 1520, 8), ('sk_d_cassette', 150, 'R', 1250, -8), ('sk_d_heart', 104, 'R', 1760, 10)]),
     dict(stem='03_recipe', lines=['Turn a recipe into', 'a shopping list'], golden='recipe_card_day.png',
-         crop=(0, 614, 1080, 614 + 2280), fam='lemon', tape='gingham',
+         crop=(0, 710, 1080, 710 + 2280), fam='lemon', tape='gingham',
          decor=[('sk_i_eggs', 168, 'L', 1520, 8), ('sk_i_flour', 150, 'R', 1250, -8), ('sk_i_maple_syrup', 124, 'R', 1760, 10)]),
-    dict(stem='04_pantry', lines=['Recipes skip what', 'is in your pantry'], golden='pantry_few.png', fam='peach',
+    dict(stem='04_pantry', lines=['Recipes leave out', 'what\u2019s in your pantry'], golden='pantry_few.png', fam='peach',
          tape='mint',
          decor=[('sk_i_honey', 164, 'L', 1520, 8), ('sk_i_salt', 132, 'R', 1250, -8), ('sk_i_olive_oil', 128, 'R', 1760, 10)]),
-    dict(stem='05_celebration', lines=['Finish the list', 'for a celebration'], golden='celebration_strip_day_9500.png',
+    dict(stem='05_celebration', lines=['Every finished list', 'gets a celebration'], golden='celebration_strip_day_9500.png',
          fam='sakura', tape='sakura',
          decor=[('sk_i_lemonade', 150, 'L', 1520, 8), ('sparkle:lemon', 112, 'R', 1250, -8), ('sk_d_star', 104, 'R', 1760, 10)]),
-    dict(stem='06_album', lines=['Collect 216 stickers', 'in your album'], golden='album_picnic_day.png', fam='grape',
+    dict(stem='06_album', lines=['Collect 200+ stickers', 'in your album'], golden='album_picnic_day.png', fam='grape',
          tape='gingham',
          decor=[('sk_d_ribbon', 160, 'L', 1520, 8), ('sk_d_flower', 128, 'R', 1250, -8), ('sk_d_heart', 104, 'R', 1760, 10)]),
     dict(stem='07_glow', lines=['Glow-in-the-dark', 'night theme'], golden='list_midtrip_glow.png', fam='periwinkle',
-         tape='dots',
-         decor=[('sk_d_moon', 156, 'L', 1520, 8), ('sk_d_glowstar', 120, 'R', 1250, -8), ('sk_d_glowstar', 92, 'R', 1760, 14)]),
+         dusk=True, tape='dots',
+         decor=[('sk_d_kira', 150, 'L', 1520, 8), ('sk_d_glowstar', 120, 'R', 1250, -8), ('sk_d_glowstar', 92, 'R', 1760, 14)]),
     dict(stem='08_surprises', lines=['18 little surprises', 'hidden in the app'], golden='egg_18_end_day.png',
          fam='melon', tape='mint',
          decor=[('sk_d_cat', 172, 'L', 1520, 6), ('sk_d_umbrella', 136, 'R', 1250, -8), ('sk_d_sun', 112, 'R', 1760, 10)]),
 ]
-DECOR_GAP = 3      # px between a decor sticker's art and the screen's edge
+DECOR_GAP = 14     # px between a decor sticker's art and the screen's edge: it overlaps the frame, never the bezel line
 
 
-def backdrop(fam):
+def backdrop(fam, dusk=False):
+    """The image's ground. `dusk` deepens the pastel toward the family's mid tone, for the night-theme image."""
     pastel, mid = FAMILIES[fam][0], FAMILIES[fam][1]
-    if fam == 'mint':
+    if dusk:
+        base, stripe = mix(mid, WHITE, 0.45), mix(mid, WHITE, 0.25)
+    elif fam == 'mint':
         base, stripe = rgb(DAY_BINDER), rgb(DAY_STRIPE)     # the Day binder itself
     else:
         base, stripe = mix(pastel, WHITE, 0.55), mix(pastel, WHITE, 0.12)
@@ -472,7 +499,7 @@ def decor_image(spec):
 
 
 def screenshot(shot):
-    canvas = backdrop(shot['fam'])
+    canvas = backdrop(shot['fam'], shot.get('dusk', False))
     # washi at the two top corners, as if the page were taped into a scrapbook
     paste(canvas, washi(shot['tape'], 250, angle=38), -66, -40)
     paste(canvas, washi(shot['tape'], 250, angle=-38), W - 196, -40)
@@ -527,6 +554,78 @@ def pad_patch(text, size, fname='zen_maru_gothic_bold.ttf', colour=BALLPOINT, pa
 
 
 FEATURE_TAGLINE = 'Your grocery list, as a sticker book'
+BOOK_GOLDEN = 'book_full.png'   # the trip's sticker book, full: date tag, stamp card and sticker grid
+
+
+def book_strip(width, angle=0.0):
+    """The trip's sticker book as the app draws it (the BOOK_GOLDEN render), cut out of the binder it was recorded on,
+    `width` px wide and turned by `angle` degrees.
+
+    The render's ground is the Day binder's pinstripes, which run top to bottom, so row 0 gives each column's ground
+    colour. The ground connected to the image's edge becomes transparent; on the anti-aliased rim, each pixel is
+    split back into the book's edge colour (its white die-cut border or its periwinkle hard shadow) and an alpha."""
+    im = Image.open(GOLDENS / BOOK_GOLDEN).convert('RGB')
+    w, h = im.size
+    src = im.load()
+    ground = [src[x, 0] for x in range(w)]
+    cand = Image.new('L', (w, h), 0)
+    c = cand.load()
+    for y in range(h):
+        for x in range(w):
+            if src[x, y] == ground[x]:
+                c[x, y] = 255
+    framed = Image.new('L', (w + 2, h + 2), 255)
+    framed.paste(cand, (1, 1))
+    ImageDraw.floodfill(framed, (0, 0), 128)
+    outside = framed.crop((1, 1, w + 1, h + 1)).point(lambda v: 255 if v == 128 else 0)
+    rim = ImageChops.subtract(outside.filter(ImageFilter.MaxFilter(5)), outside)
+    out = im.convert('RGBA')
+    o, r, op = outside.load(), rim.load(), out.load()
+    edges = (rgb(WHITE), rgb(STICKER_SHADOW))
+    for y in range(h):
+        for x in range(w):
+            if o[x, y]:
+                op[x, y] = (0, 0, 0, 0)
+            elif r[x, y]:
+                p, b = src[x, y], ground[x]
+                best = None
+                for f in edges:
+                    d = [fi - bi for fi, bi in zip(f, b)]
+                    a = sum((pi - bi) * di for pi, bi, di in zip(p, b, d)) / sum(di * di for di in d)
+                    a = min(1.0, max(0.0, a))
+                    err = sum((pi - (bi + a * di)) ** 2 for pi, bi, di in zip(p, b, d))
+                    if best is None or err < best[0]:
+                        best = (err, f, a)
+                err, f, a = best
+                if err < 300:            # explained by a blend of the ground and an edge colour
+                    op[x, y] = f + (round(a * 255),)
+    out = out.crop(out.getbbox())
+    big = out.resize((width * 2, round(out.height * width * 2 / out.width)), Image.LANCZOS)
+    if angle:
+        big = big.rotate(angle, resample=Image.BICUBIC, expand=True)
+    return big.resize((big.width // 2, big.height // 2), Image.LANCZOS)
+
+
+def place_centred(canvas, img, cx, cy):
+    """Paste `img` with its art's bounding box centred on (cx, cy); returns the art's box on the canvas."""
+    x0, y0, x1, y1 = img.getbbox()
+    x, y = round(cx - (x0 + x1) / 2), round(cy - (y0 + y1) / 2)
+    canvas.alpha_composite(img, (x, y))
+    return x + x0, y + y0, x + x1, y + y1
+
+
+FG_MARGIN = 40   # nothing that matters comes nearer the feature graphic's edges than this
+# Layout of the feature graphic: the wordmark's top, the gap under it to the tagline, the blanket's top, and the
+# sticker book's width, centre y and turn (anticlockwise), its two tapes and the stickers laid beside it.
+FG_WORDMARK_Y = 30
+FG_TAG_GAP = 4
+FG_BLANKET_Y = 300
+FG_BOOK_W = 620
+FG_BOOK_CY = 372
+FG_BOOK_ANGLE = 2
+FG_TAPE_TL = (22, 18)       # tape centres from the book's top-left and (negative) bottom-right art corners
+FG_TAPE_BR = (-22, -20)
+FG_STICKERS = (('sk_i_strawberry', 118, 150, 402, 10), ('sk_i_lemonade', 100, 884, 384, -12))
 
 
 def feature_graphic():
@@ -534,28 +633,34 @@ def feature_graphic():
     # washi at the top corners, as on the screenshots
     paste(im, washi('sakura', 180, dp=2.4, angle=34), -52, -34)
     paste(im, washi('sakura', 180, dp=2.4, angle=-34), FG_W - 140, -34)
-    # a gingham blanket along the bottom with a few stickers laid out on it
+    # a gingham blanket along the bottom
     bl = blanket(1240, 300, FAMILIES['strawberry'][1], angle=-2.5, border=10, radius=16, shadow_off=(8, 11))
-    paste(im, bl, -110, 372)
-    for name, px, cx, cy, ang in (('sk_i_strawberry', 104, 112, 420, 6), ('sk_i_banana', 90, 245, 434, -8),
-                                  ('sk_i_milk_bag', 84, 378, 438, 4), ('sk_i_apple', 84, 512, 440, -4),
-                                  ('sk_i_croissant', 90, 646, 436, -6), ('sk_i_lemonade', 82, 779, 430, 6),
-                                  ('sk_i_eggs', 92, 912, 424, -6)):
-        st = sticker(name, px, ang)
-        x0, y0, x1, y1 = st.getbbox()
-        paste(im, st, cx - (x0 + x1) / 2, cy - (y0 + y1) / 2)
+    paste(im, bl, -110, FG_BLANKET_Y)
+    # the trip's real sticker book laid on the blanket, taped down at two corners
+    book = book_strip(FG_BOOK_W, angle=FG_BOOK_ANGLE)
+    box = place_centred(im, book, FG_W / 2, FG_BOOK_CY)
+    for corner in (FG_TAPE_TL, FG_TAPE_BR):
+        tape = washi('sakura', 78, dp=1.7, angle=44)
+        cx = box[0] + corner[0] if corner[0] >= 0 else box[2] + corner[0]
+        cy = box[1] + corner[1] if corner[1] >= 0 else box[3] + corner[1]
+        place_centred(im, tape, cx, cy)
+    # a few stickers on the blanket beside it
+    for name, px, cx, cy, ang in FG_STICKERS:
+        place_centred(im, sticker(name, px, ang), cx, cy)
     # the wordmark with its twinkles, and the tagline on a pad patch
     wm = wordmark(98)
     tw = sparkle(58, FAMILIES['lemon'][1], FAMILIES['lemon'][3])
     star = sticker('sk_d_star', 44)
     group_w = wm.width + 50
     x = (FG_W - group_w) / 2
-    y = 96
+    y = FG_WORDMARK_Y
     paste(im, wm, x, y)
     paste(im, tw, x + wm.width - 20, y - 4)
     paste(im, star, x + wm.width + 16, y + 64)
     tag = pad_patch(FEATURE_TAGLINE, 30)
-    paste(im, tag, (FG_W - tag.width) / 2, y + wm.height + 14)
+    paste(im, tag, (FG_W - tag.width) / 2, y + wm.height + FG_TAG_GAP)
+    if box[0] < FG_MARGIN or box[1] < FG_MARGIN or box[2] > FG_W - FG_MARGIN or box[3] > FG_H - FG_MARGIN:
+        raise SystemExit(f'feature graphic: the sticker book {box} comes within {FG_MARGIN} px of the edge')
     return im.convert('RGB')
 
 

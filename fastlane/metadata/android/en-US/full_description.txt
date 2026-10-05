@@ -1,10 +1,13 @@
 Kirakira Basket is a grocery list that looks like the free sticker set from a 1990s girls' manga magazine: a mint binder, letter-pad pages, puffy stickers and a stamp card for every trip to the store.
 
+Sorting, recipes, photos and voice need your own OpenAI key (see What it needs). Plain lists work offline without one.
+
 YOUR STORE, IN WALKING ORDER
 • Write down your store's aisles once, in the order you walk them.
 • New items are sorted into those aisles, so the list reads aisle by aisle.
 • Each aisle folds into a little basket that fills up as you shop.
 • Check an item off and a GOT IT! stamp lands on it. Its sticker hops into the basket and a copy goes into the trip's sticker book.
+• Sizes are in metric (1 L, 2 kg, 454 g).
 
 ADD THINGS THE WAY YOU LIKE
 • Write: type a list, or a request such as "ingredients for pancakes from scratch".
@@ -14,19 +17,18 @@ ADD THINGS THE WAY YOU LIKE
 • My pantry: keep a shelf of the things you always have at home, and recipes leave them out.
 
 A STICKER FOR EVERYTHING
-• Over 200 stickers for everyday groceries, with sizes in metric (1 L, 2 kg, 454 g).
-• Finish the list for a small celebration, then keep the trip's sticker book in your album.
-• Collect stickers on grocery, picnic and seasonal sheets.
+• Over 200 stickers to collect on grocery, picnic and seasonal sheets.
+• Every finished list gets a small celebration, and you keep the trip's sticker book in your album.
 
 LITTLE EXTRAS
 • A glow-in-the-dark theme that follows your phone's dark mode.
 • 18 small surprises hidden around the app. You can turn them off in Settings for a quieter list.
-• Works with large text and TalkBack, and tones down its motion when your phone's animations are turned off.
+• Works with large text and screen readers, and tones down its motion when your phone's animations are turned off.
 
 WHAT IT NEEDS
 • The smart features use OpenAI: sorting into aisles, recipes and requests, reading photos, listening to voice notes and drawing new stickers. You paste your own OpenAI API key into Settings, the phone talks to OpenAI directly, and the usage is billed to your own OpenAI account. No key comes with the app.
 • Without a key, Kirakira Basket still works offline as a plain list: type items, check them off and move them between aisles yourself. Common groceries still get their stickers from the built-in library.
-• Your lists, pantry and album are kept on your phone. With a key set, what you add and your pantry list are sent to OpenAI for the smart features. There are no accounts, no ads and no tracking.
-• Weather surprises (a rainy-day umbrella and a first-snow sticker sheet) use a public city forecast from Environment Canada and stay off unless you turn them on.
+• Your lists, pantry and album are kept on your phone. With a key set, what you type, photos of your handwritten lists, your voice notes, item names and your pantry list are sent to OpenAI for the smart features. There are no accounts, no ads and no tracking.
+• Weather surprises (a rainy-day umbrella and a first-snow sticker sheet) use a public city forecast from Environment Canada and stay off unless you turn them on. If you also turn on Use my area, the app asks for your approximate location (never precise, never in the background) so the sunset and the forecast fit where you are; otherwise it uses Toronto.
 
 Made for one friend who shops every week at a store in Ontario.
