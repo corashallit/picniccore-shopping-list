@@ -78,7 +78,7 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M8 33.3L7.8 32.4L8 31.6L8.9 31L12.3 29.3"
+    <path android:pathData="M7.8 32.2L8.3 31.2L12.3 29.3"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.4"
         android:strokeLineCap="round"

@@ -24,8 +24,9 @@ A0, A1 = 200, 290
 MARGIN = 1.0          # the gloss stroke's distance from its host's colour-trace
 INNER = .5            # ... and from every part painted over the host (labels, icons, seeds, detail lines, parts in front)
 DOT_GAP = 1.0         # the dot's distance from any stroke
-WHITE_GAP = .7        # extra room from a white part with no outline painted over the host (a label, a crumb): white
-                      # beside white reads as one shape, so the gloss keeps about 1u off it
+WHITE_GAP = .7        # extra room from a white part with no outline painted over the host (a label, a crumb) and from
+                      # white detail lines (a battery's minus sign): white beside white reads as one shape, so the
+                      # gloss keeps about 1u off it
 NECK_K = .55          # necks and rays narrower than 2 x NECK_K x the host's inscribed radius get no gloss
 TURN_MAX = 50         # degrees of turn within TURN_LEN: a sharper turn splits the run
 TURN_LEN = 1.2
@@ -257,6 +258,8 @@ class Paint:
     def __init__(self, p):
         self.p = p
         self.fill, self.tex, self.tex_white = None, None, False
+        self.soft_lines = []          # (centreline, width) of each detail line in a non-trace colour
+        self.white_det = Polygon()    # its white detail lines (a battery's minus sign, a jar's shine mark)
         geos, strokes, soft = [], [], []
         try:
             import engine as _en
@@ -277,11 +280,20 @@ class Paint:
                 st = shape_poly(p.s, p.tf, w=p.w)
                 geos.append(st)
                 strokes.append(st)
+                if p.kind == 'line' and is_white(p):
+                    self.white_det = st       # a white printed line (a battery's minus sign) is white beside the gloss
             dets = []
+            M = parse_tf(p.tf) if p.tf else None
             for d in p.det:
                 dg = shape_poly(('path', d), p.tf, w=p.det_w)
                 (soft if soft_det else dets).append(dg)
                 strokes.append(dg)
+                if soft_det and str(det_col).upper() in ('#FFFFFF', 'W'):
+                    self.white_det = self.white_det.union(dg)
+                if soft_det:
+                    for r in _poly_pts(('path', d)):
+                        if len(r) > 1:
+                            self.soft_lines.append((LineString([apply_tf(M, *q) for q in r] if M else r), p.det_w))
             geos += dets
         except Exception:  # pragma: no cover
             dets = []
@@ -320,6 +332,7 @@ def forbidden(pp, i, tex=True, soft=True):
     geos = [(q.paint if soft else q.firm) for q in pp[i + 1:]]
     geos += [q.fill.buffer(WHITE_GAP) for q in pp[i + 1:]
              if q.p.kind == 'fill' and not q.p.ol and q.fill is not None and not q.fill.is_empty and is_white(q.p)]
+    geos += [q.white_det.buffer(WHITE_GAP) for q in pp[i:] if not q.white_det.is_empty]
     geos.append(pp[i].det_firm)
     if soft:
         geos.append(pp[i].soft)
@@ -441,6 +454,36 @@ def _unhook(pts):
     return pts
 
 
+KICK_ARM, KICK_MAX = 1.8, 45
+
+
+def _dekick(pts, arm=KICK_ARM, limit=KICK_MAX):
+    """a run without its short end kicks: where the inset contour rounds a corner within `arm` of an end and turns
+    more than `limit` degrees off the run's own direction, that bit is cut off, so the stroke ends straight instead of
+    curling into a little hook"""
+    from shapely.ops import substring
+    ln = LineString(pts)
+    L = ln.length
+    if L < 3 * arm:
+        return pts
+    step = .3
+
+    def cut(from_start):
+        b0, b1 = (ln.interpolate(arm), ln.interpolate(2 * arm)) if from_start else (ln.interpolate(L - 2 * arm), ln.interpolate(L - arm))
+        body = _heading((b0.x, b0.y), (b1.x, b1.y))
+        at, d = 0.0, 0.0
+        while d < arm:
+            a, b = (ln.interpolate(d), ln.interpolate(d + step)) if from_start else (ln.interpolate(L - d - step), ln.interpolate(L - d))
+            if abs((_heading((a.x, a.y), (b.x, b.y)) - body + 180) % 360 - 180) > limit:
+                at = d + step
+            d += step
+        return at
+    c0, c1 = cut(True), cut(False)
+    if not c0 and not c1:
+        return pts
+    return list(substring(ln, c0, L - c1).coords)
+
+
 def _sharp(pts, limit=60):
     """True when a polyline turns more than `limit` degrees within TURN_LEN (a hook, a chevron, a hairpin)"""
     ln = LineString(pts)
@@ -502,6 +545,10 @@ def clean(pp, g, host=None, trace_gap=.45, gap=.25, dot_gap=DOT_GAP, soft_ok=Fal
         return 'off the art'
     i, hg, ol = h
     F = forbidden(pp, i, tex, soft=not soft_ok)
+    if soft_ok == 'along' and g[0] == 'g':
+        why = _across(pp, i, g, geo, gap)
+        if why:
+            return why
     if g[0] == 'dot':
         if geo.difference(hg.buffer(-(ol / 2 + dot_gap))).area > .02:
             return 'dot on or by the trace'
@@ -521,6 +568,38 @@ def clean(pp, g, host=None, trace_gap=.45, gap=.25, dot_gap=DOT_GAP, soft_ok=Fal
         body = _largest(hg.buffer(-k, quad_segs=12).buffer(k, quad_segs=12)).buffer(.3)
         if geo.difference(body).area > .25 * geo.area:
             return 'in a neck or a ray'
+    return ''
+
+
+ALONG_MAX = 35         # degrees: a ridge or vein under a gloss stroke runs along it, never across it
+
+
+def _across(pp, i, g, geo, gap):
+    """'' when every non-trace detail line under the stroke (a banana's ridge, a leaf's vein, a bag's crease) runs
+    along it; else why not. Such a line may sit under the shine the way light runs along a fold; one that crosses the
+    stroke shows as a cut in it."""
+    lines, _ = _gloss_line(g)
+    if not lines:
+        return ''
+    near = geo.buffer(gap)
+    for q in pp[i:]:
+        for ln, w in q.soft_lines:
+            if ln.buffer(w / 2).intersection(near).area <= .1:
+                continue
+            seg = ln.intersection(near.buffer(.4))
+            parts = [x for x in getattr(seg, 'geoms', [seg]) if x.geom_type == 'LineString' and x.length > .3]
+            for part in parts:
+                n = max(2, int(part.length / .4))
+                for k in range(n):
+                    a, b = part.interpolate(k * part.length / n), part.interpolate((k + 1) * part.length / n)
+                    hd = _heading((a.x, a.y), (b.x, b.y))
+                    gl = min(lines, key=lambda L: L.distance(a))
+                    t = gl.project(a)
+                    c, e = gl.interpolate(max(0.0, t - .3)), gl.interpolate(min(gl.length, t + .3))
+                    gh = _heading((c.x, c.y), (e.x, e.y))
+                    diff = abs((hd - gh + 90) % 180 - 90)
+                    if diff > ALONG_MAX:
+                        return 'across a detail line'
     return ''
 
 
@@ -637,7 +716,7 @@ def autogloss(icon, report=None):
         if h is not None and h[0] in by_i:
             mi = h[0]
         d = by_i.get(mi)
-        info['r9'] = clean(pp, old_main, (mi, d['host'], d['ol']), tex='spots' if icon.key in STRIPES_OK else True) if d else 'host'
+        info['r9'] = clean(pp, old_main, (mi, d['host'], d['ol']), tex='spots' if icon.key in STRIPES_OK else True, soft_ok='along') if d else 'host'
         if not info['r9'] and _hook(_stroke_pts(old_main)[0], legacy=True):
             info['r9'] = 'a hook'
         if not info['r9']:
@@ -680,6 +759,10 @@ def autogloss(icon, report=None):
                     bent = (lambda pts: _sharp(pts, 50)) if small else _hook
                     if r and bent(r[0]):
                         r = (_unhook(r[0]), r[1], True)
+                    if r:
+                        k = _dekick(r[0])
+                        if k is not r[0] and _len(k) >= min_len:
+                            r = (k, r[1], True)
                     if r and _len(r[0]) >= min_len and not bent(r[0]):
                         return d, r, fk, w
         return None
@@ -738,7 +821,7 @@ def autogloss(icon, report=None):
         if hh is None and si.get('printed'):
             hh = (pi, pp[pi].fill, parts[pi].ol or 0)
         pts = _stroke_pts(g)[0]
-        if hh is not None and not clean(pp, g, hh, tex='spots') and not _hook(pts, legacy=True) and not _wiggly(pts) and all(LineString(pl).distance(LineString(pts)) >= 2.4 for pl in lines):
+        if hh is not None and not clean(pp, g, hh, tex='spots', soft_ok='along') and not _hook(pts, legacy=True) and not _wiggly(pts) and all(LineString(pl).distance(LineString(pts)) >= 2.4 for pl in lines):
             out.append(g)
             info['subs'].append(si)
             lines.append(pts)
@@ -755,6 +838,9 @@ def autogloss(icon, report=None):
                         if not r:
                             continue
                         pts = _cap_span(r[0], r[1])
+                        k = _dekick(pts)
+                        if k is not pts and _len(k) >= min_len:
+                            pts = k
                         if _wiggly(pts):          # drawn as one smooth stroke where that stays as clear
                             sm = LineString(_simple(pts)).buffer(w / 2)
                             if sm.within(host.buffer(-(ol / 2 + margin - .05))) and \

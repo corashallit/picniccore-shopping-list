@@ -478,14 +478,15 @@ def check_gloss_clean(lint, label, parts, gloss):
     """gloss on trace pixels: every gloss mark keeps off its host's colour-trace and off every part painted over its
     shape (labels, icons, trace-coloured detail lines, the parts drawn in front), stays out of necks and rays, never
     turns sharply (no hooks or hairpins); every dot keeps 1u off any stroke (gloss.clean). Detail lines in a non-trace
-    colour (a banana's ridge, a pale vein) may sit under a gloss stroke, never under a dot."""
+    colour (a banana's ridge, a pale vein) may sit under a gloss stroke where they run along it (within
+    gloss.ALONG_MAX degrees), never across it, and never under a dot."""
     import gloss as GL
     if not gloss:
         return
     pp = GL.paints(parts)
     bad = []
     for n, g in enumerate(gloss):
-        why = GL.clean(pp, g, trace_gap=.35, gap=.15, tex='spots')
+        why = GL.clean(pp, g, trace_gap=.35, gap=.15, tex='spots', soft_ok='along')
         if why:
             bad.append(f'{"stroke" if g[0] == "g" else "dot"} {n} {why}')
     if bad:
