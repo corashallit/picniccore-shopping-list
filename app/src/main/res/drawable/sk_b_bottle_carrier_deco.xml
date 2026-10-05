@@ -40,13 +40,13 @@
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M34.6 31L34.6 18Q34.6 14.4 38.2 14.4L41.8 14.4Q45.4 14.4 45.4 18L45.4 31Z"
+    <path android:pathData="M34.6 31L34.6 22.4Q34.6 18.8 38.2 18.8L41.8 18.8Q45.4 18.8 45.4 22.4L45.4 31Z"
         android:fillColor="#F1DEC9"
         android:strokeColor="#7A4A28"
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M38.2 19L41.8 19"
+    <path android:pathData="M38.2 23.4L41.8 23.4"
         android:strokeColor="#B1825B"
         android:strokeWidth="3.2"
         android:strokeLineCap="round"

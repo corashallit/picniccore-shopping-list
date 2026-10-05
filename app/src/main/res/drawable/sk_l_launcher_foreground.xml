@@ -146,6 +146,11 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="launch_gloss">
+    <path android:pathData="M37.84 59.08L45.73 59.08"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.08"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
   </group>
   <group android:name="star4holo_shadow">
     <path android:pathData="M70.55 30.18L70.84 32L71.19 33.23L71.66 34.23L72.28 35.03L73.08 35.65L74.08 36.12L75.32 36.47L77.13 36.76L75.32 37.05L74.08 37.4L73.08 37.87L72.28 38.49L71.66 39.29L71.19 40.29L70.84 41.52L70.55 43.34L70.26 41.52L69.92 40.29L69.45 39.29L68.82 38.49L68.03 37.87L67.02 37.4L65.79 37.05L63.97 36.76L65.79 36.47L67.02 36.12L68.03 35.65L68.82 35.03L69.45 34.23L69.92 33.23L70.26 32Z"
@@ -186,5 +191,12 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="star4holo_gloss">
+    <path android:pathData="M68.51 35.41L69.76 34.23L69.9 34.17L70.21 34.17L70.52 34.44"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth=".9"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <path android:pathData="M67.92 36.07C67.92 36.11 67.91 36.15 67.9 36.19C67.88 36.23 67.85 36.26 67.82 36.29C67.79 36.31 67.75 36.33 67.71 36.34C67.67 36.35 67.63 36.35 67.58 36.34C67.54 36.33 67.51 36.31 67.47 36.29C67.44 36.26 67.41 36.23 67.4 36.19C67.38 36.15 67.37 36.11 67.37 36.07C67.37 36.03 67.38 35.99 67.4 35.95C67.41 35.91 67.44 35.88 67.47 35.85C67.51 35.83 67.54 35.81 67.58 35.8C67.63 35.79 67.67 35.79 67.71 35.8C67.75 35.81 67.79 35.83 67.82 35.85C67.85 35.88 67.88 35.91 67.9 35.95C67.91 35.99 67.92 36.03 67.92 36.07Z"
+        android:fillColor="#FFFFFF"/>
   </group>
 </vector>

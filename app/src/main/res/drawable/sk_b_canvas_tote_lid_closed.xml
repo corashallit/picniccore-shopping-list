@@ -6,7 +6,7 @@
     android:viewportWidth="80"
     android:viewportHeight="64">
   <group android:name="cut">
-    <path android:pathData="M36.96 28.6L15.6 28.6L15.61 20.31L15.67 19.77L15.87 19.07L16.08 18.68L16.35 18.35L16.87 17.97L17.52 17.72L18.31 17.61L61.4 17.6L62.23 17.67L62.71 17.79L63.13 17.97L63.49 18.21L63.79 18.51L64.03 18.87L64.21 19.29L64.37 20.03L64.4 20.6L64.4 28.6L43.04 28.6L42.58 29.28L42.05 29.85L41.28 30.57L40 31.63L38.72 30.57L37.95 29.85L37.42 29.28Z"
+    <path android:pathData="M48.46 17.6L61.69 17.61L62.23 17.67L62.71 17.79L63.32 18.08L63.79 18.51L64.03 18.87L64.28 19.52L64.37 20.03L64.4 28.6L43.04 28.6L42.58 29.28L42.05 29.85L41.28 30.57L40 31.63L38.72 30.57L37.95 29.85L37.42 29.28L36.96 28.6L15.6 28.6L15.6 20.6L15.67 19.77L15.87 19.07L16.21 18.51L16.68 18.08L17.29 17.79L17.77 17.67L18.6 17.6L31.54 17.6L32.47 16.85L33.42 16.22L34.26 15.76L35.33 15.28L36.44 14.9L37.58 14.63L38.72 14.46L39.88 14.4L41.04 14.44L42.19 14.59L43.33 14.84L44.39 15.17L45.48 15.63L46.53 16.19L47.53 16.85Z"
         android:fillColor="#FFFFFF"
         android:fillType="evenOdd"
         android:strokeColor="#FFFFFF"
@@ -15,6 +15,16 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="art">
+    <path android:pathData="M30.87 22C35.03 14.93 44.97 14.93 49.13 22"
+        android:strokeColor="#1C7558"
+        android:strokeWidth="4.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <path android:pathData="M30.87 22C35.03 14.93 44.97 14.93 49.13 22"
+        android:strokeColor="#C9F2E3"
+        android:strokeWidth=".8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
     <path android:pathData="M15.6 28.6L64.4 28.6L64.4 20.6Q64.4 17.6 61.4 17.6L18.6 17.6Q15.6 17.6 15.6 20.6Z"
         android:fillColor="#6DD3B0"/>
     <group>

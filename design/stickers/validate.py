@@ -28,6 +28,9 @@ run(report) -> (errors, warnings, measurements). Errors fail `build_android.py` 
   baskets   all 17 kinds; back, front, open and closed lid present; exactly the decorated kinds carry a decoration
             slice; the hanko point lies on the closed lid; the rim sits inside the art; every layer's die-cut (4u
             border included) stays inside the 80 x 64 viewport; palette as above.
+  clean     gloss on trace pixels, necks or hooks (check_gloss_clean); a die-cut border with holes or leaving the
+            canvas (check_cut); detail and printed lines whose caps sit on an outline (check_line_caps); a done basket
+            whose back border shows past the closed lid as an empty white bump (check_lid_cover).
 
 GRANDFATHERED lists the approved r9 stickers (§18.2: "the 121 approved stickers ship as they are") that miss a
 geometry or gloss rule as drawn. They are reported, not failed; any other sticker, including every new key, must pass.
@@ -503,6 +506,25 @@ def check_cut(lint, label, sil, w, h, r):
         lint.errors.append(f'cut: {label} white border leaves the {w} x {h} canvas ({x0:.2f},{y0:.2f}..{x1:.2f},{y1:.2f})')
 
 
+def check_lid_cover(lint, kind, lsil):
+    """done state (back, front, closed lid): wherever the back's white border shows past the closed lid's, some of the
+    basket's art shows with it. An empty white bump means a part hidden under the lid (a handle, ice cubes) still
+    pushes the back's border out: stand it over the lid (Basket over_lid) or sit it lower. Steps under 1.5u are fine."""
+    back, lid = lsil.get('back'), lsil.get('lid_closed')
+    if back is None or lid is None:
+        return
+    r = E.CUT_W / 2
+    vis = E._filled(back.buffer(r)).difference(E._filled(lid.buffer(r)))
+    for c in getattr(vis, 'geoms', [vis]):
+        if c.is_empty or c.area < 4 or c.buffer(-.75).is_empty:
+            continue
+        art = c.intersection(back).area
+        if art < .05 * c.area:
+            p = c.representative_point()
+            lint.errors.append(f'done: sk_b_{kind}_back border shows {c.area:.1f} u² past the closed lid with '
+                               f'{art:.1f} u² of art, around ({p.x:.1f},{p.y:.1f})')
+
+
 def check_line_caps(lint, icon, key):
     """lines whose caps sit on an outline: a detail line's or a printed line's round end never lies on a visible
     colour-trace of another colour (a band line's red cap on a blue can's outline; tidy.inset_lines cuts such ends back
@@ -575,8 +597,9 @@ def run(report):
         check_gloss_clean(lint, f'sk_d_{key}', icon.parts, icon.gloss)
         check_cut(lint, f'sk_d_{key}', sil, 52, 52, E.CUT_W / 2)
     for b, kind, layers, lsil in report['baskets']:
-        check_gloss_clean(lint, f'sk_b_{kind}_front', b.front, b.gloss)
+        check_gloss_clean(lint, f'sk_b_{kind}_front', (b.back if b.glass else []) + b.front, b.gloss)
         check_gloss_clean(lint, f'sk_b_{kind}_lid_closed', b.lid_closed, b.lid_gloss)
+        check_lid_cover(lint, kind, lsil)
         for name, sil in lsil.items():
             check_cut(lint, f'sk_b_{kind}_{name}', sil, 80, 64, E.CUT_W / 2)
     import launcher

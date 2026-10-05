@@ -25,7 +25,7 @@ def hamper():
         F(('path', 'M7.6 26H40.4L37.6 39.6Q37 42 34.6 42H13.4Q11 42 10.4 39.6Z'), 'melon', 'p', band=.3,
           tex=['M7 31.4H41', 'M7 36.4H41', 'M13.6 26V42', 'M19 26V42', 'M24.4 26V42', 'M29.8 26V42', 'M35 26V42'], tex_w=1.8),
         F(('rect', 5.6, 23.4, 36.8, 5.2, 2.6), 'melon', 'm'),
-    ], gloss=[G('M18.6 15.6Q19 13.2 21 12.4', 2), G('M7.4 26H14', 2.2), DOT(17, 26)])
+    ], gloss=[G('M9.4 26H17', 2)])          # the rim's shine (the berries are too crowded with seeds for one)
     ic.gloss = trim_gloss(ic.parts, ic.gloss)
     return ic
 
