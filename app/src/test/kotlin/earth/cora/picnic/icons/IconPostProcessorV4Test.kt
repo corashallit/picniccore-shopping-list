@@ -24,6 +24,11 @@ import kotlin.math.sqrt
  * synthetic answers for the edge cases.
  */
 class IconPostProcessorV4Test {
+    private companion object {
+        /** [referenceCpuMs] on the dev container (33-38 ms), where the slowest sticker takes 58-65 ms of CPU. */
+        const val REFERENCE_CPU_MS = 33.0
+    }
+
     private class Fixture(val key: String, val families: List<String>, val targetU2: Double, val post4: JsonObject, val sheet: IntArray)
 
     private val mockup: JsonObject by lazy {
@@ -156,7 +161,46 @@ class IconPostProcessorV4Test {
         println("v4 post-processing ms (best of 10, wall): " + fixtures.zip(wall).joinToString { (f, t) -> "${f.key} %.1f".format(t) })
         println("v4 post-processing ms (best of 10, cpu): " + fixtures.zip(cpu).joinToString { (f, t) -> "${f.key} %.1f".format(t) })
         runs.forEachIndexed { i, r -> println("  ${fixtures[i].key}: ${r.minBy { it.first.millis }.first.steps}") }
-        cpu.forEachIndexed { i, t -> assertTrue("${fixtures[i].key} took $t ms of CPU", t < 100.0) }
+        // The 100 ms budget is the phone's (item 45; benchmark item 308 measures it there). Shared CI runners differ
+        // in speed from host to host, so the budget scales with a fixed reference workload timed on this machine,
+        // never below 100 ms: the test still catches the post-processor getting slower relative to the machine.
+        val reference = referenceCpuMs(threads, cpuClock)
+        val budget = 100.0 * maxOf(1.0, reference / REFERENCE_CPU_MS)
+        println("reference workload %.1f ms of CPU (expected %.1f); budget %.1f ms".format(reference, REFERENCE_CPU_MS, budget))
+        cpu.forEachIndexed { i, t -> assertTrue("${fixtures[i].key} took $t ms of CPU (budget $budget ms)", t < budget) }
+    }
+
+    /**
+     * CPU ms (best of five) of a fixed pixel workload shaped like the post-processor's: three box-blur passes over a
+     * 1024 x 1024 ARGB grid. [REFERENCE_CPU_MS] is its time on the machine the 100 ms budget was set on.
+     */
+    private fun referenceCpuMs(threads: java.lang.management.ThreadMXBean, cpuClock: Boolean): Double {
+        val n = 1024
+        val src = IntArray(n * n) { (it * 2654435761L).toInt() }
+        val dst = IntArray(n * n)
+        var sink = 0
+        fun once(): Double {
+            val start = if (cpuClock) threads.currentThreadCpuTime else System.nanoTime()
+            var a = src
+            var b = dst
+            repeat(3) {
+                for (y in 1 until n - 1) for (x in 1 until n - 1) {
+                    var r = 0
+                    var g = 0
+                    for (dy in -1..1) for (dx in -1..1) {
+                        val c = a[(y + dy) * n + x + dx]
+                        r += (c ushr 16) and 0xFF
+                        g += (c ushr 8) and 0xFF
+                    }
+                    b[y * n + x] = (r / 9 shl 16) or (g / 9 shl 8)
+                }
+                val t = a; a = b; b = t
+            }
+            sink += a[n * n / 2]
+            return ((if (cpuClock) threads.currentThreadCpuTime else System.nanoTime()) - start) / 1e6
+        }
+        repeat(3) { once() }
+        return List(5) { once() }.min().also { if (sink == 42) println() }
     }
 
     @Test
