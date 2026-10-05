@@ -2,6 +2,25 @@
 
 A picniccore grocery list for Android, styled after early-90s magical-girl anime. (It was called "Picnic List" until the art pass; the repository, the applicationId `earth.cora.picnic` and the APK file names keep the old name.)
 
+## Screenshots
+
+<p align="center">
+  <a href="fastlane/metadata/android/en-US/images/featureGraphic.png"><img src="fastlane/metadata/android/en-US/images/featureGraphic.png" alt="Kirakira Basket: your grocery list, as a sticker book" width="100%"></a>
+</p>
+
+<p align="center">
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/01_list.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01_list.png" alt="Your list, sorted aisle by aisle" width="12%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/02_snap.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02_snap.png" alt="Write it, snap it, or say it out loud" width="12%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/03_recipe.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03_recipe.png" alt="Turn a recipe into a shopping list" width="12%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/04_pantry.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/04_pantry.png" alt="Recipes skip what is in your pantry" width="12%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/05_celebration.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/05_celebration.png" alt="Finish the list for a celebration" width="12%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/06_album.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/06_album.png" alt="Collect 216 stickers in your album" width="12%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/07_glow.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/07_glow.png" alt="Glow-in-the-dark night theme" width="12%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/08_surprises.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/08_surprises.png" alt="18 little surprises hidden in the app" width="12%"></a>
+</p>
+
+The store images are drawn from the app's own screenshot tests, fonts and sticker art by [`design/store/make_store_images.py`](design/store/README.md), in the layout Google Play's publishing tools expect ([`fastlane/metadata/android/en-US`](fastlane/metadata/android/en-US)).
+
 ## What it does
 
 - **Walks the store with you.** You keep your store's aisles as a plain text list, in the order you walk them. New items are sorted into those aisles by an LLM, and the list is shown aisle by aisle. Collapsed aisles show up as little baskets holding their items.
