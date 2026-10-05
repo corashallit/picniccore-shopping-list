@@ -716,6 +716,8 @@ Rows read `busy` and show `IconCatalog.displayRef(item, busy = normalizeName(ite
 2. `busy`, `iconFit == PENDING`, or the `DEFAULT_ICON` kept because nothing matched (fit not EXACT; `IconCatalog.showsCapsule(icon, fit)`) → **art pass (D5):** the capsule sentinel `IconRef(IconCatalog.CAPSULE)`, tinted by its aisle (v1: the category fallback), and the row overlays the "drawing…" sparkle while busy.
 3. Otherwise → `IconRef(item.icon)`: an item matched EXACT to `paper_bag` ("grocery bags") shows the kraft "Shopping bag" sticker.
 
+The same `showsCapsule` rule picks the sticker a twin is filed with (`GroceryItem.bookIcon()`: filed trip books, the album's book thumbnails, the finale's stops and basket riders), the add flows' preview rows, and whether Change sticker opens on a category (an item still showing the capsule has none yet, and no cell wears the selection ring).
+
 `ItemIcon` then draws (art pass): the live sticker from `StickerArt` for a `customIconId` (the library art while it loads, or if its file is gone) → the key's library sticker (`paper_bag` included) → its category's generic → the capsule (an unknown key, whose fallback is `DEFAULT_ICON`, draws the capsule, not the bag). v1 rendered through `IconImages.load` and placeholder art.
 
 ### 8.6 Decisions API seam (TODO, not implemented)
