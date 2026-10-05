@@ -305,7 +305,8 @@ class AlbumTest {
         }
         compose.onNodeWithTag(FiledBookTags.RECEIPT).performScrollTo()
             .assertContentDescriptionEquals("Trip receipt: Saturday 26 September, Hillcrest, 1 sticker, 1 basket, 1 minute, 0 shiny")
-        compose.onNodeWithText("1 of 1 sticker · 1 of 1 aisle stamped · 1 min").assertExists()
+        // The facts break only between facts (a line of their own each where they do not share one).
+        compose.onNode(SemanticsMatcher("the trip's facts") { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.replace("\n", " ") == "1 of 1 sticker · 1 of 1 aisle stamped · 1 min" } }).assertExists()
     }
 
     /** §6.10: the books follow a long pocket page; the link above the tabs takes her straight to them. */

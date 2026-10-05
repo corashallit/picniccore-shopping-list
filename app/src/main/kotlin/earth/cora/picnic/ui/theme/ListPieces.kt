@@ -126,9 +126,6 @@ fun tabLines(name: String, room: Int, glue: Boolean = true, width: (String) -> I
 /** The fitted tab label's size (sp), for tests. */
 val TabNameFontSize: SemanticsPropertyKey<Float> = SemanticsPropertyKey("TabNameFontSize")
 
-/** The tab label's line count, for tests. */
-val TabNameLines: SemanticsPropertyKey<Int> = SemanticsPropertyKey("TabNameLines")
-
 /**
  * Fits [name] on one line in [maxWidthPx] (§4.10): the style's 20 sp if it fits, else 1 sp smaller each step down to
  * [toSp] (16 sp; under a large font, the name's 1.0 size, [tabNameFloorSp]), else [toSp], where it wraps. Sizes are the
@@ -262,10 +259,10 @@ private fun TabFace(
     val fit = remember(displayName, base, room, floor) { fitTabName(measurer, displayName, base, room, toSp = floor) }
     val style = base.copy(fontSize = fit.fontSizeSp.sp, lineHeight = (fit.fontSizeSp * 1.2f).sp)
     // Too long for one line even at 16 sp: it wraps between words into balanced lines, "&" with the word after it
-    // (§4.10, §0.4: "Meat / & seafood"). Laid out line by line, so the tab hugs its widest line. A word wider than the
-    // whole room on its own (rare) wraps inside itself instead, so no letter is lost.
-    // A word too wide for the room on its own ("& international" beside a strip's basket), or a name that would take a
-    // third line ("Canned goods / & soups"), gets the 14 dp the pattern end gives up when it narrows from 26 to 12 dp.
+    // (§4.10, §0.4: "Meat / & seafood"), laid out line by line so the tab hugs its widest line. A word too wide for the
+    // room on its own ("& international" beside a strip's basket), or a name that would take a third line ("Canned goods
+    // / & soups"), gets the 14 dp the pattern end gives up when it narrows from 26 to 12 dp. A word wider than the whole
+    // tab on its own (rare) wraps inside itself, so no letter is lost.
     val narrowRoom = if (room == Int.MAX_VALUE) room else room + with(density) { (PATTERN_END - PATTERN_END_NARROW).roundToPx() }
     val wrapped = remember(displayName, style, room, fit, look.pattern) {
         fun lines(r: Int, glue: Boolean = true) = tabLines(displayName, r, glue) { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width }
@@ -284,7 +281,6 @@ private fun TabFace(
     val lines = wrapped.first
     val narrow = wrapped.second || (lines == null && look.pattern != TabPattern.Plain && room != Int.MAX_VALUE)
     val patternWidth = if (narrow) PATTERN_END_NARROW else PATTERN_END
-    val lineCount = lines?.size ?: 0
     Row(
         Modifier
             .probe(probe, probeKey, fit.fontSizeSp)
@@ -292,7 +288,6 @@ private fun TabFace(
             .heightIn(min = size.height)
             .clearAndSetSemantics {
                 this[TabNameFontSize] = fit.fontSizeSp
-                this[TabNameLines] = lineCount
             }
             .hardShadow(shapes.tab, PicnicTheme.shadows)
             .clip(shapes.tab)
@@ -336,25 +331,26 @@ fun indexTabLeastWidth(position: Int, displayName: String, look: AisleLook, size
 }
 
 /**
- * The narrowest an [IndexTab] can be and still hold [displayName] on at most two lines, between words, at its smallest
- * size (16 sp; a large font's 16 dp), "&" kept with the word after it, at its 24 dp circle. The tray header's store chip
- * stays beside a name that fits it this way, and gives way to one that would need a third line (§4.10).
+ * The narrowest an [IndexTab] for [position] can be and still hold [displayName] on at most two lines, between words,
+ * at 16 sp, "&" kept with the word after it, its number circle as drawn here (as [indexTabLeastWidth]). The tray
+ * header's store chip stays beside a name that fits it this way, and gives way to one that would need a third line,
+ * or under a large font a smaller size (§4.10).
  */
 @Composable
-fun indexTabTwoLineWidth(displayName: String, look: AisleLook, size: TabSize): Dp {
+fun indexTabTwoLineWidth(position: Int, displayName: String, look: AisleLook, size: TabSize): Dp {
     val density = LocalDensity.current
+    val circle = rememberNumberCircleSize(position.takeIf { it > 0 }, look, size.circle)
     val measurer = rememberTextMeasurer(cacheSize = 8)
     val base = PicnicTheme.type.aisleTab
     val name = remember(displayName, base, density) {
-        val sp = tabNameFloorSp(density)
-        val style = base.copy(fontSize = sp.sp, lineHeight = (sp * 1.2f).sp)
+        val style = base.copy(fontSize = 16.sp, lineHeight = (16f * 1.2f).sp)
         fun width(text: String) = measurer.measure(text, style, softWrap = false, maxLines = 1).size.width
         val words = keepWithNextWord(displayName).split(' ').filter { it.isNotEmpty() }
         val two = (1 until words.size).minOfOrNull { k -> maxOf(width(words.subList(0, k).joinToString(" ")), width(words.subList(k, words.size).joinToString(" "))) }
         val px = minOf(width(displayName), two ?: Int.MAX_VALUE)
         with(density) { (px + 2).toDp() }
     }
-    return name + tabChrome(look, size.circle)
+    return name + tabChrome(look, circle)
 }
 
 /**

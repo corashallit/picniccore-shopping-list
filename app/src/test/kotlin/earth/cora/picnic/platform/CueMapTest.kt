@@ -335,7 +335,9 @@ class CueMapTest {
         assertNotNull("the jackpot sticker arrives", r.eggs.jackpot)
         val arrived = r.now
         r.advance(JackpotMotion.WOBBLE_MS + 200)
-        played("capsulePopJackpot", EggLog(r), fired, mapOf(Cue.CAPSULE_POP to listOf(arrived + JackpotMotion.WOBBLE_MS)), slack = 60, early = 40)
+        // The reveal starts once its row is laid out and has stayed in room for two frames (§12.2 egg 13: it waits for
+        // the row), a few frames after the sticker arrives.
+        played("capsulePopJackpot", EggLog(r), fired, mapOf(Cue.CAPSULE_POP to listOf(arrived + JackpotMotion.WOBBLE_MS)), slack = 120, early = 40)
     }
 
     /** A shake on the list (egg 4): petals, with one soft tick and kira. */

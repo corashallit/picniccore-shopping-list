@@ -341,7 +341,9 @@ class AisleEditorTest {
         // The labels preview the text 400 ms after typing stops; nothing is saved yet.
         shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(450))
         compose.waitForIdle()
-        assertTrue(compose.onAllNodesWithText("Fruit & vegetables").fetchSemanticsNodes().isNotEmpty())
+        // The label keeps "&" with the word after it (a no-break space, §0.4).
+        val label = SemanticsMatcher("shows Fruit & vegetables") { n -> n.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.replace('\u00A0', ' ') == "Fruit & vegetables" } }
+        assertTrue(compose.onAllNodes(label).fetchSemanticsNodes().isNotEmpty())
         assertEquals("produce", store.now().store.aisles().first().id)
         // Done commits through the line diff: the edited line keeps its items, the removed line's go to Everything else.
         compose.onNodeWithText("Done").performClick()

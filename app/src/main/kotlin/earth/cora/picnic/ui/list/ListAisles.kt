@@ -516,7 +516,7 @@ internal fun TrayHeader(
     // The narrowest tab that shows the whole name on one line, and the narrowest that holds it on two: the store chip
     // gives way to them (below).
     val tabLeast = indexTabLeastWidth(section.position, section.displayName, section.look, TabSize.Tray)
-    val tabTwoLines = indexTabTwoLineWidth(section.displayName, section.look, TabSize.Tray)
+    val tabTwoLines = indexTabTwoLineWidth(section.position, section.displayName, section.look, TabSize.Tray)
     val chevronInteraction = remember { MutableInteractionSource() }
     val chevronRinged = showsFocusRing(chevronInteraction)
     Layout(

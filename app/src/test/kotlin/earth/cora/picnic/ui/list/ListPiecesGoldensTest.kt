@@ -95,6 +95,42 @@ class ListPiecesGoldensTest(private val variant: ThemeVariant, @Suppress("unused
         }
     }
 
+    /**
+     * §0.4, §4.10: the default aisles under a large font on a 360 dp phone, their long names wrapping onto balanced
+     * lines (never cut) and the strips and tray headers growing round them. Day only.
+     */
+    @Test
+    @Config(qualifiers = "w360dp-h1800dp-xxhdpi")
+    fun stripsDefaultAislesFs130() = largeText("strips_default_aisles_fs130", 1.3f) { StripsOf(ListFixture.ui(ListFixture.everyDefaultAisle()).sections) }
+
+    @Test
+    @Config(qualifiers = "w360dp-h2600dp-xxhdpi")
+    fun stripsDefaultAislesFs200() = largeText("strips_default_aisles_fs200", 2f) { StripsOf(ListFixture.ui(ListFixture.everyDefaultAisle()).sections) }
+
+    @Test
+    @Config(qualifiers = "w360dp-h1500dp-xxhdpi")
+    fun trayDefaultAislesFs130() = largeText("tray_default_aisles_fs130", 1.3f) { DefaultTrays() }
+
+    @Test
+    @Config(qualifiers = "w360dp-h2000dp-xxhdpi")
+    fun trayDefaultAislesFs200() = largeText("tray_default_aisles_fs200", 2f) { DefaultTrays() }
+
+    private fun largeText(base: String, scale: Float, content: @Composable () -> Unit) {
+        org.junit.Assume.assumeTrue(variant == ThemeVariant.Day)
+        compose.recordPiece(base, variant, fontScale = scale, pad = 14.dp, content = content)
+    }
+
+    @Composable
+    private fun DefaultTrays() {
+        val clock = remember { MotionClock() }
+        val anchors = remember { AnchorRegistry() }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (s in ListFixture.ui(ListFixture.everyDefaultAisle()).sections) {
+                TrayHeader(s, null, clock, anchors, pinned = false, chevronFocus = remember(s.id) { FocusRequester() }, onFold = {}, current = false)
+            }
+        }
+    }
+
     // ---- Strips (items 78, 79, 82) ----
 
     @Test

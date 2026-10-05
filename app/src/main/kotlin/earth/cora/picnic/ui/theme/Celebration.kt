@@ -689,8 +689,9 @@ private fun SummaryBarRow(sc: SceneClock, copy: CelebrationCopy, anchors: SceneA
                         },
                 )
             }
-            // Kept open (§0.4 Q7): Done closes it. Unseen, untouchable and silent until then.
-            Box(if (kept) Modifier else Modifier.graphicsLayer { alpha = 0f }.clearAndSetSemantics { }) {
+            // Kept open (§0.4 Q7): Done closes it. Until then it is only measured (the row keeps its room), never placed,
+            // so it is unseen, silent, and a tap there still reaches the scene ("tap to skip").
+            Box(if (kept) Modifier else Modifier.clearAndSetSemantics { }) {
                 PicnicButton(copy.done, onDone, if (kept) Modifier.testTag(CelebrationTags.DONE) else Modifier, enabled = kept)
             }
         },
@@ -704,7 +705,7 @@ private fun SummaryBarRow(sc: SceneClock, copy: CelebrationCopy, anchors: SceneA
         val h = maxOf(bar.height, done.height + 2 * room + inside)
         layout(constraints.maxWidth, h) {
             bar.place(0, h - bar.height)
-            done.place((constraints.maxWidth - done.width) / 2, (h - inside - done.height) / 2)
+            if (kept) done.place((constraints.maxWidth - done.width) / 2, (h - inside - done.height) / 2)
         }
     }
 }
