@@ -160,6 +160,12 @@ interface SurpriseEngine {
     /** Re-reads the clock (the minute tick, on resume): midnight, golden hour, the season. */
     fun refresh() = Unit
 
+    /**
+     * The connection came back (the catch-up, §0.4 5 October): with the weather surprises on, a forecast that is due, or
+     * whose last ask failed, is asked for now (§12.4).
+     */
+    fun onBackOnline() = Unit
+
     /** The overlay for the effect [id] finished playing (on the frame clock). */
     fun effectDone(id: Long) = Unit
 

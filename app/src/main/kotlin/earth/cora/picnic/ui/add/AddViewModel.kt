@@ -25,6 +25,7 @@ import earth.cora.picnic.core.assistant.SkipReason
 import earth.cora.picnic.core.assistant.toGroceryItem
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.llm.LlmError
+import earth.cora.picnic.core.llm.unreached
 import earth.cora.picnic.core.model.AddOutcome
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.GroceryItem
@@ -50,6 +51,11 @@ import earth.cora.picnic.R
 import earth.cora.picnic.icons.IconRepository
 import earth.cora.picnic.platform.Announcer
 import earth.cora.picnic.platform.AudioRecorder
+import earth.cora.picnic.platform.CaptureKeeper
+import earth.cora.picnic.platform.CaptureKind
+import earth.cora.picnic.platform.KeptCapture
+import earth.cora.picnic.platform.PicnicLog
+import earth.cora.picnic.platform.keptCaptureOf
 import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.platform.NoOpAnnouncer
@@ -76,6 +82,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicIntegerArray
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -84,18 +91,25 @@ import java.util.concurrent.atomic.AtomicLong
  * (rule 7), the commit and its Undo. Owner: WP7.
  *
  * Send rules (§6.2), in order: 1 the magic word is intercepted before any network call (nothing is added, the field
- * clears); 2 no key: the text is parsed as typed and committed at once; 3 otherwise one ingest call, the bar's Send a
- * wobbling capsule meanwhile; 4 a small sure answer commits at once; 5 anything else opens the sheet for review; 6 a
- * failure shows the friendly message with Try again and Add as plain lines; 7 duplicates are never added twice (an
- * unchecked one pops, a checked one is revived); 8 the pantry: worked-out items it covers come back skipped and force a
- * review.
+ * clears); 2 no key: the text is parsed as typed and committed at once; 2b offline (§0.4, 5 October): the bar's Send does
+ * the same, its toast saying the sorting waits for the connection (the catch-up sorts it then), and so does an ingest
+ * that never reached OpenAI (offline, or no connection); the sheet's Write Send, Snap and Speak fail at once with the
+ * offline words, no request made; 3 otherwise one ingest call, the bar's Send a wobbling capsule meanwhile; 4 a small
+ * sure answer commits at once; 5 anything else opens the sheet for review; 6 a failure shows the friendly message with
+ * Try again and Add as plain lines; 7 duplicates are never added twice (an unchecked one pops, a checked one is revived);
+ * 8 the pantry: worked-out items it covers come back skipped and force a review.
+ *
+ * Kept captures (§0.4, 5 October): a photo or voice note whose request failed (with Try again offered) is kept by
+ * [keeper] in app-private storage, and its pointer in [savedState], until it is sent, replaced by a new one or deleted;
+ * closing the sheet keeps it, and opening Snap or Speak again (the bar's camera or cassette, the tab) shows it with Try
+ * again. A fresh start finds it again; the container sweeps it after 7 days.
  *
  * Scopes (ARCHITECTURE §10.3, §13): the calls she waits for (photo prep, transcription, ingest) run in viewModelScope
  * as [work] and are cancelled by [cancel] / [closeSheet]; every commit (quick add, As typed, no key, Stick all), the
  * background aisle sort after it, and Undo run in [appScope], so closing the sheet or stopping a later request never
- * loses a save or leaves typed items unsorted. Process death: the draft, the mode, the target list and
- * whether the sheet was up live in [savedState]; a camera result can reach a fresh VM before the List screen calls
- * [showList], so the target list then falls back to the current list.
+ * loses a save or leaves typed items unsorted. Process death: the draft, the mode, the target list,
+ * whether the sheet was up and the kept captures live in [savedState]; a camera result can reach a fresh VM before the List
+ * screen calls [showList], so the target list then falls back to the current list.
  */
 class AddViewModel(
     private val store: StateStore,
@@ -125,6 +139,10 @@ class AddViewModel(
      * twin, TripFiling.addItems). Null (tests that only add) adds straight to the list.
      */
     private val album: AlbumStore? = null,
+    /** False while the phone has no network at all (NetworkStatus): rule 2b. */
+    private val online: () -> Boolean = { true },
+    /** Where a photo or voice note that could not be sent is kept (FileCaptureKeeper on the phone). */
+    private val keeper: CaptureKeeper = CaptureKeeper.None,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         AddUiState(
@@ -136,8 +154,45 @@ class AddViewModel(
     )
     val state: StateFlow<AddUiState> = _state.asStateFlow()
 
+    /** The photo and the voice note kept after a failed request (their files), and what the sheet said then. */
+    @Volatile
+    private var keptPhoto: KeptCapture? = null
+
+    @Volatile
+    private var keptVoice: KeptCapture? = null
+
+    /** The kept voice note's transcript, when it was written down and the reading failed after. */
+    @Volatile
+    private var keptTranscript: String? = null
+
+    /** The failure each kept capture showed, to show it again in this session (a fresh start has its own words). */
+    private val keptFailure = HashMap<CaptureKind, AddPhase.Failed>()
+
+    /** Bumps on every forget, so a keep that finishes after it is undone. */
+    private val keptGeneration = AtomicIntegerArray(CaptureKind.entries.size)
+
+    /** The keeper's writes and deletes, in the order they were asked for (a keep, then a delete, ends deleted). */
+    private val keeperQueue = Channel<suspend () -> Unit>(Channel.UNLIMITED)
+
+    /** Plain lines from the kept voice note are under review: once they are on the list, the recording goes. */
+    private var plainFromKeptVoice = false
+
     init {
-        // What survives process death: the draft, the mode, the target list and the open sheet (never photos or audio).
+        appScope.launch {
+            for (op in keeperQueue) {
+                try {
+                    op()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    PicnicLog.w("kept capture: couldn't update it", e)
+                }
+            }
+        }
+        // A photo or voice note the last session could not send (its pointer, else what is on disk).
+        viewModelScope.launch { restoreKept() }
+        // What survives process death: the draft, the mode, the target list and the open sheet (photos and audio only
+        // as the pointers to kept captures).
         viewModelScope.launch {
             _state.map { Saved(it.listId, it.mode, it.text, it.sheetOpen) }.distinctUntilChanged().collect { saved ->
                 savedState[KEY_LIST] = saved.listId
@@ -248,6 +303,8 @@ class AddViewModel(
     fun openSheet(mode: AddMode = AddMode.WRITE, listId: String? = null) {
         if (listId != null) showList(listId)
         _state.update { it.copy(sheetOpen = true, mode = if (it.phase.busy || it.review != null) it.mode else mode) }
+        val s = _state.value
+        if (s.mode == mode && s.photo == null && s.transcript == null) showKept(mode)
     }
 
     /** v1 name: opens the sheet on [mode] for [listId]. */
@@ -273,6 +330,8 @@ class AddViewModel(
         val s = _state.value
         if (s.mode == mode || s.phase.busy || s.committing || !s.tabEnabled(mode)) return
         _state.update { it.copy(mode = mode, phase = if (it.phase is AddPhase.Failed) it.restingPhase() else it.phase) }
+        // Snap or Speak with a photo or voice note that could not be sent: it shows again, with Try again.
+        if (_state.value.review == null) showKept(mode)
     }
 
     fun setText(text: String) {
@@ -285,6 +344,172 @@ class AddViewModel(
     /** Asks the List screen to focus the bar's field (the FAB, "Start my list"). */
     fun requestFieldFocus() {
         _events.trySend(AddEvent.FocusField)
+    }
+
+    /* ---------------- kept captures (§0.4, 5 October) ---------------- */
+
+    /** A photo ([AddMode.SNAP]) or voice note ([AddMode.SPEAK]) that could not be sent waits here. */
+    fun hasKept(mode: AddMode): Boolean = keptFor(mode) != null
+
+    /**
+     * Snap or Speak opened again (the bar's camera or cassette, the sheet's tab): the kept photo or voice note shows with
+     * what went wrong and "Try again"; the footer still takes a new photo or records a new note. False when there is none
+     * (or the sheet is busy with something else), so the caller goes on to the camera or the microphone.
+     */
+    fun showKept(mode: AddMode): Boolean {
+        val s = _state.value
+        if (s.phase.busy || s.committing || s.review != null) return false
+        val kept = keptFor(mode) ?: return false
+        if (s.kept == kept.kind && s.phase is AddPhase.Failed && s.mode == mode && s.sheetOpen) return true
+        work?.cancel()
+        retryAction = null
+        val transcript = if (kept.kind == CaptureKind.VOICE) keptTranscript else null
+        val failed = keptFailure[kept.kind]
+            ?: AddPhase.Failed(
+                problem = if (kept.kind == CaptureKind.PHOTO) AddProblem.KEPT_PHOTO else AddProblem.KEPT_VOICE,
+                retryable = true,
+                canUsePlainLines = transcript != null,
+            )
+        _state.update {
+            it.cleared().copy(
+                sheetOpen = true,
+                mode = mode,
+                kept = kept.kind,
+                phase = failed,
+                photo = if (kept.kind == CaptureKind.PHOTO) SnapPhoto(thumb = null, takenAt = kept.keptAt) else null,
+                transcript = transcript,
+            )
+        }
+        work = viewModelScope.launch {
+            val bytes = keeper.read(kept)
+            if (bytes == null) {
+                // Swept or deleted meanwhile: nothing to show (the footer still takes a new one).
+                forgetKept(kept.kind)
+                _state.update { if (it.kept == kept.kind) it.copy(kept = null, photo = null, transcript = null, phase = it.restingPhase()) else it }
+                return@launch
+            }
+            retryAction = retryFor(kept.kind, bytes)
+            if (kept.kind == CaptureKind.PHOTO) {
+                val thumb = try {
+                    thumbs(bytes)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+                _state.update { if (it.kept == CaptureKind.PHOTO) it.copy(photo = it.photo?.copy(thumb = thumb)) else it }
+            }
+        }
+        return true
+    }
+
+    /** "Delete photo" / "Delete voice note" under a kept capture: it is gone from the phone; the tab starts afresh. */
+    fun discardKept() {
+        val kind = _state.value.kept ?: return
+        if (_state.value.phase.busy) return
+        work?.cancel()
+        retryAction = null
+        forgetKept(kind)
+        _state.update {
+            it.copy(
+                kept = null,
+                phase = it.restingPhase(),
+                photo = if (kind == CaptureKind.PHOTO) null else it.photo,
+                transcript = if (kind == CaptureKind.VOICE) null else it.transcript,
+            )
+        }
+    }
+
+    private fun keptFor(mode: AddMode): KeptCapture? = when (mode) {
+        AddMode.SNAP -> keptPhoto
+        AddMode.SPEAK -> keptVoice
+        AddMode.WRITE -> null
+    }
+
+    /** What "Try again" does with a kept capture's bytes: read the photo, or write down (or read) the voice note. */
+    private fun retryFor(kind: CaptureKind, bytes: ByteArray): () -> Unit = when (kind) {
+        CaptureKind.PHOTO -> { { work = viewModelScope.launch { runPhotoIngest(bytes) } } }
+        CaptureKind.VOICE -> {
+            val transcript = keptTranscript
+            if (transcript != null) {
+                { work = viewModelScope.launch { runVoiceIngest(transcript, bytes) } }
+            } else {
+                { work = viewModelScope.launch { transcribe(bytes) } }
+            }
+        }
+    }
+
+    /**
+     * The request for [bytes] failed: when the sheet offers "Try again", they are kept (the phone's app-private storage)
+     * with [transcript] for a voice note that was written down, and the sheet shows the Delete button.
+     */
+    private fun keepCapture(kind: CaptureKind, bytes: ByteArray, transcript: String? = null) {
+        val failed = _state.value.phase as? AddPhase.Failed ?: return
+        if (!failed.retryable) return
+        keptFailure[kind] = failed
+        if (kind == CaptureKind.VOICE) {
+            keptTranscript = transcript
+            savedState[KEY_KEPT_TRANSCRIPT] = transcript
+        }
+        _state.update { it.copy(kept = kind) }
+        // Try again failed again: the same bytes are kept already.
+        if (keptFor(kind.mode) != null) return
+        val generation = keptGeneration[kind.ordinal]
+        keeperQueue.trySend {
+            val kept = keeper.keep(kind, bytes) ?: return@trySend
+            withContext(Dispatchers.Main) {
+                // Forgotten while it was written (sent, replaced or deleted): the delete queued after this removes it.
+                if (keptGeneration[kind.ordinal] != generation) return@withContext
+                when (kind) {
+                    CaptureKind.PHOTO -> keptPhoto = kept
+                    CaptureKind.VOICE -> keptVoice = kept
+                }
+                savedState[keyFor(kind)] = kept.name
+            }
+        }
+    }
+
+    /** The kept [kind] goes: sent, replaced by a new one, or deleted (the file too). */
+    private fun forgetKept(kind: CaptureKind) {
+        keptGeneration.incrementAndGet(kind.ordinal)
+        keptFailure.remove(kind)
+        when (kind) {
+            CaptureKind.PHOTO -> keptPhoto = null
+            CaptureKind.VOICE -> {
+                keptVoice = null
+                keptTranscript = null
+                savedState[KEY_KEPT_TRANSCRIPT] = null
+            }
+        }
+        savedState[keyFor(kind)] = null
+        keeperQueue.trySend { keeper.discard(kind) }
+    }
+
+    /** A fresh ViewModel: the kept captures' pointers (else what the keeper still holds), shown if the sheet was on them. */
+    private suspend fun restoreKept() {
+        for (kind in CaptureKind.entries) {
+            val generation = keptGeneration[kind.ordinal]
+            val kept = savedState.get<String>(keyFor(kind))?.let { keptCaptureOf(kind, it) } ?: keeper.latest(kind)
+            if (kept == null || keptGeneration[kind.ordinal] != generation || keptFor(kind.mode) != null) continue
+            when (kind) {
+                CaptureKind.PHOTO -> keptPhoto = kept
+                CaptureKind.VOICE -> {
+                    keptVoice = kept
+                    keptTranscript = savedState[KEY_KEPT_TRANSCRIPT]
+                }
+            }
+        }
+        val s = _state.value
+        if (s.sheetOpen && s.photo == null && s.transcript == null) showKept(s.mode)
+    }
+
+    private val CaptureKind.mode: AddMode get() = if (this == CaptureKind.PHOTO) AddMode.SNAP else AddMode.SPEAK
+
+    private fun keyFor(kind: CaptureKind): String = if (kind == CaptureKind.PHOTO) KEY_KEPT_PHOTO else KEY_KEPT_VOICE
+
+    /** Rule 2b's check before a request: offline, the request is not made (core would say the same at once). */
+    private fun requireOnline() {
+        if (!online()) throw LlmError.Offline()
     }
 
     /* ---------------- Write: send, as typed ---------------- */
@@ -310,6 +535,11 @@ class AddViewModel(
             if (!hasKey()) {
                 // Rule 2: no key, so the text goes on as typed, with the toast that says how to get smart sorting.
                 commitTyped(text, noKey = true, fromBar = origin == AddOrigin.BAR)
+                return@launch
+            }
+            if (origin == AddOrigin.BAR && !online()) {
+                // Rule 2b: offline the bar adds the text as typed at once; the catch-up sorts it when the connection is back.
+                commitTyped(text, noKey = false, fromBar = true, offline = true)
                 return@launch
             }
             runTextIngest(text, origin)
@@ -412,6 +642,8 @@ class AddViewModel(
                 null
             }
             _state.update { it.copy(photo = it.photo?.copy(thumb = thumb)) }
+            // A new photo replaces one kept from before.
+            if (keptPhoto != null || keptFailure.containsKey(CaptureKind.PHOTO)) forgetKept(CaptureKind.PHOTO)
             runPhotoIngest(bytes)
         }
     }
@@ -498,6 +730,8 @@ class AddViewModel(
             } finally {
                 withContext(NonCancellable + ioDispatcher) { file.delete() }
             }
+            // A new voice note replaces one kept from before.
+            if (keptVoice != null || keptFailure.containsKey(CaptureKind.VOICE)) forgetKept(CaptureKind.VOICE)
             transcribe(bytes)
         }
     }
@@ -569,6 +803,8 @@ class AddViewModel(
         val text = voice ?: s.sentText ?: s.text
         if (text.isBlank()) return
         retryAction = null
+        // The kept voice note's words are on the card now: once they are stuck on the list, the recording goes.
+        plainFromKeptVoice = voice != null && (s.kept == CaptureKind.VOICE || keptVoice != null)
         work?.cancel()
         work = viewModelScope.launch {
             val st = store.current()
@@ -623,7 +859,12 @@ class AddViewModel(
             .map { (source, group) -> source to group.map { it.item } }
         // A note's review (its answer or its plain lines) used the draft: it clears once the rows are on the list.
         val clearsText = review.source == ItemSource.AI_TEXT || review.source == ItemSource.TYPED
-        appScope.launch { commitItems(targetListId(), batches, noKey = false, clearsText = clearsText) }
+        val sendsKeptVoice = plainFromKeptVoice
+        plainFromKeptVoice = false
+        appScope.launch {
+            val saved = commitItems(targetListId(), batches, noKey = false, clearsText = clearsText)
+            if (saved && sendsKeptVoice) withContext(Dispatchers.Main) { forgetKept(CaptureKind.VOICE) }
+        }
     }
 
     /** The toast's Undo for [commitId]: removes exactly the items that commit added and checks the revived ones again. */
@@ -650,6 +891,8 @@ class AddViewModel(
     override fun onCleared() {
         recorder?.cancel()
         recorder = null
+        // The keeper's last writes and deletes still run (the loop drains the queue in the app scope), then it ends.
+        keeperQueue.close()
     }
 
     /* ---------------- internals ---------------- */
@@ -667,8 +910,15 @@ class AddViewModel(
         val st = store.current()
         val ctx = st.ingestContext(targetListId())
         val result = try {
+            requireOnline()
             assistant.ingest(IngestInput.Text(text), ctx)
         } catch (e: LlmError) {
+            if (origin == AddOrigin.BAR && e.unreached && hasKey()) {
+                // Rule 2b: the request never reached OpenAI, so the bar's note goes on as typed now and is sorted when the
+                // connection is back (the catch-up), as if the phone had known it was offline.
+                commitTyped(text, noKey = false, fromBar = true, offline = true)
+                return
+            }
             retryAction = { send(origin) }
             failAi(e, canUsePlainLines = true, mode = AddMode.WRITE)
             return
@@ -691,44 +941,56 @@ class AddViewModel(
         val st = store.current()
         val ctx = st.ingestContext(targetListId())
         val result = try {
+            requireOnline()
             assistant.ingest(IngestInput.Image(bytes), ctx)
         } catch (e: LlmError) {
             retryAction = { work = viewModelScope.launch { runPhotoIngest(bytes) } }
             failAi(e, canUsePlainLines = false, mode = AddMode.SNAP)
+            // Kept until it is read, replaced or deleted: closing the sheet or the app ending loses nothing.
+            keepCapture(CaptureKind.PHOTO, bytes)
             return
         }
+        if (keptPhoto != null || keptFailure.containsKey(CaptureKind.PHOTO)) forgetKept(CaptureKind.PHOTO)
         showReview(result, ItemSource.PHOTO, query = null, st = st, ctx = ctx, mode = AddMode.SNAP)
     }
 
     private suspend fun transcribe(bytes: ByteArray) {
         _state.update { it.copy(phase = it.phase as? AddPhase.Transcribing ?: AddPhase.Transcribing()) }
         val transcript = try {
+            requireOnline()
             assistant.transcribe(AudioClip(bytes), keywords())
         } catch (e: LlmError) {
             retryAction = { work = viewModelScope.launch { transcribe(bytes) } }
             failAi(e, canUsePlainLines = false, mode = _state.value.mode)
+            // Kept until it is heard, replaced or deleted: closing the sheet or the app ending loses nothing.
+            keepCapture(CaptureKind.VOICE, bytes)
             return
         }
         if (transcript.isEmpty) {
+            if (keptVoice != null || keptFailure.containsKey(CaptureKind.VOICE)) forgetKept(CaptureKind.VOICE)
             fail(AddProblem.NOTHING_HEARD, mode = _state.value.mode)
             return
         }
         val text = transcript.text.trim()
         _state.update { it.copy(transcript = text) }
-        runVoiceIngest(text)
+        runVoiceIngest(text, bytes)
     }
 
-    private suspend fun runVoiceIngest(text: String) {
+    /** Reads the voice note's words [text]; [bytes] is the recording, kept with its words if the reading fails. */
+    private suspend fun runVoiceIngest(text: String, bytes: ByteArray? = null) {
         _state.update { it.copy(phase = AddPhase.Thinking(ItemSource.VOICE)) }
         val st = store.current()
         val ctx = st.ingestContext(targetListId())
         val result = try {
+            requireOnline()
             assistant.ingest(IngestInput.Transcript(text), ctx)
         } catch (e: LlmError) {
-            retryAction = { work = viewModelScope.launch { runVoiceIngest(text) } }
+            retryAction = { work = viewModelScope.launch { runVoiceIngest(text, bytes) } }
             failAi(e, canUsePlainLines = true, mode = _state.value.mode)
+            if (bytes != null) keepCapture(CaptureKind.VOICE, bytes, transcript = text)
             return
         }
+        if (keptVoice != null || keptFailure.containsKey(CaptureKind.VOICE)) forgetKept(CaptureKind.VOICE)
         val review = _state.value.review
         if (review != null) {
             // D19: Speak after Snap (or after a note, or a second voice note) appends a batch to the same preview,
@@ -767,13 +1029,13 @@ class AddViewModel(
      * Rules 2 and "As typed": the offline parse commits at once (duplicates included, so they pop, rule 7), in [appScope]:
      * nothing she does next (a new note, closing the sheet, a photo) can cancel the save or the aisle sort after it.
      */
-    private fun commitTyped(text: String, noKey: Boolean, fromBar: Boolean = false) {
+    private fun commitTyped(text: String, noKey: Boolean, fromBar: Boolean = false, offline: Boolean = false) {
         _state.update { it.copy(committing = true) }
         appScope.launch {
             val listId = targetListId()
             val ctx = store.current().ingestContext(listId).copy(existingNames = emptyList())
             val items = OfflineParser.parse(text, catalog, ctx)
-            commitItems(listId, listOf(ItemSource.TYPED to items), noKey = noKey, clearsText = true, fromBar = fromBar)
+            commitItems(listId, listOf(ItemSource.TYPED to items), noKey = noKey, clearsText = true, fromBar = fromBar, offline = offline)
         }
     }
 
@@ -782,6 +1044,8 @@ class AddViewModel(
      * ones revive; Q8), the commit event (toast, pops 80 ms apart, Undo), the sheet closes, the SurpriseEngine hears of
      * the new rows (eggs 3, 9, 17), the icon cascade, and typed rows without an aisle are placed in the background (a
      * network call with a key). The add flows are free again as soon as the rows are saved: the sort never holds them.
+     * Offline ([offline], or the phone has no network now) that sort waits for the connection (the catch-up does it) and
+     * the toast says so: one note, never a second "couldn't sort" one. Returns whether the rows were saved.
      */
     private suspend fun commitItems(
         listId: String,
@@ -789,7 +1053,8 @@ class AddViewModel(
         noKey: Boolean,
         clearsText: Boolean,
         fromBar: Boolean = false,
-    ) {
+        offline: Boolean = false,
+    ): Boolean {
         val now = clock()
         val items = batches.flatMap { (source, proposed) -> proposed.map { it.toGroceryItem(newId(), now, source) } }
         var outcome = AddOutcome.NONE
@@ -827,11 +1092,11 @@ class AddViewModel(
         } catch (e: IOException) {
             retryAction = {
                 _state.update { it.copy(committing = true) }
-                appScope.launch { commitItems(listId, batches, noKey, clearsText, fromBar) }
+                appScope.launch { commitItems(listId, batches, noKey, clearsText, fromBar, offline) }
             }
             _state.update { it.copy(committing = false, phase = AddPhase.Failed(AddProblem.SAVE_FAILED, retryable = true)) }
             _events.send(AddEvent.SaveFailed)
-            return
+            return false
         }
         val list = after.list(listId)
         val now2 = list?.items.orEmpty().associateBy { it.id }
@@ -849,6 +1114,9 @@ class AddViewModel(
         val aisleTitle = added.singleOrNull()?.let { item ->
             after.store.aisles().firstOrNull { it.id == item.aisleId }?.displayName().orEmpty()
         }
+        val unsorted = added.filter { it.source == ItemSource.TYPED && it.aisleId == null }.map { it.id }
+        // Rule 2b: typed rows that need sorting, with a key and no network: the sort waits for the catch-up.
+        val sortWaits = !noKey && unsorted.isNotEmpty() && (offline || !online())
         val commit = AddCommit(
             id = commitId,
             listId = listId,
@@ -858,6 +1126,7 @@ class AddViewModel(
             revived = revived,
             aisleTitle = aisleTitle,
             asTypedNoKey = noKey && added.isNotEmpty(),
+            asTypedOffline = sortWaits,
             fromBar = fromBar,
             otherList = shownListId.let { it.isNotEmpty() && it != listId },
             newBook = newBook,
@@ -870,18 +1139,21 @@ class AddViewModel(
             )
         }
         _events.send(AddEvent.Committed(commit))
-        if (added.isEmpty()) return
+        if (added.isEmpty()) return true
         surprises.onCommitted(added)
         icons.submit(added)
-        val unsorted = added.filter { it.source == ItemSource.TYPED && it.aisleId == null }.map { it.id }
-        if (unsorted.isNotEmpty()) {
+        if (unsorted.isNotEmpty() && !sortWaits) {
             val report = aisleSync.sortItems(unsorted)
             val error = report.error
-            // No key means "AI is off": typed items simply stay in Everything else, no need to nag.
-            if (error != null && error !is LlmError.NotConfigured) {
-                _events.send(AddEvent.SortFailed(error.friendlyMessage, report.leftUnsorted))
+            when {
+                // No key means "AI is off": typed items simply stay in Everything else, no need to nag.
+                error == null || error is LlmError.NotConfigured -> Unit
+                // It never reached OpenAI (the connection went meanwhile): the catch-up sorts them; the note says so.
+                error.unreached -> _events.send(AddEvent.SortWaits(report.leftUnsorted))
+                else -> _events.send(AddEvent.SortFailed(error.friendlyMessage, report.leftUnsorted))
             }
         }
+        return true
     }
 
     /** Transcription vocabulary: names on the target list and learned names (core caps it at 100). */
@@ -914,6 +1186,7 @@ class AddViewModel(
                     retryable = e.retryable || (settingsError && retryAction != null),
                     canUsePlainLines = canUsePlainLines,
                     needsSettings = settingsError,
+                    offline = e.unreached,
                 ),
             )
         }
@@ -946,7 +1219,7 @@ class AddViewModel(
      */
     private fun AddUiState.cleared() = copy(
         phase = AddPhase.Idle, review = null, photo = null, transcript = null, sentText = null, committing = false,
-        listId = shownListId.ifEmpty { listId },
+        listId = shownListId.ifEmpty { listId }, kept = null,
     )
 
     /**
@@ -975,6 +1248,11 @@ class AddViewModel(
         private const val KEY_TEXT = "add.text"
         private const val KEY_SHEET = "add.sheet"
 
+        /** The kept photo's and voice note's file names (their pointers, §0.4 5 October) and the voice note's words. */
+        private const val KEY_KEPT_PHOTO = "add.kept.photo"
+        private const val KEY_KEPT_VOICE = "add.kept.voice"
+        private const val KEY_KEPT_TRANSCRIPT = "add.kept.transcript"
+
         fun factory(c: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY]
@@ -996,6 +1274,8 @@ class AddViewModel(
                     announcer = c.announcer,
                     words = { id -> app?.getString(id).orEmpty() },
                     album = c.album,
+                    online = { c.network.online.value },
+                    keeper = c.keptCaptures,
                 )
             }
         }

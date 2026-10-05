@@ -58,6 +58,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
 import earth.cora.picnic.core.model.ItemSource
+import earth.cora.picnic.platform.CaptureKind
+import earth.cora.picnic.ui.common.HankoTextButton
 import earth.cora.picnic.ui.a11y.decorative
 import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.theme.Families
@@ -116,6 +118,8 @@ class AddActions(
     /** "OK" under a review with nothing to switch on. */
     val onAcknowledge: () -> Unit = {},
     val onClose: () -> Unit = {},
+    /** "Delete photo" / "Delete voice note" under a capture that could not be sent (§0.4, 5 October). */
+    val onDiscardKept: () -> Unit = {},
 )
 
 /**
@@ -152,6 +156,7 @@ fun AddSheetHost(flows: AddFlows, state: AddUiState, onOpenSettings: () -> Unit,
             onCapsulePop = vm::capsulePopped,
             onAcknowledge = vm::acknowledge,
             onClose = vm::closeSheet,
+            onDiscardKept = vm::discardKept,
         )
     }
     AddSheet(state, actions)
@@ -438,7 +443,7 @@ private fun WriteTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
         }
     } else {
         NoteField(state.text, actions.onTextChange)
-        if (failed != null) ErrorBlock(failed, actions)
+        if (failed != null) ErrorBlock(failed, actions, kept = null)
     }
 }
 
@@ -505,7 +510,7 @@ private fun SnapTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
             )
         }
         ChoosePhotoChip(actions.onChoosePhoto)
-        if (failed != null) ErrorBlock(failed, actions)
+        if (failed != null) ErrorBlock(failed, actions, kept = null)
         return
     }
     val clock = reveals.main
@@ -520,7 +525,7 @@ private fun SnapTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
     }
     if (review == null) {
         if (failed != null) {
-            ErrorBlock(failed, actions)
+            ErrorBlock(failed, actions, kept = state.kept?.takeIf { it == CaptureKind.PHOTO })
             // The photo could not be read: another one is a tap away (the footer offers the camera).
             ChoosePhotoChip(actions.onChoosePhoto)
         }
@@ -603,7 +608,7 @@ private fun HeardPart(state: AddUiState, actions: AddActions, reveals: Reveals) 
             HeardTray(review.heardRows, afterReview = true, clock = clock, onToggleKeep = actions.onToggleKeep)
         }
     }
-    if (failed != null) ErrorBlock(failed, actions)
+    if (failed != null) ErrorBlock(failed, actions, kept = state.kept?.takeIf { it == CaptureKind.VOICE })
 }
 
 /* ---------------- Speak ---------------- */
@@ -629,11 +634,12 @@ private fun SpeakTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
 /**
  * The error state (rule 6, §6.12): the friendly message in hanko with the torn-paper glyph, inline (never a system
  * dialog), with "Try again", "Add as plain lines" and "Open Settings" as they apply. At a large font a pill's label
- * wraps and the pill grows round it (§4.6, item 337): the same words at every size.
+ * wraps and the pill grows round it (§4.6, item 337): the same words at every size. Under a photo or voice note that is
+ * [kept] on the phone (§0.4, 5 October), a hanko text button deletes it.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ErrorBlock(failed: AddPhase.Failed, actions: AddActions) {
+private fun ErrorBlock(failed: AddPhase.Failed, actions: AddActions, kept: CaptureKind?) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val message = failed.message ?: stringResource(failed.problem.copy())
@@ -655,9 +661,20 @@ private fun ErrorBlock(failed: AddPhase.Failed, actions: AddActions) {
             if (failed.problem == AddProblem.MIC_DENIED) {
                 PicnicButton(stringResource(R.string.add_open_phone_settings), onClick = actions.onOpenAppSettings, glyph = PicnicGlyph.Settings)
             }
+            if (kept != null) {
+                HankoTextButton(
+                    stringResource(if (kept == CaptureKind.PHOTO) R.string.add_kept_delete_photo else R.string.add_kept_delete_voice),
+                    onClick = actions.onDiscardKept,
+                    glyph = PicnicGlyph.Delete,
+                    modifier = Modifier.testTag(ADD_DISCARD_KEPT_TAG),
+                )
+            }
         }
     }
 }
+
+/** The "Delete photo" / "Delete voice note" button under a kept capture (tests). */
+const val ADD_DISCARD_KEPT_TAG: String = "add_discard_kept"
 
 /** The app's own copy for each problem (core's AI errors bring their own friendly message). */
 private fun AddProblem.copy(): Int = when (this) {
@@ -669,6 +686,8 @@ private fun AddProblem.copy(): Int = when (this) {
     AddProblem.TOO_SHORT -> R.string.add_problem_too_short
     AddProblem.NOTHING_HEARD -> R.string.add_problem_nothing
     AddProblem.SAVE_FAILED -> R.string.add_problem_save
+    AddProblem.KEPT_PHOTO -> R.string.add_problem_kept_photo
+    AddProblem.KEPT_VOICE -> R.string.add_problem_kept_voice
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -688,6 +707,12 @@ private sealed interface FooterKind {
 
     /** Write: "As typed" and Send. */
     data object Write : FooterKind
+
+    /**
+     * Write after a request that never reached OpenAI (offline, rule 2b): "As typed" alone, so the note can still go on
+     * the list at once (the error above offers Try again and Add as plain lines).
+     */
+    data object AsTyped : FooterKind
 
     /** Snap with no photo yet, or after a photo that could not be read: "Take a photo". */
     data object TakePhoto : FooterKind
@@ -711,7 +736,12 @@ private fun footerFor(state: AddUiState, reveals: Reveals): FooterKind? {
         return FooterKind.Stick(popped, rows.size, revealing, reading)
     }
     return when (state.mode) {
-        AddMode.WRITE -> if (state.phase is AddPhase.Failed || review != null) null else FooterKind.Write
+        AddMode.WRITE -> when {
+            review != null -> null
+            (state.phase as? AddPhase.Failed)?.offline == true -> FooterKind.AsTyped
+            state.phase is AddPhase.Failed -> null
+            else -> FooterKind.Write
+        }
         AddMode.SNAP -> when {
             // No camera app: "Take a photo" could only fail again ("Choose a photo" stays in the tab).
             (state.phase as? AddPhase.Failed)?.problem == AddProblem.CAMERA_UNAVAILABLE -> null
@@ -785,6 +815,12 @@ private fun AddFooter(kind: FooterKind, state: AddUiState, actions: AddActions) 
                     modifier = if (waiting) Modifier.weight(1f) else Modifier,
                 )
             }
+            FooterKind.AsTyped -> PicnicButton(
+                stringResource(R.string.add_as_typed),
+                onClick = actions.onAsTyped,
+                style = PicnicButtonStyle.Text,
+                enabled = state.text.isNotBlank() && !busy,
+            )
             FooterKind.TakePhoto -> PicnicButton(
                 stringResource(R.string.add_snap_take),
                 onClick = actions.onTakePhoto,

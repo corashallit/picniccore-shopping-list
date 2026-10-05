@@ -274,6 +274,10 @@ data class EditItemUi(
     val drawing: Boolean = false,
     /** Opened from the add note's "Move" (§6.2): the sheet opens scrolled to "Move to aisle". */
     val focusMove: Boolean = false,
+    /** The phone is offline (§0.4, 5 October): "Draw a new sticker" waits for a connection, and the sheet says so. */
+    val offline: Boolean = false,
+    /** The drawing she asked for did not work (§0.4, 5 October): the sheet says so instead of quietly going back. */
+    val drawFailed: earth.cora.picnic.icons.DrawFailure? = null,
 ) {
     /** The aisle the item is listed under (null = Unsorted; vanished ids count as Unsorted). */
     val currentAisleId: String? get() = item.aisleId?.takeIf { id -> aisles.any { it.id == id } }
@@ -305,6 +309,12 @@ sealed interface ListEvent {
 
     /** Pull to refresh finished (§6.1): what changed; nothing shows when nothing did. */
     data class Refreshed(val sorted: Int, val left: Int, val drawn: Int) : ListEvent
+
+    /**
+     * A refresh with a key while the phone is offline (§0.4, 5 October): "Sorting and new stickers wait until you’re back
+     * online" (the catch-up does both when the connection returns).
+     */
+    data object RefreshWaits : ListEvent
 
     /**
      * An item was moved to another aisle (Cora, 5 October; §6.3): "Toothpaste goes in Produce from now on" with Undo

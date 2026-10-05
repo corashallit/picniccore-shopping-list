@@ -11,6 +11,7 @@ import earth.cora.picnic.core.model.localIcon
 import earth.cora.picnic.core.model.normalizeName
 import earth.cora.picnic.core.model.setPantryIcon
 import earth.cora.picnic.core.assistant.resolve
+import earth.cora.picnic.core.store.StateStore
 import earth.cora.picnic.platform.PicnicLog
 import earth.cora.picnic.ui.theme.gen.StickerManifest
 
@@ -18,7 +19,8 @@ import earth.cora.picnic.ui.theme.gen.StickerManifest
  * Pantry stickers (docs/DESIGN_STICKER.md §6.13, checklist 328): the learned icon override for the name, else the local
  * alias match (both through core's localIcon), else, with a key, the IconDecider's answer (ONE batched call per commit
  * of the screen; the capsule while it waits), else the category generic, else the capsule (D5). Pantry entries never
- * start a live drawing, and nothing calls the network without a key. Owner: WP8 (PantryIconsTest).
+ * start a live drawing, and nothing calls the network without a key. A commit made offline leaves its unknown entries
+ * on the capsule; the catch-up when the connection comes back decides them ([decidePending]). Owner: WP8 (PantryIconsTest).
  */
 object PantryIcons {
     /** What a shelf sticker shows: its resolved sticker, or the gashapon capsule while it has none. */
@@ -63,6 +65,18 @@ object PantryIcons {
             }
             named.id to ref
         }
+    }
+
+    /**
+     * The catch-up (docs/DESIGN_STICKER.md §0.4, 5 October): the entries still without a sticker (a commit made offline, or
+     * one whose call failed) get step 2's answer now, in one call, as a commit of the screen would. The caller checks the
+     * key and the network; an LlmError leaves them for the next time.
+     */
+    suspend fun decidePending(store: StateStore, decider: IconDecider, catalog: IconCatalog) {
+        val unknown = unresolved(store.current())
+        if (unknown.isEmpty()) return
+        val decided = decide(decider, unknown, catalog)
+        if (decided.isNotEmpty()) store.update { apply(it, decided) }
     }
 
     /** Applies step 2's answers to the entries that are still unresolved (a sticker she picked meanwhile wins). */

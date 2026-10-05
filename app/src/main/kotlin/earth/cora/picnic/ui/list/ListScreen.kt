@@ -494,6 +494,7 @@ fun ListRoute(
                 )
                 is ListEvent.ListDeleted -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_list_deleted, event.title), kind = "list"))
                 is ListEvent.Refreshed -> refreshedToast(resources, event)?.let { toasts.show(it) }
+                ListEvent.RefreshWaits -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_refresh_offline), kind = SYNC_KIND))
                 is ListEvent.Message -> toasts.show(ToastMessage(event.text, kind = "save"))
                 // Over the Edit sheet while it is up (the list's notes are under it), and over the list once it has
                 // closed; a note still up when the sheet closes carries on over the list (ListScreenContent).

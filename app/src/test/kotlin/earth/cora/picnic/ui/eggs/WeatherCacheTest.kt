@@ -181,12 +181,58 @@ class WeatherCacheTest {
         val offline = service.check(weatherOn = true)
         assertEquals(2, source.requests)
         assertTrue("an unanswered ask keeps today's rain", offline!!.rain)
-        // And it waits its 3 h before asking again.
+        // A minute later it does not ask yet.
         now += 60_000L
         service.check(weatherOn = true)
         assertEquals(2, source.requests)
         // A source that throws is no weather, never a crash.
         val throwing = WeatherService({ throw IllegalStateException("boom") }, cache(), { now + 4 * 60 * 60_000L }, zone)
         assertNull(throwing.check(weatherOn = true))
+    }
+
+    /**
+     * §0.4, 5 October: a failed ask (offline, unreachable) is asked again about 15 minutes later, keeping the old forecast
+     * meanwhile, not 3 h later; the catch-up when the connection comes back (`retryFailed`) asks at once; an answer goes
+     * back to the 3 h rhythm. The failure is kept across a restart (`weather_failed_at`).
+     */
+    @Test
+    fun aFailedAskIsRetriedAfterFifteenMinutes() = runBlocking {
+        var now = ms(day, LocalTime.of(9, 0))
+        var online = true
+        val source = CountingWeather { if (online) WeatherToday(it, rain = true, snow = false) else null }
+        source.day = { java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate() }
+        val service = WeatherService(source, cache(), { now }, zone)
+        assertTrue(service.check(weatherOn = true)!!.rain)
+        assertEquals(1, source.requests)
+
+        online = false
+        now += WeatherService.REFETCH_MS + 1
+        assertTrue("the old forecast stays", service.check(weatherOn = true)!!.rain)
+        assertEquals(2, source.requests)
+        now += 14 * 60_000L
+        service.check(weatherOn = true)
+        assertEquals("14 minutes later: not yet", 2, source.requests)
+
+        // A restart: the failure was kept, so the 15 minutes still run from it.
+        val again = WeatherService(source, cache(), { now }, zone)
+        now += 60_000L + 1
+        again.check(weatherOn = true)
+        assertEquals("15 minutes after the failed ask: asked again", 3, source.requests)
+
+        // Still offline; then the connection comes back 2 minutes later: the catch-up asks at once.
+        now += 2 * 60_000L
+        again.check(weatherOn = true)
+        assertEquals(3, source.requests)
+        online = true
+        assertTrue(again.check(weatherOn = true, retryFailed = true)!!.rain)
+        assertEquals("the catch-up asks without waiting", 4, source.requests)
+
+        // Answered: back to every 3 h, and retryFailed asks nothing then.
+        now += 20 * 60_000L
+        again.check(weatherOn = true, retryFailed = true)
+        assertEquals(4, source.requests)
+        now += WeatherService.REFETCH_MS
+        again.check(weatherOn = true)
+        assertEquals(5, source.requests)
     }
 }

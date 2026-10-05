@@ -78,6 +78,19 @@ class AddFlows internal constructor(
 
     fun recordVoice() = vm.requireKey(AddMode.SPEAK, sources.recordVoice)
 
+    /**
+     * The bar's camera button: a photo that could not be sent comes back first (the sheet on Snap, with Try again and
+     * "Take a photo" for a new one, §0.4 5 October); otherwise the camera.
+     */
+    fun snapFromBar() {
+        if (!vm.showKept(AddMode.SNAP)) takePhoto()
+    }
+
+    /** The bar's cassette button: a voice note that could not be sent comes back first; otherwise the microphone. */
+    fun speakFromBar() {
+        if (!vm.showKept(AddMode.SPEAK)) recordVoice()
+    }
+
     /** Focuses the bar's field and opens the keyboard (the FAB, "Start my list"). */
     fun focusField() {
         collapse.expand()
@@ -193,6 +206,7 @@ fun AddEventsEffect(
                         kind = "sort",
                     ),
                 )
+                is AddEvent.SortWaits -> toasts.show(ToastMessage(resources.getString(R.string.add_toast_sort_waits), kind = "sort"))
                 AddEvent.FocusField -> flows.focusField()
             }
         }
@@ -281,6 +295,7 @@ operator fun AddCommit.plus(other: AddCommit): AddCommit {
         revived = (revived + other.revived).distinctBy { it.id },
         aisleTitle = if (added.size == 1) adding.single().aisleTitle else null,
         asTypedNoKey = adding.isNotEmpty() && adding.all { it.asTypedNoKey },
+        asTypedOffline = adding.isNotEmpty() && adding.all { it.asTypedOffline },
         fromBar = fromBar && other.fromBar,
         otherList = if (added.size == 1) adding.single().otherList else other.otherList,
     )
@@ -295,7 +310,8 @@ internal fun lastTwoTogether(name: String): String {
 
 /**
  * The commit toast's words (§16): "Added Milk to Dairy & eggs ♡" (one item), "Added 3 items to Saturday shop ♡",
- * "Added as typed · add your OpenAI key to sort it" (rule 2), "Milk is back on your list" (rule 7, joined after the added
+ * "Added as typed · add your OpenAI key to sort it" (rule 2), "Added as typed · sorting waits until you’re back online"
+ * (rule 2b, offline with a key: the catch-up sorts it), "Milk is back on your list" (rule 7, joined after the added
  * part), "Milk is already on your list" (nothing new), plus "★ shiny!" for a shiny pull (egg 6). One item names the list
  * instead of its aisle when the aisle would be wrong or out of sight: a typed item with no aisle yet (the background sort
  * is about to place it) and an add to a list she has switched away from.
@@ -305,6 +321,7 @@ fun AddCommit.toastText(resources: Resources): String {
     when {
         added.isEmpty() -> Unit
         asTypedNoKey -> parts += resources.getString(R.string.add_toast_as_typed)
+        asTypedOffline -> parts += resources.getString(R.string.add_toast_as_typed_offline)
         added.size == 1 -> {
             val item = added.single()
             val everythingElse = resources.getString(R.string.add_everything_else)

@@ -12,6 +12,8 @@ import earth.cora.picnic.core.assistant.StickerPalette
 import earth.cora.picnic.core.assistant.resolve
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.llm.LlmError
+import earth.cora.picnic.core.llm.transport
+import earth.cora.picnic.core.llm.unreached
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconFit
@@ -32,8 +34,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -100,6 +105,12 @@ interface LiveDrawJackpot {
  * - Legacy icons (drawn before v4, no `.cut` file) are redrawn in v4 in the background from [resumePending], oldest
  *   first, under the daily cap and only while a token is set and drawing is on. A replaced file is deleted only when
  *   no item, pantry entry or `album.json` ([albumRefs]) references it.
+ * - Offline ([online] false: no network at all, docs/DESIGN_STICKER.md §0.4, 5 October) nothing is decided or drawn
+ *   automatically: PENDING items stay PENDING, and an APPROXIMATE name joins the cache's draw-later set without using a
+ *   daily slot. A drawing that fails on the way (offline, unreachable, a network error, a timeout) gives its slot back
+ *   and joins the set too (a refusal, the quota or a bad answer does not). [resumePending] (the cold start, a refresh,
+ *   the catch-up when the connection returns) submits the set again, under the cap.
+ * - A drawing she asked for ([redraw]) that fails is reported on [drawFailures], so the Edit sheet can say so.
  *
  * Every public method returns immediately and never throws; the work runs in [scope] (the app scope).
  */
@@ -121,6 +132,8 @@ class AppIconRepository internal constructor(
     private val compute: CoroutineDispatcher,
     private val io: CoroutineDispatcher,
     private val jackpot: LiveDrawJackpot = LiveDrawJackpot.None,
+    /** False while the phone has no network at all (NetworkStatus): nothing automatic asks the network then. */
+    private val online: () -> Boolean = { true },
 ) : IconRepository {
 
     /**
@@ -140,6 +153,7 @@ class AppIconRepository internal constructor(
         album: AlbumStore? = null,
         onIconReplaced: (String) -> Unit = {},
         jackpot: LiveDrawJackpot = LiveDrawJackpot.None,
+        online: () -> Boolean = { true },
     ) : this(
         store = store,
         settings = settings,
@@ -158,6 +172,7 @@ class AppIconRepository internal constructor(
         compute = Dispatchers.Default,
         io = Dispatchers.IO,
         jackpot = jackpot,
+        online = online,
     )
 
     private val drawer = LiveIconDrawer(
@@ -170,6 +185,9 @@ class AppIconRepository internal constructor(
     private val busyFlow = MutableStateFlow<Set<String>>(emptySet())
     override val busy: StateFlow<Set<String>> = busyFlow.asStateFlow()
 
+    private val failures = MutableSharedFlow<DrawFailure>(extraBufferCapacity = 8)
+    override val drawFailures: Flow<DrawFailure> = failures.asSharedFlow()
+
     /** Reference counts behind [busy]: a name can be decided and redrawn at the same time. */
     private val busyCounts = HashMap<String, Int>()
 
@@ -180,6 +198,9 @@ class AppIconRepository internal constructor(
     private val intake = Mutex()
     private val started = AtomicBoolean(false)
     private val swept = AtomicBoolean(false)
+
+    /** The legacy redraws were queued (once per process, and only online: offline they would only be dropped). */
+    private val legacyQueued = AtomicBoolean(false)
 
     /**
      * One drawing. [brief] is the decider's "none" answer when the batcher just gave it (look, families, category);
@@ -234,6 +255,7 @@ class AppIconRepository internal constructor(
             }
             val items = state.lists.flatMap { it.items }
             submit(items.filter { it.iconFit == IconFit.PENDING && it.customIconId == null })
+            resubmitDrawLater(state)
             if (swept.compareAndSet(false, true)) {
                 try {
                     val referenced = referencedIds(state)
@@ -244,9 +266,37 @@ class AppIconRepository internal constructor(
                 } catch (e: Exception) {
                     PicnicLog.w("icon sweep failed", e)
                 }
-                redrawLegacy()
+            }
+            if (online() && legacyQueued.compareAndSet(false, true)) redrawLegacy()
+        }
+    }
+
+    /**
+     * The names waiting for a connection to be drawn: each one an item still wants (APPROXIMATE, no drawn sticker) is
+     * submitted again (a sticker drawn for the name meanwhile is attached; otherwise a drawing is queued under the cap);
+     * a name nothing wants any more leaves the set.
+     */
+    private suspend fun resubmitDrawLater(state: AppState) {
+        val waiting = try {
+            cache.drawLater()
+        } catch (e: IOException) {
+            return
+        }
+        if (waiting.isEmpty()) return
+        val wanting = state.lists.asSequence().flatMap { it.items }
+            .filter { it.iconFit == IconFit.APPROXIMATE && it.customIconId == null }
+            .associateBy { normalizeName(it.name) }
+        val again = waiting.mapNotNull { key ->
+            wanting[key] ?: run {
+                try {
+                    cache.clearDrawLater(key)
+                } catch (e: IOException) {
+                    PicnicLog.w("couldn't update the draw-later set", e)
+                }
+                null
             }
         }
+        if (again.isNotEmpty()) submit(again)
     }
 
     override fun redraw(itemName: String) {
@@ -286,9 +336,9 @@ class AppIconRepository internal constructor(
             return
         }
         when (item.iconFit) {
-            // Step 2 needs a token (no sparkle, no doomed NotConfigured call without one): the item
-            // keeps its fallback icon and stays PENDING until resumePending() runs with a token set.
-            IconFit.PENDING -> if (hasToken() && acquire(key, exclusive = true)) decideQueue.send(NamedItem(key, item.name.trim()))
+            // Step 2 needs a token and a network (no sparkle, no doomed call without them): the item keeps its fallback
+            // icon and stays PENDING until resumePending() runs with a token set and the phone online.
+            IconFit.PENDING -> if (hasToken() && online() && acquire(key, exclusive = true)) decideQueue.send(NamedItem(key, item.name.trim()))
             IconFit.APPROXIMATE -> requestAutoDraw(key, item.name.trim(), alreadyBusy = false, brief = null)
             IconFit.EXACT -> Unit
         }
@@ -317,7 +367,15 @@ class AppIconRepository internal constructor(
         }
         if (!s.drawIcons || !s.hasToken) return false
         return try {
-            !cache.isBlocked(key) && (legacy || stillApproximate(key)) && cache.tryConsumeDaily(day, tuning.dailyCap)
+            when {
+                cache.isBlocked(key) || !(legacy || stillApproximate(key)) -> false
+                // Offline: no slot is used; an item's drawing waits for the connection (resumePending, the catch-up).
+                !online() -> {
+                    if (!legacy) cache.markDrawLater(key)
+                    false
+                }
+                else -> cache.tryConsumeDaily(day, tuning.dailyCap)
+            }
         } catch (e: IOException) {
             false
         }
@@ -431,6 +489,7 @@ class AppIconRepository internal constructor(
             } catch (e: Exception) {
                 // Decode/encode/disk problems or an unusable answer: the item keeps its catalog icon.
                 PicnicLog.w("icon drawing failed", e)
+                reportFailure(job, error = null)
             } finally {
                 release(job.key)
             }
@@ -480,6 +539,16 @@ class AppIconRepository internal constructor(
                 return
             }
         }
+        // The connection went while this waited: nothing is composed or sent (an automatic drawing waits for it).
+        if (!online()) {
+            if (job.forced) {
+                reportFailure(job, LlmError.Offline())
+            } else {
+                cache.refundDaily(job.day)
+                if (job.replaces == null) cache.markDrawLater(job.key)
+            }
+            return
+        }
         // The brief: what to draw and in which two families (the decider's look, else the plain name).
         val shown = shownIcon(job)
         // The batcher's answer is used as it is, even without a look (asking the same question again rarely helps).
@@ -493,6 +562,7 @@ class AppIconRepository internal constructor(
         if (sheet == null) {
             PicnicLog.w("no live-drawing mask bundled; live drawing disabled")
             if (!job.forced) cache.refundDaily(job.day)
+            reportFailure(job, error = null)
             return
         }
         val raw = when (val outcome = drawer.draw(IconDrawRequest(job.name, sheet.png, sheet.mask, subject, families))) {
@@ -500,16 +570,31 @@ class AppIconRepository internal constructor(
             DrawOutcome.Refused -> {
                 PicnicLog.w("icon drawing refused by moderation; name blocked")
                 cache.block(job.key)
+                cache.clearDrawLater(job.key)
+                reportFailure(job, error = null, refused = true)
                 return
             }
             is DrawOutcome.Failed -> {
                 PicnicLog.w("icon drawing gave up", outcome.error)
+                when {
+                    job.forced -> reportFailure(job, outcome.error)
+                    // It failed on the way (offline, unreachable, a network error, too slow): the day's slot comes back,
+                    // and an item's drawing waits for the connection. A quota or a bad answer keeps the slot, as before.
+                    outcome.error.transport -> {
+                        cache.refundDaily(job.day)
+                        if (job.replaces == null) cache.markDrawLater(job.key)
+                    }
+                    job.replaces == null -> cache.clearDrawLater(job.key)
+                }
                 return
             }
         }
         // The user may have picked a catalog icon for this name while it was drawing (~10 s):
         // their choice wins, so an automatic result is dropped rather than cached and attached.
-        if (!job.forced && !stillWanted(job)) return
+        if (!job.forced && !stillWanted(job)) {
+            cache.clearDrawLater(job.key)
+            return
+        }
         val sticker = withContext(compute) { processor.process(raw, families, sheet.targetAreaU2) }
         sticker.stats?.let { PicnicLog.i("live sticker v4 in ${"%.0f".format(it.millis)} ms (${sheet.neighbours.joinToString()})") }
         val id = BespokeIconCache.newIconId(job.key, clock()) { cache.fileFor(it).exists() }
@@ -517,6 +602,7 @@ class AppIconRepository internal constructor(
         val attached = safeUpdate { state ->
             if (job.replaces != null) state.replaceCustomIcon(job.replaces, id) else state.attachCustomIcon(job.key, id, overwrite = job.forced)
         }
+        cache.clearDrawLater(job.key)
         if (!attached) return
         // The icon this one replaces (a redraw, a legacy redraw): its file goes only when nothing references it any
         // more; an icon filed in the album keeps its file (§18.3 step 5).
@@ -525,6 +611,12 @@ class AppIconRepository internal constructor(
             val referenced = referencedIds(store.current()) ?: break
             if (cache.deleteIfUnreferenced(old, referenced)) onIconReplaced(old)
         }
+    }
+
+    /** A drawing she asked for did not work: the Edit sheet hears of it ([drawFailures]). Automatic ones stay quiet. */
+    private fun reportFailure(job: DrawJob, error: LlmError?, refused: Boolean = false) {
+        if (!job.forced) return
+        failures.tryEmit(DrawFailure(job.key, offline = error?.unreached == true, refused = refused))
     }
 
     /** The catalog key the name's items show now (the approximate key the sheet starts from), if any. */

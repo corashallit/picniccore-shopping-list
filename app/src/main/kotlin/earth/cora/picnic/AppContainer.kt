@@ -50,8 +50,14 @@ import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.itemsNeedingAisle
+import earth.cora.picnic.platform.AndroidNetworkStatus
+import earth.cora.picnic.platform.CaptureKeeper
 import earth.cora.picnic.platform.Captures
+import earth.cora.picnic.platform.CatchUp
+import earth.cora.picnic.platform.FileCaptureKeeper
+import earth.cora.picnic.platform.NetworkStatus
 import earth.cora.picnic.platform.PicnicLog
+import earth.cora.picnic.ui.pantry.PantryIcons
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -118,7 +124,13 @@ class AppContainer(private val app: Application) {
     /** The token is decrypted per request and never stored anywhere else. */
     val tokenSource: TokenSource = TokenSource { settings.token() }
 
-    private val client: OpenAiClient by lazy { OpenAiClient(configSource, tokenSource) }
+    /**
+     * Whether the phone has a network at all (§0.4, 5 October): offline, AI calls fail at once (LlmError.Offline), the
+     * add bar adds as typed, nothing is decided or drawn, and [catchUp] runs when a connection arrives.
+     */
+    val network: NetworkStatus by lazy { AndroidNetworkStatus.create(app) }
+
+    private val client: OpenAiClient by lazy { OpenAiClient(configSource, tokenSource, isOnline = { network.online.value }) }
 
     val assistant: GroceryAssistant by lazy { OpenAiGroceryAssistant(client, catalog) }
 
@@ -229,8 +241,34 @@ class AppContainer(private val app: Application) {
 
                 override fun failed(item: GroceryItem) = surprises.onIconDrawFailed(item)
             },
+            // Offline nothing is decided or drawn automatically: the items wait for the catch-up.
+            online = { network.online.value },
         )
     }
+
+    /**
+     * What waited for the connection (§0.4, 5 October): at the cold start and each time a connection arrives, the icon
+     * cascade resumes, items still needing an aisle are sorted (AisleSync.sortPending), the pantry's unknown stickers are
+     * decided and a due or failed forecast is asked for. Its note ("Sorted 2 items · …") shows on the list.
+     */
+    val catchUp: CatchUp by lazy {
+        CatchUp(
+            network = network,
+            hasKey = { settings.current().hasToken },
+            resumeStickers = { icons.resumePending() },
+            sortPending = { aisleSync.sortPending() },
+            pantryStickers = { PantryIcons.decidePending(store, iconDecider, catalog) },
+            weather = { surprises.onBackOnline() },
+            scope = appScope,
+            clock = clock,
+        )
+    }
+
+    /**
+     * Photos and voice notes that could not be sent (offline, or the request failed), kept in noBackupFilesDir/kept until
+     * they are sent, replaced or thrown away, and for at most 7 days (§0.4, 5 October; PRIVACY.md).
+     */
+    val keptCaptures: CaptureKeeper by lazy { FileCaptureKeeper(File(app.noBackupFilesDir, "kept"), clock) }
 
     val photos: PhotoPreparer by lazy { CapturePhotoPreparer(app) }
 
@@ -251,9 +289,10 @@ class AppContainer(private val app: Application) {
     /**
      * Once per process (MainActivity calls it on every onCreate; only the first call does anything),
      * all in [appScope]: warm the catalog, then keep the album in step with the state (TripFiling.launchAlbumSync:
-     * collects check-offs, repairs a filing interrupted between album.json and state.json, §7.2), resume the icon
-     * cascade (PENDING items from an offline or token-less session), sweep stale camera captures, and watch for a
-     * token being added.
+     * collects check-offs, repairs a filing interrupted between album.json and state.json, §7.2), start the catch-up
+     * (the icon cascade resumes: PENDING items from an offline or token-less session, names waiting to be drawn; online
+     * with a key, items still needing an aisle are sorted; then again after every arrival of a connection), sweep stale
+     * camera captures and kept captures older than 7 days, and watch for a token being added.
      */
     fun startOnce() {
         if (!started.compareAndSet(false, true)) return
@@ -264,8 +303,9 @@ class AppContainer(private val app: Application) {
             }
             _ready.value = true
             TripFiling.launchAlbumSync(appScope, store, album, catalog, clock)
-            icons.resumePending()
+            catchUp.start()
             withContext(Dispatchers.IO) { Captures.sweepStale(app) }
+            keptCaptures.sweep()
         }
         appScope.launch { onTokenAdded(settings) { resumeAfterTokenAdded() } }
     }

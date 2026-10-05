@@ -35,6 +35,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -77,6 +78,9 @@ import earth.cora.picnic.ui.theme.hardShadow
 
 /** The two pages of the Edit sheet's sticker grid: the item's own category, or every sticker. */
 enum class EditPage { Details, Icons }
+
+/** The line under "Draw a new sticker": the hint, or why it rests or did not work (tests). */
+const val EDIT_DRAW_LINE_TAG: String = "edit_draw_line"
 
 /**
  * The Edit item sheet (docs/DESIGN_STICKER.md §6.3, checklist 217, 329): a letter-set sheet with the 120 dp hero sticker
@@ -337,14 +341,29 @@ internal fun EditDetails(
                     ItemIcon(state.icon, contentDescription = null, size = 56.dp, drawing = true)
                 }
             }
+            // Offline the button rests and says why; a drawing that did not work says so here (§0.4, 5 October), in hanko,
+            // instead of the sheet quietly going back to the old sticker.
             else -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 PicnicButton(
                     stringResource(R.string.edit_draw),
                     onClick = onRedraw,
                     style = PicnicButtonStyle.Secondary,
                     glyph = PicnicGlyph.Sparkle,
+                    enabled = !state.offline,
                 )
-                Text(stringResource(R.string.edit_draw_hint), style = t.caption.copy(color = c.inkSoft))
+                val failed = state.drawFailed
+                val line = when {
+                    state.offline -> R.string.edit_draw_offline
+                    failed == null -> R.string.edit_draw_hint
+                    failed.refused -> R.string.edit_draw_refused
+                    failed.offline -> R.string.edit_draw_failed_unreachable
+                    else -> R.string.edit_draw_failed
+                }
+                Text(
+                    stringResource(line),
+                    style = t.caption.copy(color = if (failed != null && !state.offline) c.hanko else c.inkSoft),
+                    modifier = Modifier.testTag(EDIT_DRAW_LINE_TAG),
+                )
             }
         }
         // Room for the last line to scroll clear of the footer's fade.
