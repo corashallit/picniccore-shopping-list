@@ -69,7 +69,7 @@ import org.robolectric.annotation.GraphicsMode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 
 /**
- * The offline experience on screen (docs/DESIGN_STICKER.md §0.4, 5 October; items 349–357): the menu's Refresh offline
+ * The offline experience on screen (docs/DESIGN_STICKER.md §0.4, 5 October; items 350, 351, 353, 356–358): the menu's Refresh offline
  * says what waits and asks nothing; the Write tab offline fails at once and keeps "As typed", which adds the note with
  * the one offline note; a kept photo offers "Delete photo"; the Edit sheet rests its drawing offline and says why or that
  * a drawing did not work; Settings shows "Saved." and the neutral line, never the hanko error. (The new notes' fit at

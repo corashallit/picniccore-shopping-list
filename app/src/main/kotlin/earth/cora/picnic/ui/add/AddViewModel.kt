@@ -482,7 +482,8 @@ class AddViewModel(
             }
         }
         savedState[keyFor(kind)] = null
-        keeperQueue.trySend { keeper.discard(kind) }
+        // The queue keeps the order; once the ViewModel is gone (it is closed) the file is deleted directly.
+        if (keeperQueue.trySend { keeper.discard(kind) }.isFailure) appScope.launch { keeper.discard(kind) }
     }
 
     /** A fresh ViewModel: the kept captures' pointers (else what the keeper still holds), shown if the sheet was on them. */

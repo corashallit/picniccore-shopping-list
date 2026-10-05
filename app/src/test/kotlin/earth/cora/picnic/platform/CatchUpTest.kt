@@ -28,7 +28,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The catch-up when the connection comes back (docs/DESIGN_STICKER.md §0.4, 5 October; items 352, 353): at a cold start
+ * The catch-up when the connection comes back (docs/DESIGN_STICKER.md §0.4, 5 October; item 352): at a cold start
  * online with a key and after each arrival of a connection it resumes the stickers, sorts every item still needing an
  * aisle (one note, "Sorted 1 item"), decides the pantry's stickers and asks a due forecast; never without a key (the
  * forecast aside), never two at once, and runs after arrivals at least a minute apart.

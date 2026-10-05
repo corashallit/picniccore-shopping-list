@@ -53,6 +53,22 @@ class PrivacyDocTest {
         assertTrue("the first 200", "first 200" in plain)
     }
 
+    /**
+     * Item 360 (§0.4, 5 October): the network-state permission is named and said to be granted without a prompt, and a
+     * photo or voice note that could not be sent is said to be kept, where, until when, and for 7 days at most.
+     */
+    @Test
+    fun theNetworkStateAndKeptCaptures() {
+        val permissions = plain.substringAfter("Permissions the app asks for").substringBefore("How long things are kept")
+        assertTrue("names the permission", "Network state:" in permissions)
+        assertTrue("never a prompt", "never asks you about it" in permissions)
+        assertTrue("kept when it couldn't be sent", "couldn't be sent" in plain)
+        assertTrue("where", "the app's private storage" in plain)
+        assertTrue("until when", "until it is sent, you take a new photo or record a new note, or you tap Delete photo or Delete voice note" in plain)
+        assertTrue("7 days at most", "7 days at most" in plain)
+        assertTrue("the source table names the manifest's permissions", "INTERNET, ACCESS_NETWORK_STATE, RECORD_AUDIO, ACCESS_COARSE_LOCATION" in plain)
+    }
+
     @Test
     fun theAppsName() {
         assertTrue(doc.startsWith("# Kirakira Basket privacy policy"))

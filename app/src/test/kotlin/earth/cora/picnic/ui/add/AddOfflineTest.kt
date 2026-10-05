@@ -39,7 +39,7 @@ import java.io.File
 import java.io.IOException
 
 /**
- * The add flows offline (docs/DESIGN_STICKER.md §0.4, 5 October; §6.2 rule 2b, items 348–351): the bar's Send adds the
+ * The add flows offline (docs/DESIGN_STICKER.md §0.4, 5 October; §6.2 rule 2b; items 350, 351, 358): the bar's Send adds the
  * note as typed at once, with one toast and Undo, and so does a request that never reached OpenAI; the sheet's Write
  * Send, Snap and Speak fail at once with the offline words and no request; "As typed" offline gives one note, never a
  * second "couldn't sort" one; a photo or voice note that could not be sent is kept (closing the sheet, a new

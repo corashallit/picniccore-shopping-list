@@ -361,7 +361,11 @@ internal fun EditDetails(
                 }
                 Text(
                     stringResource(line),
-                    style = t.caption.copy(color = if (failed != null && !state.offline) c.hanko else c.inkSoft),
+                    // The offline and failure lines break balanced: never a lone word on the last one ("… / stays.").
+                    style = t.caption.copy(
+                        color = if (failed != null && !state.offline) c.hanko else c.inkSoft,
+                        lineBreak = if (line == R.string.edit_draw_hint) t.caption.lineBreak else androidx.compose.ui.text.style.LineBreak.Heading,
+                    ),
                     modifier = Modifier.testTag(EDIT_DRAW_LINE_TAG),
                 )
             }
