@@ -156,7 +156,7 @@ add('beans', 'Kidney beans', [
 
 # soup: periwinkle tin, peach label, steaming bowl pictogram
 add('soup', 'Chicken noodle soup', [
-    *can('periwinkle', 'peach', top=12.6, lab_y=18, lab_h=18.4),
+    *can('periwinkle', 'peach', top=12.6, lab_y=19.8, lab_h=16.6),
     F(('path', 'M16.4 28.4H31.6C31.6 32.6 28.4 35 24 35C19.6 35 16.4 32.6 16.4 28.4Z'), 'peach', 'w', ol=1.4, cut=False),
     F(('ellipse', 24, 28.4, 7.6, 1.6), 'peach', 'm', ol=1.3, cut=False),
     LINE('M19.6 25.6C18.6 24.4 20.6 23.2 19.6 21.6M24 25.6C23 24.4 25 23.2 24 21.6M28.4 25.6C27.4 24.4 29.4 23.2 28.4 21.6', 'peach', 1.3, cut=False),

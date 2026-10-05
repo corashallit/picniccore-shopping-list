@@ -59,7 +59,7 @@ add('roastchicken', 'Rotisserie chicken', [
 # pizza slice: lemon cheese, golden lemon crust, strawberry pepperoni
 add('pizza', 'Frozen pizza', [
     F(('path', 'M24 42.2C21.6 42.2 6.8 15.4 7.8 13C11.4 9.8 17.4 8.4 24 8.4C30.6 8.4 36.6 9.8 40.2 13C41.2 15.4 26.4 42.2 24 42.2Z'), 'lemon', 'p', band=.18,
-      det=['M14.4 18.6q1 3.4 -.2 5.6', 'M33.6 22q-1.2 3 .2 5'], det_t='m', det_w=1.6),
+      det=['M15 18.4q.9 2.8 -.1 4.6', 'M33 21.6q-1 2.6 .1 4.2'], det_t='m', det_w=1.6),
     F(('path', 'M6.8 12.6C10.6 8 17 6 24 6C31 6 37.4 8 41.2 12.6C41.8 13.4 41.4 14.6 40.4 14.6C36.4 12.2 30.6 11 24 11C17.4 11 11.6 12.2 7.6 14.6C6.6 14.6 6.2 13.4 6.8 12.6Z'), 'lemon', 'm', ol=2),
     *[F(('circle', x, y, r), 'strawberry', 'm', ol=1.4, cut=False) for x, y, r in [(18.4, 17.6, 3.2), (29, 19.6, 3), (23.4, 27.6, 2.8)]],
     F(('path', 'M26.6 33.2C28 33.4 28.2 35.4 27.4 37.6C26.6 39.4 25.4 39.2 25.4 37.6Z'), 'lemon', 'p', ol=1.6),

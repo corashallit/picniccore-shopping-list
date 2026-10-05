@@ -53,16 +53,16 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M16 18.9L36 18.9"
+    <path android:pathData="M16.5 20.2L35.5 20.2"
         android:strokeColor="#E4D6FF"
         android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M16.7 18.3L35.7 18.4"
+    <path android:pathData="M16 18.3L16.4 18.2L20.2 18.1L35.8 18.2"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.4"
+        android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>

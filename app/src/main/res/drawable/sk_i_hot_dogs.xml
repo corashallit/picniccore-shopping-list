@@ -35,7 +35,7 @@
         android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M13.39 33.42Q14.75 30.61 17.27 32.45Q19.79 34.3 21.15 31.49Q22.51 28.67 25.03 30.52Q27.55 32.36 28.91 29.55Q30.27 26.74 32.79 28.58Q35.32 30.43 36.68 27.62"
+    <path android:pathData="M16.39 31.93Q16.8 32.12 17.27 32.45Q19.79 34.3 21.15 31.49Q21.4 30.97 21.69 30.61M24.15 30Q24.57 30.18 25.03 30.52Q27.55 32.36 28.91 29.55Q29.17 29.03 29.45 28.68M31.91 28.06Q32.33 28.25 32.79 28.58Q33.56 29.14 34.23 29.28"
         android:strokeColor="#FFF3A6"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
@@ -54,13 +54,16 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M25.7 37.6L30.1 36.5"
+    <path android:pathData="M35.5 27L39.1 26.3L40.2 26.7"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M22.99 38.59C22.99 38.71 22.96 38.83 22.91 38.94C22.86 39.05 22.78 39.14 22.69 39.22C22.59 39.29 22.49 39.34 22.37 39.37C22.25 39.4 22.13 39.4 22.01 39.37C21.89 39.34 21.79 39.29 21.69 39.22C21.6 39.14 21.52 39.05 21.47 38.94C21.42 38.83 21.39 38.71 21.39 38.59C21.39 38.47 21.42 38.35 21.47 38.24C21.52 38.13 21.6 38.04 21.69 37.96C21.79 37.89 21.89 37.84 22.01 37.81C22.13 37.78 22.25 37.78 22.37 37.81C22.49 37.84 22.59 37.89 22.69 37.96C22.78 38.04 22.86 38.13 22.91 38.24C22.96 38.35 22.99 38.47 22.99 38.59Z"
-        android:fillColor="#FFFFFF"/>
+    <path android:pathData="M24.9 37.6L30.9 36"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
   </group>
   <group android:name="dominant">
     <clip-path android:pathData="M7.23 35.99C6.4 32.69 8.64 30.9 10.97 30.32L37.36 23.74C39.69 23.16 42.5 23.69 43.32 26.99C44.14 30.29 41.91 32.08 39.58 32.66L13.19 39.24C10.86 39.82 8.05 39.29 7.23 35.99Z"/>

@@ -127,8 +127,8 @@ add('soda', 'Pop', [
     F(('circle', 40.2, 14.6, 1.6), 'strawberry', 'w', ol=1.4),
     F(('path', 'M14.4 14.6H33.6C34.8 15.8 35.6 17.4 35.6 19V38.4A11.6 3.6 0 0 1 12.4 38.4V19C12.4 17.4 13.2 15.8 14.4 14.6Z'),
       'strawberry', 'm', band=.18),
-    F(('rect', 13.4, 23.4, 21.2, 9.6), 'strawberry', 'w', ol=0, cut=False, det=['M13.6 23.4H34.4', 'M13.6 33H34.4'], det_w=1.4),
-    *[F(('circle', x, y, r), 'strawberry', 'm', ol=1.2, cut=False) for x, y, r in [(18.6, 28.8, 2.6), (24.6, 27.2, 1.8), (29.8, 29.4, 2.2)]],
+    F(('rect', 13.4, 25.8, 21.2, 9.6), 'strawberry', 'w', ol=0, cut=False, det=['M13.6 25.8H34.4', 'M13.6 35.4H34.4'], det_w=1.4),
+    *[F(('circle', x, y, r), 'strawberry', 'm', ol=1.2, cut=False) for x, y, r in [(18.6, 31.2, 2.6), (24.6, 29.6, 1.8), (29.8, 31.8, 2.2)]],
     F(('ellipse', 24, 14.6, 9.6, 3.2), 'strawberry', 'w'),
     F(('rect', 21.6, 12.6, 6.4, 3, 1.5), 'strawberry', 'p', ol=1.2, cut=False),
     F(('circle', 23.4, 14.1, .7), 'strawberry', 'w', ol=0, cut=False),
@@ -164,7 +164,7 @@ add('wine', 'Wine', [
 # baby formula: an open periwinkle tin heaped with powder, a pink scoop resting on top, a baby-bottle label
 add('baby_formula', 'Baby formula', [
     F(cyl(9.6, 38.4, 17.6, 42, 4.6), 'periwinkle', 'p', band=.18),
-    F(('rect', 10.5, 23.6, 27, 13.2), 'periwinkle', 'w', ol=0, cut=False, det=['M10.6 23.6H37.4', 'M10.6 36.8H37.4'], det_w=1.3),
+    F(('rect', 13.6, 23.6, 20.8, 13.2), 'periwinkle', 'w', ol=0, cut=False, det=['M13.6 23.6H34.4', 'M13.6 36.8H34.4'], det_w=1.3),
     F(('path', 'M22.4 26.2C22.4 25 23.1 24.4 24 24.4C24.9 24.4 25.6 25 25.6 26.2Z'), 'sakura', 'm', ol=1.2, cut=False),
     F(('rect', 21.4, 26.2, 5.2, 1.8, .9), 'sakura', 'm', ol=1.2, cut=False),
     F(('path', 'M21.8 28H26.2V33.4Q26.2 34.6 25 34.6H23Q21.8 34.6 21.8 33.4Z'), 'sakura', 'p', ol=1.2, cut=False),
@@ -241,7 +241,7 @@ add('aluminum_foil', 'Foil & food wrap', [
     *[F(('path', d), 'periwinkle', 'm', ol=0, cut=False) for d in [
         'M20.4 18.4L26.4 16.4L24.4 23.4Z', 'M14.4 24.6L20.4 22.4L17.6 29Z', 'M29.6 22.4L35 20.2L35.6 26.8Z', 'M23.6 27.4L29.6 26.2L26.6 31.6Z']],
     LINE('M20.4 18.4L24.4 23.4L26.4 16.4M24.4 23.4L29.6 22.4M17.6 29L20.4 22.4L24.4 23.4M26.6 31.6L29.6 26.2', 'periwinkle', 1.5, t='m', cut=False),
-    F(('path', 'M31.2 12.2Q34.6 10.8 36.4 13.4L36.9 21.4Q32.4 19.8 31.2 12.2Z'), 'periwinkle', 'm', ol=1.6, det=['M32.6 14.6Q33.8 17.4 35.6 18.6'], det_t='p', det_w=1.4),
+    F(('path', 'M31.2 12.2Q34.6 10.8 36.4 13.4L36.9 21.4Q32.4 19.8 31.2 12.2Z'), 'periwinkle', 'm', ol=1.6, det=['M33.8 15.8Q34.5 17 35.2 17.8'], det_t='p', det_w=1.4),
     F(('rect', 6.4, 31.6, 35.2, 10.4, 3.2), 'sakura', 'm', band=.3, band_t='deep'),
     F(('rect', 6, 29.8, 36, 3.8, 1.9), 'sakura', 'deep', ol=1.6,
       det=['M8.6 32.1' + ''.join(f'L{fmt(9.8 + 1.2 * i)} {"31.3" if i % 2 == 0 else "32.1"}' for i in range(26))], det_t='p', det_w=1.2),
@@ -325,7 +325,7 @@ add('lotion', 'Lotion & lip balm', [
 
 # pads & tampons: a square pink box with a flower and a tab-top lid, an unwrapped winged pad lying in front of it
 add('feminine_care', 'Pads & tampons', [
-    F(('rect', 8.4, 8.2, 27.2, 27.6, 3.6), 'sakura', 'p', band=.2, det=['M9 13.4H35'], det_t='m'),
+    F(('rect', 8.4, 8.2, 27.2, 27.6, 3.6), 'sakura', 'p', band=.2, det=['M10.6 13.4H33.4'], det_t='m'),
     F(('path', 'M17.6 13.4Q22 16.6 26.4 13.4'), 'sakura', 'm', ol=1.4, cut=False),
     F(('path', _c4_flower(22, 22.8, 6.4)), 'sakura', 'm', ol=1.4, cut=False),
     F(('circle', 22, 22.8, 2.1), 'lemon', 'm', ol=1.2, cut=False),
@@ -339,7 +339,7 @@ add('pills', 'Pain & allergy medicine', [
     F(('rect', 9.2, 7.4, 23.6, 31, 3.6, -10), 'mint', 'p', band=.16, sband=False),
     *[F(('circle', x, y, 3.8), 'mint', 'w', ol=1.5, cut=False, det=[f'M{fmt(x - 1.8)} {fmt(y + .3)}L{fmt(x + 1.8)} {fmt(y - .3)}'], det_t='m', det_w=1.2)
       for x, y in [(15.2, 13.4), (25, 11.6), (16.6, 22.2), (26.4, 20.4), (18, 31)]],
-    F(('circle', 27.8, 29.2, 3.8), 'mint', 'm', ol=1.5, cut=False, det=['M25.6 27.6L27.4 29.4L26 31.2', 'M29.6 27.4L28.4 29.2L30 30.8'], det_t='p', det_w=1.2),
+    F(('circle', 27.8, 29.2, 3.8), 'mint', 'm', ol=1.5, cut=False, det=['M26.2 28.2L27.4 29.4L26.4 30.6', 'M29 28L28.4 29.2L29.4 30.2'], det_t='p', det_w=1.2),
     F(('circle', 34.8, 35.6, 6), 'mint', 'w', band=.3, band_t='p', det=['M31.8 35.9L37.8 35.3'], det_t='m', det_w=1.5),
     F(('path', 'M15.6 39.6C14.2 38.2 14.2 36.2 15.6 34.8L18.4 32L22.6 36.2L19.8 39C18.4 40.4 17 41 15.6 39.6Z'), 'peach', 'm', ol=1.6),
     F(('path', 'M18.4 32L21.2 29.2C22.6 27.8 24.6 27.8 26 29.2C27.4 30.6 27.4 32.6 26 34L22.6 36.2Z'), 'peach', 'w', ol=1.6),
@@ -361,16 +361,16 @@ add('cough_syrup', 'Cold & flu medicine', [
 # bug spray: a green aerosol can, a crossed-out mosquito on its label, a puff of spray from the nozzle
 add('bug_spray', 'Bug spray', [
     *[F(('circle', x, y, r), 'melon', 'w', ol=1.3) for x, y, r in [(32, 7.4, 1.5), (36.4, 9.6, 1.8), (35.2, 14.4, 1.4)]],
-    F(('rect', 19.8, 6.4, 8.4, 6.8, 2.2), 'melon', 'm', det=['M28.2 8.8H29.8'], det_w=1.6),
+    F(('rect', 19.8, 6.4, 8.4, 6.8, 2.2), 'melon', 'm'), LINE('M28.2 8.8H29.8', 'melon', 1.6),
     F(('path', 'M17.6 13.2H30.4C32.8 14.6 34 16.4 34 18.8H14C14 16.4 15.2 14.6 17.6 13.2Z'), 'melon', 'w', ol=2),
     F(cyl(14, 34, 18, 42, 3.4), 'melon', 'm', band=.18, band_t='deep'),
     F(('circle', 24, 29.6, 7), 'melon', 'w', ol=1.5, cut=False),
     LINE('M21.6 27.4L18.8 25.6M21.2 30L18.2 30.6M26.2 27.2L29 25.4M26.6 29.8L29.6 30.4M21.8 32.8L20 35M26 32.8L27.8 35', 'melon', 1.2, t='tr', cut=False),
     F(('ellipse', 24, 29.6, 2.2, 3.6), 'melon', 'm', ol=1.2, cut=False),
     F(('circle', 24, 25.4, 1.6), 'melon', 'm', ol=1.2, cut=False),
-    F(('ellipse', 20.6, 25.6, 2.6, 1.4, 30), 'melon', 'p', ol=1.2, cut=False),
-    F(('ellipse', 27.4, 25.6, 2.6, 1.4, -30), 'melon', 'p', ol=1.2, cut=False),
-    LINE('M18.6 24.2L29.4 35', 'strawberry', 2.2, t='m', cut=False),
+    F(('ellipse', 21.2, 26.6, 2.2, 1.2, 20), 'melon', 'p', ol=1.2, cut=False),
+    F(('ellipse', 26.8, 26.6, 2.2, 1.2, -20), 'melon', 'p', ol=1.2, cut=False),
+    LINE('M19.05 24.65L28.95 34.55', 'strawberry', 2.2, t='m', cut=False),
     LINE('M24 22.6A7 7 0 1 1 23.99 22.6', 'strawberry', 2.2, t='m', cut=False),
 ], qty='300 g can', aisle='health')
 
@@ -416,14 +416,14 @@ add('potted_plant', 'Potted plant', [
 
 # seeds: a yellow paper seed packet with a sunflower picture, its top torn open and seeds tumbling out
 add('seed_packet', 'Seeds', [
-    *[F(('ellipse', x, y, 1.4, 2.2, a), 'cocoa', 'm', ol=1.3, det=[f'M{fmt(x)} {fmt(y - 1)}V{fmt(y + 1)}'], det_t='p', det_w=1.2)
+    *[F(('ellipse', x, y, 1.4, 2.2, a), 'cocoa', 'm', ol=1.3)
       for x, y, a in [(34.6, 9.6, 30), (39.4, 13.6, -20), (36.4, 17.4, 60)]],
     F(('path', 'M11.4 15.6L14 13.4L16.4 15.2L18.8 13.2L21.2 15.2L23.6 13.4L26 15.4L28.4 13.4L30.8 15L33.2 13.2L36.6 15.4V38.6Q36.6 42 33.2 42H14.8Q11.4 42 11.4 38.6Z'),
       'lemon', 'p', band=.18, band_t='m'),
-    F(('rect', 14.4, 18.6, 19.2, 16.4, 2.6), 'lemon', 'w', ol=1.5, cut=False),
+    F(('rect', 16, 18.6, 16, 16.4, 2.6), 'lemon', 'w', ol=1.5, cut=False),
     TUBE('M24 34.4V29.4', 'melon', 2.4, 'm', cut=False),
     F(('path', 'M24 32.8C21.4 31.4 19.6 32.2 19.4 34C21.6 34.8 23 34.4 24 32.8Z'), 'melon', 'm', ol=1.2, cut=False),
-    *[F(('ellipse', 24 + 4.4 * _c4m.cos(_c4m.radians(a)), 25.6 + 4.4 * _c4m.sin(_c4m.radians(a)), 2.5, 1.6, a), 'lemon', 'm', ol=1.5, cut=False) for a in range(0, 360, 45)],
+    *[F(('ellipse', 24 + 4 * _c4m.cos(_c4m.radians(a)), 25.6 + 4 * _c4m.sin(_c4m.radians(a)), 2.4, 1.6, a), 'lemon', 'm', ol=1.5, cut=False) for a in range(0, 360, 45)],
     F(('circle', 24, 25.6, 3), 'cocoa', 'm', ol=1.4, cut=False, det=[_c4_dots([(23, 24.8), (25, 24.8), (24, 26.6)])], det_t='p', det_w=1.4),
 ], qty='1 packet', aisle='garden')
 
@@ -460,9 +460,9 @@ add('matches', 'Matches & lighters', [
     *[F(('ellipse', x, y, 1.9, 2.4), 'strawberry', 'm', ol=1.4) for x, y in [(12.6, 18.6), (16.4, 16.8), (20.2, 18), (24, 16.4)]],
     F(('rect', 9.4, 21.6, 18, 7.4, 2), 'strawberry', 'p', det=['M9.6 24H27.2'], det_t='m', det_w=1.2),
     F(('rect', 7, 26.4, 23, 15.6, 3), 'strawberry', 'm', band=.2),
-    F(('rect', 10.6, 29.6, 15.8, 9.2, 2.4), 'strawberry', 'w', ol=1.4, cut=False),
+    F(('rect', 11.6, 31, 13.8, 7.6, 2.4), 'strawberry', 'w', ol=1.4, cut=False),
     F(('path', 'M18.4 37C16.6 37 15.8 35.6 16.2 34.2C16.6 33 17.6 32.6 17.8 31.2C19 32 19.4 33 19.2 33.8C19.8 33.4 20.2 32.8 20.2 32.2C21.4 33.4 21.8 34.8 21.2 35.8C20.8 36.6 19.8 37 18.4 37Z'),
-      'peach', 'm', ol=1.2, cut=False),
+      'peach', 'm', ol=1.2, cut=False, tf='translate(0 .8)'),
 ], qty='10 boxes', aisle='garden')
 
 # candles: a cream pillar candle on a little peach saucer, wax dripping over its rim, the flame glowing with tiny rays
@@ -496,10 +496,12 @@ add('picnic_blanket', 'Picnic blanket', [
 
 # paper plates: a stack of three paper plates seen from a little above, the top one with a ribbed mint rim round a plain
 # white well (seen face-on a lone plate read as a button or a bottle cap at 22-30 dp; the stack reads as plates)
-def _c4_ribs(cx, cy, r0x, r0y, r1x, r1y, n):
-    """n radial ribs between two concentric ellipses"""
+def _c4_ribs(cx, cy, r0x, r0y, r1x, r1y, n, skip=None):
+    """n radial ribs between two concentric ellipses (none at angles in `skip`, degrees: room for the gloss)"""
     out = ''
     for i in range(n):
+        if skip and skip[0] <= 360 * i / n <= skip[1]:
+            continue
         t = 2 * _c4m.pi * i / n
         c, s_ = _c4m.cos(t), _c4m.sin(t)
         out += f'M{fmt(cx + r0x * c)} {fmt(cy + r0y * s_)}L{fmt(cx + r1x * c)} {fmt(cy + r1y * s_)}'
@@ -511,7 +513,7 @@ add('paper_plates', 'Paper plates', [
     F(('ellipse', 24, _C4_PY + 6.8, 17.6, 8.8), 'mint', 'p', ol=1.8),
     F(('ellipse', 24, _C4_PY + 3.4, 17.6, 8.8), 'mint', 'w', ol=1.8),
     F(('ellipse', 24, _C4_PY, 17.6, 8.8), 'mint', 'p', band=.2, band_t='m',
-      det=[_c4_ribs(24, _C4_PY, 12.2, 5.6, 15.6, 7.6, 24)], det_t='m', det_w=1.2),
+      det=[_c4_ribs(24, _C4_PY, 12.2, 5.6, 15.2, 6.9, 24, (190, 260))], det_t='m', det_w=1.2),
     F(('ellipse', 24, _C4_PY - .3, 10.4, 4.2), 'mint', 'w', ol=1.5, cut=False),
 ], qty='50 plates', aisle='garden')
 
@@ -522,7 +524,7 @@ def _c4_cup(cx, top, h, wt=19.6, wb=12.4, tf=None):
     l0, r0, l1, r1, y0, y1 = cx - wt / 2, cx + wt / 2, cx - wb / 2, cx + wb / 2, top + 1, top + h
     body = (f'M{fmt(l0)} {fmt(y0)}H{fmt(r0)}L{fmt(r1 + .3)} {fmt(y1 - 2.2)}Q{fmt(r1)} {fmt(y1)} {fmt(r1 - 2.2)} {fmt(y1)}'
             f'H{fmt(l1 + 2.2)}Q{fmt(l1)} {fmt(y1)} {fmt(l1 - .3)} {fmt(y1 - 2.2)}Z')
-    dots = _c4_dots([(cx + dx + (2.4 if (i % 2) else 0), top + 5.4 + i * 4.2) for i in range(int((h - 6) / 4.2) + 1) for dx in (-7.2, -2.4, 2.4)])
+    dots = _c4_dots([(cx + dx + (2.4 if (i % 2) else 0), top + 5.4 + i * 4.2) for i in range(int((h - 6) / 4.2) + 1) for dx in (-4, .8, 5.6)])
     k = dict(tf=tf, sband=False) if tf else {}
     return [F(('path', body), 'sakura', 'p', band=.2, band_t='m', tex=[dots], tex_t='w', tex_w=2.4, **k),
             F(('ellipse', cx, top + .2, wt / 2 + 1.2, 2.6), 'sakura', 'm', **k),
@@ -546,7 +548,7 @@ add('plastic_cutlery', 'Disposable cutlery', [
     F(('ellipse', 24, 13.6, 4, 5.6), 'ramune', 'p', tf='rotate(-30 24 33)', ol=0, cut=False),
     F(('path', _C4_FORK), 'ramune', 'w', tf='rotate(30 24 33)', band=.12, band_t='p'),
     F(('path', _C4_KNIFE), 'ramune', 'w', band=.12, band_t='p',
-      det=['M21.8 22H26.2', 'M26.8 10.8L27.8 11.6M27 13.6L28 14.4M27 16.4L28 17.2'], det_t='m', det_w=1.2),
+      det=['M25.2 11.2L26 11.8M25.4 13.8L26.2 14.4M25.4 16.4L26.2 17'], det_t='m', det_w=1.2),
     F(('path', 'M22.6 32.2L19.6 38.6L22 38.2L22.8 40.4L24.8 33Z'), 'sakura', 'm', ol=1.5),
     F(('path', 'M25.4 32.2L28.4 38.6L26 38.2L25.2 40.4L23.2 33Z'), 'sakura', 'm', ol=1.5),
     F(('path', 'M24 31.4C20.6 27.4 14.6 27.8 15 31.4C15.4 35 20.8 34.4 24 31.4C27.2 34.4 32.6 35 33 31.4C33.4 27.8 27.4 27.4 24 31.4Z'), 'sakura', 'm', ol=1.7,

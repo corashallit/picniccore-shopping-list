@@ -32,7 +32,7 @@
         android:fillColor="#9AA8F5"/>
     <path android:pathData="M25.6 29.4L31.6 28.2L28.6 33.6Z"
         android:fillColor="#9AA8F5"/>
-    <path android:pathData="M22.4 20.4L26.4 25.4L28.4 18.4M26.4 25.4L31.6 24.4M20.26 29.44L22.4 24.4L26.4 25.4M28.6 33.6L31.6 28.2"
+    <path android:pathData="M22.4 20.4L26.4 25.4L28.4 18.4M26.4 25.4L31.6 24.4M20.26 29.44L22.4 24.4L26.4 25.4M28.6 33.6L29.62 31.77M30.92 29.42L31.6 28.2"
         android:strokeColor="#9AA8F5"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
@@ -43,7 +43,7 @@
         android:strokeWidth="1.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M34.6 16.6Q35.8 19.4 37.6 20.6"
+    <path android:pathData="M35.91 17.99Q36.44 18.88 36.98 19.53"
         android:strokeColor="#DCE1FF"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
@@ -66,7 +66,7 @@
         android:strokeWidth="1.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M10.6 34.1L11.8 33.3L13 34.1L14.2 33.3L15.4 34.1L16.6 33.3L17.8 34.1L19 33.3L20.2 34.1L21.4 33.3L22.6 34.1L23.8 33.3L25 34.1L26.2 33.3L27.4 34.1L28.6 33.3L29.8 34.1L31 33.3L32.2 34.1L33.4 33.3L34.6 34.1L35.8 33.3L37 34.1L38.2 33.3L39.4 34.1L40.6 33.3L41.8 34.1"
+    <path android:pathData="M10.68 34.05L11.72 33.35M11.88 33.35L12.92 34.05M13.08 34.05L14.12 33.35M14.28 33.35L15.32 34.05M15.48 34.05L16.52 33.35M16.68 33.35L17.72 34.05M17.88 34.05L18.92 33.35M19.08 33.35L20.12 34.05M20.28 34.05L21.32 33.35M21.48 33.35L22.52 34.05M22.68 34.05L23.72 33.35M23.88 33.35L24.92 34.05M25.08 34.05L26.12 33.35M26.28 33.35L27.32 34.05M27.48 34.05L28.52 33.35M28.68 33.35L29.72 34.05M29.88 34.05L30.92 33.35M31.08 33.35L32.12 34.05M32.28 34.05L33.32 33.35M33.48 33.35L34.52 34.05M34.68 34.05L35.72 33.35M35.88 33.35L36.92 34.05M37.08 34.05L38.12 33.35M38.28 33.35L39.32 34.05M39.48 34.05L40.52 33.35M40.68 33.35L41.72 34.05"
         android:strokeColor="#FFD6E8"
         android:strokeWidth="1.2"
         android:strokeLineCap="round"

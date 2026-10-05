@@ -91,12 +91,11 @@ GRANDFATHERED = {
     'thin': {'frozen_pizza'},
     'corner': {'bottled_water', 'cream', 'french_fries', 'frozen_vegetables', 'laundry_detergent', 'olive_oil',
         'orange_juice', 'potato_chips'},
-    'stray_gloss': {'bacon', 'celery', 'grapes'},
-    'coverage': {'baby_wipes', 'bandages', 'bottled_water', 'butter_tart', 'diapers', 'honey'},
-    'dot': {'baguette', 'diapers', 'lettuce'},
+    'stray_gloss': set(),
+    'coverage': set(),
+    'dot': set(),
     'cross': set(),
-    'printed': {'bakery_generic', 'canned_tomatoes', 'canned_tuna', 'cheddar', 'donut', 'maple_syrup', 'oatmeal', 'pasta',
-        'soup_can', 'sunscreen', 'sweet_potato', 'tea', 'tissues', 'yogurt'},
+    'printed': {'bakery_generic', 'cheddar', 'donut', 'pasta', 'sunscreen', 'sweet_potato', 'tea', 'tissues', 'yogurt'},
     'families': set(),
     'hairline': {'baby_food', 'cat_food', 'cat_litter', 'cherries', 'granola', 'grapes', 'honey', 'hot_sauce', 'ice_cream', 'jam',
         'ketchup', 'laundry_detergent', 'lemonade', 'maple_syrup', 'mayonnaise', 'oatmeal', 'orange', 'pasta_sauce', 'peach',
@@ -170,11 +169,13 @@ def check_gloss(lint, stickers, gloss_report, critters):
     spans = []
     for icon, key, groups, dom, sil in stickers:
         art = _art_geom(icon, base).buffer(.35)
-        for g in icon.gloss:
+        inf = infos.get(icon.key) or {}
+        small = bool(inf.get('main') and inf['main'].get('small'))       # the main arc on a grape: at least 3u
+        for gi, g in enumerate(icon.gloss):
             if g[0] == 'g':
                 d = E.bake(g[1], base)
                 geo = E.stroke_geom(d, g[2])
-                if g[2] < 2.4 and _length(d) < 4:
+                if g[2] < 2.4 and _length(d) < (2.8 if small and gi == 0 else 4):
                     lint.errors.append(f'gloss: {key} sub-gloss is {_length(d):.1f}u long (>= 4u)')
             else:
                 geo = Point(g[1] + OFF, g[2] + OFF).buffer(g[3])
@@ -188,7 +189,7 @@ def check_gloss(lint, stickers, gloss_report, critters):
             spans.append((cov, key))
             if cov > .36:
                 lint.errors.append(f'gloss: {key} main gloss covers {cov:.0%} of its contour (25-35 %)')
-            elif cov < COVERAGE_MIN and not info['main'].get('clipped'):
+            elif cov < COVERAGE_MIN and not info['main'].get('clipped') and info['main']['len'] < 12:
                 lint.fail('coverage', key, f'gloss: {key} main gloss covers {cov:.1%} of its contour (25-35 %): '
                                            f'a shape drawn above cuts the run short, or the shape has no clear upper-left curve')
             if not info.get('dot') and not info.get('dot_blocked'):
@@ -481,7 +482,7 @@ def check_gloss_clean(lint, label, parts, gloss):
     pp = GL.paints(parts)
     bad = []
     for n, g in enumerate(gloss):
-        why = GL.clean(pp, g, soft_ok=True, trace_gap=.35)
+        why = GL.clean(pp, g, trace_gap=.35, gap=.15, tex='spots')
         if why:
             bad.append(f'{"stroke" if g[0] == "g" else "dot"} {n} {why}')
     if bad:

@@ -85,19 +85,19 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M28.4 14.6L28.4 17.2M31.4 14.6L31.4 17.2M34.4 14.6L34.4 17.2M37.4 14.6L37.4 17.2"
+    <path android:pathData="M28.4 15.1L28.4 16.7M31.4 15.1L31.4 16.7M34.4 15.1L34.4 16.7M37.4 15.1L37.4 16.7"
         android:strokeColor="#DCE1FF"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M25.8 26.6L25.9 24.9L26.2 23.9L26.9 23L27.9 22.4L28.9 22.2L35.8 22.2"
+    <path android:pathData="M25.8 26.4L25.9 24.7L26.4 23.6L27.4 22.7L28.7 21.9"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M26.6 30.28C26.6 30.4 26.57 30.52 26.52 30.63C26.47 30.74 26.39 30.83 26.3 30.91C26.2 30.98 26.1 31.03 25.98 31.06C25.86 31.09 25.74 31.09 25.62 31.06C25.5 31.03 25.4 30.98 25.3 30.91C25.21 30.83 25.13 30.74 25.08 30.63C25.03 30.52 25 30.4 25 30.28C25 30.16 25.03 30.04 25.08 29.93C25.13 29.82 25.21 29.73 25.3 29.65C25.4 29.58 25.5 29.53 25.62 29.5C25.74 29.47 25.86 29.47 25.98 29.5C26.1 29.53 26.2 29.58 26.3 29.65C26.39 29.73 26.47 29.82 26.52 29.93C26.57 30.04 26.6 30.16 26.6 30.28Z"
+    <path android:pathData="M26.5 30.06C26.5 30.18 26.47 30.3 26.42 30.41C26.37 30.52 26.29 30.61 26.2 30.69C26.1 30.76 26 30.81 25.88 30.84C25.76 30.87 25.64 30.87 25.52 30.84C25.4 30.81 25.3 30.76 25.2 30.69C25.11 30.61 25.03 30.52 24.98 30.41C24.93 30.3 24.9 30.18 24.9 30.06C24.9 29.94 24.93 29.82 24.98 29.71C25.03 29.6 25.11 29.51 25.2 29.43C25.3 29.36 25.4 29.31 25.52 29.28C25.64 29.25 25.76 29.25 25.88 29.28C26 29.31 26.1 29.36 26.2 29.43C26.29 29.51 26.37 29.6 26.42 29.71C26.47 29.82 26.5 29.94 26.5 30.06Z"
         android:fillColor="#FFFFFF"/>
     <path android:pathData="M12.1 28L12.1 23"
         android:strokeColor="#FFFFFF"

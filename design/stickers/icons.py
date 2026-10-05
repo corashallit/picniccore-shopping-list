@@ -131,11 +131,11 @@ add('apple', 'McIntosh apples', [
 CARROT = 'M-5 2C-5 -1.2 5 -1.2 5 2C5 10 2.4 22.8 .9 27.4Q0 29.6 -.9 27.4C-2.4 22.8 -5 10 -5 2Z'
 LEAVES = ['M-1.2 -.4C-6 -3.6 -7 -9 -4.4 -12C-1.2 -9 -.4 -4.6 -1.2 -.4Z', 'M0 -.6C-.8 -6 1 -11 4.2 -12.6C5.8 -8.6 3.6 -3.6 0 -.6Z', 'M1.4 -.2C4.4 -4.2 9 -5.4 11.4 -3.6C9.4 -.2 5 .8 1.4 -.2Z']
 add('carrots', 'Carrots', [
-    *[F(('path', l), 'melon', 'm', tf='translate(32.6 12.4) rotate(32)', ol=1.6) for l in LEAVES],
-    F(('path', CARROT), 'peach', 'm', band=.24, tf='translate(32.6 12.4) rotate(32)', det=['M-4.4 8H-1.6', 'M1.4 12.6H3.8', 'M-3.4 17.4H-1']),
-    *[F(('path', l), 'melon', 'm', tf='translate(23 13.8) rotate(16)', ol=1.6) for l in LEAVES],
+    *[F(('path', l), 'melon', 'm', tf='translate(32.6 13.6) rotate(32) scale(.84)', ol=1.6) for l in LEAVES],
+    F(('path', CARROT), 'peach', 'm', band=.24, tf='translate(32.6 13.6) rotate(32)', det=['M-4.4 8H-1.6', 'M1.4 12.6H3.8', 'M-3.4 17.4H-1']),
+    *[F(('path', l), 'melon', 'm', tf='translate(23 13.8) rotate(16) scale(.84)', ol=1.6) for l in LEAVES],
     F(('path', CARROT), 'peach', 'm', band=.24, tf='translate(23 13.8) rotate(16)', det=['M-4.4 8H-1.6', 'M1.4 12.6H3.8', 'M-3.4 17.4H-1']),
-], gloss=[G('M-3 4.2Q-3 1.6 -.6 1.2', 2.2, 'translate(23 13.8) rotate(16)'), G('M-3 4.2Q-3 1.6 -.6 1.2', 2.2, 'translate(32.6 12.4) rotate(32)')],
+], gloss=[G('M-3 4.2Q-3 1.6 -.6 1.2', 2.2, 'translate(23 13.8) rotate(16)'), G('M-3 4.2Q-3 1.6 -.6 1.2', 2.2, 'translate(32.6 13.6) rotate(32)')],
     qty='907 g bag', aisle='produce')
 
 # 7 broccoli
@@ -173,7 +173,7 @@ add('onion', 'Yellow onions', [
 # root base with its tuft: never a purple onion
 add('garlic', 'Garlic', [
     F(('path', 'M21.8 15.2C22 11.6 22.6 8.8 23.4 6.8Q24 5.6 24.6 6.8C25.4 8.8 26 11.6 26.2 15.2Z'), 'cocoa', 'w', ol=1.6,
-      det=['M24 7.6V14.4'], det_t='p', det_w=1.3),
+      det=['M24 10.4V14.4'], det_t='p', det_w=1.3),
     F(('path', 'M24 11.8C25.6 15.2 28.2 16.4 32 18.6C39.6 23 41 31.4 36.6 36.8C35 38.6 33 39.4 30.6 39.4H17.4C15 39.4 13 38.6 11.4 36.8C7 31.4 8.4 23 16 18.6C19.8 16.4 22.4 15.2 24 11.8Z'),
       'cocoa', 'w', band=.22, band_t='p',
       det=['M24 15.2C19.6 20.4 18.6 30.6 20.8 39.2', 'M24 15.2C28.4 20.4 29.4 30.6 27.2 39.2', 'M17.2 19.8C13.6 25 13.8 32.6 16 38.6', 'M30.8 19.8C34.4 25 34.2 32.6 32 38.6'],
@@ -192,9 +192,9 @@ add('avocado', 'Avocados', [
 
 # 12 baguette
 BTF = 'translate(24.6 23.6) rotate(-38)'
-BTF = 'translate(24 26) rotate(-25)'
+BTF = 'translate(24.6 26) rotate(-25)'
 add('baguette', 'Baguette', [
-    F(('path', 'M-22 0C-22 -4.6 -18.6 -5.4 -14.4 -5.4H14.4C18.6 -5.4 22 -4.6 22 0C22 4.6 18.6 5.4 14.4 5.4H-14.4C-18.6 5.4 -22 4.6 -22 0Z'),
+    F(('path', 'M-21 0C-21 -4.6 -17.6 -5.4 -13.4 -5.4H14.4C18.6 -5.4 22 -4.6 22 0C22 4.6 18.6 5.4 14.4 5.4H-13.4C-17.6 5.4 -21 4.6 -21 0Z'),
       'peach', 'm', band=.28, tf=BTF),
     *[F(('ellipse', x, -1.2, 3.5, 1.3, -24), 'peach', 'p', ol=1.3, cut=False, tf=BTF) for x in (-4.4, 2.6, 9.6, 16.4)],
     F(('path', 'M-20.4 -7.6H-9.4L-6.4 7.6H-20.4Q-21.8 7.6 -21.8 6.2V-6.2Q-21.8 -7.6 -20.4 -7.6Z'), 'cocoa', 'p', band=.3, tf=BTF,
@@ -222,7 +222,7 @@ add('sourdough', 'Sourdough boule', [
 
 # 15 sliced loaf (bag clip)
 SLICE = 'M9 22C9 17 12 14.6 16.4 15C18.6 12.4 25.4 12.4 27.6 15C32 14.6 35 17 35 22C35 25 33.4 26.4 32 27V38.8Q32 41.6 29.2 41.6H14.8Q12 41.6 12 38.8V27C10.6 26.4 9 25 9 22Z'
-CRUMB = 'M11.8 22C11.8 18.8 13.9 17.4 17.1 17.8C19.1 15.4 24.9 15.4 26.9 17.8C30.1 17.4 32.2 18.8 32.2 22C32.2 24.2 30.8 25.2 29.4 25.6V37.8Q29.4 39 28.2 39H15.8Q14.6 39 14.6 37.8V25.6C13.2 25.2 11.8 24.2 11.8 22Z'
+CRUMB = 'M12.9 22.2C12.9 19.6 14.8 18.4 17.6 18.8C19.5 16.6 24.5 16.6 26.4 18.8C29.2 18.4 31.1 19.6 31.1 22.2C31.1 24.2 30 25.2 29.4 25.6V37.8Q29.4 39 28.2 39H15.8Q14.6 39 14.6 37.8V25.6C14 25.2 12.9 24.2 12.9 22.2Z'
 add('loaf', 'Sandwich loaf', [
     F(('path', SLICE), 'peach', 'm', tf='translate(5.6 -3.8)', band=.2),
     F(('path', SLICE), 'peach', 'm', tf='translate(2.8 -1.9)', band=.2),
@@ -356,7 +356,7 @@ add('jam', 'Strawberry jam', [
 # 29 canned tomatoes
 add('tomatocan', 'Diced tomatoes', [
     F(cyl(10, 38, 14.4, 42), 'periwinkle', 'p', band=.18),
-    F(('rect', 10.9, 19.6, 26.2, 16.4), 'strawberry', 'p', ol=0, cut=False, det=['M10.9 19.6H37.1', 'M10.9 36H37.1'], det_w=1.4),
+    F(('rect', 10.9, 21.6, 26.2, 14.4), 'strawberry', 'p', ol=0, cut=False, det=['M10.9 21.6H37.1', 'M10.9 36H37.1'], det_w=1.4),
     F(('circle', 24, 28.6, 5), 'strawberry', 'm', ol=1.5, cut=False),
     F(('path', star_path(24, 24.2, 2.8, 1.2, 5)), 'strawberry', 'tr', ol=0, cut=False),
     F(ell_top(10, 38, 14.4), 'periwinkle', 'w'),
@@ -367,7 +367,7 @@ add('tomatocan', 'Diced tomatoes', [
 BOW = 'M0 -1.4C-3 -5.6 -8 -6.2 -9.2 -4C-10.2 -1.6 -10.2 1.6 -9.2 4C-8 6.2 -3 5.6 0 1.4C3 5.6 8 6.2 9.2 4C10.2 1.6 10.2 -1.6 9.2 -4C8 -6.2 3 -5.6 0 -1.4Z'
 BOWD = ['M-1.6 -2.2V2.2', 'M1.6 -2.2V2.2', 'M-8.2 -3.2L-7 -1.8L-8.2 -.2L-7 1.4L-8.2 3', 'M8.2 -3.2L7 -1.8L8.2 -.2L7 1.4L8.2 3']
 PENNE = 'M-9.4 -3.8H4.2Q5.4 -3.8 6 -2.8L9.4 2.8Q10 3.8 8.8 3.8H-4.8Q-6 3.8 -6.6 2.8L-10 -2.8Q-10.6 -3.8 -9.4 -3.8Z'
-PD = ['M-6.6 -1.3H5.8', 'M-5.2 1.3H7.2']
+PD = ['M1.6 -1.3H5.8', 'M-5.2 1.3H7.2']
 PE = ('ellipse', 7.8, 0, 1.5, 3.2, -28)
 add('pasta', 'Penne', [
     F(('path', PENNE), 'lemon', 'p', band=.3, det=PD, det_t='m', det_w=1.2, tf='translate(15.6 33.2) rotate(-28)'),
@@ -413,7 +413,7 @@ add('icecream', 'Ice cream', [
     *[LINE(d, 'cocoa', 1.6, t='m') for d in ['M19.4 11.6l1.4 1', 'M25.6 10.2l-1 1.4', 'M28.4 13.6l1.4 .6', 'M22.2 14.6l1.2 -.8']],
     F(('path', 'M10.4 19.6H37.6L35.6 38.6Q35.2 42 31.8 42H16.2Q12.8 42 12.4 38.6Z'), 'sakura', 'w', band=.24, band_t='p'),
     F(('rect', 8.4, 16, 31.2, 6, 3), 'sakura', 'm'),
-    F(('path', 'M20.2 26.6H27.8L24 35.6Z'), 'cocoa', 'm', ol=1.4, cut=False, det=['M21.6 29.2H26.4', 'M22.8 32H25.2'], det_t='p', det_w=1),
+    F(('path', 'M20.2 26.6H27.8L24 35.6Z'), 'cocoa', 'm', ol=1.4, cut=False, det=['M21.6 29.2H26.4'], det_t='p', det_w=1),
     F(('circle', 24, 26, 3.8), 'sakura', 'p', ol=1.4, cut=False),
 ], gloss=[G('M17.4 13.6Q18 10.2 21.2 9'), DOT(16.6, 16.2), G('M13.6 25.6L14.2 31', 2.2)], qty='1.5 L tub', aisle='frozen')
 
@@ -454,7 +454,7 @@ add('toiletpaper', 'Toilet paper', [
     F(ell_top(8, 34, 14.4), 'periwinkle', 'w'),
     F(('ellipse', 21, 14.4, 4.4, 1.6), 'periwinkle', 'm', ol=1.4, cut=False),
     F(('path', 'M31.6 18.6H38Q40.4 18.6 40.4 21V37.8L38.4 36.2L36.4 37.8L34.4 36.2L32.4 37.8L31.6 37.2Z'), 'periwinkle', 'w', ol=1.8,
-      det=['M33 27.6h1.6M36.4 27.6H38'], det_t='m', det_w=1.4),
+      det=['M33.6 27.6h1.2M36.4 27.6H37.6'], det_t='m', det_w=1.4),
 ], gloss=[G('M11.4 20V28'), DOT(11.4, 31.4)], qty='12 double rolls', aisle='household')
 
 # 39 toothpaste: crimped end, printed mint swirl, cap; lies at -25 deg
@@ -496,13 +496,13 @@ add('bakingpowder', 'Baking powder', [
     F(cyl(12.6, 35.4, 17.6, 42), 'grape', 'p', band=.2),
     F(('rect', 13.5, 23.6, 21, 11.6), 'grape', 'w', ol=0, cut=False, det=['M13.5 23.6H34.5', 'M13.5 35.2H34.5'], det_w=1.3),
     F(('path', 'M18.6 32.4C16.6 32.4 16.2 29.4 18.4 29C18.4 26.4 21.6 25.4 23.2 27.2C24.6 25.2 28.4 25.8 28.6 28.6C30.8 28.6 31.2 32.4 29 32.4Z'), 'grape', 'p', ol=1.3, cut=False),
-    F(('rect', 11.4, 13.6, 25.2, 6.6, 3), 'grape', 'm', det=['M14 16.9H34'], det_t='p', det_w=1.2),
+    F(('rect', 11.4, 13.6, 25.2, 6.6, 3), 'grape', 'm', det=['M14 18.2H34'], det_t='p', det_w=1.2),
 ], gloss=[G('M15.4 23V31', 2.2), DOT(15.4, 34)], qty='225 g tin', aisle='baking')
 
 # 43 salt shaker
 add('salt', 'Sea salt', [
     F(('path', 'M15.4 19.6C15.4 12.6 19.4 9.4 24 9.4C28.6 9.4 32.6 12.6 32.6 19.6Z'), 'periwinkle', 'm'),
-    *[F(('circle', x, y, .95), 'periwinkle', 'w', ol=0, cut=False) for x, y in [(20.8, 15), (24, 13.4), (27.2, 15), (22.4, 17.6), (25.6, 17.6)]],
+    *[F(('circle', x, y, .95), 'periwinkle', 'w', ol=0, cut=False) for x, y in [(21.8, 15.2), (24, 13.8), (26.2, 15.2), (22.9, 17.4), (25.1, 17.4)]],
     F(('path', 'M15 21.4H33L34.6 38.6Q35 42 31.6 42H16.4Q13 42 13.4 38.6Z'), 'periwinkle', 'w', band=.46, band_t='p'),
     F(('rect', 13.6, 18.2, 20.8, 4.2, 2.1), 'periwinkle', 'm'),
     *[F(('rect', x, y, 1.8, 1.8, .4, a), 'periwinkle', 'w', ol=1, cut=False) for x, y, a in [(18.6, 34.4, 20), (23.4, 33.2, -10), (28.4, 35, 30), (21.2, 38.2, 0), (26.4, 38.4, 15)]],

@@ -16,6 +16,7 @@ from svgelements import Path as SPath, Move, Line, QuadraticBezier, CubicBezier,
 from engine import fmt, parse_tf, apply_tf
 
 LINE_GAP = .75        # a trimmed line's cap keeps this much off the trace
+GAPS = (LINE_GAP, .4, .15)   # in a narrow shape, where LINE_GAP would leave too little of a line, a smaller gap
 MIN_PIECE = 1.2       # shorter leftovers are dropped
 
 
@@ -81,11 +82,12 @@ def _write(pieces):
     return out
 
 
-def trim_path(d, ok, tf=None, step=.1):
+def trim_path(d, ok, tf=None, step=.1, dot_ok=None):
     """the pieces of path d (local coordinates; tf maps them to icon space) where ok(point in icon space) holds,
-    each kept on its own curves; d itself when every point is ok. Returns (new d or '' , changed)."""
+    each kept on its own curves; d itself when every point is ok. Returns (new d or '' , changed, refused): refused
+    when a subpath would have lost more than KEEP_MIN of its length and was left as written."""
     M = parse_tf(tf) if tf else None
-    out, changed = [], False      # out: per subpath, the path data of what is kept
+    out, changed, refused = [], False, False      # out: per subpath, the path data of what is kept
     for segs in _segments(d):
         samples = []
         for si, seg in enumerate(segs):
@@ -99,8 +101,14 @@ def trim_path(d, ok, tf=None, step=.1):
                 q = apply_tf(M, *p) if M else p
                 samples.append((si, t, p, ok(q)))
         total = sum(math.dist(samples[i][2], samples[i + 1][2]) for i in range(len(samples) - 1))
-        if all(s[3] for s in samples) or total < 1.0:      # clear, or a dot (h.1), which is not a line with ends
-            out.append(_write([(seg, 0.0, 1.0) for seg in segs]))
+        if total < 1.0:      # a dot (h.1) is not a line with ends: it stays, unless it sits on a trace or off the art
+            if dot_ok is None or all(dot_ok(apply_tf(M, *s[2]) if M else s[2]) for s in samples):
+                out.append(_write([(seg, 0.0, 1.0) for seg in segs]))
+            else:
+                changed = True
+            continue
+        if all(s[3] for s in samples) or math.dist(segs[0][0], segs[-1][-1]) < .05:
+            out.append(_write([(seg, 0.0, 1.0) for seg in segs]))     # clear, or a closed ring, which has no ends
             continue
         runs, cur = [], []
         for s in samples:
@@ -117,6 +125,7 @@ def trim_path(d, ok, tf=None, step=.1):
             kept += length if length >= MIN_PIECE else 0.0
         if total > 0 and kept < KEEP_MIN * total and total > 1.0:
             out.append(_write([(seg, 0.0, 1.0) for seg in segs]))     # mostly on a trace by design: leave it
+            refused = True
             continue
         changed = True
         for r in runs:
@@ -133,11 +142,11 @@ def trim_path(d, ok, tf=None, step=.1):
             if pieces:
                 out.append(_write(pieces))
     if not changed:
-        return d, False
-    return ''.join(out), True
+        return d, False, refused
+    return ''.join(out), True, refused
 
 
-KEEP_MIN = .7        # a line is cut back only when at least this share of it is left; else it is left as written
+KEEP_MIN = .5        # a line is cut back only when at least half of it is left; else it is left as written
 
 
 def colour_of_trace(p):
@@ -204,25 +213,41 @@ def inset_lines(icon):
             traces = cache[col]
             # an end may run into a trace of its own colour (a T-junction) but never past the outline's outer edge
             inside = prep(art.buffer(max(0.0, 1.0 - w / 2 - .1)))
-            bad = prep(traces.buffer(LINE_GAP + w / 2)) if traces is not None else None
             # what the parts drawn after this one paint over hides the line there: those stretches stay as they are
             cover = [q.paint for q in pp[i + 1:] if not q.paint.is_empty]
             hidden = prep(unary_union(cover).buffer(-w / 2)) if cover else None
+            oks = []
+            for gap in GAPS:
+                bad = prep(traces.buffer(gap + w / 2)) if traces is not None else None
 
-            def ok(q, inside=inside, bad=bad, hidden=hidden):
+                def ok(q, inside=inside, bad=bad, hidden=hidden):
+                    pt = Point(q)
+                    return (hidden is not None and hidden.contains(pt)) or (inside.contains(pt) and not (bad and bad.contains(pt)))
+                oks.append(ok)
+            touch = prep(traces.buffer(w / 2 + .05)) if traces is not None else None
+            within = prep(art.buffer(1.0 - w / 2))
+
+            def dot_ok(q, touch=touch, within=within, hidden=hidden):
                 pt = Point(q)
-                return (hidden is not None and hidden.contains(pt)) or (inside.contains(pt) and not (bad and bad.contains(pt)))
+                return (hidden is not None and hidden.contains(pt)) or (within.contains(pt) and not (touch and touch.contains(pt)))
+
+            def trim(d, tf):
+                for ok in oks:          # the widest gap that leaves enough of the line
+                    nd, ch, refused = trim_path(d, ok, tf, dot_ok=dot_ok)
+                    if not refused:
+                        return nd, ch
+                return nd, ch
             if what == 'det':
                 new = []
                 for d in p.det:
-                    nd, ch = trim_path(d, ok, p.tf)
+                    nd, ch = trim(d, p.tf)
                     if ch:
                         changed += 1
                     if nd:
                         new.append(nd)
                 p.det = new
             else:
-                nd, ch = trim_path(p.s[1], ok, p.tf)
+                nd, ch = trim(p.s[1], p.tf)
                 if ch:
                     changed += 1
                     if nd:

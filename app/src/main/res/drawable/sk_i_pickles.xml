@@ -40,11 +40,6 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M17.8 18.8L34.2 18.8"
-        android:strokeColor="#D3F4C5"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"/>
     <path android:pathData="M21.96 31.87C22.18 33.44 22.22 35 22.09 36.4C21.95 37.8 21.63 38.99 21.17 39.85C20.7 40.72 20.11 41.22 19.45 41.31C18.79 41.41 18.09 41.08 17.4 40.38C16.72 39.68 16.09 38.62 15.57 37.31C15.05 36.01 14.66 34.49 14.44 32.93C14.22 31.36 14.18 29.8 14.31 28.4C14.45 27 14.77 25.81 15.23 24.95C15.7 24.08 16.29 23.58 16.95 23.49C17.61 23.39 18.31 23.72 19 24.42C19.68 25.12 20.31 26.18 20.83 27.49C21.35 28.79 21.74 30.31 21.96 31.87Z"
         android:fillColor="#8EDB76"/>
     <group>
@@ -109,13 +104,11 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M32.3 33.6L33.3 29.4L33.7 29L34.4 28.8"
+    <path android:pathData="M22.2 20.1L29.6 20.1"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="2.4"
+        android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M33.35 37.19C33.35 37.31 33.32 37.43 33.27 37.54C33.22 37.65 33.14 37.74 33.05 37.82C32.95 37.89 32.85 37.94 32.73 37.97C32.61 38 32.49 38 32.37 37.97C32.25 37.94 32.15 37.89 32.05 37.82C31.96 37.74 31.88 37.65 31.83 37.54C31.78 37.43 31.75 37.31 31.75 37.19C31.75 37.07 31.78 36.95 31.83 36.84C31.88 36.73 31.96 36.64 32.05 36.56C32.15 36.49 32.25 36.44 32.37 36.41C32.49 36.38 32.61 36.38 32.73 36.41C32.85 36.44 32.95 36.49 33.05 36.56C33.14 36.64 33.22 36.73 33.27 36.84C33.32 36.95 33.35 37.07 33.35 37.19Z"
-        android:fillColor="#FFFFFF"/>
   </group>
   <group android:name="dominant">
     <clip-path android:pathData="M17.6 17.6L34.4 17.6L34.4 20.4C38.4 21.4 40.6 24.2 40.6 28L40.6 40Q40.6 44 36.6 44L15.4 44Q11.4 44 11.4 40L11.4 28C11.4 24.2 13.6 21.4 17.6 20.4Z"/>

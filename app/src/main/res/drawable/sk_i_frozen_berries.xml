@@ -16,11 +16,11 @@
   </group>
   <group android:name="fills">
     <path android:pathData="M13.6 14.6L38.4 14.6C41.8 20.6 43.2 29 42.4 36.6Q41.8 43.6 36.6 43.8L15.4 43.8Q10.2 43.6 9.6 36.6C8.8 29 10.2 20.6 13.6 14.6Z"
-        android:fillColor="#FFFFFF"/>
+        android:fillColor="#CCEBFF"/>
     <group>
       <clip-path android:pathData="M13.6 14.6L38.4 14.6C41.8 20.6 43.2 29 42.4 36.6Q41.8 43.6 36.6 43.8L15.4 43.8Q10.2 43.6 9.6 36.6C8.8 29 10.2 20.6 13.6 14.6Z"/>
       <path android:pathData="M6.8 39.71L45.2 39.71L45.2 45.8L6.8 45.8Z"
-          android:fillColor="#CCEBFF"/>
+          android:fillColor="#7CC6F5"/>
     </group>
   </group>
   <group android:name="lines">
@@ -159,7 +159,7 @@
         android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M20.6 25L20.7 25M27.4 33L27.5 33M33.6 30.2L33.7 30.2M13.6 37.6L13.7 37.6M37.4 37.6L37.5 37.6M22.2 41.8L22.3 41.8M29.6 41.8L29.7 41.8M26.8 24.4L26.9 24.4"
+    <path android:pathData="M22 24.2L22.1 24.2M26.4 24.4L26.5 24.4M13.6 37.6L13.7 37.6M38 37.8L38.1 37.8"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="1.6"
         android:strokeLineCap="round"
@@ -176,7 +176,7 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M14.6 12.4L14.6 14.2M17.6 12.4L17.6 14.2M20.6 12.4L20.6 14.2M23.6 12.4L23.6 14.2M26.6 12.4L26.6 14.2M29.6 12.4L29.6 14.2M32.6 12.4L32.6 14.2M35.6 12.4L35.6 14.2M38.2 12.4L38.2 14.2"
+    <path android:pathData="M14.6 12.8L14.6 13.6M17.6 12.8L17.6 13.6M20.6 12.8L20.6 13.6M23.6 12.8L23.6 13.6M26.6 12.8L26.6 13.6M29.6 12.8L29.6 13.6M32.6 12.8L32.6 13.6M35.6 12.8L35.6 13.6"
         android:strokeColor="#7CC6F5"
         android:strokeWidth="1.2"
         android:strokeLineCap="round"

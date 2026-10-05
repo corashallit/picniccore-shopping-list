@@ -32,11 +32,6 @@
         android:strokeWidth="1.8"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M20.8 26.6L20.9 26.6"
-        android:strokeColor="#CB9C73"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"/>
     <path android:pathData="M43.81 22.48C44.26 24.16 43.75 26.62 42.58 28.01C41.41 29.4 38.8 30.56 36.78 30.83C34.77 31.1 32.08 30.56 30.49 29.65C28.91 28.73 27.74 26.93 27.26 25.34C26.78 23.75 26.61 21.45 27.6 20.09C28.59 18.73 31.17 17.55 33.22 17.19C35.27 16.82 38.11 17 39.88 17.89C41.64 18.77 43.36 20.79 43.81 22.48Z"
         android:fillColor="#F1DEC9"/>
     <group>

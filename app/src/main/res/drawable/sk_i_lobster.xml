@@ -77,17 +77,17 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M26 39L26 43.6"
+    <path android:pathData="M26 40.8L26 42.2"
         android:strokeColor="#FFC4D1"
         android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M23.4 40.4L22.6 43.6"
+    <path android:pathData="M23.9 41.2L23.6 42.3"
         android:strokeColor="#FFC4D1"
         android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M28.6 40.4L29.4 43.6"
+    <path android:pathData="M28.1 41.2L28.4 42.3"
         android:strokeColor="#FFC4D1"
         android:strokeWidth="1.2"
         android:strokeLineCap="round"
@@ -140,7 +140,7 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M20.6 24.4Q26 27 31.4 24.4"
+    <path android:pathData="M23.11 25.33Q26 26.07 28.89 25.33"
         android:strokeColor="#FFC4D1"
         android:strokeWidth="1.3"
         android:strokeLineCap="round"
@@ -158,6 +158,16 @@
         android:strokeLineJoin="round"/>
     <path android:pathData="M14.33 24.05C14.33 24.17 14.3 24.29 14.25 24.4C14.2 24.51 14.12 24.6 14.03 24.68C13.93 24.75 13.83 24.8 13.71 24.83C13.59 24.86 13.47 24.86 13.35 24.83C13.23 24.8 13.13 24.75 13.03 24.68C12.94 24.6 12.86 24.51 12.81 24.4C12.76 24.29 12.73 24.17 12.73 24.05C12.73 23.93 12.76 23.81 12.81 23.7C12.86 23.59 12.94 23.5 13.03 23.42C13.13 23.35 13.23 23.3 13.35 23.27C13.47 23.24 13.59 23.24 13.71 23.27C13.83 23.3 13.93 23.35 14.03 23.42C14.12 23.5 14.2 23.59 14.25 23.7C14.3 23.81 14.33 23.93 14.33 24.05Z"
         android:fillColor="#FFFFFF"/>
+    <path android:pathData="M34.2 18.2L35.6 17.9L39.3 18.8"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <path android:pathData="M22.2 22.5L22.2 21L22.4 19.6L22.9 18.5L23.5 17.4"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
   </group>
   <group android:name="dominant">
     <clip-path android:pathData="M11.85 27.55C8.08 22.38 6.84 15.87 9.36 11.61C10.1 10.57 11.56 10.57 11.75 11.97L12.39 16.36L14.94 15.84L14.8 10.26C14.85 9 16.14 8.42 17.05 9.41C20.38 13.03 22.03 20.26 20.11 25.18Z"/>

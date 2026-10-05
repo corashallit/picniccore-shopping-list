@@ -7,7 +7,7 @@
     android:viewportWidth="52"
     android:viewportHeight="52">
   <group android:name="cut">
-    <path android:pathData="M26 3.6L26.46 6.79L26.95 9.38L27.52 11.73L28.19 13.85L28.98 15.75L29.79 17.26L30.83 18.78L31.88 19.98L33.06 21.05L34.56 22.1L36.25 23.02L38.15 23.81L40.27 24.48L42.62 25.05L45.21 25.54L48.4 26L45.21 26.46L42.62 26.95L40.27 27.52L38.15 28.19L36.25 28.98L34.56 29.9L33.06 30.95L31.88 32.02L30.83 33.22L29.79 34.74L28.98 36.25L28.19 38.15L27.52 40.27L26.95 42.62L26.46 45.21L26 48.4L25.54 45.21L25.05 42.62L24.48 40.27L23.81 38.15L23.02 36.25L22.21 34.74L21.17 33.22L20.12 32.02L18.94 30.95L17.44 29.9L15.75 28.98L13.85 28.19L11.73 27.52L9.38 26.95L6.79 26.46L3.6 26L6.79 25.54L9.38 25.05L11.73 24.48L13.85 23.81L15.75 23.02L17.26 22.21L18.78 21.17L19.98 20.12L21.05 18.94L22.1 17.44L23.02 15.75L23.81 13.85L24.48 11.73L25.05 9.38L25.54 6.79Z"
+    <path android:pathData="M26 4.2L26.42 7.06L26.92 9.65L27.5 11.99L28.19 14.1L28.99 15.99L29.81 17.49L30.87 19L31.95 20.2L33.15 21.25L34.68 22.3L36.21 23.11L38.12 23.9L40.01 24.5L42.35 25.08L44.94 25.58L47.8 26L44.94 26.42L42.35 26.92L40.01 27.5L37.9 28.19L36.01 28.99L34.51 29.81L33 30.87L31.8 31.95L30.75 33.15L29.7 34.68L28.89 36.21L28.1 38.12L27.5 40.01L26.92 42.35L26.42 44.94L26 47.8L25.58 44.94L25.08 42.35L24.5 40.01L23.9 38.12L23.11 36.21L22.3 34.68L21.25 33.15L20.2 31.95L19 30.87L17.49 29.81L15.99 28.99L14.1 28.19L11.99 27.5L9.65 26.92L7.06 26.42L4.2 26L7.06 25.58L9.65 25.08L11.99 24.5L14.1 23.81L15.99 23.01L17.49 22.19L19 21.13L20.2 20.05L21.25 18.85L22.3 17.32L23.11 15.79L23.9 13.88L24.5 11.99L25.08 9.65L25.58 7.06Z"
         android:fillColor="#FFFFFF"
         android:fillType="evenOdd"
         android:strokeColor="#FFFFFF"
@@ -16,9 +16,9 @@
         android:strokeLineJoin="round"/>
   </group>
   <group android:name="fills">
-    <path android:pathData="M26 3.6C28 19.6 32.4 24 48.4 26C32.4 28 28 32.4 26 48.4C24 32.4 19.6 28 3.6 26C19.6 24 24 19.6 26 3.6Z">
+    <path android:pathData="M26 4.2C28 19.6 32.4 24 47.8 26C32.4 28 28 32.4 26 47.8C24 32.4 19.6 28 4.2 26C19.6 24 24 19.6 26 4.2Z">
         <aapt:attr name="android:fillColor">
-          <gradient android:type="linear" android:startX="3.6" android:startY="3.6" android:endX="48.4" android:endY="48.4" android:tileMode="clamp">
+          <gradient android:type="linear" android:startX="4.2" android:startY="4.2" android:endX="47.8" android:endY="47.8" android:tileMode="clamp">
             <item android:offset="0" android:color="#FFFFD6E8"/>
             <item android:offset=".25" android:color="#FFCCEBFF"/>
             <item android:offset=".5" android:color="#FFC9F2E3"/>
@@ -29,7 +29,7 @@
     </path>
   </group>
   <group android:name="lines">
-    <path android:pathData="M26 3.6C28 19.6 32.4 24 48.4 26C32.4 28 28 32.4 26 48.4C24 32.4 19.6 28 3.6 26C19.6 24 24 19.6 26 3.6Z"
+    <path android:pathData="M26 4.2C28 19.6 32.4 24 47.8 26C32.4 28 28 32.4 26 47.8C24 32.4 19.6 28 4.2 26C19.6 24 24 19.6 26 4.2Z"
         android:strokeColor="#3E4BB0"
         android:strokeWidth="2.2"
         android:strokeLineCap="round"
@@ -41,6 +41,6 @@
   <group android:name="gloss">
   </group>
   <group android:name="dominant">
-    <clip-path android:pathData="M26 3.6C28 19.6 32.4 24 48.4 26C32.4 28 28 32.4 26 48.4C24 32.4 19.6 28 3.6 26C19.6 24 24 19.6 26 3.6Z"/>
+    <clip-path android:pathData="M26 4.2C28 19.6 32.4 24 47.8 26C32.4 28 28 32.4 26 47.8C24 32.4 19.6 28 4.2 26C19.6 24 24 19.6 26 4.2Z"/>
   </group>
 </vector>

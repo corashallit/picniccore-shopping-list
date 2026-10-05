@@ -97,7 +97,7 @@ def _c2_ginger():
     return 'M' + 'L'.join(f'{fmt(x)} {fmt(y)}' for x, y in list(g.simplify(.04).exterior.coords)[:-1]) + 'Z'
 
 
-_C2_GRINGS = ['M27.2 21.6Q30 23.6 33 21.2', 'M26.6 28.4Q28.8 30.2 31.6 28.4', 'M34.2 21.8Q36.8 23 39 20.6', 'M36.4 16.6Q38.4 17.6 40.2 15.8']
+_C2_GRINGS = ['M27.2 21.6Q30 23.6 33 21.2', 'M26.6 28.4Q28.8 30.2 31.6 28.4', 'M34.2 21.8Q36.8 23 39 20.6', 'M37 17.8Q38.4 18.4 39.4 17.4']
 add('ginger', 'Ginger', [
     F(('path', _c2_ginger()), 'cocoa', 'p', band=.26, det=_C2_GRINGS, det_t='m', det_w=1.6),
     F(('circle', 35.8, 35.4, 6.2), 'cocoa', 'lp', det=[dots_ring(35.8, 35.4, 3.4, 7, 10), 'M35.8 35.4h.1'], det_t='m', det_w=1.3),
@@ -107,8 +107,8 @@ add('ginger', 'Ginger', [
 # and the tub, melon rim
 _C2_SL = [  # (x, y, rx, ry, rot, fam)
     (17, 16.4, 4.8, 3.2, -25, 'melon'), (24.4, 14.4, 5, 3.2, 8, 'strawberry'), (31.2, 16.6, 4.6, 3, 28, 'melon'),
-    (16.4, 29.2, 5, 3.4, 20, 'strawberry'), (24, 28, 5.4, 3.6, -12, 'melon'), (31, 29.6, 4.4, 3.2, -24, 'strawberry'),
-    (19.8, 35.2, 5, 3.2, -8, 'melon'), (28.4, 35.4, 4.8, 3.2, 14, 'melon'),
+    (19.2, 29.4, 5, 3.4, 20, 'strawberry'), (24.6, 28, 5.4, 3.6, -12, 'melon'), (31, 29.6, 4.4, 3.2, -24, 'strawberry'),
+    (20.6, 35.6, 5, 3.2, -8, 'melon'), (28.4, 35.4, 4.8, 3.2, 14, 'melon'),
 ]
 
 
@@ -154,7 +154,7 @@ def _c2_spinach():
         tf = f'translate({fmt(24 + dx)} 40.6) rotate({a})'
         out.append(TUBE(f'M0 -1V{fmt(-s - 1.4)}', 'mint', 3, 'm', tf=tf))
         out.append(F(('path', _c2_spleaf(l, w, s)), 'melon', 'm', band=.3, tf=tf,
-                     det=[f'M0 {fmt(-s - 1)}V{fmt(-l + 3)}', f'M0 {fmt(-s - (l - s) * .4)}l{fmt(-w * .55)} -2.6', f'M0 {fmt(-s - (l - s) * .58)}l{fmt(w * .55)} -2.6'],
+                     det=[f'M0 {fmt(-s - 1)}V{fmt(-l + 3)}', f'M0 {fmt(-s - (l - s) * .4)}l{fmt(-w * .4)} -1.9', f'M0 {fmt(-s - (l - s) * .58)}l{fmt(w * .4)} -1.9'],
                      det_t='deep', det_w=1.5))
     return out
 
@@ -178,7 +178,7 @@ def _c2_pod(L=30, hw=2.9, bumps=5, amp=1.0, k=1.6):
 
 add('green_beans', 'Green beans', [
     *[F(('path', _c2_pod(L, hw, 5, .8, 1.6)), 'melon', 'm', band=.34, sband=False, tf=f'translate(7.6 {fmt(y)}) rotate({a}) translate({fmt(L / 2 + .6)} 0)',
-        det=[f'M{fmt(-L / 2 + 4)} {fmt(.5)}Q0 {fmt(-.3)} {fmt(L / 2 - 4)} {fmt(1.4)}'], det_t='p', det_w=1.5)
+        det=[f'M{fmt(-L / 2 + (14 if hw > 3 else 4))} {fmt(.5 if hw <= 3 else .2)}Q{fmt(3 if hw > 3 else 0)} {fmt(-.3)} {fmt(L / 2 - 4)} {fmt(1.4)}'], det_t='p', det_w=1.5)
       for y, a, L, hw in [(28.6, -34, 31, 2.8), (31.4, -22, 31.6, 2.8), (34.4, -10, 31.6, 2.9), (37.8, 1, 31.2, 3.8)]],
     *[F(('ellipse', 7.6, y, 1.6, 2.2, a), 'melon', 'deep', ol=1.5) for y, a in [(28.4, -34), (31.2, -22), (34.2, -10), (37.6, 1)]],
 ], qty='454 g', aisle='produce')
@@ -193,7 +193,7 @@ def _c2_front_spear(top=7, hw=5):
             f'H{fmt(24 - hw + 2.2)}Q{fmt(24 - hw)} 41.8 {fmt(24 - hw)} 39.6Z')
     return [F(('path', body), 'melon', 'm', band=.14,
               det=[f'M{fmt(24 - 2.6)} {fmt(top + 6.4)}L24 {fmt(top + 3.8)}L{fmt(24 + 2.6)} {fmt(top + 6.4)}', f'M{fmt(24 - 3.2)} {fmt(top + 10.4)}L24 {fmt(top + 7.8)}L{fmt(24 + 3.2)} {fmt(top + 10.4)}',
-                   f'M{fmt(24 + hw - .4)} {fmt(top + 18)}l-1.6 1.4', f'M{fmt(24 + hw - .4)} {fmt(top + 25)}l-1.6 1.4'], det_t='#9B7CDE', det_w=1.5)]
+                   f'M{fmt(24 + hw - 2.1)} {fmt(top + 18)}l-1.2 1.1', f'M{fmt(24 + hw - 2.1)} {fmt(top + 25)}l-1.2 1.1'], det_t='#9B7CDE', det_w=1.5)]
 
 
 def _c2_spear(a, top, hw=2.4):
@@ -202,10 +202,9 @@ def _c2_spear(a, top, hw=2.4):
     tip = (f'M{fmt(24 - th)} {fmt(top + 7.4)}C{fmt(24 - th - .3)} {fmt(top + 2.6)} {fmt(24 - 1.4)} {fmt(top - .4)} 24 {fmt(top - 1.6)}'
            f'C{fmt(24 + 1.4)} {fmt(top - .4)} {fmt(24 + th + .3)} {fmt(top + 2.6)} {fmt(24 + th)} {fmt(top + 7.4)}Q24 {fmt(top + 9)} {fmt(24 - th)} {fmt(top + 7.4)}Z')
     return [F(('path', f'M{fmt(24 - hw)} {fmt(top + 5)}H{fmt(24 + hw)}V40Q{fmt(24 + hw)} 41.8 24 41.8Q{fmt(24 - hw)} 41.8 {fmt(24 - hw)} 40Z'),
-              'melon', 'm', band=.14, tf=tf, sband=False,
-              det=[f'M{fmt(24 - hw + .2)} {fmt(top + 14)}l1.4 1.3', f'M{fmt(24 + hw - .2)} {fmt(top + 20)}l-1.4 1.3'], det_w=1.2),
+              'melon', 'm', band=.14, tf=tf, sband=False),
             F(('path', tip), 'melon', 'm', ol=1.6, tf=tf,
-              det=[f'M{fmt(24 - th + 1)} {fmt(top + 5)}L24 {fmt(top + 2.6)}L{fmt(24 + th - 1)} {fmt(top + 5)}', f'M{fmt(24 - 1.4)} {fmt(top + .6)}L24 {fmt(top - .3)}L{fmt(24 + 1.4)} {fmt(top + .6)}'],
+              det=[f'M{fmt(24 - th + 1.8)} {fmt(top + 5.2)}L24 {fmt(top + 3.4)}L{fmt(24 + th - 1.8)} {fmt(top + 5.2)}', f'M{fmt(24 - .8)} {fmt(top + 1.8)}L24 {fmt(top + 1)}L{fmt(24 + .8)} {fmt(top + 1.8)}'],
               det_t='#9B7CDE', det_w=1.3)]
 
 
@@ -220,7 +219,7 @@ add('asparagus', 'Asparagus', [
 def _c2_basil_leaf(x, y, a, l, w):
     tf = f'translate({fmt(x)} {fmt(y)}) rotate({a})'
     return F(('path', _c2_leaf(l, w)), 'melon', 'm', band=.28, tf=tf,
-             det=[f'M0 -1.6V{fmt(-l * .82)}', f'M{fmt(-w * .5)} {fmt(-l * .3)}Q{fmt(-w * .8)} {fmt(-l * .6)} {fmt(-w * .3)} {fmt(-l * .8)}'],
+             det=[f'M0 -1.6V{fmt(-l * .76)}', f'M{fmt(-w * .36)} {fmt(-l * .32)}Q{fmt(-w * .58)} {fmt(-l * .56)} {fmt(-w * .24)} {fmt(-l * .72)}'],
              det_t='p', det_w=1.2)
 
 
@@ -253,7 +252,7 @@ _C2_PS = [(18.6, 27.6, 6.2, 5), (30.2, 28, 6, 9), (13.6, 19.4, 7.4, 3), (34.2, 1
 add('parsley', 'Parsley & cilantro', [
     *[TUBE(f'M24 40.6Q{fmt((24 + x) / 2)} {fmt((41 + y) / 2 + 4)} {fmt(x)} {fmt(y + R * .5)}', 'melon', 2.6, 'm') for x, y, R, s in _C2_PS],
     *[F(('path', _c2_frill(x, y, R, -90 + s * 7, s)), 'melon', 'm', band=.26,
-        det=[f'M{fmt(x)} {fmt(y + R * .5)}L{fmt(x)} {fmt(y - R * .45)}', f'M{fmt(x)} {fmt(y + R * .1)}L{fmt(x - R * .45)} {fmt(y - R * .2)}',
+        det=[f'M{fmt(x)} {fmt(y + R * .38)}L{fmt(x)} {fmt(y - R * .45)}', *([f'M{fmt(x)} {fmt(y + R * .1)}L{fmt(x - R * .45)} {fmt(y - R * .2)}'] if R < 8 else []),
              f'M{fmt(x)} {fmt(y + R * .1)}L{fmt(x + R * .45)} {fmt(y - R * .2)}'], det_t='p', det_w=1.2) for x, y, R, s in _C2_PS],
 ], qty='1 bunch', aisle='produce')
 
@@ -320,7 +319,7 @@ def _c2_drip(x0, x1, cy, rx, ry, drips):
 
 
 add('cake', 'Cake', [
-    F(cyl(9.4, 38.6, 20.6, 42, 4.6), 'sakura', 'w', band=.2, band_t='p', det=['M10 30.6Q24 35 38 30.6'], det_t='p', det_w=1.6),
+    F(cyl(9.4, 38.6, 20.6, 42, 4.6), 'sakura', 'w', band=.2, band_t='p', det=['M11.8 31.1Q24 34.5 36.2 31.1'], det_t='p', det_w=1.6),
     F(('path', _c2_drip(9.4, 38.6, 20.6, 14.6, 4.6, [(12.8, 4.4, 1.6), (18.4, 7, 1.8), (24.6, 3.6, 1.6), (30.4, 6.2, 1.8), (35.6, 3.8, 1.5)])),
       'sakura', 'm'),
     LINE('M24.4 10Q25.6 7 28.6 6.4', 'strawberry', 1.5),
@@ -385,8 +384,7 @@ add('mozzarella', 'Mozzarella', [
     F(('ellipse', 24, 23.6, 17, 5.6), 'ramune', 'p'),
     F(('circle', 19.4, 22.4, 7.6), 'ramune', 'w', band=.3, band_t='p'),
     F(('circle', 31.2, 24.4, 5.6), 'ramune', 'w', band=.3, band_t='p'),
-    F(('path', 'M7 23.6C7 27.2 14.6 29.8 24 29.8C33.4 29.8 41 27.2 41 23.6L38.6 38.8Q38.2 42 35 42H13Q9.8 42 9.4 38.8Z'), 'ramune', 'm', band=.24, band_t='deep',
-      det=['M8.4 26.4C10.6 28.4 16.6 30.4 24 30.4C31.4 30.4 37.4 28.4 39.6 26.4'], det_t='p', det_w=1.5),
+    F(('path', 'M7 23.6C7 27.2 14.6 29.8 24 29.8C33.4 29.8 41 27.2 41 23.6L38.6 38.8Q38.2 42 35 42H13Q9.8 42 9.4 38.8Z'), 'ramune', 'm', band=.24, band_t='deep'),
     F(('path', _c2_leaf(10, 4.6)), 'melon', 'm', band=.3, tf='translate(21.6 17.6) rotate(56)', det=['M0 -1.4V-8.4'], det_t='p', det_w=1.5),
 ], qty='200 g tub', aisle='deli')
 
@@ -407,7 +405,7 @@ add('parmesan', 'Parmesan', [
 add('hummus', 'Hummus & dips', [
     F(('path', 'M7 26H41L38 38.8Q37.4 42 34 42H14Q10.6 42 10 38.8Z'), 'cocoa', 'w', band=.26, band_t='p'),
     F(('path', 'M28.6 24Q27 23.8 27.8 22.4L33.6 9.4Q34.6 7.6 35.6 9.4L40.2 20.6Q40.8 22.2 39.2 22.4Z'), 'cocoa', 'p', band=.3, band_t='m',
-      tex=['M33 15h.1M35.6 18.8h.1M33.4 21h.1'], tex_t='m', tex_w=2),
+      tex=['M36 16h.1M36.6 19h.1M34 20.6h.1'], tex_t='m', tex_w=2),
     F(('ellipse', 24, 26, 17, 7.6), 'cocoa', 'm'),
     F(('path', 'M9.4 26.4C9.4 21.4 15.6 18.4 24 18.4C32.4 18.4 38.6 21.4 38.6 26.4C34.6 29.6 13.4 29.6 9.4 26.4Z'), 'cocoa', 'p', ol=1.6, cut=False,
       det=['M25 21.6C30.6 21.2 33.4 23.4 31.2 25.8C28.2 28.6 18.6 28.2 16.8 25.4C15.2 22.6 19.4 20.4 26.2 20.6'], det_t='m', det_w=2.6),
@@ -468,7 +466,7 @@ add('fish_fillet', 'White fish fillets', [
       tex=['M-11.1 -8.8L-7.9 0L-11.1 8.8', 'M-4.75 -8.8L-1.6 0L-4.75 8.8', 'M1.6 -8.8L4.75 0L1.6 8.8', 'M7.6 -7L10 0L7.6 7'], tex_t='m', tex_w=1.6),
     F(('path', 'M24.4 31.4H39.4A7.5 7.5 0 0 1 24.4 31.4Z'), 'lemon', 'm', ol=1.8, tf=_C2_FW),
     F(('path', 'M26.4 32.4H37.4A5.5 5.5 0 0 1 26.4 32.4Z'), 'lemon', 'lp', ol=0, cut=False, tf=_C2_FW,
-      det=['M27 32.6A4.9 4.9 0 0 0 36.8 32.6', 'M31.9 32.8V36.6', 'M31.7 32.8L29.2 35.4', 'M32.1 32.8L34.6 35.4'], det_t='w', det_w=1.5),
+      det=['M27.15 33.8A4.9 4.9 0 0 0 36.65 33.8', 'M31.9 32.8V36.6', 'M31.7 32.8L29.2 35.4', 'M32.1 32.8L34.6 35.4'], det_t='w', det_w=1.5),
 ], qty='400 g', aisle='seafood')
 
 # 23 shrimp: a plump curled peach shrimp, striped segments, a tail fan, a little eye and feelers
@@ -530,7 +528,7 @@ add('lobster', 'Lobster & crab', [
     TUBE('M28.4 18.8L33.6 21.6', 'strawberry', 4.4, 'm'),
     F(('path', _C2_CLAW), 'strawberry', 'm', band=.3, tf='translate(13 18.4) rotate(-16)'),
     F(('path', _C2_CLAW), 'strawberry', 'm', band=.3, tf='translate(35 18.4) rotate(16) scale(-1 1)'),
-    F(('path', 'M24 35.6L18.2 40.2Q17.2 42 19.4 42H28.6Q30.8 42 29.8 40.2Z'), 'strawberry', 'm', det=['M24 37V41.6', 'M21.4 38.4L20.6 41.6', 'M26.6 38.4L27.4 41.6'], det_t='p', det_w=1.2),
+    F(('path', 'M24 35.6L18.2 40.2Q17.2 42 19.4 42H28.6Q30.8 42 29.8 40.2Z'), 'strawberry', 'm', det=['M24 37.9V40.3', 'M21.9 39.2L21.6 40.3', 'M26.1 39.2L26.4 40.3'], det_t='p', det_w=1.2),
     *[F(('rect', 24 - w / 2, y, w, 4.6, 2.3), 'strawberry', 'm', band=.34) for y, w in [(32.4, 7.2), (29, 8.4), (25.6, 9.4)]],
     F(('ellipse', 24, 19.6, 6.4, 8), 'strawberry', 'm', band=.22, det=['M18.6 22.4Q24 25 29.4 22.4'], det_t='p', det_w=1.3),
     F(('circle', 21.6, 12.6, 1.5), 'strawberry', 'tr', ol=0), F(('circle', 26.4, 12.6, 1.5), 'strawberry', 'tr', ol=0),
@@ -545,7 +543,7 @@ add('milk_carton', 'Milk', [
     F(('rect', 10.6, 18.6, 26.8, 23.4, 3), 'ramune', 'w', band=.18, band_t='p',
       tex=['M6 30.4H42'], tex_t='m', tex_w=9.2),
     F(('path', 'M20.8 26.6H27.2L26.3 33.6Q26.1 34.6 25.1 34.6H22.9Q21.9 34.6 21.7 33.6Z'), 'ramune', 'w', ol=1.4, cut=False,
-      det=['M21.3 28.8H26.7'], det_t='p', det_w=1.4),
+      det=['M22.2 28.8H25.8'], det_t='p', det_w=1.4),
 ], qty='2 L carton', aisle='dairy')
 
 # 27 cream cheese: a foil brick, its left half still wrapped (silver periwinkle with soft creases), torn open to the
@@ -586,5 +584,5 @@ add('veggie_burger', 'Veggie burgers & meat alternatives', [
     F(('path', 'M6.6 27.8C8.6 24.6 10.6 27.6 12.6 25.2C14.6 27.8 16.4 24.6 18.6 26.8C20.6 24.6 22.4 27.6 24.4 25.2C26.6 27.6 28.2 24.6 30.4 26.8C32.4 24.6 34.2 27.6 36.2 25.2C38.2 27.8 39.8 25.6 41.4 27.8L40.6 29.4H7.4Z'),
       'melon', 'm', ol=1.6),
     F(('path', 'M8.4 25.6C8.4 16.6 15 11.2 24 11.2C33 11.2 39.6 16.6 39.6 25.6Q39.6 27.4 37.8 27.4H10.2Q8.4 27.4 8.4 25.6Z'), 'peach', 'm', band=.22),
-    *[F(('ellipse', x, y, 1.3, .8, a), 'peach', 'w', ol=0, cut=False) for x, y, a in [(16.4, 17.6, -30), (22.6, 15, 0), (28.6, 15.8, 25), (33.2, 19.4, 40), (19.6, 21, -15), (26.6, 20.4, 10), (13.4, 22, -40)]],
+    *[F(('ellipse', x, y, 1.3, .8, a), 'peach', 'w', ol=0, cut=False) for x, y, a in [(17.6, 19.2, -30), (22.8, 17, 0), (28.6, 15.8, 25), (33.2, 19.4, 40), (20, 22.2, -15), (26.6, 20.4, 10), (14.6, 22.8, -40)]],
 ], qty='4 patties', aisle='plant_based')

@@ -49,7 +49,7 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M32.06 17.04L37.1 18.3"
+    <path android:pathData="M32.81 17.23L36.35 18.11"
         android:strokeColor="#FF9FC8"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
