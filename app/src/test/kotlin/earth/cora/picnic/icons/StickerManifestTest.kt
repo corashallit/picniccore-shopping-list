@@ -19,7 +19,7 @@ import java.io.File
 
 /**
  * The library sticker set (WP1, docs/DESIGN_STICKER.md §3.2; checklist items 28 and 35): one generated `sk_i_<key>`
- * vector per catalog key, each with the five named groups, and kawaii faces only as separate overlays that list
+ * vector per catalog key, each with the five named groups (bacon's gloss group empty), and kawaii faces only as separate overlays that list
  * stickers never draw.
  */
 @RunWith(AndroidJUnit4::class)
@@ -45,8 +45,21 @@ class StickerManifestTest {
             assertTrue(entry.key, d is VectorDrawable && d.intrinsicWidth > 0)
             val art = VectorArtCache.get(context.resources, entry.drawable)
             assertEquals(entry.key, 52f, art.viewport.width)
-            for (group in StickerManifest.GROUPS) assertTrue("${entry.key} has no `$group` group", art.has(group))
+            for (group in StickerManifest.GROUPS) {
+                if (group == "gloss" && entry.key in NO_GLOSS) continue
+                assertTrue("${entry.key} has no `$group` group", art.has(group))
+            }
         }
+        // The one sticker with an empty gloss group (§3.1): drawing a gloss on it again means taking it off this list.
+        for (key in NO_GLOSS) {
+            val art = VectorArtCache.get(context.resources, StickerManifest.entries.first { it.key == key }.drawable)
+            assertTrue("$key: no gloss", !art.has("gloss"))
+        }
+    }
+
+    private companion object {
+        /** design/stickers/gloss.py NO_GLOSS: each wavy bacon strip is split along its length by a white fat stripe. */
+        val NO_GLOSS = setOf("bacon")
     }
 
     @Test
