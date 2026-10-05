@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import earth.cora.picnic.R
+import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.platform.AddSources
 import earth.cora.picnic.platform.rememberAddSources
 import earth.cora.picnic.ui.theme.ToastHostState
@@ -94,6 +95,17 @@ class AddFlows internal constructor(
         keyboard?.hide()
     }
 
+    /**
+     * A send from the bar committed while its field still had focus: the field keeps it, and the keyboard (put away
+     * while the note was read) comes back, so she can write the next thing at once (milk, Send, eggs, Send). It still
+     * lets go when a review opens the sheet or the sheet closes ([releaseField]).
+     */
+    fun keepField(): Boolean {
+        if (!collapse.fieldFocused) return false
+        if (inputModes?.inputMode != InputMode.Keyboard) keyboard?.show()
+        return true
+    }
+
     /** Called by [AddDock] once the bar is composed. */
     internal fun focusNow() {
         try {
@@ -156,8 +168,9 @@ fun AddEventsEffect(
         flows.vm.events.collect { event ->
             when (event) {
                 is AddEvent.Committed -> {
-                    // The send is done: the field lets go, so the bar can fold again (item 116).
-                    flows.releaseField()
+                    // A review's commit is done: the field lets go, so the bar can fold again (item 116). A quick add
+                    // from the bar keeps the field and the keyboard for the next thing she writes.
+                    if (!(event.commit.fromBar && flows.keepField())) flows.releaseField()
                     committed(event.commit)
                     toasts.show(notes.toast(event.commit))
                 }
@@ -246,14 +259,11 @@ operator fun AddCommit.plus(other: AddCommit): AddCommit {
         revived = (revived + other.revived).distinctBy { it.id },
         aisleTitle = if (added.size == 1) adding.single().aisleTitle else null,
         asTypedNoKey = adding.isNotEmpty() && adding.all { it.asTypedNoKey },
+        fromBar = fromBar && other.fromBar,
+        otherList = if (added.size == 1) adding.single().otherList else other.otherList,
     )
 }
 
-/**
- * The commit toast's words (§16): "Added Milk to Dairy & eggs ♡" (one item), "Added 3 items to Saturday shop ♡",
- * "Added as typed · add your OpenAI key for smart sorting" (rule 2), "Milk is back on your list" (rule 7, joined after
- * the added part), "Milk is already on your list" (nothing new), plus "★ shiny!" for a shiny pull (egg 6).
- */
 /** "Saturday shop" → "Saturday shop" with a no-break space: the note never leaves "shop ♡" alone on its last line (§4.6). */
 internal fun lastTwoTogether(name: String): String {
     val trimmed = name.trim()
@@ -261,16 +271,25 @@ internal fun lastTwoTogether(name: String): String {
     return if (at <= 0) trimmed else trimmed.substring(0, at) + '\u00A0' + trimmed.substring(at + 1)
 }
 
+/**
+ * The commit toast's words (§16): "Added Milk to Dairy & eggs ♡" (one item), "Added 3 items to Saturday shop ♡",
+ * "Added as typed · add your OpenAI key to sort it" (rule 2), "Milk is back on your list" (rule 7, joined after the added
+ * part), "Milk is already on your list" (nothing new), plus "★ shiny!" for a shiny pull (egg 6). One item names the list
+ * instead of its aisle when the aisle would be wrong or out of sight: a typed item with no aisle yet (the background sort
+ * is about to place it) and an add to a list she has switched away from.
+ */
 fun AddCommit.toastText(resources: Resources): String {
     val parts = mutableListOf<String>()
     when {
         added.isEmpty() -> Unit
         asTypedNoKey -> parts += resources.getString(R.string.add_toast_as_typed)
-        added.size == 1 -> parts += resources.getString(
-            R.string.add_toast_added_one,
-            added.single().name,
-            lastTwoTogether(aisleTitle?.takeIf { it.isNotBlank() } ?: resources.getString(R.string.add_everything_else)),
-        )
+        added.size == 1 -> {
+            val item = added.single()
+            val everythingElse = resources.getString(R.string.add_everything_else)
+            val sortComing = item.source == ItemSource.TYPED && item.aisleId == null
+            val where = if ((otherList || sortComing) && listTitle.isNotBlank()) listTitle else aisleTitle?.takeIf { it.isNotBlank() } ?: everythingElse
+            parts += resources.getString(R.string.add_toast_added_one, item.name, lastTwoTogether(where))
+        }
         else -> parts += resources.getQuantityString(R.plurals.add_toast_added_many, added.size, added.size, lastTwoTogether(listTitle))
     }
     if (revived.isNotEmpty()) {

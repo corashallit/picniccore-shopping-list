@@ -113,7 +113,9 @@ fun RecipeCard(
                         for (group in groupByAisle(rows)) AisleTray(group, clock, onToggleKeep)
                     }
                 }
-                if (onEditPantry != null && rows.any { it.skipReason == SkipReason.IN_PANTRY }) {
+                // A recipe is where the pantry matters (salt, flour and oil fill the card), so the way to it shows on every
+                // recipe card, not only once a pantry row is there.
+                if (onEditPantry != null && (review.recipe != null || rows.any { it.skipReason == SkipReason.IN_PANTRY })) {
                     PicnicButton(
                         stringResource(R.string.add_edit_pantry),
                         onClick = onEditPantry,
@@ -150,7 +152,8 @@ private fun MetaRow(review: AddReview, rows: List<ReviewRow>) {
     val t = PicnicTheme.type
     val kept = rows.count { it.keep }
     val parts = buildList {
-        review.recipe?.recipesCompared?.let { add(pluralStringResource(R.plurals.add_card_recipes, it, it)) }
+        // "3 recipes" only when a web search ran (D16: the card claims nothing the answer did not do).
+        review.recipe?.recipesCompared?.takeIf { review.webSearch }?.let { add(pluralStringResource(R.plurals.add_card_recipes, it, it)) }
         if (rows.isNotEmpty()) add(stringResource(R.string.add_card_kept, kept, rows.size))
     }
     FlowRow(

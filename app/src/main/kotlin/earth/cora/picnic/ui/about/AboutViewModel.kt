@@ -37,9 +37,19 @@ object Licences {
         val assets = context.assets
         val index = assets.open("licenses/licenses.json").bufferedReader().use { it.readText() }
         return json.decodeFromString<List<Licence>>(index).map { l ->
-            l.copy(text = assets.open("licenses/${l.file}").bufferedReader().use { it.readText() }.trim())
+            l.copy(text = breakableUrls(assets.open("licenses/${l.file}").bufferedReader().use { it.readText() }.trim()))
         }
     }
+
+    /**
+     * A web address in a licence ("(https://github.com/googlefonts/zen-marugothic)") may break after each "/" (a
+     * zero-width space follows it), so a narrow screen wraps it at a slash instead of in the middle of a word.
+     */
+    internal fun breakableUrls(text: String): String = URL.replace(text) { m ->
+        m.value.substringBefore("://") + "://" + m.value.substringAfter("://").replace("/", "/\u200B")
+    }
+
+    private val URL = Regex("""https?://[^\s)]+""")
 }
 
 data class AboutUiState(

@@ -116,6 +116,14 @@ fun EditItemSheetContent(
     var note by rememberSaveable(item.id) { mutableStateOf(item.note.orEmpty()) }
     var page by rememberSaveable(item.id) { mutableStateOf(initialPage) }
     val changed = name.trim() != item.name || quantity.trim() != item.quantity.orEmpty() || note.trim() != item.note.orEmpty()
+    // Something that applies at once (an aisle, a sticker, a toggle, a drawing) was done: with the fields unchanged the
+    // footer offers an enabled "Done" where a grey Save would leave her unsure whether it took.
+    var applied by rememberSaveable(item.id) { mutableStateOf(false) }
+    val moveToAisle: (String?) -> Unit = { applied = true; onMoveToAisle(it) }
+    val setIcon: (String) -> Unit = { applied = true; onSetIcon(it) }
+    val redraw: () -> Unit = { applied = true; onRedraw() }
+    val favouriteChange: (Boolean) -> Unit = { applied = true; onFavouriteChange(it) }
+    val pantryChange: (Boolean) -> Unit = { applied = true; onPantryChange(it) }
 
     // No Material ripple anywhere in the sheet, kit chips included (§0.2).
     NoMaterialPress {
@@ -131,7 +139,11 @@ fun EditItemSheetContent(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     HankoTextButton(stringResource(R.string.edit_delete), onClick = onDelete, glyph = PicnicGlyph.Delete)
-                    PicnicButton(stringResource(R.string.edit_save), onClick = { onSave(name, quantity, note) }, enabled = changed && name.isNotBlank())
+                    if (applied && !changed) {
+                        PicnicButton(stringResource(R.string.screens_done), onClick = onClose)
+                    } else {
+                        PicnicButton(stringResource(R.string.edit_save), onClick = { onSave(name, quantity, note) }, enabled = changed && name.isNotBlank())
+                    }
                 }
             },
         ) {
@@ -143,15 +155,15 @@ fun EditItemSheetContent(
                 onNameChange = { name = it },
                 onQuantityChange = { quantity = it },
                 onNoteChange = { note = it },
-                onMoveToAisle = onMoveToAisle,
-                onSetIcon = onSetIcon,
+                onMoveToAisle = moveToAisle,
+                onSetIcon = setIcon,
                 allStickers = page == EditPage.Icons,
                 onAllStickersChange = { page = if (it) EditPage.Icons else EditPage.Details },
-                onRedraw = onRedraw,
+                onRedraw = redraw,
                 favourite = favourite,
                 inPantry = inPantry,
-                onFavouriteChange = onFavouriteChange,
-                onPantryChange = onPantryChange,
+                onFavouriteChange = favouriteChange,
+                onPantryChange = pantryChange,
                 aisleStyles = aisleStyles,
                 togglesReady = togglesReady,
             )

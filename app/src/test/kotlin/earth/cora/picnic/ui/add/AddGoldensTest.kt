@@ -119,7 +119,7 @@ class AddGoldensTest(private val variant: ThemeVariant, private val v: String) {
         base.copy(
             sheetOpen = true, mode = AddMode.WRITE, text = PANCAKES, sentText = PANCAKES,
             phase = AddPhase.Failed(
-                // Core's own words for a network error (§4.8, §16: "Couldn't reach OpenAI. Check your connection?").
+                // Core's own words for a network error (§4.8, §16: "Couldn’t reach OpenAI. Check your connection?").
                 AddProblem.AI, message = earth.cora.picnic.core.llm.LlmError.Network(null).friendlyMessage,
                 retryable = true, canUsePlainLines = true,
             ),
@@ -147,7 +147,7 @@ class AddGoldensTest(private val variant: ThemeVariant, private val v: String) {
         ),
     )
 
-    @Test fun speakTranscribing() = sheet("speak_transcribing_$v", base.copy(sheetOpen = true, mode = AddMode.SPEAK, phase = AddPhase.Transcribing))
+    @Test fun speakTranscribing() = sheet("speak_transcribing_$v", base.copy(sheetOpen = true, mode = AddMode.SPEAK, phase = AddPhase.Transcribing(12_000)))
 
     @Test fun speakHeard() = sheet(
         "speak_heard_$v",

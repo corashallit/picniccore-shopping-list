@@ -124,21 +124,24 @@ class FabTest {
         compose.onNodeWithTag(ADD_FIELD_TAG).fetchSemanticsNode().config.getOrElse(androidx.compose.ui.semantics.SemanticsProperties.Focused) { false }
 
     /**
-     * Item 116, D11: once a send has committed, the field lets go (and the keyboard goes down), so the bar folds into the
-     * FAB as she scrolls down the aisles, as the collapse rules say.
+     * A quick add from the bar keeps the field's focus (and the keyboard), so she writes the next thing straight away:
+     * milk, Send, eggs, Send. The field lets go when a review opens the sheet or the sheet closes (item 116).
      */
     @Test
-    fun afterSendTheBarFolds() {
+    fun afterSendTheFieldStaysForTheNextThing() {
         val rig = ListRig(ListFixture.longAisle())
         // Into Produce, on screen at the top: the list has no reason to move (whose scroll the bar would ignore).
         rig.answers("Lemons", "lemon", aisle = "produce")
         compose.show(rig)
         send("lemons")
         assertTrue("committed", rig.app.items().any { it.name == "Lemons" })
-        assertFalse("the field let go after the send", fieldFocused())
-        compose.onNodeWithTag(ListTags.LIST).performTouchInput { swipeUp(startY = centerY + 120 * dp, endY = top + 10 * dp, durationMillis = 500) }
+        assertTrue("the field keeps its focus after a quick add", fieldFocused())
+        rig.answers("Limes", "lime", aisle = "produce")
+        compose.onNodeWithTag(ADD_FIELD_TAG).performTextInput("limes")
+        compose.onNodeWithContentDescription("Send").performClick()
         compose.waitForIdle()
-        assertTrue("scrolled down past 140 dp: the FAB", compose.exists(ADD_FAB_TAG))
+        assertTrue("the next one went on without tapping the field again", rig.app.items().any { it.name == "Limes" })
+        assertTrue(fieldFocused())
     }
 
     /**

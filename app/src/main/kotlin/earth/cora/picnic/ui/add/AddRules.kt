@@ -51,27 +51,37 @@ object AddRules {
      * pantry row is never a quick add (item 324), and a name already on her list shows in the review as "already on
      * your list". An answer with nothing to add is never a quick add either: it would commit nothing and wipe her note,
      * so it opens the review ("OK" keeps the draft), with or without a message.
+     *
+     * One exception (§6.2 rule 7): a name she wrote herself that is already unchecked on her list ([ProposedItem.named],
+     * ALREADY_ON_LIST) does not hold the add up. With a key it behaves as it does without one: the row pops on the list
+     * and the toast says "Milk is already on your list", and the model's note about it (it often mentions the duplicate)
+     * is not shown, since the toast says the same.
      */
-    fun isQuickAdd(result: IngestResult, sent: String?): Boolean =
-        result.items.isNotEmpty() &&
+    fun isQuickAdd(result: IngestResult, sent: String?): Boolean {
+        val skipped = result.items.filter { it.skipReason != SkipReason.NONE }
+        val onlyNamedDuplicates = skipped.isNotEmpty() && skipped.all { it.skipReason == SkipReason.ALREADY_ON_LIST && it.named }
+        return result.items.isNotEmpty() &&
             result.items.size <= QUICK_ADD_MAX_ITEMS &&
             result.recipe == null &&
-            result.items.none { it.skipReason != SkipReason.NONE } &&
-            !messageWorthShowing(result.message, sent)
+            (skipped.isEmpty() || onlyNamedDuplicates) &&
+            (onlyNamedDuplicates || !messageWorthShowing(result.message, sent))
+    }
 
     /**
      * The thinking box's steps (§4.18, D16), only from real fields of the answer, in this order: "Searched the web" only
      * if the answer used web search, quoting the model's own first query (`CallMeta.searchQueries`; never her note, which
      * may not be what was searched) or, when the answer names none, unquoted; "Compared 3 recipes · makes 12" only with
-     * `recipe.recipes_compared` or `servings`; "Checked your pantry · left out n" only with `in_pantry` rows (n is their
-     * count); "Checked your list, sorted into n aisles" always.
+     * `recipe.recipes_compared` (and only when a web search really ran: no pages were compared without one) or
+     * `servings`; "Checked your pantry · left out n" only with `in_pantry` rows (n is their count); "Checked your list,
+     * sorted into n aisles" always.
      */
     fun thinkingSteps(result: IngestResult): List<ThinkingStep> = buildList {
         val queries = result.meta.searchQueries.filter { it.isNotBlank() }
         if (result.meta.webSearches > 0 || queries.isNotEmpty()) add(ThinkingStep.SearchedWeb(queries.firstOrNull()?.let(::searchQuery)))
         val recipe = result.recipe
-        if (recipe != null && (recipe.recipesCompared != null || recipe.servings != null)) {
-            add(ThinkingStep.ComparedRecipes(recipe.recipesCompared, recipe.servings))
+        val compared = recipe?.recipesCompared?.takeIf { result.meta.webSearches > 0 }
+        if (recipe != null && (compared != null || recipe.servings != null)) {
+            add(ThinkingStep.ComparedRecipes(compared, recipe.servings))
         }
         val inPantry = result.items.count { it.skipReason == SkipReason.IN_PANTRY }
         if (inPantry > 0) add(ThinkingStep.CheckedPantry(inPantry))

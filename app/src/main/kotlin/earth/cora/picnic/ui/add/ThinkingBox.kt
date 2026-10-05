@@ -95,12 +95,12 @@ fun ThinkingBox(
             if (popped && popAge in 0..(2L * PicnicMotion.pose)) onPop(clock.id)
         }
     }
-    // At large text the steps run long: the capsule stays by the headline instead of floating mid-box.
-    val large = androidx.compose.ui.platform.LocalDensity.current.fontScale >= LARGE_TEXT
     PaperTheme {
         val c = PicnicTheme.colors
         val shape = PicnicTheme.shapes.section
-        Row(
+        // The capsule sits beside the headline; the steps run the box's full width under them, so a quoted search or
+        // "Compared 3 recipes · makes 12" keeps to one or two lines.
+        Column(
             modifier
                 .fillMaxWidth()
                 .testTag(THINKING_TAG)
@@ -109,48 +109,49 @@ fun ThinkingBox(
                 .background(c.backing)
                 .border(PicnicTheme.dimens.border, c.stickerWhite, shape)
                 .padding(start = 12.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
-            verticalAlignment = if (large) Alignment.Top else Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-                ItemIcon(
-                    IconRef(IconCatalog.CAPSULE),
-                    contentDescription = null,
-                    size = 52.dp,
-                    aisleIndex = Families.rotation.indexOf(family),
-                    modifier = Modifier.graphicsLayer {
-                        rotationZ = wobble
-                        scaleX = popScale
-                        scaleY = popScale
-                    },
-                )
-                if (popped && popAge in 0 until 2L * PicnicMotion.pose && !reduced) PopBurst()
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Once every step is ticked, the headline says it is done ("Found a recipe ♡" / "All sorted"), no ellipsis.
-                val done = steps != null && clock != null && steps.isNotEmpty() && clock.stepsShown() >= steps.size &&
-                    clock.since(clock.plan.stepAt[steps.size - 1]) >= RevealPlan.TICK_MILLIS
-                val headline = stringResource(
-                    when {
-                        done && recipe -> R.string.add_thinking_recipe_done
-                        done -> R.string.add_thinking_done
-                        !waiting && recipe -> R.string.add_thinking_recipe
-                        else -> R.string.add_thinking_reading
-                    },
-                )
-                PicnicText(
-                    headline,
-                    style = PicnicTheme.type.label.copy(fontSize = 15.sp, lineHeight = 20.sp, color = c.ballpoint),
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                )
-                if (reduced && waiting) {
-                    Text(stringResource(R.string.theme_loader_working), style = PicnicTheme.type.caption.copy(color = c.ballpointSoft))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                    ItemIcon(
+                        IconRef(IconCatalog.CAPSULE),
+                        contentDescription = null,
+                        size = 52.dp,
+                        aisleIndex = Families.rotation.indexOf(family),
+                        modifier = Modifier.graphicsLayer {
+                            rotationZ = wobble
+                            scaleX = popScale
+                            scaleY = popScale
+                        },
+                    )
+                    if (popped && popAge in 0 until 2L * PicnicMotion.pose && !reduced) PopBurst()
                 }
-                if (steps != null && clock != null) {
-                    val shown = clock.stepsShown()
-                    steps.take(shown).forEachIndexed { i, step ->
-                        StepLine(stepText(step), age = clock.since(clock.plan.stepAt[i]), reduced = reduced)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // Once every step is ticked, the headline says it is done ("Found a recipe ♡" / "All sorted"), no ellipsis.
+                    val done = steps != null && clock != null && steps.isNotEmpty() && clock.stepsShown() >= steps.size &&
+                        clock.since(clock.plan.stepAt[steps.size - 1]) >= RevealPlan.TICK_MILLIS
+                    val headline = stringResource(
+                        when {
+                            done && recipe -> R.string.add_thinking_recipe_done
+                            done -> R.string.add_thinking_done
+                            !waiting && recipe -> R.string.add_thinking_recipe
+                            else -> R.string.add_thinking_reading
+                        },
+                    )
+                    PicnicText(
+                        headline,
+                        style = PicnicTheme.type.label.copy(fontSize = 15.sp, lineHeight = 20.sp, color = c.ballpoint),
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                    if (reduced && waiting) {
+                        Text(stringResource(R.string.theme_loader_working), style = PicnicTheme.type.caption.copy(color = c.ballpointSoft))
                     }
+                }
+            }
+            if (steps != null && clock != null) {
+                val shown = clock.stepsShown()
+                steps.take(shown).forEachIndexed { i, step ->
+                    StepLine(stepText(step), age = clock.since(clock.plan.stepAt[i]), reduced = reduced)
                 }
             }
         }
@@ -202,8 +203,9 @@ fun stepText(step: ThinkingStep): String = when (step) {
         val recipes = step.recipes
         val servings = step.servings
         when {
-            // The separator goes with the words after it: a line never ends in "·".
-            recipes != null && servings != null -> pluralStringResource(R.plurals.add_step_compared, recipes, recipes) + " ·\u00A0" +
+            // The separator ends the first line when the step wraps ("Compared 3 recipes ·" / "makes 12"), as in the
+            // detail lines (AddRules.keepTogether): a line never starts with "·".
+            recipes != null && servings != null -> pluralStringResource(R.plurals.add_step_compared, recipes, recipes) + "\u00A0· " +
                 stringResource(R.string.add_step_makes, servings)
             recipes != null -> pluralStringResource(R.plurals.add_step_compared, recipes, recipes)
             servings != null -> stringResource(R.string.add_step_makes_alone, servings)

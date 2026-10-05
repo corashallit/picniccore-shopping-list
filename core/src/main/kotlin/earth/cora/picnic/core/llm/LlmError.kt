@@ -3,8 +3,8 @@ package earth.cora.picnic.core.llm
 /**
  * Typed failures of every GroceryAssistant / OpenAiClient call (research/openai_api.md §2.8).
  * CONTRACT: core never throws anything else for API problems (CancellationException still propagates).
- * [friendlyMessage] is safe to show in the UI; [message] is for logs and never contains the key
- * or the server's raw 401 text (which echoes a masked key).
+ * [friendlyMessage] is safe to show in the UI (plain words, typographic apostrophes, no scope ids or codes); [message]
+ * is for logs and never contains the key or the server's raw 401 text (which echoes a masked key).
  */
 sealed class LlmError(
     message: String,
@@ -35,11 +35,24 @@ sealed class LlmError(
         val missingScopes: List<String>? = null,
     ) : LlmError("HTTP $status unauthorized" + (missingScopes?.let { " (missing scopes: ${it.joinToString()})" } ?: "")) {
         override val friendlyMessage: String
-            get() = when {
-                missingScopes == null -> "OpenAI didn't accept this key. Check it in Settings, or paste a new one."
-                missingScopes.isEmpty() -> "This OpenAI key is missing a permission the app needs. Check the key's permissions."
-                else -> "This OpenAI key is missing a permission the app needs (${missingScopes.joinToString()}). Check the key's permissions."
+            get() {
+                if (missingScopes == null) return "OpenAI didn’t accept this key. Check it in Settings, or paste a new one."
+                // She can't change a key's permissions herself: say whom to ask and what to turn on, in the words of
+                // OpenAI's key dialog (docs/OPENAI_KEY.md), never the scope ids (those stay in [message], for logs).
+                val permissions = missingScopes.mapNotNull(::permissionFor).distinct()
+                val ask = if (permissions.isEmpty()) "check its permissions" else "allow " + permissions.joinToString(" and ")
+                return "This key can’t do everything the app needs. Ask the person who made it to $ask."
             }
+
+        private companion object {
+            /** A missing scope as the permission row in OpenAI's restricted-key dialog that grants it. */
+            fun permissionFor(scope: String): String? = when (scope.removePrefix("api.")) {
+                "model.read" -> "List models (Read)"
+                "model.request" -> "Model capabilities (Request)"
+                "responses.write", "responses.read" -> "the Responses API (Write)"
+                else -> null
+            }
+        }
     }
 
     /** 429 rate limit / 503 overloaded, after the automatic retries were used up. */
@@ -55,7 +68,7 @@ sealed class LlmError(
 
     /** DNS, TLS, connection reset, cleartext blocked, 5xx after retries. */
     class Network(cause: Throwable?, override val requestId: String? = null) : LlmError("Network error: ${cause?.javaClass?.simpleName}", cause) {
-        override val friendlyMessage: String get() = "Couldn't reach OpenAI. Check your connection?"
+        override val friendlyMessage: String get() = "Couldn’t reach OpenAI. Check your connection?"
         override val retryable: Boolean get() = true
     }
 
@@ -80,8 +93,8 @@ sealed class LlmError(
             get() = when (code) {
                 // Models are fixed in ModelDefaults (no model settings): the key's project lacks access.
                 "model_not_found" ->
-                    "This OpenAI key can't use one of the AI models the app needs. Check which models its project allows."
-                else -> "The assistant's answer couldn't be used. Try again or rephrase."
+                    "This OpenAI key can’t use one of the AI models the app needs. Check which models its project allows."
+                else -> "The assistant’s answer couldn’t be used. Try again or rephrase."
             }
 
         /** Answer-level problems (incomplete, unparsable, no message) often succeed on a second try; 4xx do not. */
@@ -90,6 +103,6 @@ sealed class LlmError(
 
     /** The model refused, or image moderation blocked the request (moderation_blocked). */
     class Refusal(val refusal: String, override val requestId: String? = null) : LlmError("Refusal: $refusal") {
-        override val friendlyMessage: String get() = "The assistant couldn't help with that one."
+        override val friendlyMessage: String get() = "The assistant couldn’t help with that one."
     }
 }

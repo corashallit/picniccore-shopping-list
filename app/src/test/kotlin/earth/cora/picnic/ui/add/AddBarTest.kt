@@ -231,7 +231,7 @@ class AddBarTest {
         assertEquals(listOf("Lemons", "Oat milk"), added.map { it.name })
         assertTrue(added.all { it.source == ItemSource.TYPED })
         val toast = h.shown.last()
-        assertEquals("Added as typed · add your OpenAI key for smart sorting", toast.text)
+        assertEquals("Added as typed · add your OpenAI key to sort it", toast.text)
         assertEquals("Undo", toast.actionLabel)
         assertEquals("", h.vm.state.value.text)
         toast.onAction!!()
@@ -308,14 +308,12 @@ class AddBarTest {
     @Test
     fun duplicatePopsExisting() {
         val h = compose.setHarness(
-            FakeAssistant(ingest = { _, _ -> answer(f.proposed("Strawberries", "strawberry", "produce", "1 L basket", skip = SkipReason.ALREADY_ON_LIST)) }),
+            FakeAssistant(ingest = { _, _ -> answer(f.proposed("Strawberries", "strawberry", "produce", "1 L basket", skip = SkipReason.ALREADY_ON_LIST, named = true)) }),
         )
         val before = h.items()
         send("strawberries")
-        assertTrue("a skipped row: the review opens", h.vm.state.value.sheetOpen)
-        compose.onNode(reviewRow("Strawberries")).assertExists()
-        compose.onNode(hasText("OK") and hasClickAction()).performClick()
-        compose.waitForIdle()
+        // Rule 7: with a key, as without one, the row already there pops; no review sheet for it.
+        assertFalse("no review for a name already there", h.vm.state.value.sheetOpen)
         assertEquals(before.size, h.items().size)
         val commit = h.commits.single()
         assertTrue(commit.added.isEmpty())

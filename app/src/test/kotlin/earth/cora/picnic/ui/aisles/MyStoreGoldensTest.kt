@@ -88,7 +88,7 @@ class MyStoreGoldensTest(private val variant: ThemeVariant, @Suppress("unused") 
     })
 
     @Test
-    fun error() = record("mystore_error", MyStoreSamples.default, frozen = true, toast = "Couldn't save. Try again.")
+    fun error() = record("mystore_error", MyStoreSamples.default, frozen = true, toast = "Couldn’t save. Try again.")
 
     @Test
     fun fontScale130() {

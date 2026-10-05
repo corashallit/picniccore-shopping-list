@@ -78,11 +78,14 @@ class AisleEditorTest {
 
     private lateinit var vm: AislesViewModel
 
+    /** Times the screen asked to leave (Done or Back). */
+    private var backs = 0
+
     private fun launch(state: AppState = Samples.shoppingState, assistant: FakeAssistant = FakeAssistant()): InMemoryStateStore {
         val store = InMemoryStateStore(state)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         vm = AislesViewModel(store, AisleSync(store, assistant, baskets) { Samples.NOW }, baskets, scope, { Samples.NOW })
-        compose.setContent { PicnicTheme { AislesRoute(vm, onBack = {}) } }
+        compose.setContent { PicnicTheme { AislesRoute(vm, onBack = { backs++ }) } }
         compose.waitForIdle()
         return store
     }
@@ -172,8 +175,8 @@ class AisleEditorTest {
     fun editLabelPersists() {
         val store = launch()
         compose.onNodeWithContentDescription("Edit Bakery").performClick()
-        compose.onNodeWithContentDescription("store aisle").performTextReplacement("4")
-        compose.onNodeWithContentDescription("store aisle").performImeAction()
+        compose.onNodeWithContentDescription("Store aisle").performTextReplacement("4")
+        compose.onNodeWithContentDescription("Store aisle").performImeAction()
         waitFor(store) { it.store.aisleStyles["bakery"]?.storeAisle == 4 }
         compose.onNodeWithContentDescription("Peach").performClick()
         waitFor(store) { it.store.aisleStyles["bakery"]?.family == "peach" }
@@ -245,7 +248,7 @@ class AisleEditorTest {
     fun clearingStoreNumberRemovesIt() {
         val store = launch()
         compose.onNodeWithContentDescription("Edit Baking & spices").performScrollTo().performClick()
-        val number = compose.onNodeWithContentDescription("store aisle")
+        val number = compose.onNodeWithContentDescription("Store aisle")
         assertEquals("2", number.fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
         number.performTextReplacement("")
         number.performImeAction()
@@ -258,18 +261,18 @@ class AisleEditorTest {
         assertTrue("the raw text says it too", s.store.aislesText.lines().any { it.trim() == "Baking & spices" })
         // The label stays open on the renamed aisle, its number field blank, and the label shows no store number.
         compose.waitForIdle()
-        assertEquals("", compose.onNodeWithContentDescription("store aisle").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        assertEquals("", compose.onNodeWithContentDescription("Store aisle").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
         compose.onNodeWithContentDescription("Baking & spices, aisle ${baking.position}").assertExists()
         // Closed and opened again: still none.
         compose.onNodeWithContentDescription("Done editing Baking & spices").performClick()
         compose.onNodeWithContentDescription("Edit Baking & spices").performScrollTo().performClick()
-        assertEquals("", compose.onNodeWithContentDescription("store aisle").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
+        assertEquals("", compose.onNodeWithContentDescription("Store aisle").fetchSemanticsNode().config[SemanticsProperties.EditableText].text)
         compose.onNodeWithContentDescription("Done editing Baking & spices").performClick()
 
         // Another number on a numbered name: the name says it.
         compose.onNodeWithContentDescription("Edit Pasta, rice & international").performScrollTo().performClick()
-        compose.onNodeWithContentDescription("store aisle").performTextReplacement("5")
-        compose.onNodeWithContentDescription("store aisle").performImeAction()
+        compose.onNodeWithContentDescription("Store aisle").performTextReplacement("5")
+        compose.onNodeWithContentDescription("Store aisle").performImeAction()
         waitFor(store) { st -> st.store.aisles().any { it.name == "Aisle 5 - Pasta, rice & international" } }
         val pasta = store.now().store.aisles().first { it.name == "Aisle 5 - Pasta, rice & international" }
         assertEquals(pasta.id, store.now().findItem("i-gochujang")?.aisleId)
@@ -352,6 +355,37 @@ class AisleEditorTest {
         assertEquals(s.store.aisles().first().id, s.findItem("i-lemons")?.aisleId)
         assertNull(s.findItem("i-baguette")?.aisleId)
         assertNull(s.findItem("i-bagels")?.aisleId)
+    }
+
+    /**
+     * One select-all and delete in "Aisles as text", then Done: the screen stays to say what it removed (leaving would
+     * take the toast with it), Undo brings every aisle and its items back, and the next Done leaves.
+     */
+    @Test
+    fun removedAislesComeBackWithUndo() {
+        val store = launch()
+        val before = store.now()
+        val count = before.store.aisles().size
+        compose.onNodeWithContentDescription("Aisles as text:").performScrollTo().performTextReplacement("")
+        compose.onNodeWithText("Done").performClick()
+        waitFor(store) { it.store.aisles().isEmpty() }
+        assertEquals("Done stays while the removal toasts", 0, backs)
+        assertNull(store.now().findItem("i-lemons")?.aisleId)
+        compose.mainClock.autoAdvance = false
+        repeat(20) { frame() }
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithText("Removed $count aisles · their items are in Everything else", substring = true).assertExists()
+        compose.onNodeWithText("Undo").performClick()
+        repeat(5) { frame() }
+        compose.mainClock.autoAdvance = true
+        waitFor(store) { it.store.aislesText == before.store.aislesText }
+        val after = store.now()
+        assertEquals("colours, patterns and store numbers", before.store.aisleStyles, after.store.aisleStyles)
+        assertTrue("baskets", before.store.aisleBaskets.all { (id, kind) -> after.store.aisleBaskets[id] == kind })
+        assertEquals(before.findItem("i-lemons")?.aisleId, after.findItem("i-lemons")?.aisleId)
+        compose.onNodeWithText("Done").performClick()
+        compose.waitForIdle()
+        assertEquals("the next Done leaves", 1, backs)
     }
 
     /** "Aisles as text" also commits when the field loses focus (§6.7), not only on Done. */

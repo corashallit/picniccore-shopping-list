@@ -84,6 +84,11 @@ class SurpriseLabViewModel(
     private var sandboxHolder by mutableStateOf<SurpriseLabSandbox?>(null)
     private val tries = IntArray(EGGS + 1)
 
+    /** The egg last tried: the practice list opens under its tile (and stays there through "Start over"). */
+    private var lastTried by mutableStateOf<Int?>(null)
+
+    override val practiceAfter: Int? get() = lastTried
+
     /** The sandbox while the lab is open and an egg has been tried (tests). */
     val sandbox: SurpriseLabSandbox? get() = sandboxHolder
 
@@ -94,6 +99,7 @@ class SurpriseLabViewModel(
 
     override fun fire(number: Int) {
         if (number !in 1..EGGS) return
+        lastTried = number
         fresh().fire(number, attempt = tries[number]++)
     }
 
@@ -117,6 +123,7 @@ class SurpriseLabViewModel(
     override fun close() {
         sandboxHolder?.close()
         sandboxHolder = null
+        lastTried = null
     }
 
     override fun onCleared() {

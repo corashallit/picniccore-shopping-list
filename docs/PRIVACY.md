@@ -15,7 +15,7 @@ Kirakira Basket is a grocery-list app for Android, made by [FILL IN: your name a
 ## The short version
 
 - **Your lists live on your phone.** There's no Kirakira Basket account, and I can't see your lists.
-- **Nothing leaves your phone until you connect the app to OpenAI.** You connect it by pasting an OpenAI API key in Settings: your own, or one I set up for you. Without one, the app works as a plain list. (The one exception is a switch that stays off unless you turn it on: **Weather surprises** asks Environment Canada for a city forecast. See below.)
+- **Nothing leaves your phone until you connect the app to OpenAI** (apart from Android’s own backup of your lists and sticker album, if you have it turned on). You connect it by pasting an OpenAI API key in Settings: your own, or one I set up for you. Without one, the app works as a plain list. (The other exception is a switch that stays off unless you turn it on: **Weather surprises** asks Environment Canada for a city forecast. See below.)
 - **Once you're connected,** what you add goes **directly from your phone to OpenAI** so it can be understood, sorted into aisles and given a little sticker: typed requests, photos of handwritten lists, voice notes, item names, and the list of things you keep at home (your pantry).
 - **There is no Kirakira Basket server.** Nothing you add passes through a server of mine.
 - **Your location is never needed.** If you turn on **Use my area**, the app uses your *approximate* area for its sunset and forecast surprises. Your area stays on this phone; only the forecast request names the nearest city.
@@ -27,9 +27,9 @@ Kirakira Basket is a grocery-list app for Android, made by [FILL IN: your name a
 |---|---|---|
 | Your lists and items, your aisles and store name, the aisle corrections you've taught the app, the icons you picked for items, your favourites, and **your pantry** (the things you keep at home, written on the My pantry screen, with the sticker each one shows) | That's the app | **Yes**, if you've turned on Android backup or move to a new phone. This file and your sticker album (next row) are the only parts of the app that are backed up. Backups are handled by Google under your Google account. |
 | Your sticker album: the sticker books of the trips you've finished and the stickers you've collected (item names and their icons) | So your album keeps its pages | **Yes**, together with your lists. |
-| Settings: the "Draw new stickers with AI" switch, the Surprises switches (Easter eggs, Sounds, Haptics, "Next stop" card, Celebration, Weather surprises, Use my area), a random installation ID, and a masked hint of your key (like `sk-…a1b2`) | So the app remembers your setup | No |
+| Settings: the "Draw new stickers with AI" switch, the Surprises switches (Easter eggs, Sounds, Haptics, "Next stop" card, Celebration, Weather surprises, Use my area), a random installation ID, a masked hint of your key (like `sk-…a1b2`), and whether Android has stopped asking you about location for the app | So the app remembers your setup (and, once Android has stopped asking, offers its settings page instead of a prompt that can't appear) | No |
 | With **Use my area** on: your approximate area, rounded to 0.1° (about 10 km), the code of the nearest Environment Canada forecast city, and when it was last checked | So sunset and the forecast fit where you are, without asking the phone more than every 6 hours | No. It is deleted when you turn Use my area off or take away the location permission. |
-| With **Weather surprises** on: the last forecast the app read (just "rain today" and "snow seen") and when it was fetched | So the forecast is asked for at most every 3 hours | No |
+| With **Weather surprises** on: the last forecast the app read (rain today, snow seen, and which forecast city it was for) and when it was fetched, the first-snow date of this season and the day of the last rain note | So the forecast is asked for at most every 3 hours, and the first snow and the rain note each come once | No |
 | Your OpenAI key | To connect | No. It is encrypted with a key kept in your phone's Android Keystore and can't be decrypted on any other device. The app never shows it again. |
 | Icons drawn for your items, a count of today's drawings, and any item names the image service refused to draw | So each icon is drawn once, and a refused name isn't retried | No |
 | A photo or voice note while it's being processed | To send it | No. It is deleted as soon as it has been read; leftovers from an interrupted session are removed within a day. |
@@ -102,12 +102,13 @@ The app has **no camera permission**: photos come from your camera app or Androi
 | Lists, pantry, sticker album, settings and drawn icons on your phone | Until you delete them or uninstall the app |
 | Your rounded area (Use my area) | Until you turn the switch off, take away the permission, or uninstall the app; refreshed at most every 6 hours |
 | Android backup of your lists and sticker album | As long as Google keeps your device backup (your Google account settings) |
+| Weather surprises cache | Until you uninstall; the city is forgotten when you turn Use my area off |
 | Photos and voice notes on your phone | Deleted right after they're sent; leftovers within a day |
 | OpenAI's abuse-monitoring logs | Up to 30 days (no logs for voice transcription) |
 
 ## Your choices and rights
 
-- **Use the app without AI.** Don't add a key: nothing leaves your phone.
+- **Use the app without AI.** Don't add a key: nothing leaves your phone, apart from Android’s own backup of your lists and sticker album if you have it turned on.
 - **Turn off "Draw new stickers with AI"** in Settings, or **remove your key** there.
 - **Leave Weather surprises and Use my area off** (they are off unless you turn them on), or turn them off at any time; turning Use my area off deletes the stored area.
 - **Edit or empty your pantry** on the My pantry screen.

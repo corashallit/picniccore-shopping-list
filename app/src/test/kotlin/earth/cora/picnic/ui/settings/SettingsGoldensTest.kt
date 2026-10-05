@@ -64,7 +64,7 @@ class SettingsGoldensTest(private val variant: ThemeVariant, @Suppress("unused")
     fun surprisesOff() = record("settings_surprises_off", SettingsSamples.surprisesOff, scrollTo = "Use my area")
 
     @Test
-    fun saveError() = record("settings_save_error", SettingsSamples.ok.copy(notice = "Couldn't save. Try again."), frozen = true)
+    fun saveError() = record("settings_save_error", SettingsSamples.ok.copy(notice = "Couldn’t save. Try again."), frozen = true)
 
     @Test
     fun fontScale130() {
@@ -94,7 +94,7 @@ object SettingsSamples {
     val ok = base.copy(hasToken = true, tokenHint = "sk-…3f9a", test = ConnectionTestUi.Ok(412), settings = AppSettings(hasToken = true, tokenHint = "sk-…3f9a"))
 
     val failed = ok.copy(
-        test = ConnectionTestUi.Failed("This OpenAI key is missing a permission the app needs (api.responses.write). Check the key's permissions."),
+        test = ConnectionTestUi.Failed(earth.cora.picnic.core.llm.LlmError.Unauthorized(401, missingScopes = listOf("api.responses.write")).friendlyMessage),
     )
 
     val surprisesOff = ok.copy(

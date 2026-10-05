@@ -150,7 +150,7 @@ class SettingsViewModelTest {
         gate.complete(Unit)
         advanceUntilIdle()
         val failed = f.vm.state.value.test as ConnectionTestUi.Failed
-        assertTrue(failed.message.contains("missing a permission the app needs (api.model.read)"))
+        assertTrue(failed.message.contains("Ask the person who made it to allow List models (Read)"))
     }
 
     @Test

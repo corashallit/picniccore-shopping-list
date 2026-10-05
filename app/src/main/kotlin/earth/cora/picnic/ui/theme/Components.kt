@@ -41,7 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -792,7 +792,7 @@ private fun TextButton(
         modifier
             .defaultMinSize(minHeight = 48.dp)
             .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
-            .alpha(if (enabled) 1f else 0.5f),
+            .dimmedUnless(enabled),
         contentAlignment = Alignment.Center,
     ) {
         Row(
@@ -1838,6 +1838,18 @@ fun KeyField(
     )
 }
 
+/**
+ * A disabled control at half strength, drawn as one layer (so its parts never show through each other) that reaches
+ * [reach] past the control's bounds: its hard shadow, which falls outside them, keeps its rounded end. (Modifier.alpha
+ * would clip the layer to the bounds and cut the shadow square.)
+ */
+internal fun Modifier.dimmedUnless(enabled: Boolean, reach: Dp = 8.dp): Modifier = if (enabled) this else drawWithContent {
+    val r = reach.toPx()
+    drawContext.canvas.saveLayer(Rect(-r, -r, size.width + r, size.height + r), Paint().apply { alpha = 0.5f })
+    drawContent()
+    drawContext.canvas.restore()
+}
+
 /* ------------------------------------------------------------------------------------------------
  * Switches (§4.9, §4.17).
  * ------------------------------------------------------------------------------------------------ */
@@ -1887,7 +1899,7 @@ fun PicnicSwitch(
                     Modifier.toggleable(value = checked, interactionSource = interaction, indication = null, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
                 },
             )
-            .alpha(if (enabled) 1f else 0.5f),
+            .dimmedUnless(enabled),
         contentAlignment = Alignment.Center,
     ) {
         Box(

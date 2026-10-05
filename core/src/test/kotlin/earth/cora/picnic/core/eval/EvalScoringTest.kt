@@ -83,6 +83,9 @@ class EvalScoringTest {
         assertEquals(3, s.iconOk, "an approximate fit on a depicted item is wrong")
         assertFalse(s.checks.first { it.what == "metric quantities" }.ok)
         assertTrue(s.checks.filter { it.what.startsWith("qty") }.all { it.ok })
+        // A recipe amount after the "·" may keep cups and spoons (§4.17); the store quantity before it may not.
+        val recipe = EvalScoring.scoreIngest(c, store, listOf(item("Milk", "dairy-eggs", "milk_carton", qty = "1 L · 1¼ cups")), "ok", 0)
+        assertTrue(recipe.checks.first { it.what == "metric quantities" }.ok)
     }
 
     @Test

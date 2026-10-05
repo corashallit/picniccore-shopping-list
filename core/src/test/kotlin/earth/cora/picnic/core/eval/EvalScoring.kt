@@ -108,6 +108,16 @@ object EvalScoring {
         RegexOption.IGNORE_CASE,
     )
 
+    /** The cooking measures a recipe amount may keep after the "·" (DESIGN_STICKER §4.17, ingest rule "quantity"). */
+    private val COOKING = Regex("\\b(cups?|tbsp|tsp|teaspoons?|tablespoons?|pinch(es)?)\\b", RegexOption.IGNORE_CASE)
+
+    /** A quantity that is not metric: the store quantity before the "·" never, the recipe amount after it only in cooking measures. */
+    private fun imperial(quantity: String): Boolean {
+        val dot = quantity.indexOf('·')
+        if (dot < 0) return IMPERIAL.containsMatchIn(quantity)
+        return IMPERIAL.containsMatchIn(quantity.substring(0, dot)) || IMPERIAL.containsMatchIn(COOKING.replace(quantity.substring(dot + 1), ""))
+    }
+
     /** Rough French detector for the message: enough for "did it answer in French". */
     private val FRENCH = Regex("\\b(j'ai|ajout|ajouté|et|les|des|du|la|le|à|pour|liste|épicerie)\\b", RegexOption.IGNORE_CASE)
 
@@ -210,7 +220,7 @@ object EvalScoring {
             SearchExpectation.ANY -> Unit
         }
 
-        val imperial = items.filter { it.quantity?.let(IMPERIAL::containsMatchIn) == true }
+        val imperial = items.filter { it.quantity?.let(::imperial) == true }
         checks += Check("metric quantities", imperial.isEmpty(), imperial.joinToString { "${it.name}: ${it.quantity}" })
 
         checks += Check("message <= $MESSAGE_MAX_CHARS chars", message.length <= MESSAGE_MAX_CHARS, "${message.length} chars")

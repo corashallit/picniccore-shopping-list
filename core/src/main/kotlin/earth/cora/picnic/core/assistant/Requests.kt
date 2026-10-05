@@ -277,7 +277,7 @@ internal object Prompts {
 
     fun oneLine(text: String, max: Int): String = text.replace(Regex("\\s+"), " ").trim().take(max)
 
-    const val PHOTO_INSTRUCTION = "Photo of a handwritten shopping list. Add its items."
+    const val PHOTO_INSTRUCTION = "Photo of a shopping list or a recipe. Add what to buy."
     const val TRANSCRIPT_PREFIX = "Voice note transcript: "
     const val MAX_EXISTING_NAMES = 150
 

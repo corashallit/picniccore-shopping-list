@@ -132,7 +132,9 @@ class SpeakFlowTest {
         val h = compose.setHarness()
         h.vm.micDenied()
         compose.waitForIdle()
-        compose.onNodeWithText("Speak needs the microphone. You can allow it in the phone's settings.").assertExists()
+        compose.onNodeWithText("Speak needs the microphone. You can allow it in the phone’s settings.").assertExists()
+        // No "Record a voice note" pill: asking again would be refused at once (Android may not even show its prompt).
+        compose.onNode(hasText("Record a voice note") and hasClickAction()).assertDoesNotExist()
         compose.onNode(hasText("Open phone settings") and hasClickAction()).performClick()
         compose.waitForIdle()
         val started = shadowOf(compose.activity).nextStartedActivity
@@ -167,7 +169,8 @@ class SpeakFlowTest {
         compose.waitForIdle()
         compose.onNodeWithTag(HEARD_TRAY_TAG).assertExists()
         compose.onNode(hasText("Heard · 3 stickers"), useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("“${f.TRANSCRIPT}”").assertExists()
+        // Klee One draws "…" at mid-height, so the transcript shows three full stops instead.
+        compose.onNodeWithText("“${f.TRANSCRIPT.replace("…", "...")}”").assertExists()
         val stick = compose.onNode(hasText("Stick all 3 on my list") and hasClickAction())
         stick.performClick()
         compose.waitForIdle()

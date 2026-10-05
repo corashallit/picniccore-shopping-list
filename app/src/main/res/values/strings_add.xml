@@ -45,7 +45,7 @@
     </plurals>
     <string name="add_step_makes">makes\u00A0%1$d</string>
     <string name="add_step_makes_alone">Makes\u00A0%1$d</string>
-    <string name="add_step_pantry">Checked your pantry ·\u00A0left\u00A0out\u00A0%1$d</string>
+    <string name="add_step_pantry">Checked your pantry\u00A0· left\u00A0out\u00A0%1$d</string>
     <plurals name="add_step_sorted">
         <item quantity="one">Checked your list, sorted into %1$d aisle</item>
         <item quantity="other">Checked your list, sorted into %1$d aisles</item>
@@ -83,6 +83,8 @@
     <string name="add_snap_caption">fridge list · %1$s</string>
     <string name="add_snap_popped">Popped into stickers</string>
     <string name="add_snap_popped_count">%1$d of %2$d</string>
+    <!-- Once every line has popped: the rows "Stick all" will add. -->
+    <string name="add_snap_kept">%1$d kept</string>
     <string name="add_snap_take">Take a photo</string>
     <string name="add_snap_choose">Choose a photo</string>
     <string name="add_snap_hint">A clear, well-lit photo of a paper list works best.</string>
@@ -120,13 +122,13 @@
     <!-- Under a review with nothing to switch on (an empty answer, or only names already on the list) -->
     <string name="add_ok">OK</string>
     <string name="add_problem_ai">Something went wrong reading that. Try again.</string>
-    <string name="add_problem_photo">Couldn\'t open that photo. Try another one?</string>
-    <string name="add_problem_camera">There\'s no camera app on this phone. Choose a photo instead.</string>
-    <string name="add_problem_mic">The microphone isn\'t available right now. Try again in a moment.</string>
-    <string name="add_problem_mic_denied">Speak needs the microphone. You can allow it in the phone\'s settings.</string>
+    <string name="add_problem_photo">Couldn’t open that photo. Try another one?</string>
+    <string name="add_problem_camera">There’s no camera app on this phone. Choose a photo instead.</string>
+    <string name="add_problem_mic">The microphone isn’t available right now. Try again in a moment.</string>
+    <string name="add_problem_mic_denied">Speak needs the microphone. You can allow it in the phone’s settings.</string>
     <string name="add_problem_too_short">That was too short to hear. Try again.</string>
-    <string name="add_problem_nothing">Didn\'t catch that. Try again a little closer to the mic.</string>
-    <string name="add_problem_save">Couldn\'t save. Try again.</string>
+    <string name="add_problem_nothing">Didn’t catch that. Try again a little closer to the mic.</string>
+    <string name="add_problem_save">Couldn’t save. Try again.</string>
 
     <!-- Toasts after a commit (§4.15, §16) -->
     <string name="add_toast_added_one">Added %1$s to %2$s\u00A0♡</string>
@@ -144,7 +146,7 @@
         <item quantity="one">%1$d item is back on your list</item>
         <item quantity="other">%1$d items are back on your list</item>
     </plurals>
-    <string name="add_toast_as_typed">Added as typed · add your OpenAI key for smart sorting</string>
+    <string name="add_toast_as_typed">Added as typed · add your OpenAI key to sort it</string>
     <string name="add_toast_shiny">★ shiny!</string>
     <string name="add_toast_nothing">Nothing to add</string>
     <string name="add_toast_undo">Undo</string>

@@ -94,8 +94,8 @@ class ThinkingStepsTest {
         compose.onNodeWithText("Compared 3 recipes", substring = true).assertDoesNotExist()
         clock.elapsed = 250
         compose.waitForIdle()
-        // The separator goes with the words after it (a line never ends in "·").
-        compose.onNodeWithText("Compared 3 recipes · makes 12").assertExists()
+        // The separator ends the first line when the step wraps (a line never starts with "·").
+        compose.onNodeWithText("Compared 3 recipes\u00A0· makes\u00A012").assertExists()
         compose.onNodeWithText("Checked your list", substring = true).assertDoesNotExist()
         clock.elapsed = 500
         compose.waitForIdle()
@@ -132,7 +132,7 @@ class ThinkingStepsTest {
         assertTrue(ThinkingStep.CheckedPantry(4) in withPantry)
         assertEquals(withPantry.size - 2, withPantry.indexOf(ThinkingStep.CheckedPantry(4)))
         show { ThinkingBox(withPantry, recipe = true, clock = clockAt(withPantry.size, RevealClock.DONE), family = Families.lemon) }
-        compose.onNodeWithText("Checked your pantry · left out 4").assertExists()
+        compose.onNodeWithText("Checked your pantry\u00A0· left\u00A0out\u00A04").assertExists()
 
         // No in_pantry rows (an empty pantry, or nothing in it): no pantry step.
         assertTrue(AddRules.thinkingSteps(f.pancakes()).none { it is ThinkingStep.CheckedPantry })

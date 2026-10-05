@@ -15,6 +15,9 @@ import earth.cora.picnic.core.model.AisleStyle
 import earth.cora.picnic.core.model.Aisles
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.BasketKind
+import earth.cora.picnic.core.model.GroceryItem
+import earth.cora.picnic.core.model.GroceryList
+import earth.cora.picnic.core.model.setAislesText
 import earth.cora.picnic.core.model.aisles
 import earth.cora.picnic.core.model.commitAislesText
 import earth.cora.picnic.core.model.displayName
@@ -86,6 +89,12 @@ sealed interface AislesEvent {
 
     /** A re-sort finished: the screen turns the report into a toast. */
     data class Synced(val report: AisleSyncReport) : AislesEvent
+
+    /**
+     * "Aisles as text" removed [count] aisles (their items went to Everything else): the toast says so and offers Undo,
+     * which puts [before]'s store (aisles, colours, patterns, baskets, store numbers) and its items' aisles back.
+     */
+    data class Removed(val count: Int, val before: AppState) : AislesEvent
 }
 
 class AislesViewModel(
@@ -104,6 +113,12 @@ class AislesViewModel(
     private val report = MutableStateFlow<AisleSyncReport?>(null)
     private val writes = Mutex()
     private val _events = Channel<AislesEvent>(Channel.BUFFERED)
+
+    /** The saved state the screen shows (for [pendingRemovals]). Main thread. */
+    private var saved: AppState? = null
+
+    /** The draft a Done or Back already stayed for (its removals toasted): the next one leaves. Main thread. */
+    private var stayedFor: String? = null
 
     val events: Flow<AislesEvent> = _events.receiveAsFlow()
 
@@ -133,6 +148,7 @@ class AislesViewModel(
 
     fun setText(text: String) {
         textDraft.value = text
+        stayedFor = null
     }
 
     /** Done or the text field lost focus: the line diff (an edited line keeps its items, a removed one's go to Everything else). */
@@ -230,10 +246,45 @@ class AislesViewModel(
         }
     }
 
-    /** Done or Back: commits the store name and the text, closes the label being edited. */
-    fun leave() {
+    /**
+     * Undo of a text commit that removed aisles ([AislesEvent.Removed]): the store as it was (every aisle with its colour,
+     * pattern, basket and store number, and the learned corrections) and every item's aisle as it was, in every list.
+     * Items added since stay as they are.
+     */
+    fun undoRemoved(before: AppState) {
+        textDraft.value = null
+        stayedFor = null
         editing.value = null
-        if (nameDraft.value != null || textDraft.value != null) write { it }
+        appScope.launch {
+            writes.withLock {
+                try {
+                    store.update { s -> s.restoredAisles(before, baskets, clock()) }
+                } catch (e: IOException) {
+                    PicnicLog.w("couldn't put the aisles back", e)
+                    _events.send(AislesEvent.SaveFailed)
+                }
+            }
+        }
+    }
+
+    /**
+     * Done or Back: commits the store name and the text, closes the label being edited, and says whether she can leave
+     * now. A text that removes aisles is committed here and she stays, once: the "Removed n aisles" toast and its Undo
+     * show on this screen (gone with it, nothing would say what went). The next Done or Back leaves.
+     */
+    fun leave(): Boolean {
+        val text = textDraft.value
+        val stay = text != null && text != stayedFor && pendingRemovals() > 0
+        if (stay) stayedFor = text
+        editing.value = null
+        if (nameDraft.value != null || text != null) write { it }
+        return !stay
+    }
+
+    /** How many aisles committing the "Aisles as text" draft now would remove (0 with no draft). */
+    fun pendingRemovals(): Int {
+        val text = textDraft.value ?: return 0
+        return saved?.aislesRemovedBy(text, baskets, clock()) ?: 0
     }
 
     /* ---------------- internals ---------------- */
@@ -264,12 +315,18 @@ class AislesViewModel(
         }
     }
 
-    /** Commits the store-name and text drafts (in that order). The drafts clear only once saved. */
+    /**
+     * Commits the store-name and text drafts (in that order). The drafts clear only once saved. A text commit that
+     * removed aisles says so, with Undo ([AislesEvent.Removed]): one select-all and delete must never quietly wipe the
+     * store's colours, baskets and numbers.
+     */
     private suspend fun commitPending() {
         val name = nameDraft.value
         val text = textDraft.value
         if (name == null && text == null) return
+        var before: AppState? = null
         store.update { s ->
+            before = s
             var next = s
             if (name != null) next = next.setStoreName(name)
             if (text != null) next = next.commitAislesText(text, baskets::guess, clock())
@@ -277,10 +334,17 @@ class AislesViewModel(
         }
         nameDraft.compareAndSet(name, null)
         textDraft.compareAndSet(text, null)
+        val old = before ?: return
+        if (text != null) {
+            val removed = old.aislesRemovedBy(text, baskets, clock())
+            if (removed > 0) _events.send(AislesEvent.Removed(removed, old))
+        }
     }
 
-    private fun build(s: AppState, draft: String?, preview: String?, u: Ui): AislesUiState =
-        stateOf(s, baskets, draft, preview, u.name, u.editing, u.syncing, u.report)
+    private fun build(s: AppState, draft: String?, preview: String?, u: Ui): AislesUiState {
+        saved = s
+        return stateOf(s, baskets, draft, preview, u.name, u.editing, u.syncing, u.report)
+    }
 
     companion object {
         /** The labels preview the text 400 ms after she stops typing (§6.7). */
@@ -362,6 +426,38 @@ internal fun AppState.withStoreAisle(aisleId: String, number: Int?, now: Long): 
 }
 
 private val DIGITS = Regex("\\d{1,3}")
+
+/**
+ * How many of this state's aisles a commit of [text] removes (their lines went; renamed or moved lines are not removed),
+ * by the same line diff as commitAislesText: it runs on a copy of the store with one marker item per aisle, and counts
+ * the markers that end up in Everything else.
+ */
+internal fun AppState.aislesRemovedBy(text: String, baskets: BasketCatalog, now: Long): Int {
+    val aisles = store.aisles()
+    if (aisles.isEmpty()) return 0
+    val markers = aisles.mapIndexed { i, aisle -> GroceryItem(id = "aisle-marker-$i", name = aisle.name, aisleId = aisle.id, icon = "paper_bag", addedAt = 0) }
+    val probe = AppState(lists = listOf(GroceryList("aisle-probe", "", 0, markers)), currentListId = "aisle-probe", store = store)
+    return probe.commitAislesText(text, baskets::guess, now).lists.single().items.count { it.aisleId == null }
+}
+
+/**
+ * This state with [before]'s store and learned corrections back, and every item that had an aisle in [before] back in
+ * that aisle (as placed by hand or not); a list's open aisle that the commit reset comes back too. Ends with the trip
+ * reconcile (setAislesText on the same text).
+ */
+internal fun AppState.restoredAisles(before: AppState, baskets: BasketCatalog, now: Long): AppState {
+    val placed = before.lists.flatMap { it.items }.filter { it.aisleId != null }.associateBy { it.id }
+    val openBefore = before.lists.associate { it.id to it.openAisle }
+    val lists = lists.map { list ->
+        list.copy(
+            items = list.items.map { item -> placed[item.id]?.let { item.copy(aisleId = it.aisleId, manuallyPlaced = it.manuallyPlaced) } ?: item },
+            openAisle = list.openAisle ?: openBefore[list.id],
+        )
+    }
+    val corrections = before.corrections + corrections.filterNot { it in before.corrections }
+    return copy(store = before.store, lists = lists, corrections = corrections)
+        .setAislesText(before.store.aislesText, baskets::guess, now)
+}
 
 /** The basket kinds in the editor's sticker row (§4.26: 17 kinds), in catalog order. */
 val EditorBaskets: List<BasketKind> = BasketKind.entries.toList()

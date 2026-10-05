@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -181,7 +182,9 @@ private fun LicenceRow(licence: Licence, expanded: Boolean, onToggle: () -> Unit
         ) {
             Column(Modifier.weight(1f)) {
                 Text(licence.family, style = t.fieldValue.copy(color = c.ink))
-                Text(stringResource(R.string.about_licence_use, licence.licence, licence.use), style = t.caption.copy(color = c.inkSoft))
+                // The intro names the licence once; each row says what the font is used for (balanced lines, never one
+                // word left alone on the last).
+                Text(licence.use, style = t.caption.copy(color = c.inkSoft, lineBreak = LineBreak.Heading))
             }
             Glyph(if (expanded) PicnicGlyph.Collapse else PicnicGlyph.Expand, contentDescription = null, tint = c.inkSoft, size = 22.dp)
         }

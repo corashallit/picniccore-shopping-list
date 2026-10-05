@@ -556,6 +556,7 @@ private fun SpeakAfterReview(state: AddUiState, actions: AddActions, reveals: Re
         heardNames = heardNames(review),
         onRecord = actions.onRecord,
         onStop = actions.onStopRecording,
+        onCancel = actions.onCancel,
     )
     HeardPart(state, actions, reveals)
 }
@@ -614,6 +615,7 @@ private fun SpeakTab(state: AddUiState, actions: AddActions, reveals: Reveals) {
         heardNames = review?.let(::heardNames).orEmpty(),
         onRecord = actions.onRecord,
         onStop = actions.onStopRecording,
+        onCancel = actions.onCancel,
     )
     HeardPart(state, actions, reveals)
 }
@@ -644,9 +646,10 @@ private fun ErrorBlock(failed: AddPhase.Failed, actions: AddActions) {
             if (failed.needsSettings) {
                 PicnicButton(stringResource(R.string.add_open_settings), onClick = actions.onOpenSettings, style = PicnicButtonStyle.Secondary, glyph = PicnicGlyph.Settings)
             }
-            // The microphone was turned off: the words say where to allow it, and this takes her there.
+            // The microphone was turned off: the words say where to allow it, and this takes her there (the way on, so
+            // the main pill; there is no Record footer then).
             if (failed.problem == AddProblem.MIC_DENIED) {
-                PicnicButton(stringResource(R.string.add_open_phone_settings), onClick = actions.onOpenAppSettings, style = PicnicButtonStyle.Secondary, glyph = PicnicGlyph.Settings)
+                PicnicButton(stringResource(R.string.add_open_phone_settings), onClick = actions.onOpenAppSettings, glyph = PicnicGlyph.Settings)
             }
         }
     }
@@ -684,6 +687,9 @@ private sealed interface FooterKind {
 
     /** Snap with no photo yet, or after a photo that could not be read: "Take a photo". */
     data object TakePhoto : FooterKind
+
+    /** Speak with nothing recorded yet, or after a voice note that failed: "Record a voice note" (the corner sticker's twin). */
+    data object Record : FooterKind
 }
 
 private fun footerFor(state: AddUiState, reveals: Reveals): FooterKind? {
@@ -712,7 +718,13 @@ private fun footerFor(state: AddUiState, reveals: Reveals): FooterKind? {
             state.phase is AddPhase.Thinking -> FooterKind.Stick(0, 0, revealing = true, reading = true)
             else -> null
         }
-        AddMode.SPEAK -> null
+        AddMode.SPEAK -> when (val phase = state.phase) {
+            AddPhase.Idle -> FooterKind.Record
+            // A key problem ("Open Settings") or the microphone turned off ("Open phone settings"): that is the way on;
+            // recording again would only be refused (Android may not even ask again).
+            is AddPhase.Failed -> if (phase.needsSettings || phase.problem == AddProblem.MIC_DENIED) null else FooterKind.Record
+            else -> null
+        }
     }
 }
 
@@ -773,6 +785,13 @@ private fun AddFooter(kind: FooterKind, state: AddUiState, actions: AddActions) 
                 stringResource(R.string.add_snap_take),
                 onClick = actions.onTakePhoto,
                 glyph = PicnicGlyph.Polaroid,
+                modifier = Modifier.weight(1f),
+            )
+            FooterKind.Record -> PicnicButton(
+                stringResource(R.string.add_speak_record),
+                onClick = actions.onRecord,
+                enabled = !busy,
+                glyph = PicnicGlyph.Cassette,
                 modifier = Modifier.weight(1f),
             )
         }

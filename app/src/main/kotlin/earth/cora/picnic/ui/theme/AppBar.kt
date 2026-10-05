@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -55,9 +56,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
@@ -279,7 +282,8 @@ data class MenuItem(
  * `cubic-bezier(.3, 1.5, .5, 1)`) out of the More button's corner; a fade under reduced motion. Place it in the screen's
  * overlay at the More button's anchor; [onDismissRequest] closes it after an item. Given a [maxHeight] (the room left in
  * the window: landscape, a short multi-window pane, large text), the card stops there and its rows scroll, so every
- * item stays reachable (§15).
+ * item stays reachable (§15). A [title] (a pop card that belongs to one thing, like a pantry sticker) heads the rows and
+ * says what they act on.
  */
 @Composable
 fun OverflowMenu(
@@ -288,6 +292,7 @@ fun OverflowMenu(
     modifier: Modifier = Modifier,
     width: Dp = 224.dp,
     maxHeight: Dp = Dp.Unspecified,
+    title: String? = null,
 ) {
     val reduced = LocalReducedMotion.current
     val pop = remember { Animatable(0f) }
@@ -318,6 +323,16 @@ fun OverflowMenu(
                 .then(if (maxHeight.isSpecified) Modifier.heightIn(max = maxHeight).verticalScroll(rememberScrollState()) else Modifier)
                 .padding(vertical = 6.dp),
         ) {
+            if (title != null) {
+                Text(
+                    title,
+                    style = PicnicTheme.type.label.copy(color = PicnicTheme.colors.ballpoint),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 6.dp).semantics { heading() },
+                )
+                Box(Modifier.padding(horizontal = 14.dp).fillMaxWidth().height(1.5.dp).background(PicnicTheme.colors.rule))
+            }
             for (item in items) MenuRow(item, onDismissRequest)
         }
     }

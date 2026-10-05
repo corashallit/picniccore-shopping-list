@@ -42,7 +42,7 @@
     <string name="edit_quantity">Amount</string>
     <string name="edit_quantity_placeholder">2, 500 g, 4 L</string>
     <string name="edit_note">Note</string>
-    <string name="edit_note_placeholder">ripe ones, unsalted…</string>
+    <string name="edit_note_placeholder">brand, size, ripeness…</string>
     <string name="edit_aisle">Move to aisle</string>
     <string name="edit_aisle_hint">The app puts it there next time too.</string>
     <string name="edit_everything_else">Everything else</string>
@@ -52,7 +52,7 @@
     <string name="edit_draw">Draw a new sticker</string>
     <string name="edit_drawing">Drawing a new sticker…</string>
     <string name="edit_draw_hint">Takes about 10&#160;s and uses your OpenAI key.</string>
-    <string name="edit_draw_no_key">Drawing a new sticker needs an OpenAI key (Settings).</string>
+    <string name="edit_draw_no_key">Add your OpenAI key in Settings to draw new stickers.</string>
     <string name="edit_save">Save</string>
     <string name="edit_delete">Delete</string>
 
@@ -64,7 +64,7 @@
     <string name="aisles_text_label">Aisles as text:</string>
     <string name="aisles_text_hint">One aisle per line, in the order you walk through the store. Lines starting with # are notes.</string>
     <string name="aisles_store_aisle">store aisle %1$d</string>
-    <string name="aisles_store_aisle_field">store aisle</string>
+    <string name="aisles_store_aisle_field">Store aisle</string>
     <string name="aisles_label">%1$s, aisle %2$d</string>
     <string name="aisles_label_store">%1$s, aisle %2$d, store aisle %3$d</string>
     <string name="aisles_edit">Edit %1$s</string>
@@ -80,7 +80,7 @@
     <string name="aisles_resort">Re-sort my list</string>
     <string name="aisles_resorting">Sorting your list into the aisles…</string>
     <string name="aisles_preview_note">Showing your text. It is saved when you tap Done or leave the field.</string>
-    <string name="aisles_empty">No aisles yet: everything goes to Everything else.</string>
+    <string name="aisles_empty">No aisles yet, so every item goes in Everything else.</string>
     <plurals name="aisles_report_sorted">
         <item quantity="one">Sorted %1$d item</item>
         <item quantity="other">Sorted %1$d items</item>
@@ -88,6 +88,11 @@
     <string name="aisles_report_left">%1$d left in Everything else</string>
     <string name="aisles_report_both">%1$s · %2$s</string>
     <string name="aisles_report_nothing">Everything is already in place.</string>
+    <!-- "Aisles as text" removed aisles (their items went to Everything else); the toast offers Undo. -->
+    <plurals name="aisles_removed">
+        <item quantity="one">Removed %1$d aisle · its items are in Everything else</item>
+        <item quantity="other">Removed %1$d aisles · their items are in Everything else</item>
+    </plurals>
     <string-array name="aisles_family_names">
         <item>Strawberry</item>
         <item>Ramune blue</item>
@@ -142,6 +147,9 @@
     <string name="settings_key_missing">Not set yet: adding items with AI needs it.</string>
     <string name="settings_save">Save</string>
     <string name="settings_remove_key">Remove key</string>
+    <string name="settings_remove_key_title">Remove your OpenAI key?</string>
+    <string name="settings_remove_key_body">Adding with AI stops until you paste a key again. The app can’t show this key again.</string>
+    <string name="settings_remove_key_no">Not yet</string>
     <string name="settings_key_storage">Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.</string>
     <string name="settings_test">Test connection</string>
     <string name="settings_test_running">Checking…</string>
@@ -169,6 +177,7 @@
     <string name="settings_area_hint_finding">sunset and forecast near you; approximate area only</string>
     <string name="settings_area_hint_denied">location isn’t allowed, so Toronto for now</string>
     <string name="settings_area_hint_no_fix">couldn’t find your area yet, so Toronto for now</string>
+    <string name="settings_needs_eggs">needs Easter eggs on</string>
     <string name="settings_surprises_footer">Reduced motion follows your phone’s setting.</string>
     <string name="settings_area_rationale_title">Use my area?</string>
     <!-- §0.4 Q6, verbatim; PRIVACY.md says the same (PrivacyDocTest). -->
@@ -176,8 +185,11 @@
     <string name="settings_area_continue">Continue</string>
     <string name="settings_area_not_now">Not now</string>
     <string name="settings_area_denied">Location wasn’t allowed, so the surprises use Toronto.</string>
+    <!-- Android no longer shows its location prompt (denied for good): the rationale's button opens the app's page in Android settings. -->
+    <string name="settings_area_open_settings">Open Android settings</string>
+    <string name="settings_area_denied_for_good">Location is off for Kirakira Basket. You can allow it in Android settings.</string>
     <string name="settings_help_title">About your key</string>
-    <string name="settings_help_budget">Make the key in its own OpenAI project with a monthly budget and \"Enforce a hard limit\" turned on, so a lost phone or a leaked key can\'t run up a big bill.</string>
+    <string name="settings_help_budget">Make the key in its own OpenAI project with a monthly budget and “Enforce a hard limit” turned on, so a lost phone or a leaked key can’t run up a big bill.</string>
     <string name="settings_help_restricted">A restricted key is enough: List models (Read), Model capabilities (Request) and Responses API (Write). One key per person.</string>
     <string name="settings_help_guide">If someone else made your key, they have a step-by-step guide for these settings.</string>
     <string name="settings_help_privacy">Text, photos, recordings and your pantry go to OpenAI when you ask the app to sort or read something. Item names also go there in the background, to sort them into aisles and to pick or draw their stickers (you can turn drawing off above).</string>
@@ -198,8 +210,7 @@
     <string name="about_made_for">Made for one friend in Ontario</string>
     <string name="about_sun_hint">tap the sun?</string>
     <string name="about_licences">Licences</string>
-    <string name="about_licences_intro">The lettering comes from free fonts under the SIL Open Font License 1.1. Their licences:</string>
-    <string name="about_licence_use">%1$s · %2$s</string>
+    <string name="about_licences_intro">The lettering uses free fonts under the SIL Open Font License 1.1. Tap a font to read its licence.</string>
     <string name="about_licence_expanded">open</string>
     <string name="about_licence_collapsed">closed</string>
     <string name="about_art">Sticker art</string>
@@ -212,10 +223,10 @@
     <string name="lab_title">Surprise lab</string>
     <string name="lab_subtitle">every surprise, on a practice list</string>
     <string name="lab_ribbon">Surprise lab · practice list</string>
-    <string name="lab_note">Each surprise plays on a practice copy of “Saturday shop”. Nothing here touches your lists, your album or your settings.</string>
+    <string name="lab_note">Each surprise plays on a practice list called “Saturday shop”. Nothing here touches your lists, your album or your settings.</string>
     <string name="lab_try">Try it</string>
     <string name="lab_try_egg">Try %1$s</string>
-    <string name="lab_needs_motion">needs animations on</string>
+    <string name="lab_needs_motion">needs animations on (your phone’s settings)</string>
     <string name="lab_egg_number">%1$d · %2$s</string>
     <string-array name="lab_egg_names">
         <item>Dusk binder</item>
@@ -241,21 +252,21 @@
         <item>Tap the sun by the title.</item>
         <item>Press and hold a folded basket for a second.</item>
         <item>Add apples, lemons or strawberries.</item>
-        <item>Give the phone a little shake.</item>
-        <item>Open the list between 11 pm and 4 am.</item>
+        <item>Give the phone two quick, firm shakes.</item>
+        <item>Open the list between 11\u00A0pm and 4\u00A0am.</item>
         <item>Every new item has a 1 in 200 chance.</item>
         <item>Send “kirakira” from the add bar.</item>
-        <item>Get every stop but one, and leave its basket empty.</item>
+        <item>Check off every aisle but one, and leave that basket empty.</item>
         <item>Add a birthday cake, then check it off.</item>
-        <item>Tap the first four stamps: 1st, 1st, 2nd, 2nd, 3rd, 4th, 3rd, 4th.</item>
-        <item>Open the app in a season’s two weeks: Thanksgiving, Halloween…</item>
+        <item>Within 6 seconds, tap the first four stamps: 1st, 1st, 2nd, 2nd, 3rd, 4th, 3rd, 4th.</item>
+        <item>Open the list in the two weeks up to a holiday, like Thanksgiving or Halloween.</item>
         <item>Open the list in the half hour before sunset.</item>
         <item>A newly drawn sticker has a 1 in 100 chance.</item>
         <item>Finish four trips in a row with everything checked.</item>
-        <item>Press and hold the LCD before the list is done.</item>
+        <item>Press and hold the little green counter before the list is done.</item>
         <item>Turn on Weather surprises on a rainy day.</item>
-        <item>Have three picnic things on the list.</item>
-        <item>Press and hold the LCD once the list is done.</item>
+        <item>Open the list with three picnic things on it, like strawberries, chips and lemonade.</item>
+        <item>Press and hold the little green counter once the list is done.</item>
     </string-array>
 
     <!-- My pantry (§6.13) -->
@@ -265,6 +276,7 @@
     <string name="pantry_add_hint">flour, salt, spices…</string>
     <string name="pantry_add_action">Add to pantry</string>
     <string name="pantry_text_label">Pantry as text:</string>
+    <string name="pantry_text_hint">One thing per line</string>
     <string name="pantry_empty">Nothing on the shelves yet. Write what you always keep at home, and recipes will leave it out.</string>
     <string name="pantry_limit">Recipes check the first 200</string>
     <string name="pantry_sticker">%1$s, in your pantry</string>
@@ -275,7 +287,7 @@
     <string name="pantry_already">%1$s is already in your pantry</string>
     <string name="pantry_took_off">%1$s is off your pantry shelf</string>
     <string name="screens_undo">Undo</string>
-    <string name="screens_save_failed">Couldn\'t save. Try again.</string>
+    <string name="screens_save_failed">Couldn’t save. Try again.</string>
 
     <!-- Sticker album (§6.10, §4.25) and the filed trip book (§6.6, read-only) -->
     <string name="album_title">Sticker album</string>

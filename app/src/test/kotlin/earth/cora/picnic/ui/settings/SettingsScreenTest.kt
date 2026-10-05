@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -84,14 +85,22 @@ class SettingsScreenTest {
         compose.onNodeWithText("Save").assertIsEnabled().performClick()
         state = SettingsSamples.ok
         compose.onNodeWithText("Test connection").performClick()
+        // A saved key with nothing new typed: no Save pill that would do nothing.
+        compose.onNodeWithText("Save").assertDoesNotExist()
+        // "Remove key" asks first; "Not yet" keeps the key.
         compose.onNodeWithText("Remove key").performClick()
+        compose.onNodeWithText("Remove your OpenAI key?").assertExists()
+        compose.onNodeWithText("Not yet").performClick()
+        assertEquals(listOf("save", "test"), calls)
+        compose.onNodeWithText("Remove key").performClick()
+        compose.onNodeWithTag(REMOVE_KEY_CONFIRM_TAG).performClick()
         assertEquals(listOf("save", "test", "clear"), calls)
     }
 
     @Test
     fun failedTestShowsTheFriendlyError() {
         launch(SettingsSamples.failed)
-        compose.onNodeWithText("missing a permission", substring = true).assertExists()
+        compose.onNodeWithText("can’t do everything the app needs", substring = true).assertExists()
     }
 
     @Test

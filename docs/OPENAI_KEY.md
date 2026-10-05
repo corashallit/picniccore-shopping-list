@@ -48,11 +48,12 @@ API key must have api.model.read assigned to it".
 
 **What Test connection proves.** It calls only the first row. "Connected" means the key is valid and has
 **List models: Read**. The other two permissions are first used by the first "Sort it out", so try one
-item after setting up. If a permission is missing, the app names the scope in its message, for example
-"This OpenAI key is missing a permission the app needs (model.request)." (OpenAI answers HTTP 401
-"You have insufficient permissions for this operation. Missing scopes: …").
+item after setting up. If a permission is missing, the app names the permission to turn on, for example
+"This key can’t do everything the app needs. Ask the person who made it to allow Model capabilities
+(Request)." (OpenAI answers HTTP 401 "You have insufficient permissions for this operation. Missing scopes:
+…"; the scope ids go to the app's log only.)
 
-| Scope in the app's message | Permission to add |
+| Scope OpenAI reports | Permission to add |
 |---|---|
 | `api.model.read`, `model.read` | List models: Read |
 | `api.model.request`, `model.request` | Model capabilities: Request |

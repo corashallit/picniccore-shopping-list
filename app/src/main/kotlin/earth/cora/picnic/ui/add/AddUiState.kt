@@ -32,8 +32,11 @@ sealed interface AddPhase {
     /** Recording voice. [levels] holds the most recent input levels (0..1, oldest first) for the dot equaliser. */
     data class Recording(val elapsedMs: Long, val level: Float, val levels: List<Float> = emptyList()) : AddPhase
 
-    /** The voice note is being turned into words (bee loop). */
-    data object Transcribing : AddPhase
+    /**
+     * The voice note is being turned into words (bee loop). [elapsedMs] is how long the recording ran: the LCD keeps
+     * showing it, so the seconds she just recorded do not look lost.
+     */
+    data class Transcribing(val elapsedMs: Long = 0L) : AddPhase
 
     /**
      * The request is out (rule 3): the bar's Send is a wobbling capsule and its field is read-only; in the sheet the
@@ -217,8 +220,18 @@ data class AddCommit(
     val revived: List<GroceryItem>,
     /** The single added item's aisle display name ("Dairy & eggs"), "" for Everything else; null with 0 or 2+ items. */
     val aisleTitle: String? = null,
-    /** Rule 2: no key, so the text went on as typed ("Added as typed · add your OpenAI key for smart sorting"). */
+    /** Rule 2: no key, so the text went on as typed ("Added as typed · add your OpenAI key to sort it"). */
     val asTypedNoKey: Boolean = false,
+    /**
+     * The add came from the docked bar's own Send (a quick add, or the no-key add) rather than a review in the sheet: the
+     * field keeps its focus and the keyboard, so she can write the next thing straight away.
+     */
+    val fromBar: Boolean = false,
+    /**
+     * The items went to a list other than the one on screen (she switched lists while the note was being read): the
+     * toast names that list ("Added Paper towels to Saturday shop ♡"), not an aisle she cannot see.
+     */
+    val otherList: Boolean = false,
     /**
      * The add came more than 12 h after the trip's last activity, so it filed that trip's book first and the items went
      * onto a fresh list (§0.4 Q9's add-side twin): the List turns the book and offers Undo with it. Null otherwise.
