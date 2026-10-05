@@ -320,7 +320,19 @@ class AlbumTest {
         compose.waitForIdle()
         compose.onNodeWithText("Trip sticker books").assertIsDisplayed()
         compose.onNodeWithText("Sat 26 Sep", substring = true).assertIsDisplayed()
-        // The page has gone by: its pinned tabs went with it rather than sitting over the books card's heading.
+    }
+
+    /**
+     * Two months of books: the link brings the books card to the top. The page has gone by, so its pinned tabs went
+     * with it rather than sitting over the card's heading (assertIsDisplayed cannot see an overlay; the tabs' nodes can).
+     */
+    @Test
+    fun pinnedTabsLeaveWithThePage() {
+        val books = (0 until 8).map { i -> AlbumSamples.partBook.copy(id = "trip-$i", startedAt = AlbumSamples.partBook.startedAt - i * 7 * 86_400_000L) }
+        compose.setContent { PicnicTheme { AlbumScreen(AlbumSamples.state(AlbumSamples.mockup.copy(books = books)), AlbumActions()) } }
+        compose.onNodeWithText("8 trip sticker books").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Trip sticker books").assertIsDisplayed()
         compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).assertCountEquals(0)
     }
 }
