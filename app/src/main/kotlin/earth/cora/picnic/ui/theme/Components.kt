@@ -1610,8 +1610,8 @@ fun SourceChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
 
 /**
  * The ruled text field (§4.8): no box. A 2 dp ballpointSoft underline, the label above (Zen Maru 700 13 sp
- * ballpointSoft), the value Zen Maru 700 16 sp ballpoint, 56 dp tall. Focus: a 3 dp strawberry-trace underline with a
- * 13 dp puffy heart at its left end. Error: a hanko underline and helper text in hanko 13 sp with a 16 dp torn-paper
+ * ballpointSoft), the value Zen Maru 700 16 sp ballpoint, 56 dp tall. Focus: a 3 dp strawberry underline (the trace;
+ * the mid on Glow's dark paper) with a 13 dp puffy heart at its left end. Error: a hanko underline and helper text in hanko 13 sp with a 16 dp torn-paper
  * glyph (key / network wording, never proxy wording). Disabled: a dotted underline, the value ballpointSoft.
  * Multi-line: rule lines continue under every line, one per text line: the pitch is the text's own line height, the
  * caller's [textStyle] line height when it sets one (the aisles text's 24 sp, a transcript's 22 sp) and
@@ -1777,13 +1777,17 @@ internal fun Density.lineHeightPx(lineHeight: androidx.compose.ui.unit.TextUnit,
     return kotlin.math.ceil(px)
 }
 
-/** The field's underline: rest 2 dp ballpointSoft; focus 3 dp strawberry trace + a 13 dp puffy heart; error hanko; disabled dotted. */
+/**
+ * The field's underline: rest 2 dp ballpointSoft; focus 3 dp in the strawberry accent ink + a 13 dp puffy heart; error
+ * hanko; disabled dotted. The accent ink follows the paper (§4.8): the trace on light paper, the mid on Glow's page and
+ * backing, where the trace falls to about 2.4.
+ */
 @Composable
 private fun FieldUnderline(focused: Boolean, error: Boolean, enabled: Boolean) {
     val c = PicnicTheme.colors
     val color = when {
         error -> c.hanko
-        focused -> Families.strawberry.trace
+        focused -> if (c.isDark) Families.strawberry.mid else Families.strawberry.trace
         else -> c.inkSoft
     }
     val thickness = if (focused || error) 3.dp else 2.dp
