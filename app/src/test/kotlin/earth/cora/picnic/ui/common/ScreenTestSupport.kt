@@ -219,13 +219,13 @@ object Samples {
             ),
         ),
         currentListId = LIST_ID,
-        store = StoreProfile(name = "No Frills on Bank St"),
+        store = StoreProfile(name = "Hillcrest Market"),
     )
 
     val emptyState: AppState = AppState(
         lists = listOf(GroceryList(LIST_ID, "Groceries", NOW)),
         currentListId = LIST_ID,
-        store = StoreProfile(name = "No Frills on Bank St"),
+        store = StoreProfile(name = "Hillcrest Market"),
     )
 
     /** Busy names for the drawing sparkle in screenshots. */

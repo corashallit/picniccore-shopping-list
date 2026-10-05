@@ -7,19 +7,85 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Device-local settings (NOT in state.json, not backed up). CONTRACT (docs/ARCHITECTURE.md §9).
- * Amendment A1: the ONLY user settings are the user's OpenAI key (with "Test connection") and
- * "Draw new icons with AI". Requests always go to LlmConfig.DEFAULT_BASE_URL (api.openai.com); models
- * are fixed in core's ModelDefaults; theme and motion follow the system. The key itself is never part
- * of this class: only whether one is set and a masked hint.
+ * Amendment A1: the user's OpenAI key (with "Test connection") and "Draw new icons with AI".
+ * Amendment A4 (docs/DESIGN_STICKER.md §6.8, §19.2, §0.4): the Surprises switches below. Requests always go
+ * to LlmConfig.DEFAULT_BASE_URL (api.openai.com; the opt-in weather feed is the one exception); models are
+ * fixed in core's ModelDefaults; reduced motion follows the system. The key itself is never part of this
+ * class: only whether one is set and a masked hint.
+ * DataStore keys (DataStoreSettingsRepository): eggs, sounds, haptics, next_stop_card, celebration, weather,
+ * use_my_area, dusk_binder, surprise_lab, ants_day (egg 17's last parade); seen_books (the album's shown trip books,
+ * §7.8); move_note_shown and hold_hint_done (the one-time move notes, §6.1, §6.3). Consumers ask [allows] for a Surprises
+ * switch, so SurprisesGatingTest
+ * covers every gate in one table.
  */
 data class AppSettings(
-    /** "Draw new icons with AI" (icon cascade step 3; about 10 s and 1.5 US cents per icon). */
+    /** "Draw new icons with AI" (icon cascade step 3; about 10 s per icon, on her OpenAI key). */
     val drawIcons: Boolean = true,
     /** Read-only for UI: a key is stored and decryptable. */
     val hasToken: Boolean = false,
     /** Read-only for UI: masked key, e.g. "sk-…a1b2" (see [maskToken]). */
     val tokenHint: String? = null,
-)
+    /** Surprises → Easter eggs ("all 18 secrets"). */
+    val eggs: Boolean = true,
+    /** Surprises → Sounds (off by default; never in silent or vibrate, §14.1). */
+    val sounds: Boolean = false,
+    /** Surprises → Haptics. */
+    val haptics: Boolean = true,
+    /** Surprises → "Next stop" card (§10). */
+    val nextStopCard: Boolean = true,
+    /** Surprises → Celebration (§11). */
+    val celebration: Boolean = true,
+    /** Surprises → Weather surprises (off by default; the Environment Canada feed, §12.4, Q3). */
+    val weather: Boolean = false,
+    /** Surprises → Use my area (off by default; coarse location only, rounded to 0.1°, §0.4 Q6). */
+    val useMyArea: Boolean = false,
+    /** Egg 1: the Dusk binder is saved (kept while eggs are off). */
+    val duskBinder: Boolean = false,
+    /** The Surprise lab is unlocked (7 taps on the version line, §6.9). */
+    val surpriseLab: Boolean = false,
+    /** The first move's fuller note ("… Smart sorting puts other kinds of toothpaste there too.") has been shown (§6.3). */
+    val moveNoteShown: Boolean = false,
+    /** The one-time "Hold an item to edit it or move it to another aisle" note has been shown, or she held a row first (§6.1). */
+    val holdHintDone: Boolean = false,
+) {
+    /** Whether the Surprises switch [surprise] is on (§6.8). Each switch gates exactly its own feature (item 228). */
+    fun allows(surprise: Surprise): Boolean = when (surprise) {
+        Surprise.EasterEggs -> eggs
+        Surprise.Sounds -> sounds
+        Surprise.Haptics -> haptics
+        Surprise.NextStopCard -> nextStopCard
+        Surprise.Celebration -> celebration
+        Surprise.Weather -> weather
+        Surprise.UseMyArea -> useMyArea
+    }
+
+    /** These settings with the Surprises switch [surprise] set to [on]. */
+    fun with(surprise: Surprise, on: Boolean): AppSettings = when (surprise) {
+        Surprise.EasterEggs -> copy(eggs = on)
+        Surprise.Sounds -> copy(sounds = on)
+        Surprise.Haptics -> copy(haptics = on)
+        Surprise.NextStopCard -> copy(nextStopCard = on)
+        Surprise.Celebration -> copy(celebration = on)
+        Surprise.Weather -> copy(weather = on)
+        Surprise.UseMyArea -> copy(useMyArea = on)
+    }
+}
+
+/**
+ * The switches of the Settings "Surprises" card (§6.8, §0.4), in the card's order, with their DataStore [key] and
+ * default. Easter eggs gate every egg (§2.5); Sounds and Haptics gate Feedback (§14.1); the Next stop card and the
+ * Celebration gate their scenes (§10, §11); Weather surprises gate the Environment Canada feed (eggs 11 and 16,
+ * §12.4); Use my area gates the approximate location behind sunset and the forecast (PlaceSource, §0.4 Q6).
+ */
+enum class Surprise(val key: String, val default: Boolean) {
+    EasterEggs("eggs", true),
+    Sounds("sounds", false),
+    Haptics("haptics", true),
+    NextStopCard("next_stop_card", true),
+    Celebration("celebration", true),
+    Weather("weather", false),
+    UseMyArea("use_my_area", false),
+}
 
 interface SettingsRepository {
     /** Emits the persisted settings (defaults for anything never changed), then every change. */
@@ -28,6 +94,36 @@ interface SettingsRepository {
     suspend fun current(): AppSettings
 
     suspend fun setDrawIcons(enabled: Boolean)
+
+    /** Turns one Surprises switch on or off (§6.8). */
+    suspend fun setSurprise(surprise: Surprise, on: Boolean)
+
+    /** Egg 1: the Dusk binder is saved (true) or the moon was tapped (false). Kept while eggs are off (§2.5). */
+    suspend fun setDuskBinder(on: Boolean)
+
+    /** The Surprise lab is unlocked (7 taps on the version line, §6.9); persisted. */
+    suspend fun setSurpriseLab(unlocked: Boolean)
+
+    /** The first move's fuller note was shown (§6.3, Cora 5 October): later moves get the short one. Persisted. */
+    suspend fun markMoveNoteShown()
+
+    /** The hold hint was shown, or she held a row before it could be (§6.1, Cora 5 October): it never comes back. Persisted. */
+    suspend fun markHoldHintDone()
+
+    /** Egg 17: the day (her local date) the ant parade last marched, or null; it marches at most once a day (§12.2). */
+    suspend fun antsDay(): java.time.LocalDate?
+
+    /** Egg 17: the ants marched on [day]. */
+    suspend fun markAntsDay(day: java.time.LocalDate)
+
+    /**
+     * Filed trip books (TripBook.id) whose album row has played its magic appear (§7.8: a newly filed book's row blooms
+     * in once, the next time the album opens). Device-local, like the rest of these settings.
+     */
+    val seenBooks: Flow<Set<String>>
+
+    /** Marks the filed trip books [ids] as shown in the album. */
+    suspend fun markBooksSeen(ids: Collection<String>)
 
     /** Stores the OpenAI key encrypted (Android Keystore AES-GCM); null or blank clears it. Never logs it. */
     suspend fun setToken(token: String?)
@@ -51,6 +147,41 @@ class InMemorySettingsRepository(
 
     override suspend fun setDrawIcons(enabled: Boolean) {
         state.value = state.value.copy(drawIcons = enabled)
+    }
+
+    override suspend fun setSurprise(surprise: Surprise, on: Boolean) {
+        state.value = state.value.with(surprise, on)
+    }
+
+    override suspend fun setDuskBinder(on: Boolean) {
+        state.value = state.value.copy(duskBinder = on)
+    }
+
+    override suspend fun setSurpriseLab(unlocked: Boolean) {
+        state.value = state.value.copy(surpriseLab = unlocked)
+    }
+
+    override suspend fun markMoveNoteShown() {
+        state.value = state.value.copy(moveNoteShown = true)
+    }
+
+    override suspend fun markHoldHintDone() {
+        state.value = state.value.copy(holdHintDone = true)
+    }
+
+    private var ants: java.time.LocalDate? = null
+
+    override suspend fun antsDay(): java.time.LocalDate? = ants
+
+    override suspend fun markAntsDay(day: java.time.LocalDate) {
+        ants = day
+    }
+
+    private val seen = MutableStateFlow<Set<String>>(emptySet())
+    override val seenBooks: Flow<Set<String>> = seen.asStateFlow()
+
+    override suspend fun markBooksSeen(ids: Collection<String>) {
+        seen.value = seen.value + ids
     }
 
     override suspend fun setToken(token: String?) {

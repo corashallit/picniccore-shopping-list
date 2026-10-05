@@ -1,0 +1,144 @@
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-ca">
+<!--
+This is a data file that is meant to be read by RSS readers or aggregators.
+See https://www.canada.ca/en/environment-climate-change/services/weather-general-tools-resources/ways-to-access-forecasts.html to learn more about our RSS service.
+-->
+<title>Toronto - Weather - Environment Canada</title>
+<link rel="related" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38" type="text/html"/>
+<link rel="self" href="https://weather.gc.ca/rss/weather/43.65_-79.38_e.xml" type="application/atom+xml"/>
+<link rel="alternate" hreflang="fr-ca" href="https://meteo.gc.ca/rss/weather/43.65_-79.38_f.xml" type="application/atom+xml"/>
+<author>
+  <name>Environment Canada</name>
+  <uri>https://weather.gc.ca</uri>
+</author>
+<updated>2026-10-03T11:05:46Z</updated>
+<id>tag:weather.gc.ca,2013-04-16:20261003110546</id>
+<logo>https://weather.gc.ca/cacheable/images/img/wmms-alt.png</logo>
+<icon>https://weather.gc.ca/template/gcweb/v16.5.0/GCWeb/assets/favicon.ico</icon>
+<rights>Copyright 2026, Environment Canada</rights>
+<entry>
+  <title>No watches or warnings in effect, Toronto</title>
+  <link type="text/html" href="https://weather.gc.ca/index_e.html"/>
+  <updated>2026-09-03T10:16:29Z</updated>
+  <published>2026-09-03T10:16:29Z</published>
+  <category term="Warnings and Watches"/>
+  <summary type="html">No watches or warnings in effect.</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_w1:20260903101629</id>
+</entry>
+<entry>
+  <title>Current Conditions: Mainly Clear, 7.6°C</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T11:00:00Z</updated>
+  <published>2026-10-03T11:00:00Z</published>
+  <category term="Current Conditions"/>
+  <summary type="html">
+    <![CDATA[<b>Observed at:</b> Toronto Pearson Int'l Airport 7:00 AM EDT Saturday 3 October 2026<br/> <b>Condition:</b> Mainly Clear<br/> <b>Temperature:</b> 7.6&deg;C<br/> <b>Pressure / Tendency:</b> 102.7 kPa rising<br/> <b>Visibility:</b> 24 km<br/> <b>Humidity:</b> 86 %<br/> <b>Dewpoint:</b> 5.4&deg;C<br/> <b>Wind:</b> N 8 km/h<br/> <b>Air Quality Health Index:</b> n/a<br/>]]>
+  </summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_cc:20261003110000</id>
+</entry>
+<entry>
+  <title>Saturday: Mainly sunny. High 17.</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">Mainly sunny. Fog patches dissipating this morning. Wind becoming east 20 km/h near noon. High 17. UV index 5 or moderate. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc0:20261003090000</id>
+</entry><entry>
+  <title>Saturday night: Rain. Low 8.</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">Rain beginning this evening. Amount 10 mm. Low 8. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc1:20261003090000</id>
+</entry><entry>
+  <title>Sunday: Chance of showers. High 21. POP 40%</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">Sunny early in the morning then a mix of sun and cloud with 40 percent chance of showers late in the morning and early afternoon. Fog patches dissipating early in the morning. High 21. UV index 4 or moderate. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc2:20261003090000</id>
+</entry><entry>
+  <title>Sunday night: Chance of showers. Low 9. POP 30%</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">Cloudy periods with 30 percent chance of showers. Low 9. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc3:20261003090000</id>
+</entry><entry>
+  <title>Monday: Sunny. High 16.</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">Sunny. High 16. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc4:20261003090000</id>
+</entry><entry>
+  <title>Monday night: Cloudy periods. Low plus 5.</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">Cloudy periods. Low plus 5. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc5:20261003090000</id>
+</entry><entry>
+  <title>Tuesday: A mix of sun and cloud. High 16.</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">A mix of sun and cloud. High 16. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc6:20261003090000</id>
+</entry><entry>
+  <title>Tuesday night: Cloudy periods. Low 7.</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">Cloudy periods. Low 7. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc7:20261003090000</id>
+</entry><entry>
+  <title>Wednesday: Chance of showers. High 19. POP 40%</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">A mix of sun and cloud with 40 percent chance of showers. High 19. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc8:20261003090000</id>
+</entry><entry>
+  <title>Wednesday night: Chance of showers. Low 10. POP 30%</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">Cloudy periods with 30 percent chance of showers. Low 10. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc9:20261003090000</id>
+</entry><entry>
+  <title>Thursday: A mix of sun and cloud. High 21.</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">A mix of sun and cloud. High 21. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc10:20261003090000</id>
+</entry><entry>
+  <title>Thursday night: Cloudy periods. Low 9.</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">Cloudy periods. Low 9. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc11:20261003090000</id>
+</entry><entry>
+  <title>Friday: A mix of sun and cloud. High 18.</title>
+  <link type="text/html" href="https://weather.gc.ca/en/location/index.html?coords=43.65,-79.38"/>
+  <updated>2026-10-03T09:00:00Z</updated>
+  <published>2026-10-03T09:00:00Z</published>
+  <category term="Weather Forecasts"/>
+  <summary type="html">A mix of sun and cloud. High 18. Forecast issued 5:00 AM EDT Saturday 3 October 2026</summary>
+  <id>tag:weather.gc.ca,2013-04-16:43.65-79.38_fc12:20261003090000</id>
+</entry>
+</feed>

@@ -63,6 +63,10 @@ data class Produced(
     val aisleId: String? = null,
     val icon: String,
     val fit: IconFit,
+    /** The row's skip_reason wire value ("none" = kept). */
+    val skip: String = "none",
+    /** She named it (versus worked out). */
+    val named: Boolean = true,
 )
 
 @Serializable
@@ -103,6 +107,16 @@ object EvalScoring {
         "\\b(lbs?|pounds?|oz|ounces?|cups?|tbsp|tsp|teaspoons?|tablespoons?|gallons?|quarts?|qt|pints?|fl\\.? ?oz)\\b",
         RegexOption.IGNORE_CASE,
     )
+
+    /** The cooking measures a recipe amount may keep after the "·" (DESIGN_STICKER §4.17, ingest rule "quantity"). */
+    private val COOKING = Regex("\\b(cups?|tbsp|tsp|teaspoons?|tablespoons?|pinch(es)?)\\b", RegexOption.IGNORE_CASE)
+
+    /** A quantity that is not metric: the store quantity before the "·" never, the recipe amount after it only in cooking measures. */
+    private fun imperial(quantity: String): Boolean {
+        val dot = quantity.indexOf('·')
+        if (dot < 0) return IMPERIAL.containsMatchIn(quantity)
+        return IMPERIAL.containsMatchIn(quantity.substring(0, dot)) || IMPERIAL.containsMatchIn(COOKING.replace(quantity.substring(dot + 1), ""))
+    }
 
     /** Rough French detector for the message: enough for "did it answer in French". */
     private val FRENCH = Regex("\\b(j'ai|ajout|ajouté|et|les|des|du|la|le|à|pour|liste|épicerie)\\b", RegexOption.IGNORE_CASE)
@@ -185,6 +199,9 @@ object EvalScoring {
                     val ok = Regex(re, RegexOption.IGNORE_CASE).containsMatchIn(text)
                     checks += Check("detail ${item.name}", ok, "got \"$text\", want /$re/")
                 }
+                expect.skip?.let { want ->
+                    checks += Check("skip ${item.name}", item.skip == want, "got ${item.skip}, want $want")
+                }
             }
         }
 
@@ -203,10 +220,15 @@ object EvalScoring {
             SearchExpectation.ANY -> Unit
         }
 
-        val imperial = items.filter { it.quantity?.let(IMPERIAL::containsMatchIn) == true }
+        val imperial = items.filter { it.quantity?.let(::imperial) == true }
         checks += Check("metric quantities", imperial.isEmpty(), imperial.joinToString { "${it.name}: ${it.quantity}" })
 
-        checks += Check("message present, <= $MESSAGE_MAX_CHARS chars", message.isNotBlank() && message.length <= MESSAGE_MAX_CHARS, "${message.length} chars")
+        checks += Check("message <= $MESSAGE_MAX_CHARS chars", message.length <= MESSAGE_MAX_CHARS, "${message.length} chars")
+        // A plain list added exactly as she named it needs no message, so the app can add it at once (DESIGN_STICKER §6.2
+        // rule 4, quick add). Anything skipped or worked out from a dish, a correction she made mid-note (a scratched
+        // item, a changed amount: the cases tagged "self-correction"), or an answer with nothing to buy, says why.
+        val explains = items.isEmpty() || items.any { it.skip != "none" || !it.named } || "self-correction" in case.tags
+        if (explains) checks += Check("message present (something to explain)", message.isNotBlank(), "")
         case.message.mustNot.forEach { phrase ->
             val hit = if (phrase.startsWith("re:")) {
                 Regex(phrase.removePrefix("re:"), RegexOption.IGNORE_CASE).containsMatchIn(message)
@@ -215,9 +237,11 @@ object EvalScoring {
             }
             checks += Check("message avoids '$phrase'", !hit, message)
         }
-        when (case.message.lang) {
-            "fr" -> checks += Check("message in French", FRENCH.findAll(message).count() >= 2, message)
-            "en" -> checks += Check("message in English", FRENCH.findAll(message).count() < 2, message)
+        if (message.isNotBlank()) {
+            when (case.message.lang) {
+                "fr" -> checks += Check("message in French", FRENCH.findAll(message).count() >= 2, message)
+                "en" -> checks += Check("message in English", FRENCH.findAll(message).count() < 2, message)
+            }
         }
 
         if (transcript != null) {

@@ -136,7 +136,11 @@ android {
         unitTests {
             isIncludeAndroidResources = true
             all {
-                it.maxHeapSize = "2g"
+                // The suite's live heap stays under 600 MB, but Robolectric's native graphics grow the process
+                // off-heap (3 GB RSS after 1146 tests in one JVM). A fresh JVM every 36 test classes keeps each
+                // one near 1.5-2.2 GB, so a 7 GB CI runner never runs out.
+                it.maxHeapSize = "1280m"
+                it.forkEvery = 36
                 it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
                 // Robolectric on SDK 36+ touches FileDescriptor internals via jdk.internal.access.
                 it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
@@ -150,6 +154,12 @@ android {
         // targetSdk 36 is deliberate (see docs/BUILDING.md); version-freshness checks are noise in CI.
         disable += setOf("OldTargetApi", "GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable")
     }
+}
+
+// Lint's analysis (1-2 GB inside the daemon) must not overlap the Robolectric test JVM on a
+// 7 GB CI runner: run it after the unit tests whenever both are in the task graph.
+tasks.matching { it.name.startsWith("lintAnalyze") }.configureEach {
+    mustRunAfter("testDebugUnitTest")
 }
 
 roborazzi {
@@ -200,3 +210,13 @@ dependencies {
     testImplementation(libs.roborazzi.preview.scanner.support)
     testImplementation(libs.composable.preview.scanner)
 }
+
+// :app:checkStickers: the generated sticker art matches the DSL (design/stickers/, docs/DESIGN_STICKER.md §18.3).
+apply(from = rootProject.file("design/stickers/checkStickers.gradle.kts"))
+// :app:checkSounds: the sound clips match their recipes (design/sounds/make_sounds.py, §14.2).
+apply(from = rootProject.file("design/sounds/checkSounds.gradle.kts"))
+
+// CI (.github/workflows/android.yml) runs :app:lintDebug, so lint runs checkSounds too: it needs nothing but Python 3's
+// standard library, which every runner has. checkStickers is not wired in: it needs shapely, svgelements and numpy
+// (design/stickers/requirements.txt), which a runner does not have; run it locally after any change to design/stickers/.
+tasks.named { it == "lintDebug" }.configureEach { dependsOn("checkSounds") }

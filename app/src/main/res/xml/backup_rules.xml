@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- API 26-30 Auto Backup. Mirrors data_extraction_rules.xml (allow-list). -->
+<!-- API 26-30 Auto Backup. Mirrors data_extraction_rules.xml (allow-list): the lists and the sticker album. -->
 <full-backup-content>
     <include domain="file" path="state.json" />
+    <include domain="file" path="album.json" />
 </full-backup-content>

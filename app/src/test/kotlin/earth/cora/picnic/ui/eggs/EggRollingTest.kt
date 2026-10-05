@@ -1,0 +1,257 @@
+package earth.cora.picnic.ui.eggs
+
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import earth.cora.picnic.core.model.list
+import earth.cora.picnic.core.model.removeItem
+import androidx.compose.ui.geometry.Offset
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
+import earth.cora.picnic.core.model.setOpenAisle
+import earth.cora.picnic.platform.Cue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import androidx.compose.ui.test.onNodeWithTag
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import kotlin.math.PI
+import kotlin.math.abs
+
+/**
+ * Items 240 and 335 (egg 3): a commit with a `roll` or `hop` item (also in French) sends its sticker from the add bar
+ * to its aisle's basket, bumps it (the basket wobbles hello, "pff"), and settles it on its line, never in the basket;
+ * the produce spins with its travel, θ = Δx ⁄ r (r = 22 dp), clockwise moving right, anticlockwise moving left, and
+ * keeps its angle while it only drops.
+ */
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w360dp-h760dp-xxhdpi")
+class EggRollingTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    private val px = 3f // xxhdpi
+
+    /** Adds [name] to Produce (opened first, as the lab does) and returns the commit's frame time. */
+    private fun EggRig.addProduce(name: String, icon: String? = null): Long {
+        act {
+            model.set { it.setOpenAisle(model.listId, "produce") }
+            val c = earth.cora.picnic.core.catalog.IconCatalog.default
+            model.add(
+                listOf(
+                    earth.cora.picnic.core.model.GroceryItem(
+                        id = "t-$name", name = name, aisleId = "produce", icon = icon ?: c.match(name)!!.key,
+                        addedAt = clock.now(), source = earth.cora.picnic.core.model.ItemSource.TYPED,
+                    ),
+                ),
+            )
+        }
+        return now
+    }
+
+    @Test
+    fun rollsToItsBasketAndSettlesOnItsLine() {
+        val r = EggRig(compose).start()
+        val gottenBefore = r.model.grouped().sections.single { it.id == "produce" }.gotten.size
+        val t0 = r.addProduce("Lemons")
+        val fx = r.eggs.rolling
+        assertNotNull(fx)
+        assertFalse("lemons roll", fx!!.hop)
+        assertEquals("produce", fx.sectionId)
+        // The row's own sticker hides while its twin travels.
+        assertTrue(r.eggs.hidesRowSticker(fx.itemId))
+        // The bump at the basket: it wobbles hello and says "pff" (LAND).
+        r.advanceTo(t0 + RollingMotion.BUMP_AT + 50)
+        assertEquals("produce", r.eggs.basketHello?.sectionId)
+        assertTrue(r.feedback.times(Cue.LAND).any { it >= t0 + RollingMotion.BUMP_AT - 20 })
+        // Settled on its line by 3.2 s: the effect is over, the item is still to get, the basket holds what it held.
+        r.advanceTo(t0 + 3_200)
+        assertNull(r.eggs.rolling)
+        val row = r.list.items.single { it.name == "Lemons" }
+        assertFalse(row.checked)
+        val produce = r.model.grouped().sections.single { it.id == "produce" }
+        assertEquals("it never enters the basket", gottenBefore, produce.gotten.size)
+        assertTrue(produce.rows.any { it.id == row.id })
+        // Its last pose sat on its row's sticker (drawn by its row, beneath the row's words).
+        val last = r.probe.frames.last { it.tag == "rollhome" }
+        val spot = r.anchor(earth.cora.picnic.ui.list.motion.AnchorRegistry.rowKey(row.id))
+        assertEquals(spot.center.x, last.center.x, 4f * px)
+        assertEquals(spot.center.y, last.center.y, 4f * px)
+    }
+
+    @Test
+    fun berriesHop() {
+        val r = EggRig(compose).start()
+        r.addProduce("Raspberries")
+        assertTrue(r.eggs.rolling!!.hop)
+    }
+
+    @Test
+    fun frenchNamesMatchByKey() {
+        val e = EngineRig()
+        try {
+            e.engine.onListShown(e.listId)
+            val pommes = e.item("p1", "pommes", "produce")
+            assertEquals("apple", pommes.icon)
+            e.engine.onCommitted(listOf(pommes))
+            assertNotNull(e.eggs.rolling)
+            e.engine.effectDone(e.eggs.rolling!!.id)
+            val fraises = e.item("f1", "fraises", "produce")
+            e.engine.onCommitted(listOf(fraises))
+            assertTrue(e.eggs.rolling!!.hop)
+            e.engine.effectDone(e.eggs.rolling!!.id)
+            // One per commit; a plain item rolls nothing.
+            e.engine.onCommitted(listOf(e.item("b1", "Bread", "bakery", "sliced_bread")))
+            assertNull(e.eggs.rolling)
+        } finally {
+            e.close()
+        }
+    }
+
+    @Test
+    fun spinMatchesTravel() {
+        val r = EggRig(compose).start()
+        r.probe.clear()
+        val t0 = r.addProduce("Lemons")
+        r.advanceTo(t0 + RollingMotion.DURATION + 100)
+        // The overlay's frames, then its row's (the roll home along its line, beneath the words): one travel.
+        val frames = r.probe.frames.filter { it.tag == "roller" || it.tag == "rollhome" }.distinctBy { it.time }.sortedBy { it.time }
+        assertTrue("sampled the roll", frames.size > 20)
+        val radius = RollingMotion.RADIUS_DP * px
+        var right = 0
+        var left = 0
+        var drops = 0
+        frames.zipWithNext { a, b ->
+            val dx = b.center.x - a.center.x
+            val dTheta = b.rotation - a.rotation
+            val expected = (dx / radius * 180.0 / PI).toFloat()
+            assertEquals("θ = Δx ⁄ r between ${a.time} and ${b.time} ms", expected, dTheta, 5f)
+            when {
+                dx > 0.5f -> {
+                    right++
+                    assertTrue("clockwise while it moves right", dTheta > 0f)
+                }
+                dx < -0.5f -> {
+                    left++
+                    assertTrue("anticlockwise while it moves left", dTheta < 0f)
+                }
+                abs(b.center.y - a.center.y) > 0.5f -> {
+                    drops++
+                    assertEquals("it keeps its angle while it only drops", 0f, dTheta, 0.01f)
+                }
+            }
+        }
+        assertTrue("it rolled right (back from the basket to its column)", right > 0)
+        assertTrue("it rolled left", left > 3)
+        assertTrue("it dropped", drops > 0)
+        // It lands upright on its spot: a whole number of turns.
+        val end = frames.last().rotation
+        val off = ((end % 360f) + 360f) % 360f
+        assertEquals("upright on its line (${end}°)", 0f, if (off > 180f) off - 360f else off, 5f)
+        // One full turn per 2πr = 138 dp.
+        assertEquals(138.2f, (2 * PI * RollingMotion.RADIUS_DP).toFloat(), 0.1f)
+    }
+
+    /**
+     * Item 259 for egg 3: on its way it never crosses a word (up its checkbox column, along its basket's lane, down onto
+     * its line), and the roll home along its own line is drawn by its row beneath the row's words.
+     */
+    @Test
+    fun itGoesRoundEveryWord() {
+        val r = EggRig(compose).start()
+        r.probe.clear()
+        val t0 = r.addProduce("Lemons")
+        val row = r.list.items.single { it.name == "Lemons" }
+        var overlay = 0
+        var home = 0
+        while (r.now < t0 + RollingMotion.DURATION) {
+            r.advance(48)
+            val words = textBoxes(compose)
+            r.probe.frames.filter { it.tag == "roller" }.forEach { f ->
+                overlay++
+                words.filter { (_, box) -> box.overlaps(f.bounds.deflate(2f)) }.forEach { (w, _) -> fail("at ${f.time} ms the sticker crosses \"$w\"") }
+            }
+            r.probe.frames.filter { it.tag == "rollhome" }.forEach { f ->
+                home++
+                val line = compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.row(row.id), useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+                assertTrue("at ${f.time} ms it rolls home on its own line", line.inflate(1f).contains(f.bounds.center))
+            }
+            r.probe.clear()
+        }
+        assertTrue(overlay > 10)
+        assertTrue("its row drew the roll home", home > 5)
+    }
+
+    /**
+     * The trip review (item 259, §12.2 egg 3): on a short list the end of the list's note lies between the add bar and
+     * the new row, right across the way up out of the bar. The sticker then sets off from its own slot instead: along
+     * its line beneath its row's words, up its checkbox column, along the basket's lane and back, never over a word
+     * (sampled every 100 ms, against every text node and the list's word keep-outs); its slot shows a ghost outline
+     * while it travels; and it settles exactly on its slot.
+     */
+    @Test
+    fun onAShortListItSetsOffFromItsSlot() {
+        var small = PracticeFixture.unchecked()
+        val keep = setOf("strawberries", "milk")
+        for (id in small.list(PracticeFixture.LIST_ID)!!.items.map { it.id }) {
+            if (id !in keep) small = small.removeItem(PracticeFixture.LIST_ID, id, PracticeFixture.WRITTEN + 100)
+        }
+        val r = EggRig(compose, fixture = small).start()
+        r.advance(600)
+        r.probe.clear()
+        val t0 = r.addProduce("Lemons")
+        val row = r.list.items.single { it.name == "Lemons" }
+        r.advance(200)
+        val note = r.anchors.bounds(EggAnchors.TEXT_PREFIX + "endnote")
+        val bar = r.anchor(AnchorRegistry.ADD_BAR)
+        val slot = r.anchor(AnchorRegistry.rowKey(row.id))
+        assertNotNull("the end of the list's note shows", note)
+        assertTrue("it lies between the new row and the bar ($note, row $slot, bar $bar)", note!!.top > slot.bottom && note.bottom <= bar.top)
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.rollGhost(row.id), useUnmergedTree = true).assertExists()
+        var overlay = 0
+        var fromSlot = 0
+        var last: Offset? = null
+        while (r.now < t0 + RollingMotion.DURATION + 100) {
+            r.advance(100)
+            val words = wordBoxes(compose, r.anchors)
+            val line = r.anchors.bounds(EggAnchors.line(row.id))
+            for (f in r.probe.frames) {
+                val piece = f.bounds.deflate(2f)
+                if (f.tag == "roller") {
+                    overlay++
+                    words.filter { (_, box) -> box.overlaps(piece) }.forEach { (w, _) -> fail("at ${f.time} ms the sticker crosses \"$w\"") }
+                    last = f.bounds.center
+                } else if (f.tag == "rollhome") {
+                    if (f.time < RollingMotion.RISE_END) fromSlot++
+                    // Beneath its own row's words only.
+                    words.filter { (_, box) -> box.overlaps(piece) && !(line != null && line.inflate(1f).contains(box.topLeft) && line.inflate(1f).contains(box.bottomRight)) }
+                        .forEach { (w, _) -> fail("at ${f.time} ms the roll along its line crosses \"$w\"") }
+                    last = f.bounds.center
+                }
+            }
+            r.probe.clear()
+        }
+        assertTrue("it travelled ($overlay overlay frames)", overlay > 5)
+        assertTrue("it set off from its slot, along its own line ($fromSlot)", fromSlot > 0)
+        val home = r.anchor(AnchorRegistry.rowKey(row.id)).center
+        assertEquals("it settles on its slot (x)", home.x, last!!.x, 2 * 3f)
+        assertEquals("it settles on its slot (y)", home.y, last!!.y, 2 * 3f)
+        assertNull("done", r.eggs.rolling)
+        compose.onNodeWithTag(earth.cora.picnic.ui.list.ListTags.rollGhost(row.id), useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun reducedMotionAddsItNormally() {
+        val r = EggRig(compose, reduced = true).start()
+        r.addProduce("Lemons")
+        assertNull(r.eggs.rolling)
+        assertTrue(r.list.items.any { it.name == "Lemons" })
+    }
+
+}

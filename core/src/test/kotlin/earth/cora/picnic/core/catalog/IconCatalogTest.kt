@@ -5,6 +5,7 @@ import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.IconRef
+import earth.cora.picnic.core.model.bookIcon
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -88,10 +89,16 @@ class IconCatalogTest {
     fun displayRefRules() {
         val base = GroceryItem(id = "a", name = "Lemons", icon = "lemon", iconFit = IconFit.EXACT, addedAt = 0)
         assertEquals(IconRef("lemon"), catalog.displayRef(base, busy = false))
-        assertEquals(IconRef("fruit_generic"), catalog.displayRef(base, busy = true))
+        assertEquals(IconRef(IconCatalog.CAPSULE), catalog.displayRef(base, busy = true))
         assertEquals(IconRef("lemon", "c-1"), catalog.displayRef(base.copy(customIconId = "c-1"), busy = true))
-        assertEquals(IconRef(IconCatalog.DEFAULT_ICON), catalog.displayRef(base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.PENDING), busy = false))
+        assertEquals(IconRef(IconCatalog.CAPSULE), catalog.displayRef(base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.PENDING), busy = false))
         assertEquals(IconRef("condiments_generic"), catalog.displayRef(base.copy(icon = "condiments_generic", iconFit = IconFit.APPROXIMATE), busy = false))
+        // Matched nothing (the default key, not EXACT): still the capsule. Matched "grocery bags": the kraft bag itself.
+        assertEquals(IconRef(IconCatalog.CAPSULE), catalog.displayRef(base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.APPROXIMATE), busy = false))
+        assertEquals(IconRef(IconCatalog.DEFAULT_ICON), catalog.displayRef(base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.EXACT), busy = false))
+        // A filed book's twin and the finale's riders follow the same rule (they used to file the bag for "nothing matched").
+        assertEquals(IconRef(IconCatalog.CAPSULE), base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.APPROXIMATE).bookIcon())
+        assertEquals(IconRef(IconCatalog.DEFAULT_ICON), base.copy(icon = IconCatalog.DEFAULT_ICON, iconFit = IconFit.EXACT).bookIcon())
     }
 
     @Test
@@ -102,21 +109,25 @@ class IconCatalogTest {
         assertEquals(catalog.keys.size, catalog.keys.toSet().size)
     }
 
-    /** research/validate_icon_catalog.py SAMPLES: the reference for the keyword heuristic (43/43). */
+    /**
+     * research/validate_icon_catalog.py SAMPLES, re-tuned for the C design's 17 kinds (docs/DESIGN_STICKER.md §5.2:
+     * Produce wicker picnic, Deli & meat bento box, Baking mixing bowl, Breakfast fruit crate, Dairy & eggs egg
+     * basket, Frozen cooler, Household canvas tote, Pantry jar shelf).
+     */
     @Test
-    fun basketHeuristicMatchesTheValidatorSamples() {
+    fun basketHeuristicMatchesTheSamples() {
         val samples = mapOf(
-            "Produce" to "fruit_crate", "Fruits et légumes" to "fruit_crate", "Fruits & Légumes" to "fruit_crate",
+            "Produce" to "wicker_picnic", "Fruits et légumes" to "wicker_picnic", "Fruits & Légumes" to "wicker_picnic",
             "Fruit" to "berry_punnet", "Bakery" to "bread_basket", "Boulangerie" to "bread_basket",
-            "Aisle 2 - Baking & spices" to "canvas_tote", "Dairy" to "milk_crate", "Produits laitiers" to "milk_crate",
-            "Eggs & dairy" to "egg_basket", "Meat & seafood" to "cooler", "Poissons et fruits de mer" to "cooler",
-            "Deli & cheese" to "cooler", "Frozen" to "ice_bucket", "Surgelés" to "ice_bucket", "Ice cream" to "ice_bucket",
+            "Aisle 2 - Baking & spices" to "mixing_bowl", "Dairy" to "milk_crate", "Produits laitiers" to "milk_crate",
+            "Eggs & dairy" to "egg_basket", "Meat & seafood" to "bento_box", "Poissons et fruits de mer" to "cooler",
+            "Deli & cheese" to "bento_box", "Frozen" to "cooler", "Surgelés" to "cooler", "Ice cream" to "ice_bucket",
             "Crème glacée" to "ice_bucket", "Aisle 7 - Snacks & pop" to "candy_jar", "Chips & candy" to "candy_jar",
             "Health & beauty" to "vanity_case", "Pharmacy" to "vanity_case", "Pain relief" to "vanity_case",
-            "Baby" to "vanity_case", "Pet food" to "wire_basket", "Cleaning & paper" to "wire_basket",
+            "Baby" to "vanity_case", "Pet food" to "wire_basket", "Cleaning & paper" to "canvas_tote",
             "International" to "bento_box", "World foods" to "bento_box", "Flowers" to "flower_bucket",
-            "Fleurs" to "flower_bucket", "Cereal & breakfast" to "egg_basket", "Canned goods & soups" to "jar_shelf",
-            "Condiments" to "jar_shelf", "Pasta & rice" to "canvas_tote", "Bulk" to "canvas_tote",
+            "Fleurs" to "flower_bucket", "Cereal & breakfast" to "fruit_crate", "Canned goods & soups" to "jar_shelf",
+            "Condiments" to "jar_shelf", "Pasta & rice" to "jar_shelf", "Bulk" to "jar_shelf",
             "Beer & wine" to "bottle_carrier", "Boissons" to "bottle_carrier", "Coffee & tea" to "bottle_carrier",
             "Aisle 12" to "wicker_picnic", "Checkout" to "wicker_picnic", "Seasonal" to "wicker_picnic",
             "Plant-based" to "milk_crate", "Prepared meals" to "bento_box", "Around the store" to "wicker_picnic",

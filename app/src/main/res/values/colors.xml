@@ -1,16 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Window ground before Compose draws (splash, first frame). Mirrors PicnicTheme background tokens:
-         "picnic at noon" here, "picnic at dusk" in values-night. -->
-    <color name="picnic_ground">#FFFFFBF2</color>
-    <!-- Launcher / splash placeholder art (the art pass replaces these). -->
-    <color name="picnic_cream">#FFFFFBF2</color>
-    <color name="picnic_ink">#FF2A1730</color>
-    <color name="picnic_strawberry">#FFF04462</color>
-    <color name="picnic_gingham">#55F04462</color>
-    <color name="picnic_wicker">#FFE9B872</color>
-    <color name="picnic_wicker_shade">#FFC98455</color>
-    <color name="picnic_rim">#FFF7D9A8</color>
-    <color name="picnic_leaf">#FF55C26A</color>
-    <color name="picnic_lemon">#FFFFD43B</color>
+    <!-- Window ground before Compose draws (after the splash, first frame): the Day binder, as the splash
+         (docs/DESIGN_STICKER.md §2); values-night uses the Glow binder like the night splash. -->
+    <color name="picnic_ground">#FFE6F6EE</color>
 </resources>

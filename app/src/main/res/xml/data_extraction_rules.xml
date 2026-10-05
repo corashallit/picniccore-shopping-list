@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- API 31+. Allow-list: only the list state is backed up / transferred. Everything else
-     (Keystore-encrypted token, which can't be decrypted on another device; icon cache) is excluded
-     implicitly. Don't add <exclude> for paths outside an <include>: lint FullBackupContent errors. -->
+<!-- API 31+. Allow-list: only the list state and the sticker album (album.json, docs/ARCHITECTURE.md §6.1) are backed
+     up / transferred. Everything else (Keystore-encrypted token, which can't be decrypted on another device; icon
+     cache) is excluded implicitly. Don't add <exclude> for paths outside an <include>: lint FullBackupContent errors. -->
 <data-extraction-rules>
     <cloud-backup>
         <include domain="file" path="state.json" />
+        <include domain="file" path="album.json" />
     </cloud-backup>
     <device-transfer>
         <include domain="file" path="state.json" />
+        <include domain="file" path="album.json" />
     </device-transfer>
 </data-extraction-rules>

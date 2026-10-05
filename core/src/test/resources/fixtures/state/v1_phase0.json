@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "currentListId": "l",
+  "lists": [{
+    "id": "l", "title": "Groceries", "createdAt": 0,
+    "openAisle": "bakery",
+    "items": [
+      {"id": "a", "name": "Bread", "aisleId": "bakery", "icon": "sliced_bread", "checked": true, "checkedAt": 9000, "addedAt": 100},
+      {"id": "b", "name": "Jam", "aisleId": "produce", "icon": "jam", "checked": true, "checkedAt": 5000, "addedAt": 200, "rarity": "SHINY"},
+      {"id": "c", "name": "Tea", "aisleId": "produce", "icon": "tea", "checked": false, "checkedAt": 7000, "bookSlot": 4, "addedAt": 300}
+    ]
+  }],
+  "store": {"name": "Corner store", "aislesText": "Produce\nBakery"},
+  "favourites": ["jam"]
+}

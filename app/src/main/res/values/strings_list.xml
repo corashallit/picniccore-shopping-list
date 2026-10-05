@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- List screen strings: WP5 (list screen, sticker book, baskets; docs/DESIGN_STICKER.md §6.1, §6.5, §6.6, §7, §16). -->
+
+    <!-- The app bar (§4.2, §16): "★ Hillcrest Market · 8 stops"; the star is drawn. -->
+    <string name="list_subtitle">%1$s\u00A0· %2$s</string>
+    <plurals name="list_stops">
+        <item quantity="one">%1$d\u00A0stop</item>
+        <item quantity="other">%1$d\u00A0stops</item>
+    </plurals>
+
+    <!-- A folded strip (§4.10): "A3 · 2 left of 5" / "5 of 5 in the basket"; TalkBack "Aisle 1, Produce: 2 left of 5". -->
+    <string name="list_strip_after_chip">"·\u00A0"</string>
+    <string name="list_strip_left_count">%1$d\u00A0left</string>
+    <string name="list_strip_left_tail">" of\u00A0%1$d"</string>
+    <string name="list_strip_done_count">%1$d\u00A0of\u00A0%2$d</string>
+    <string name="list_strip_done_tail">" in\u00A0the\u00A0basket"</string>
+    <string name="list_strip_label">Aisle %1$d, %2$s: %3$s</string>
+    <string name="list_strip_label_unsorted">%1$s: %2$s</string>
+    <string name="list_strip_left_spoken">%1$d left of %2$d</string>
+    <string name="list_strip_done_spoken">%1$d of %2$d in the basket</string>
+    <string name="list_strip_expand">Expand</string>
+    <!-- An aisle's whole name for TalkBack (§15): "Baking, store aisle 2"; the open tray's heading "Aisle 4, Baking, store aisle 2". -->
+    <string name="list_aisle_store_spoken">%1$s, store aisle %2$d</string>
+    <string name="list_aisle_heading">Aisle %1$d, %2$s</string>
+    <string name="list_tray_collapse">Collapse %1$s</string>
+
+    <!-- A row (§4.11, §15): the state and the custom actions. -->
+    <string name="list_row_got_it">got it</string>
+    <string name="list_row_not_checked">not checked</string>
+    <string name="list_row_check">Check</string>
+    <string name="list_row_uncheck">Uncheck</string>
+    <string name="list_row_delete">Delete</string>
+    <string name="list_row_edit">Edit</string>
+
+    <!-- The end of the list (§6.1, §16); the heart is drawn. -->
+    <plurals name="list_end_note">
+        <item quantity="one">♡ end of the list · %1$d sticker</item>
+        <item quantity="other">♡ end of the list · %1$d stickers</item>
+    </plurals>
+
+    <!-- The empty state (§4.21, §16). -->
+    <string name="list_empty_title">A brand-new sticker sheet!</string>
+    <string name="list_empty_body">Nothing on %1$s yet. Type it, snap your paper list, or just say it out loud.</string>
+    <string name="list_empty_action">Start my list</string>
+
+    <!-- The sticker book (§7.3, §7.7, §15). -->
+    <string name="list_book_summary">Trip sticker book, %1$s: %2$s, %3$s</string>
+    <plurals name="list_book_stickers">
+        <item quantity="one">%1$d of %2$d sticker</item>
+        <item quantity="other">%1$d of %2$d stickers</item>
+    </plurals>
+    <plurals name="list_book_aisles">
+        <item quantity="one">%1$d of %2$d aisle stamped</item>
+        <item quantity="other">%1$d of %2$d aisles stamped</item>
+    </plurals>
+    <string name="list_book_open">Open trip book</string>
+    <string name="list_book_added_spoken">%1$s added to today’s sticker book</string>
+    <string name="list_book_peeled_spoken">%1$s peeled out of today’s sticker book</string>
+    <!-- The stamp name tag (§7.7): "4 · Baking · 1 left" / "3 · Deli & meat · stamped". -->
+    <string name="list_stamp_tag_name">%1$d · %2$s</string>
+    <string name="list_stamp_tag_left">%1$s · %2$d left</string>
+    <string name="list_stamp_tag_stamped">%1$s · stamped</string>
+    <string name="list_trip_book_bonus">bonus sticker!</string>
+
+    <!-- The peek note (§4.23) for TalkBack. -->
+    <string name="list_peek_in_basket">%1$s, in the basket</string>
+    <!-- The Trip book sheet's sticker pages (§6.6, §15): the page buttons and actions, and what the dots and LCD say. -->
+    <string name="list_trip_book_next">Next page</string>
+    <string name="list_trip_book_previous">Previous page</string>
+    <string name="list_trip_book_page">Page %1$d of %2$d</string>
+    <!-- The last line of a peek note too long for the room it has. -->
+    <plurals name="list_peek_more">
+        <item quantity="one">+%1$d more</item>
+        <item quantity="other">+%1$d more</item>
+    </plurals>
+
+    <!-- The New trip sheet (§6.5, §16). -->
+    <string name="list_new_trip_title">Start a new trip?</string>
+    <string name="list_new_trip_body">This sticker book goes into your album.</string>
+    <string name="list_new_trip_clear">Clear what I got</string>
+    <string name="list_new_trip_keep">Keep everything, uncheck it all</string>
+    <string name="list_new_trip_not_yet">Not yet</string>
+
+    <!-- The overflow menu (§4.24, §16); My store, My pantry, Sticker album and Settings are the screens' own. -->
+    <string name="list_menu_new_trip">New trip</string>
+    <string name="list_menu_no_trip">No trip yet</string>
+    <string name="list_menu_switch_list">Switch list…</string>
+    <string name="list_menu_refresh">Refresh</string>
+    <!-- TalkBack: the tap-outside area behind the open overflow menu (§4.24, §15). -->
+    <string name="list_menu_close">Close menu</string>
+    <string name="list_action_refresh">Refresh stickers and aisles</string>
+
+    <!-- Sticky notes (§4.15, §16). -->
+    <string name="list_undo">Undo</string>
+    <string name="list_toast_torn_one">%1$s torn out</string>
+    <plurals name="list_toast_torn_many">
+        <item quantity="one">%1$d item torn out</item>
+        <item quantity="other">%1$d items torn out</item>
+    </plurals>
+    <string name="list_toast_new_book">New sticker book for today ✦ your last shop is in the album</string>
+    <!-- §0.4 Q9's add-side twin: the first add after 12 h idle filed the last shop's book; the next book opens at the
+         next check-off, so this one names no day. -->
+    <string name="list_toast_new_book_add">Fresh sticker book ✦ your last shop is in the album</string>
+    <string name="list_toast_new_trip">New trip · a fresh sticker book ♡</string>
+    <!-- The list switcher (§6.4): the delete confirm sheet says what goes with the list; the note once it has gone. -->
+    <plurals name="list_delete_items">
+        <item quantity="one">Its %1$d item goes with it.</item>
+        <item quantity="other">Its %1$d items go with it.</item>
+    </plurals>
+    <string name="list_toast_list_deleted">%1$s deleted</string>
+    <string name="list_toast_nudge">New shop? Start a fresh sticker book</string>
+    <string name="list_toast_nudge_action">New trip</string>
+    <plurals name="list_toast_sorted">
+        <item quantity="one">Sorted %1$d item</item>
+        <item quantity="other">Sorted %1$d items</item>
+    </plurals>
+    <plurals name="list_toast_drawn">
+        <item quantity="one">%1$d new sticker drawn</item>
+        <item quantity="other">%1$d new stickers drawn</item>
+    </plurals>
+    <plurals name="list_toast_left">
+        <item quantity="one">%1$d left in Everything else</item>
+        <item quantity="other">%1$d left in Everything else</item>
+    </plurals>
+    <!-- A move (Cora, 5 October; §6.3, §4.15): every move says what it changed, with Undo. "From now on" is the learned
+         correction: that item goes to that aisle on every later add and re-sort. The first move to an aisle says once that
+         smart sorting (the prompt rules) sends other kinds of the item there too; %3$s is the item's kind, lower case. -->
+    <string name="list_toast_moved">%1$s goes in %2$s from now on</string>
+    <string name="list_toast_moved_first">%1$s goes in %2$s from now on. Smart sorting puts other kinds of %3$s there too.</string>
+    <string name="list_toast_moved_unsorted">%1$s moved to Everything else</string>
+    <!-- The one-time hold hint (Cora, 5 October; §6.1): the first time her list shows items sorted into aisles. -->
+    <string name="list_hint_hold">Hold an item to edit it or move it to another aisle</string>
+    <string name="list_hint_hold_ok">Got it</string>
+</resources>

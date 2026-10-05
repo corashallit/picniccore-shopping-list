@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- "Picnic at dusk" window ground (PicnicTheme dark background token). -->
-    <color name="picnic_ground">#FF2B2140</color>
+    <!-- Night window ground: the Glow binder, as the night splash (docs/DESIGN_STICKER.md §2). -->
+    <color name="picnic_ground">#FF161A3E</color>
 </resources>

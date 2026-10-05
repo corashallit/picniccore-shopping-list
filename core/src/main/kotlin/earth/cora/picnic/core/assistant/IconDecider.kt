@@ -36,6 +36,14 @@ data class IconDecision(
     val icon: String?,
     /** The item's catalog category key (picks the fallback icon), or null if unknown. */
     val category: String?,
+    /**
+     * With "none": one line telling the live drawing what to show (the v4 prompt's subject, §18.3), e.g. "one squat
+     * glass jar of kimchi with a round screw lid; a few chunky folded cabbage leaves show through the glass".
+     * Null for a match or when the model gave none.
+     */
+    val look: String? = null,
+    /** The sticker families to draw it in, body first, at most two ([StickerPalette.NAMES]); empty if unknown. */
+    val families: List<String> = emptyList(),
 ) {
     companion object {
         val NONE: IconDecision = IconDecision(icon = null, category = null)
@@ -60,7 +68,8 @@ fun IconDecision.resolve(catalog: IconCatalog): ResolvedIcon {
  * IconDecider on the Responses API (verified live 2026-10-01: 12 names, 2.6 s, ~US$0.0004 cold).
  * Request: store=false, reasoning.effort from [model] ("none"), max_output_tokens from [model],
  * strict json_schema "icon_decisions" =
- * {decisions:[{id: enum(i1..iN), icon: enum(catalog.decidableKeys + "none"), category: enum(category keys)}]},
+ * {decisions:[{id: enum(i1..iN), icon: enum(catalog.decidableKeys + "none"), category: enum(category keys),
+ *   look: string ("" for a match), body: enum(sticker families), accent: enum(sticker families)}]},
  * input = developer RULES + the catalog grouped by category (cache breakpoint after it, on models that
  * take explicit cache fields) and a user message "Items:\ni1: <name>\n...". Rules text lives in
  * core/src/main/resources/prompts/icon_decider_rules.txt (docs/PROMPTS.md).
@@ -82,7 +91,7 @@ class ResponsesIconDecider(
             val body = Requests.responses(
                 model = model,
                 schemaName = "icon_decisions",
-                schema = Schemas.iconDecisions(wireIds, catalog.decidableKeys, categoryKeys),
+                schema = Schemas.iconDecisions(wireIds, catalog.decidableKeys, categoryKeys, StickerPalette.NAMES),
                 stable = stable,
                 context = null,
                 user = listOf(Requests.inputText(Prompts.itemsBlock(batch.map { it.name }))),
@@ -101,11 +110,18 @@ class ResponsesIconDecider(
     private fun toDecision(row: WireDecision): IconDecision {
         val icon = row.icon?.takeIf { it != Schemas.ICON_NONE && it in catalog && !catalog.isGeneric(it) }
         val category = row.category?.takeIf { it in categoryKeys } ?: icon?.let { catalog[it]?.category }
-        return IconDecision(icon = icon, category = category)
+        // The look only matters for a drawing, so only with "none"; the families come with every row.
+        val look = row.look?.let { Prompts.oneLine(it, MAX_LOOK_CHARS) }?.trimEnd('.')?.takeIf { icon == null && it.isNotEmpty() }
+        val families = listOfNotNull(row.body, row.accent).map { it.trim().lowercase() }
+            .filter { StickerPalette.family(it) != null }.distinct()
+        return IconDecision(icon = icon, category = category, look = look, families = families)
     }
 
     internal companion object {
         const val BATCH_SIZE = 40
+
+        /** A look is one line for the image prompt; longer answers are cut. */
+        const val MAX_LOOK_CHARS = 300
     }
 }
 
@@ -113,4 +129,11 @@ class ResponsesIconDecider(
 internal data class WireDecisions(val decisions: List<WireDecision>)
 
 @Serializable
-internal data class WireDecision(val id: String, val icon: String? = null, val category: String? = null)
+internal data class WireDecision(
+    val id: String,
+    val icon: String? = null,
+    val category: String? = null,
+    val look: String? = null,
+    val body: String? = null,
+    val accent: String? = null,
+)

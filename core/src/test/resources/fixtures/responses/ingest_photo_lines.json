@@ -1,0 +1,64 @@
+{
+ "id": "resp_photo_lines",
+ "object": "response",
+ "created_at": 1790867868,
+ "status": "completed",
+ "error": null,
+ "incomplete_details": null,
+ "max_output_tokens": 12000,
+ "model": "gpt-5.6-terra",
+ "output": [
+  {
+   "id": "msg_00b5d1627948c6e2016abe799d5ae887d2b3b76c4f705534a1",
+   "type": "message",
+   "status": "completed",
+   "content": [
+    {
+     "type": "output_text",
+     "annotations": [],
+     "text": "{\"items\": [{\"name\": \"Sourdough\", \"quantity\": null, \"note\": null, \"aisle_id\": \"bakery\", \"icon\": \"bakery_generic\", \"icon_fit\": \"exact\", \"skip_reason\": \"none\", \"named\": true, \"pantry_entry\": \"\"}, {\"name\": \"Canned tomatoes\", \"quantity\": \"796 mL can\", \"note\": null, \"aisle_id\": \"aisle-4-canned-goods-soups\", \"icon\": \"canned_tomatoes\", \"icon_fit\": \"exact\", \"skip_reason\": \"none\", \"named\": true, \"pantry_entry\": \"\"}, {\"name\": \"Milk\", \"quantity\": null, \"note\": null, \"aisle_id\": \"dairy-eggs\", \"icon\": \"milk_bag\", \"icon_fit\": \"exact\", \"skip_reason\": \"none\", \"named\": true, \"pantry_entry\": \"\"}, {\"name\": \"milk\", \"quantity\": \"4 L\", \"note\": null, \"aisle_id\": \"dairy-eggs\", \"icon\": \"milk_bag\", \"icon_fit\": \"exact\", \"skip_reason\": \"none\", \"named\": true, \"pantry_entry\": \"\"}, {\"name\": \"Salt\", \"quantity\": null, \"note\": null, \"aisle_id\": \"aisle-2-baking-spices\", \"icon\": \"salt\", \"icon_fit\": \"exact\", \"skip_reason\": \"in_pantry\", \"named\": true, \"pantry_entry\": \"salt\"}, {\"name\": \"Ground beef\", \"quantity\": \"2 lb\", \"note\": null, \"aisle_id\": \"meat-seafood\", \"icon\": \"ground_beef\", \"icon_fit\": \"exact\", \"skip_reason\": \"none\", \"named\": true, \"pantry_entry\": \"\"}], \"message\": \"Added 5 items from your list.\", \"lines\": [{\"text\": \"bread → sourdough\", \"crossed_out\": false, \"correction_of\": \"bread\", \"item_index\": 0}, {\"text\": \"tomatoes 796\", \"crossed_out\": false, \"correction_of\": null, \"item_index\": 1}, {\"text\": \"chips\", \"crossed_out\": true, \"correction_of\": null, \"item_index\": null}, {\"text\": \"milk\", \"crossed_out\": false, \"correction_of\": null, \"item_index\": 2}, {\"text\": \"Milk 4L\", \"crossed_out\": false, \"correction_of\": \"\", \"item_index\": 3}, {\"text\": \"salt\", \"crossed_out\": false, \"correction_of\": null, \"item_index\": 4}, {\"text\": \"beef 2 lb\", \"crossed_out\": false, \"correction_of\": null, \"item_index\": 5}, {\"text\": \"   \", \"crossed_out\": false, \"correction_of\": null, \"item_index\": null}, {\"text\": \"ghost\", \"crossed_out\": false, \"correction_of\": null, \"item_index\": 42}], \"recipe\": null}"
+    }
+   ],
+   "phase": "final_answer",
+   "role": "assistant"
+  }
+ ],
+ "reasoning": {
+  "context": "all_turns",
+  "effort": "low",
+  "mode": "standard",
+  "summary": null
+ },
+ "service_tier": "default",
+ "store": false,
+ "usage": {
+  "input_tokens": 6483,
+  "input_tokens_details": {
+   "cache_write_tokens": 6112,
+   "cached_tokens": 0
+  },
+  "output_tokens": 249,
+  "output_tokens_details": {
+   "reasoning_tokens": 0
+  },
+  "total_tokens": 6732
+ },
+ "tool_usage": {
+  "image_gen": {
+   "input_tokens": 0,
+   "input_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "output_tokens": 0,
+   "output_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "total_tokens": 0
+  },
+  "web_search": {
+   "num_requests": 0
+  }
+ }
+}

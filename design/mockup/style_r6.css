@@ -1,0 +1,41 @@
+/* ---------- r6 · the celebration is always the light pastel picnic, even when it plays over the glow-in-the-dark list:
+   re-declare the light ink + paper tokens on it and undo the dark-only descendant rules ---------- */
+§ .sk-dark .sk-cele{--sk-binder:#E6F6EE;--sk-stripe:#CDEEDD;--sk-pad:#FFFFFF;--sk-rule:#BCD0FF;--sk-margin:#FF9CC2;--sk-shadow:#6E7BD0;--sk-bp:#25307C;--sk-bp2:#4F5BA6;--sk-hanko:#C8321F;
+ --sk-spot-fill:#fff;--sk-spot-line:#3E4BB0;--sk-ghost-fill:#fff;--sk-ghost-line:#9AA8F5;--sk-hs:1.6px 2.2px 0 #6E7BD0;--sk-hs2:2.4px 3.4px 0 #6E7BD0;color:#25307C}
+§ .sk-dark .sk-cele .sk-stamp>svg.sk-ring{color:var(--sk-bp2)}
+§ .sk-dark .sk-cele .sk-stamp.is-now>svg.sk-ring{color:var(--sk-strawberry-t)}
+§ .sk-dark .sk-cele .sk-stamp .sk-sn{color:var(--sk-bp2)}
+§ .sk-dark .sk-cele .sk-ring circle{fill:#fff}
+/* r6: the spinning rays square must cover the scene at every angle (centre 180,304 → farthest corner 490 px; a 900 px square only guarantees 450),
+   and on the dark list the scene gets the light paper underneath so nothing navy shows through while the rays fade in */
+§ .sk-cele .c-rays{width:1200px;height:1200px}
+§ .sk-dark .sk-cele .c-scene{background-color:var(--sk-binder)}
+/* r6: sticker glint = an 80 % white band masked by the icon's own die-cut, swept in 6 stepped frames (ambient glint 0.9 s, shiny every 4 s) */
+§ .sk-gl{overflow:hidden;pointer-events:none}
+§ .sk-glb{fill:#fff;fill-opacity:.8;visibility:hidden}
+§ .sk-ico.is-glint .sk-glb{visibility:visible;animation:sticker-glr1 .9s steps(6,end) both}
+§ .sk-ico.is-shiny .sk-glb{visibility:visible;animation:sticker-glr 4s steps(6,end) infinite}
+@keyframes sticker-glr1{0%{transform:translateX(0)}100%{transform:translateX(94px)}}
+@keyframes sticker-glr{0%,80%{transform:translateX(0)}84%{transform:translateX(23.5px)}88%{transform:translateX(47px)}92%{transform:translateX(70.5px)}96%,100%{transform:translateX(94px)}}
+
+/* r7: a peeked (long-pressed) folded aisle sits above the aisles after it, so its note is never covered */
+§ .sk-aw.is-peek{position:relative;z-index:40}
+
+/* r8 · one basket rule: a basket holds only what has already been gotten. Empty = a dotted landing spot half-sunk in its mouth
+   (the same dashed ring as an unchecked row's spot). A done basket's lid shuts over everything got (the minis hide once the lid
+   has landed) and they show again under the open lid while you press and hold to peek */
+§ .bk .bk-wait{fill:var(--sk-spot-fill,#fff);stroke:var(--sk-spot-line,#3E4BB0);stroke-width:1.8px;stroke-dasharray:3.2 2.4}
+§ .bk .bk-minis{transition:visibility 0s}
+§ .bk.is-done .bk-minis{visibility:hidden;transition:visibility 0s .24s}
+§ .sk-aw.is-peek .sk-folded .bk.is-done .bk-minis{visibility:visible;transition:none}
+§ .bk .bk-in{transform-box:fill-box}
+§ .bk .bk-in.is-peek{animation:sticker-peek .5s steps(2,end)}
+/* un-check: the sticker hops back out of the basket onto its line; its row keeps the dotted outline until it lands */
+§ .sk-hopper.sk-hopout{animation:sticker-hop .34s cubic-bezier(.3,.9,.5,1) reverse both}
+§ .sk-row.is-landing .sk-ico>svg.sk-real{visibility:hidden}
+§ .sk-row.is-landing .sk-ico>svg.sk-ghost{display:block;position:absolute;left:0;top:0}
+/* r8 · pinned aisle header: the band is pinned as a full-tray-width plate (it covers the tray's 3 px white top edge, sides and
+   5 px padding, so it lines up with the tray exactly when not pinned) and it pins flush to the top edge of the scroll viewport
+   (−11 px list padding − 3 px border), so no row can ever show above, beside or through the corners of a pinned header */
+§ .sk-s-list .sk-aw>.sk-opened>.sk-tabrow{top:-14px;margin:-3px -8px 0;height:53px;padding:0 5px 5px 6px;border:3px solid #fff;border-bottom:0;border-radius:12px 12px 0 0}
+§ .sk-s-list .sk-aw>.sk-opened>.sk-tabrow>.sk-beefly{left:231px}

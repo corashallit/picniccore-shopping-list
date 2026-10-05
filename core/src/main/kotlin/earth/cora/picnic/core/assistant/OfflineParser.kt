@@ -3,6 +3,7 @@ package earth.cora.picnic.core.assistant
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.IconFit
 import earth.cora.picnic.core.model.Quantities
+import earth.cora.picnic.core.model.normalizeMetric
 import earth.cora.picnic.core.model.normalizeName
 
 /**
@@ -11,7 +12,8 @@ import earth.cora.picnic.core.model.normalizeName
  * - Split on newlines, commas and semicolons; trim; drop empty pieces and leading bullets.
  *   A comma between two digits ("1,5 kg") is a decimal comma, not a separator.
  * - A leading or trailing quantity is pulled out: "2 lemons", "2x lemons", "lemons x2", "500 g flour",
- *   "1 L milk", "1.5 kg potatoes" -> quantity "2" / "500 g" / "1 L" / "1.5 kg"; name capitalized.
+ *   "1 L milk", "1.5 kg potatoes" -> quantity "2" / "500 g" / "1 L" / "1.5 kg"; name capitalized. Imperial
+ *   amounts become metric (normalizeMetric: "2 lb potatoes" -> "907 g").
  * - Icon, cascade step 1: context.iconOverrides[normalizeName] else catalog.match(name) -> (key, EXACT);
  *   no local match -> (IconCatalog.DEFAULT_ICON, PENDING) for IconRepository to decide (step 2).
  * - aisleId = the matching correction's aisle (aisleFromCorrection = true), else null (Unsorted;
@@ -49,7 +51,7 @@ object OfflineParser {
             val corrected = corrections[key]
             out += ProposedItem(
                 name = name,
-                quantity = split.quantity,
+                quantity = split.quantity?.let(::normalizeMetric),
                 note = null,
                 aisleId = corrected,
                 icon = matched ?: IconCatalog.DEFAULT_ICON,

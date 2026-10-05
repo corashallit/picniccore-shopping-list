@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Easter eggs, Surprise lab, receipt strings: WP9 (docs/DESIGN_STICKER.md §12, §13.2, §16). Say plain true things. -->
+
+    <!-- Toasts (§16). -->
+    <string name="egg_toast_rain">Rain on the way · bring\u00A0the\u00A0tote!</string>
+    <string name="egg_toast_bonus">BONUS STAGE! ♪ · tap\u00A0a\u00A0stamp\u00A0to\u00A0stop</string>
+    <string name="egg_toast_back_pocket">Your album’s back pocket opened!</string>
+    <string name="egg_toast_look">Look</string>
+    <string name="egg_toast_receipt">Receipt saved to your sticker\u00A0book\u00A0♡</string>
+
+    <!-- Egg 5: the doodle by the frozen aisle's tab (decorative). -->
+    <string name="egg_snack_doodle">snack?</string>
+
+    <!-- Egg 18: the printed receipt's TalkBack action (§13.2: "Double-tap to save it to the sticker book"). -->
+    <string name="egg_receipt_save">save it to the sticker book</string>
+
+    <!-- The Surprise lab's practice list (§6.9). -->
+    <string name="egg_lab_reset">Start the practice list over</string>
+    <!-- The practice list's overflow menu: My store, My pantry, the album, Settings and the list switcher are her own. -->
+    <string name="egg_lab_not_here">That opens from your own list, not the practice copy</string>
+    <!-- The Unsorted section's tab on the practice list (§4.10). -->
+    <string name="egg_practice_everything_else">Everything else</string>
+</resources>

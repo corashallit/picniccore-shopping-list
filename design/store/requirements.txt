@@ -1,0 +1,3 @@
+# design/store/make_store_images.py. Python 3.11+.
+Pillow==12.3.0      # with libraqm for DynaPuff's kerning (the PyPI wheels have it)
+cairosvg==2.9.1     # rasterises the sticker drawables; needs the Cairo library (apt: libcairo2, brew: cairo)

@@ -1,0 +1,60 @@
+/* ---------- r5 · tear-off delete: rest row → swipe → tear → the slot closes → Undo toast → slot re-opens, one 3.2 s loop ---------- */
+§ .sk-m-slot{animation:sticker-tslot 3.2s ease-in-out infinite}
+@keyframes sticker-tslot{0%,70%{height:48px}82%,93%{height:0}99%,100%{height:48px}}
+§ .sk-m-slot .sk-m-tear{animation-name:sticker-tswipe}
+@keyframes sticker-tswipe{0%,12%{transform:translateX(0)}30%,94%{transform:translateX(-46px)}95%,100%{transform:translateX(0)}}
+§ .sk-m-slot .sk-m-tear>div{animation-name:sticker-tearl2,sticker-tsh2}
+§ .sk-m-slot .sk-m-tear .sk-tr{animation-name:sticker-tear2,sticker-tsh2}
+@keyframes sticker-tearl2{0%,34%{transform:none;opacity:1}44%{transform:translate(-4px,2px) rotate(-3deg);opacity:1}70%,95%{transform:translate(-40px,80px) rotate(-18deg);opacity:0}96%{transform:none;opacity:0}100%{transform:none;opacity:1}}
+@keyframes sticker-tear2{0%,34%{transform:none;opacity:1}44%{transform:translate(4px,6px) rotate(6deg);opacity:1}70%,95%{transform:translate(30px,90px) rotate(24deg);opacity:0}96%{transform:none;opacity:0}100%{transform:none;opacity:1}}
+@keyframes sticker-tsh2{0%,11%{box-shadow:0 0 0 transparent}12%,94%{box-shadow:1.6px 2.2px 0 var(--sk-shadow)}95%,100%{box-shadow:0 0 0 transparent}}
+/* at rest the row is an ordinary row with its dashed spot; as the swipe starts the spot cross-fades to the scissors stub and the perforation prints in */
+§ .sk-m-slot .sk-tr>span{position:absolute;display:grid;place-items:center}
+§ .sk-m-slot .sk-tspot{right:6px;top:0;width:48px;height:48px;animation:sticker-tspot 3.2s linear infinite}
+§ .sk-m-slot .sk-tcut{inset:0;opacity:0;animation:sticker-tcut 3.2s cubic-bezier(.3,1.4,.5,1) infinite}
+§ .sk-m-slot .sk-m-tear .sk-tr::before{opacity:0;animation:sticker-tperf 3.2s linear infinite}
+@keyframes sticker-tspot{0%,12%{opacity:1}19%,94%{opacity:0}95%,100%{opacity:1}}
+@keyframes sticker-tcut{0%,17%{opacity:0;transform:scale(.5) rotate(-20deg)}29%,94%{opacity:1;transform:none}95%,100%{opacity:0;transform:none}}
+@keyframes sticker-tperf{0%,12%{opacity:0}22%,94%{opacity:1}95%,100%{opacity:0}}
+/* the sticky-note Undo toast under the closed tray; the Undo chip is pressed, the slot opens and the row is back */
+§ .sk-m-tundo{position:absolute;left:50%;top:124px;width:232px;margin-left:-116px;height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 6px 0 12px;background:var(--sk-lemon-p);border:3px solid #fff;box-shadow:var(--sk-hs2);font:700 13.5px/1.2 var(--sk-f-body);color:var(--sk-bp);opacity:0;pointer-events:none;animation:sticker-tundo 3.2s cubic-bezier(.3,1.3,.5,1) infinite}
+§ .sk-m-tundo .sk-tape{left:74px;top:-10px;width:72px;height:16px;transform:rotate(3deg)}
+§ .sk-m-tundo .sk-chip{--cp:#fff;min-height:28px;font-size:12.5px;padding:2px 10px 2px 8px;gap:4px;animation:sticker-tundop 3.2s steps(1,end) infinite}
+@keyframes sticker-tundo{0%,81%{transform:translateY(-12px) rotate(-9deg);opacity:0}85%{transform:translateY(2px) rotate(-1deg);opacity:1}87%,93%{transform:rotate(-2deg);opacity:1}97%,100%{transform:translateY(-8px) rotate(-4deg);opacity:0}}
+@keyframes sticker-tundop{0%,90%{transform:none;box-shadow:var(--sk-hs)}91%,93%{transform:translate(1px,1.5px) scale(.94);box-shadow:none}94%,100%{transform:none;box-shadow:var(--sk-hs)}}
+
+/* ---------- r5 · egg 2 ladybug stroll: a 20 dp end cap she walks on, painted above the tray's inner panel ---------- */
+§ .sk-e-tray{top:5px}
+§ .sk-e-tray.sk-tray.is-compact{padding-bottom:23px}
+§ .sk-e-tray.sk-tray.is-compact .sk-trcap{height:20px;opacity:.6}
+§ .sk-egg .sk-e-lady{z-index:2}
+§ .sk-egg .sk-e-walk{left:14px;top:142px}
+§ .sk-egg .sk-e-walk svg{transform:rotate(90deg);animation-name:sticker-waddle3}
+§ .sk-egg .sk-e-fly{left:205px;top:137px;animation-name:sticker-efly2}
+@keyframes sticker-waddle3{0%{transform:rotate(85deg)}50%{transform:rotate(95deg)}}
+@keyframes sticker-efly2{0%,60%{opacity:0;transform:none}61%{opacity:1;transform:translate(0,0) rotate(90deg)}70%{transform:translate(26px,-2px) rotate(96deg)}80%{transform:translate(70px,-4px) rotate(100deg)}90%{transform:translate(172px,-10px) rotate(104deg);opacity:1}91%,100%{opacity:0}}
+
+/* ---------- r5 · screen 1 + screen 6: an expanded aisle is the kit's aisle tray (colour band header, rows on the lighter panel, patterned end cap) ---------- */
+§ .sk-aw>.sk-opened{background:var(--ap);background-image:none;border:3px solid #fff;border-radius:12px;padding:0 5px 18px}
+§ .sk-aw>.sk-opened::before{display:none}
+§ .sk-aw>.sk-opened>.sk-tabrow{background:var(--ap);box-shadow:none;border-radius:9px 9px 0 0;height:50px;padding:0 0 5px 1px}
+§ .sk-aw>.sk-opened>.sk-rows{position:relative;z-index:1;background:var(--sk-pad);border-radius:8px;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--am) 60%,transparent);padding:0 4px 0 8px;margin:0;list-style:none}
+§ .sk-aw>.sk-opened>.sk-rows>li+li{border-top:1px solid var(--sk-rule)}
+§ .sk-aw>.sk-opened>.sk-trcap{height:15px;opacity:.55}
+§ .sk-aw>.sk-opened>.sk-ladywalk{left:30px;top:auto;bottom:.5px;width:14px;height:14px;animation-name:sticker-ladycap}
+§ .sk-aw>.sk-opened>.sk-ladywalk svg{transform:rotate(90deg);animation-name:sticker-waddle3}
+@keyframes sticker-ladycap{0%{transform:translateX(0)}8%{transform:translateX(22px)}16%{transform:translateX(44px)}24%{transform:translateX(66px)}32%{transform:translateX(88px)}40%{transform:translateX(110px)}48%,60%{transform:translateX(130px)}61%{transform:translateX(130px);opacity:0}99%{transform:translateX(0);opacity:0}100%{transform:translateX(0);opacity:1}}
+§ .sk-dark .sk-aw>.sk-opened>.sk-rows{box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--am) 70%,transparent)}
+
+/* ---------- r5 · motion tile "Aisle done → lid + hanko → fold": the open aisle is a tray; it folds back into the white 56 dp strip ---------- */
+§ .sk-m-fold{background:var(--ap);border:3px solid #fff;border-radius:12px;padding:0 5px 14px;transition:background-color .24s steps(2,end),padding .24s cubic-bezier(.2,.9,.3,1)}
+§ .sk-m-fold .sk-tabrow{background:transparent;box-shadow:none;height:48px;padding:4px 0 0 1px}
+§ .sk-m-fold .sk-mrows{position:relative;z-index:1;background:var(--sk-pad);border-radius:8px;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--am) 60%,transparent);padding:0 4px 0 8px;margin:0;list-style:none}
+§ .sk-m-fold .sk-mrows>li+li{border-top:1px solid var(--sk-rule)}
+§ .sk-m-fold .sk-trcap{transition:opacity .16s}
+§ .sk-m-fold.is-shut{background-color:var(--sk-pad);padding-bottom:2px}
+§ .sk-m-fold.is-shut .sk-trcap{opacity:0}
+§ .sk-m-fold{left:8px;right:8px}
+§ .sk-m-fold .sk-tabrow{gap:2px}
+§ .sk-m-fold .sk-tab{padding-right:28px}
+§ .sk-m-fold .sk-chev{width:40px}

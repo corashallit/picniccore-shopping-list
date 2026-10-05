@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import earth.cora.picnic.core.llm.LlmConfig
 import earth.cora.picnic.platform.PicnicLog
@@ -30,7 +31,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * filesDir/datastore/settings.preferences_pb (not backed up) plus the encrypted OpenAI key in [tokenStore].
  *
  * Keys: `draw_icons` (absent = true), `token_hint` (masked key; present = a key is stored),
- * `install_id` (random UUID, created on first use; hashed into LlmConfig.safetyIdentifier). Builds
+ * `install_id` (random UUID, created on first use; hashed into LlmConfig.safetyIdentifier), the Surprises switches
+ * (`eggs`, `sounds`, `haptics`, `next_stop_card`, `celebration`, `weather`, `use_my_area`; absent = the switch's
+ * default, [Surprise.default]), the egg state `dusk_binder` and `surprise_lab` (absent = false) and `ants_day` (egg 17's
+ * last parade, her local date as yyyy-mm-dd; absent = never), `seen_books` (the trip books the album has shown, §7.8;
+ * absent = none), and `move_note_shown` and `hold_hint_done` (the one-time move notes, §6.1, §6.3; absent = false). Builds
  * with a server-address setting also stored `base_url`; [migrateOnce] removes it. The key itself
  * never enters DataStore, a Flow, a data class or a log line: it is decrypted only inside [token].
  */
@@ -77,6 +82,41 @@ class DataStoreSettingsRepository(
 
     override suspend fun setDrawIcons(enabled: Boolean) {
         dataStore.edit { if (enabled) it.remove(DRAW_ICONS) else it[DRAW_ICONS] = false }
+    }
+
+    override suspend fun setSurprise(surprise: Surprise, on: Boolean) {
+        val key = SURPRISE_KEYS.getValue(surprise)
+        dataStore.edit { if (on == surprise.default) it.remove(key) else it[key] = on }
+    }
+
+    override suspend fun setDuskBinder(on: Boolean) {
+        dataStore.edit { if (on) it[DUSK_BINDER] = true else it.remove(DUSK_BINDER) }
+    }
+
+    override suspend fun setSurpriseLab(unlocked: Boolean) {
+        dataStore.edit { if (unlocked) it[SURPRISE_LAB] = true else it.remove(SURPRISE_LAB) }
+    }
+
+    override suspend fun markMoveNoteShown() {
+        dataStore.edit { it[MOVE_NOTE_SHOWN] = true }
+    }
+
+    override suspend fun markHoldHintDone() {
+        dataStore.edit { it[HOLD_HINT_DONE] = true }
+    }
+
+    override suspend fun antsDay(): java.time.LocalDate? =
+        prefs.first()[ANTS_DAY]?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+
+    override suspend fun markAntsDay(day: java.time.LocalDate) {
+        dataStore.edit { it[ANTS_DAY] = day.toString() }
+    }
+
+    override val seenBooks: Flow<Set<String>> = prefs.map { it[SEEN_BOOKS].orEmpty() }.distinctUntilChanged()
+
+    override suspend fun markBooksSeen(ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        dataStore.edit { it[SEEN_BOOKS] = it[SEEN_BOOKS].orEmpty() + ids }
     }
 
     /**
@@ -175,11 +215,16 @@ class DataStoreSettingsRepository(
 
     private fun Preferences.toSettings(): AppSettings {
         val hint = this[TOKEN_HINT]
-        return AppSettings(
+        val base = AppSettings(
             drawIcons = this[DRAW_ICONS] ?: true,
             hasToken = hint != null,
             tokenHint = hint,
+            duskBinder = this[DUSK_BINDER] ?: false,
+            surpriseLab = this[SURPRISE_LAB] ?: false,
+            moveNoteShown = this[MOVE_NOTE_SHOWN] ?: false,
+            holdHintDone = this[HOLD_HINT_DONE] ?: false,
         )
+        return Surprise.entries.fold(base) { s, surprise -> s.with(surprise, this[SURPRISE_KEYS.getValue(surprise)] ?: surprise.default) }
     }
 
     companion object {
@@ -190,6 +235,17 @@ class DataStoreSettingsRepository(
         internal val DRAW_ICONS = booleanPreferencesKey("draw_icons")
         internal val TOKEN_HINT = stringPreferencesKey("token_hint")
         internal val INSTALL_ID = stringPreferencesKey("install_id")
+        internal val DUSK_BINDER = booleanPreferencesKey("dusk_binder")
+        internal val SURPRISE_LAB = booleanPreferencesKey("surprise_lab")
+        internal val SEEN_BOOKS = stringSetPreferencesKey("seen_books")
+        internal val ANTS_DAY = stringPreferencesKey("ants_day")
+
+        /** The one-time move notes (Cora, 5 October; §6.1, §6.3): absent = not shown yet. */
+        internal val MOVE_NOTE_SHOWN = booleanPreferencesKey("move_note_shown")
+        internal val HOLD_HINT_DONE = booleanPreferencesKey("hold_hint_done")
+
+        /** One boolean key per Surprises switch, named [Surprise.key]; absent = [Surprise.default]. */
+        internal val SURPRISE_KEYS: Map<Surprise, Preferences.Key<Boolean>> = Surprise.entries.associateWith { booleanPreferencesKey(it.key) }
 
         /** Same scheme-less authority (host and port, default ports filled in); unparsable URLs never match. */
         internal fun sameHost(a: String, b: String): Boolean {

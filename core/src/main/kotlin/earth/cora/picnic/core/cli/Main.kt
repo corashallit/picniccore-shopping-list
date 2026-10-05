@@ -45,7 +45,9 @@ import kotlin.system.exitProcess
  *   icons "<item>"...            icon cascade steps 1-2: local match, then the IconDecider for the rest
  *   match "<item>"...            local icon match only (no network)
  *   parse "<text>"               OfflineParser only (no network)
- *   draw "<item name>" <out.webp> [--style=<png>] [--hint=<text>]   live icon (costs ~US$0.015)
+ *   draw "<item name>" <sheet.png> <out.webp> [--mask=<png>] [--subject=<look>] [--families=a,b]
+ *                                live sticker v4 on a neighbour sheet (costs ~US$0.015; the app composes the
+ *                                sheet; app/src/test/resources/icons/ai4/sheet_*.png are examples)
  *   test                         GET /models/{smart model}
  * Options: --aisles=<file>, --existing="Butter,Bananas", --correction="oat milk=dairy-eggs" (repeatable),
  *   --quiet (no HTTP log lines). Developer-only model flags (the app has no equivalent):
@@ -79,7 +81,7 @@ private fun printUsage() {
     println(
         """
         Picnic core CLI. Commands: ingest "<text>" | photo <jpg> | transcribe <m4a> [--ingest] | recat "<item>"... |
-          baskets [aisles.txt] | icons "<item>"... | match "<item>"... | parse "<text>" | draw "<name>" <out.webp> | test
+          baskets [aisles.txt] | icons "<item>"... | match "<item>"... | parse "<text>" | draw "<name>" <sheet.png> <out.webp> | test
         Options: --aisles=<file> --existing="A,B" --correction="name=aisle-id" --quiet
                  --smart=<model> --smart-effort=<e> --fast=<model> --fast-effort=<e> (developer only)
         Env: OPENAI_API_KEY (required for network commands), PICNIC_BASE_URL (default ${LlmConfig.DEFAULT_BASE_URL})
@@ -204,14 +206,23 @@ private class Cli(private val options: List<String>) {
     }
 
     private suspend fun draw(args: List<String>) {
-        require(args.size >= 2) { "draw needs \"<item name>\" <out.webp>" }
-        val style = File(option("style") ?: "../app/src/main/assets/icons/_style_reference.png")
-        require(style.isFile) { "style reference not found at ${style.path} (pass --style=<png>)" }
+        require(args.size >= 3) { "draw needs \"<item name>\" <sheet.png> <out.webp>" }
+        val sheet = File(args[1])
+        require(sheet.isFile) { "no sheet at ${sheet.path}" }
+        val mask = File(option("mask") ?: "../app/src/main/assets/icons/mask.png")
+        require(mask.isFile) { "mask not found at ${mask.path} (pass --mask=<png>)" }
+        val families = option("families")?.split(',')?.map { it.trim() }.orEmpty()
         val icon = assistant.drawIcon(
-            IconDrawRequest(itemName = args[0], hint = option("hint"), styleReference = style.readBytes(), styleReferenceFileName = style.name),
+            IconDrawRequest(
+                itemName = args[0],
+                sheet = sheet.readBytes(),
+                mask = mask.readBytes(),
+                subject = option("subject").orEmpty(),
+                families = families,
+            ),
         )
-        File(args[1]).writeBytes(icon.bytes)
-        println("Wrote ${icon.bytes.size} bytes (${icon.mimeType}) to ${args[1]} in ${icon.meta.latencyMs} ms")
+        File(args[2]).writeBytes(icon.bytes)
+        println("Wrote ${icon.bytes.size} bytes (${icon.mimeType}) to ${args[2]} in ${icon.meta.latencyMs} ms")
     }
 
     private fun printIngest(result: IngestResult) {

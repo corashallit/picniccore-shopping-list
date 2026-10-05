@@ -12,22 +12,43 @@ import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.llm.ConfigSource
 import earth.cora.picnic.core.llm.OpenAiClient
 import earth.cora.picnic.core.llm.TokenSource
+import earth.cora.picnic.core.calendar.PlaceSource
+import earth.cora.picnic.core.calendar.SunClock
 import earth.cora.picnic.core.model.StateOps
+import earth.cora.picnic.core.store.AlbumStore
+import earth.cora.picnic.core.store.JsonFileAlbumStore
 import earth.cora.picnic.core.store.JsonFileStateStore
 import earth.cora.picnic.core.store.StateStore
+import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.icons.AppIconRepository
-import earth.cora.picnic.icons.AssetIconImages
-import earth.cora.picnic.icons.BundledIcons
-import earth.cora.picnic.icons.IconImages
+import earth.cora.picnic.icons.AppStickerArt
 import earth.cora.picnic.icons.IconRepository
+import earth.cora.picnic.icons.LiveDrawJackpot
+import earth.cora.picnic.icons.StickerArt
+import earth.cora.picnic.platform.AndroidAnnouncer
+import earth.cora.picnic.platform.AndroidFeedback
+import earth.cora.picnic.platform.AndroidTimeouts
+import earth.cora.picnic.platform.AreaPlaceSource
+import earth.cora.picnic.platform.Announcer
 import earth.cora.picnic.platform.AudioRecorder
 import earth.cora.picnic.platform.CapturePhotoPreparer
+import earth.cora.picnic.platform.Feedback
 import earth.cora.picnic.platform.PhotoPreparer
+import earth.cora.picnic.platform.Timeouts
 import earth.cora.picnic.platform.VoiceRecorder
 import earth.cora.picnic.settings.DataStoreSettingsRepository
 import earth.cora.picnic.settings.KeystoreTokenStore
 import earth.cora.picnic.settings.SettingsRepository
+import earth.cora.picnic.core.weather.EnvironmentCanadaWeather
+import earth.cora.picnic.platform.DataStoreWeatherCache
+import earth.cora.picnic.platform.WeatherService
+import earth.cora.picnic.ui.eggs.AppSurpriseEngine
+import earth.cora.picnic.ui.eggs.SurpriseEngine
+import earth.cora.picnic.ui.eggs.SurpriseLabViewModel
+import earth.cora.picnic.ui.eggs.ThemeVariantSource
 import earth.cora.picnic.core.model.ItemSource
+import earth.cora.picnic.core.model.GroceryItem
+import earth.cora.picnic.core.model.Rarity
 import earth.cora.picnic.core.model.itemsNeedingAisle
 import earth.cora.picnic.platform.Captures
 import earth.cora.picnic.platform.PicnicLog
@@ -46,6 +67,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.ZoneId
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -55,6 +77,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * everything is lazy and touching a property never blocks the main thread on I/O.
  * ViewModels take the individual dependencies (not the container) so tests can pass fakes.
  * Models are NOT configured here: core's ModelDefaults is the one place (amendment A1).
+ * The art pass (docs/DESIGN_STICKER.md §21): this file belongs to the lead; packages send their hunks
+ * (a new service's construction) and the lead merges them. Phase 0 wires the C services with their stubs.
  */
 class AppContainer(private val app: Application) {
     /**
@@ -105,15 +129,86 @@ class AppContainer(private val app: Application) {
      */
     val iconDecider: IconDecider by lazy { ResponsesIconDecider(client, catalog) }
 
-    val aisleSync: AisleSync by lazy { AisleSync(store, assistant, baskets) }
+    val aisleSync: AisleSync by lazy { AisleSync(store, assistant, baskets, clock) }
 
-    private val bundledIcons: BundledIcons by lazy { BundledIcons(app) }
+    /**
+     * The sticker album: filesDir/album.json, next to state.json on the backup allow-list (§7.2, amendment A5).
+     * Filing writes it BEFORE state.json (TripFiling); [startOnce] keeps it in step with every committed state.
+     */
+    val album: AlbumStore by lazy { JsonFileAlbumStore(File(app.filesDir, "album.json")) }
 
-    private val assetIconImages: AssetIconImages by lazy {
-        AssetIconImages(bundledIcons, catalog, File(AppIconRepository.iconsDir(app), "custom"))
+    /**
+     * Sounds + haptics (§14): SoundPool sonification gated by Surprises → Sounds and the ringer, View haptics
+     * gated by Surprises → Haptics. Built in [startOnce], before MainActivity resumes, so its window tracker
+     * sees the activity.
+     */
+    val feedback: Feedback by lazy { AndroidFeedback.create(app, settings.settings, appScope) }
+
+    /** Polite TalkBack announcements (§15), de-duplicated within 1 s. */
+    val announcer: Announcer by lazy { AndroidAnnouncer(app) }
+
+    /** "Time to take action" and "Touch & hold delay" (§9, §15), read live from the phone's settings. */
+    val timeouts: Timeouts by lazy { AndroidTimeouts(app) }
+
+    /**
+     * Where sunset and the forecast are computed (§0.4 Q6, WP8): Toronto unless Surprises → Use my area is on and coarse
+     * location is granted; then the phone's approximate area, rounded to 0.1° before any use, refreshed at most every 6 h.
+     */
+    val places: PlaceSource by lazy { AreaPlaceSource.create(app, settings, clock) }
+
+    /**
+     * Today's weather for eggs 11 and 16 (§12.4, §0.4): the Environment Canada forecast city nearest [places]' point,
+     * fetched at most every 3 h while Surprises → Weather is on, cached in DataStore.
+     */
+    val weather: WeatherService by lazy {
+        WeatherService(EnvironmentCanadaWeather(place = { places.place() }), DataStoreWeatherCache.create(app), clock, city = { places.place().cityCode })
     }
 
-    /** The icon cascade on device: decider batcher, live drawing queue, bespoke cache (§8.3). */
+    /** Every Easter-egg trigger (§12, WP9). */
+    val surprises: SurpriseEngine by lazy {
+        AppSurpriseEngine(
+            store = store,
+            album = album,
+            settings = settings,
+            catalog = catalog,
+            scope = appScope,
+            clock = clock,
+            feedback = feedback,
+            timeouts = timeouts,
+            weather = weather,
+            places = places,
+            // Midnight and golden hour are her local time (§12.2 eggs 5 and 12); the season calendar stays Toronto's.
+            localZone = ZoneId.systemDefault(),
+            // Read at each tap (not at construction: themeVariants itself reads this engine's state).
+            variant = { themeVariants.variant.value },
+        )
+    }
+
+    /** Day / Glow / Dusk / Golden (§2.5); MainActivity feeds it the system dark mode (WP4). Ticks once a minute. */
+    val themeVariants: ThemeVariantSource by lazy {
+        ThemeVariantSource(
+            settings, clock, SunClock, places, ZoneId.systemDefault(),
+            duskShown = surprises.state.map { it.dusk },
+            onTick = { surprises.refresh() },
+        ).also { it.start(appScope) }
+    }
+
+    /** The Surprise lab's practice list (§6.9): a sandbox per visit, with the phone's sounds, haptics and timeouts. */
+    val surpriseLab: () -> SurpriseLabViewModel get() = SurpriseLabViewModel.factory(feedback, announcer, timeouts)
+
+    /**
+     * Sticker art for ItemIcon (§3.3, §19.2), provided to the theme as LocalStickerArt: library vectors from
+     * StickerManifest, live stickers from filesDir/icons/custom/<id>.webp and their `.cut` paths, decoded off the main
+     * thread into a bounded memory cache.
+     */
+    private val appStickerArt: AppStickerArt by lazy { AppStickerArt(File(AppIconRepository.iconsDir(app), "custom")) }
+
+    val stickerArt: StickerArt get() = appStickerArt
+
+    /**
+     * The icon cascade on device: decider batcher, live drawing queue (v4), bespoke cache (§8.3). A redraw that
+     * deletes the file it replaced drops that sticker from [stickerArt]'s memory too.
+     */
     val icons: IconRepository by lazy {
         AppIconRepository(
             app = app,
@@ -124,13 +219,18 @@ class AppContainer(private val app: Application) {
             catalog = catalog,
             appScope = appScope,
             clock = clock,
-            bundled = bundledIcons,
-            onIconReplaced = assetIconImages::evictCustom,
+            album = album,
+            onIconReplaced = appStickerArt::evict,
+            // Egg 13 (WP9): a live drawing for an APPROXIMATE item comes out a jackpot 1 in 100.
+            jackpot = object : LiveDrawJackpot {
+                override fun drawing(item: GroceryItem) = surprises.onIconDrawing(item)
+
+                override fun drawn(item: GroceryItem): Rarity = surprises.onIconDrawn(item)
+
+                override fun failed(item: GroceryItem) = surprises.onIconDrawFailed(item)
+            },
         )
     }
-
-    /** Bitmap loader provided to the theme layer through LocalIconImages. */
-    val iconImages: IconImages get() = assetIconImages
 
     val photos: PhotoPreparer by lazy { CapturePhotoPreparer(app) }
 
@@ -140,7 +240,7 @@ class AppContainer(private val app: Application) {
     private val _ready = MutableStateFlow(false)
 
     /**
-     * True once [startOnce] has parsed the icon catalog (a ~105 KB JSON resource) off the main
+     * True once [startOnce] has parsed the icon catalog (a ~110 KB JSON resource) off the main
      * thread. MainActivity keeps the splash screen up and composes nothing until then, so no
      * ViewModel factory ever parses it on the main thread.
      */
@@ -150,18 +250,20 @@ class AppContainer(private val app: Application) {
 
     /**
      * Once per process (MainActivity calls it on every onCreate; only the first call does anything),
-     * all in [appScope]: warm the catalog and the bundled-icon index, then resume the icon cascade
-     * (PENDING items from an offline or token-less session), sweep stale camera captures, and watch
-     * for a token being added.
+     * all in [appScope]: warm the catalog, then keep the album in step with the state (TripFiling.launchAlbumSync:
+     * collects check-offs, repairs a filing interrupted between album.json and state.json, §7.2), resume the icon
+     * cascade (PENDING items from an offline or token-less session), sweep stale camera captures, and watch for a
+     * token being added.
      */
     fun startOnce() {
         if (!started.compareAndSet(false, true)) return
+        feedback // registers its resumed-window tracker (haptics) before the first onResume
         appScope.launch {
             withContext(Dispatchers.IO) {
                 catalog.match("milk") // parses the catalog and builds its match index
-                bundledIcons.keys
             }
             _ready.value = true
+            TripFiling.launchAlbumSync(appScope, store, album, catalog, clock)
             icons.resumePending()
             withContext(Dispatchers.IO) { Captures.sweepStale(app) }
         }

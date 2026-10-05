@@ -111,6 +111,25 @@ internal object ResponsesOutput {
         return byUrl.map { (url, title) -> WebSource(url, title) }
     }
 
+    /**
+     * What the model searched for, in order and without repeats: each search action's `query` (or its `queries`),
+     * trimmed to one line. The thinking box quotes the first (DESIGN_STICKER §4.18): it is the real query, never her note.
+     */
+    fun searchQueries(resp: JsonObject): List<String> {
+        val out = LinkedHashSet<String>()
+        for (item in output(resp)) {
+            if (item.string("type") != "web_search_call") continue
+            val action = item["action"] as? JsonObject ?: continue
+            if (action.string("type") != "search") continue
+            val queries = (action["queries"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
+            for (q in listOfNotNull(action.string("query")) + queries) {
+                val one = q.replace(Regex("\\s+"), " ").trim()
+                if (one.isNotEmpty()) out += one
+            }
+        }
+        return out.toList()
+    }
+
     /** Billable web searches: tool_usage.web_search.num_requests, else the number of search actions. */
     fun webSearches(resp: JsonObject): Int {
         val counted = ((resp["tool_usage"] as? JsonObject)?.get("web_search") as? JsonObject)

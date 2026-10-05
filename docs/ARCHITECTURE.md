@@ -1,10 +1,12 @@
-# Picnic List: architecture
+# Kirakira Basket: architecture
 
-Status: v1 contract, 2026-10-01, revised for client amendments A1 (no model settings) and A2 (icon matching cascade). Package and applicationId base: `earth.cora.picnic`. App name (placeholder): "Picnic List".
+Status: v1 contract, 2026-10-01, revised for client amendments A1 (no model settings), A2 (icon matching cascade) and A3 (baskets hold what's gotten); amended 2026-10-02 for the art pass: A4 (settings), A5 (trips and the in-store layout) and A6 (Cora's answers), plus every change listed in `docs/DESIGN_STICKER.md` §19.3, marked **Art pass** where it lands below; 2026-10-03: the contracts as part 1 of the art pass built them, then the additions part 2 made (WP6 motion, WP7 add flows; DESIGN_STICKER §19.2); 2026-10-04: part 3 joins WP9's eggs to WP5's List screen (§10.3); 2026-10-05: the paper decides the ink (`OnPaper`, §11.1–§11.2; DESIGN_STICKER §2.4.1, item 339). Package and applicationId base: `earth.cora.picnic` (unchanged). App name: **"Kirakira Basket"** (D20: the launcher label and the wordmark read `R.string.app_name`; it was "Picnic List" through v1, and the repository, the applicationId and the APK file names `picnic-list-*.apk` keep their old names).
 
 This document is the contract between the people (or agents) building the app in parallel. The Kotlin stub files listed in §3.2 are **normative**: they compile today, and their signatures are the interfaces. Bodies marked `TODO("<owner>: …")` are for the owner to fill in. If this document and a stub disagree, the stub wins. Fix both, and tell the other owners.
 
-**Changing a contract.** You may add to a contract freely: new optional parameters with defaults, new functions, new fields with defaults. Renaming or removing anything, or changing what an existing call means, needs a note to every consumer listed in §3.2. Persisted names (anything in `state.json`, icon keys, basket keys, aisle-id and name normalization) also need a schema migration (§6.4).
+**Changing a contract.** You may add to a contract freely: new optional parameters with defaults, new functions, new fields with defaults. Renaming or removing anything, or changing what an existing call means, needs a note to every consumer listed in §3.2. Persisted names (anything in `state.json` or `album.json`, icon keys, basket keys, aisle-id and name normalization) also need a schema migration (§6.4).
+
+**The art pass (direction C, "Furoku Sticker Album").** `docs/DESIGN_STICKER.md` is the authoritative build spec for the art pass: §19 lists its data and contract changes, §20 the acceptance checklist, §21 the ten work packages (WP1–WP10) and their file ownership. Its §19.3 amendments are landed in this document (each marked **Art pass**, with its consumers). Phase 0 (§21.3 step 1) landed every new contract as a compiling stub: signatures are normative like the skeleton's (§3.2), bodies marked `TODO("WP<n>: …")` or `TODO(WP<n>)` are for that package, and v1 behaviour is kept wherever the current screens still call an op. Part 1 (WP1–WP4, WP10) has filled its stubs; where it changed or added a signature, the text below gives the one it built. Where this document and DESIGN_STICKER.md disagree, DESIGN_STICKER.md wins and this document is fixed.
 
 Research this rests on (not in the repo): the OpenAI brief (`research/openai_api.md`, live-verified), the Android build brief (`research/android_build.md`), the icon catalog (`research/icon_catalog.json`) and the art directions (`research/directions.md`, concept renders in `design/concepts/`).
 
@@ -28,7 +30,10 @@ Units are metric (g, kg, mL, L), and Canadian specifics apply (4 L bagged milk).
 
 - **A1. No model settings.** There are no model-name fields, reasoning-effort choices, "Best/Budget" presets or web-search toggle anywhere a user can reach. Models are fixed defaults maintained by the developers in **one place**, core's `ModelDefaults` (§7.1). Settings keep only the user's OpenAI key (with "Test connection") and the "Draw new icons with AI" toggle. Changing a model means editing `ModelDefaults` and shipping an APK.
 - **A2. Icon matching cascade.** Every item that doesn't already carry an icon from the ingest call (typed items, the offline raw-lines fallback, renames) goes through: (1) a local match (normalized name against catalog keys, labels and aliases, plus learned icon overrides), then (2) an LLM decision through the `IconDecider` interface (gpt-6-luna today; OpenAI's Decisions API is the intended future implementation, §8.6), then (3) live generation of a bespoke icon. Each step falls through on failure or offline to the category fallback icon. The ingest call's own icon choice counts as step 2 for the items it returns (§8.2).
-- **A3. The basket holds what's gotten (Cora).** A collapsed aisle's basket shows mini icons of the aisle's **checked** items only, in the order the "In the basket" section lists them (oldest first; check time isn't tracked). Items still to get never appear in a basket. Nothing ticked yet means an empty basket of that aisle's kind, which fills as items are ticked; a cleared aisle (everything ticked) keeps its "cleared" stamp with a full basket. The badge keeps counting what is still to get, and the header announces both ("Produce, 2 to get, 3 in the basket", collapsed). This holds wherever `AisleBasket` shows mini icons (§4.2, §10.3, §11.4). Basket kinds whose look comes from their contents (flower bucket, ice bucket, bottle carrier, candy jar) keep that built-in decoration when empty; Cora prefers the maximalist look to a bare container, so the badge, not the art, says how much is left.
+- **A3. The basket holds what's gotten (Cora).** A collapsed aisle's basket shows mini icons of the aisle's **checked** items only, in the order the "In the basket" section lists them (oldest first; check time isn't tracked). Items still to get never appear in a basket. Nothing ticked yet means an empty basket of that aisle's kind, which fills as items are ticked; a cleared aisle (everything ticked) keeps its "cleared" stamp with a full basket. The badge keeps counting what is still to get, and the header announces both ("Produce, 2 to get, 3 in the basket", collapsed). This holds wherever `AisleBasket` shows mini icons (§4.2, §10.3, §11.4). Basket kinds whose look comes from their contents (flower bucket, ice bucket, bottle carrier, candy jar) keep that built-in decoration when empty; Cora prefers the maximalist look to a bare container, so the badge, not the art, says how much is left. **Art pass:** baskets now fill in check-off order (`GroceryItem.checkedAt`, A5), and the GOT IT hanko lands on the basket lid when the aisle is done (DESIGN_STICKER §5).
+- **A4. Surprises and About (settings, DESIGN_STICKER D3, §6.8).** Settings gains a **Surprises** card: Easter eggs (on), Sounds (off), Haptics (on), "Next stop" card (on), Celebration (on), Weather surprises (off), Use my area (off, A6), each a field of `AppSettings` (§9), and an **About & licences** page (the OFL texts, and the hidden Surprise lab, §6.9 there). Models, effort and the web-search toggle still never reach the UI: A1 stands. Consumers: `AppSettings` / `SettingsRepository` (WP8), every package that gates on a switch (WP6 Next card and celebration, WP9 eggs and weather, WP10 sounds and haptics).
+- **A5. Trips and the in-store layout (DESIGN_STICKER D1, D2, D13, §7).** A **trip** opens at the first check-off on a list without one and closes on **New trip** or when its list is deleted; its sticker book is filed into the **album** (`album.json`) first. Trip completion is an **invariant** of the state that every item-touching operation reconciles (`TripRules.reconcile`), so a trip finished by a delete, a move or an undo is complete too. `GroceryList.lastClosedAt` anchors the "new" star between trips. **Checked rows stay in place** in their aisle (no "In the basket" section; "Clear checked" becomes New trip). **One open aisle** (`GroceryList.openAisle`: null automatic, "" all folded, else a section id). Schema **v2** with a real v1 → v2 step (§6.4). Consumers: ListViewModel, AddViewModel, AislesViewModel, AisleSync, the icon repository.
+- **A6. Cora's answers of 2 October (DESIGN_STICKER §0.4).** The name is **Kirakira Basket**. "Use my area" is an opt-in that requests `ACCESS_COARSE_LOCATION` only, rounds the point to 0.1° before any use and feeds sunset and the forecast through `PlaceSource` (Toronto otherwise; §9, §16). There is a **pantry** (`AppState.pantry`, §4): every AI request carries it and the model leaves out worked-out items it covers, never named ones. The first check-off more than 12 h after a trip's last activity **starts a new book without asking** (`TripRules.startsNewBook`, `toggleCheckedStartingNewBook`, `TripFiling.toggle`; the old book is filed first and Undo restores it, `undoNewBook`). The celebration closes itself behind a visible progress bar (TalkBack: it waits for a tap). The mockup is a frozen reference: the spec wins. Consumers: WP3 (pantry, trips), WP5 (the auto new book), WP6 (celebration), WP7 (pantry rows), WP8 and WP9 (Use my area, the pantry screen), PRIVACY.md.
 
 ---
 
@@ -57,6 +62,8 @@ picniccore-shopping-list/
 │     src/test/{kotlin/…, resources/robolectric.properties (sdk=36), screenshots/ (goldens)}
 ├─ docs/                        ARCHITECTURE.md, BUILDING.md, OPENAI_KEY.md, PRIVACY.md, PROMPTS.md, RELEASING.md
 ├─ design/concepts/             art-direction concept renders (reference only)
+├─ design/stickers/ fonts/ sounds/   Art pass: the sticker DSL + Android emitter (WP1, WP2), font and sound scripts (WP2)
+├─ design/mockup/               Art pass: the r9 mockup generator, frozen as a visual reference (DESIGN_STICKER §18.4)
 └─ .github/workflows/android.yml
 ```
 
@@ -74,7 +81,9 @@ Commands (always `./gradlew`; the system gradle 8.14 cannot evaluate AGP 9, and 
 | debug APK | `./gradlew :app:assembleDebug` → `app/build/outputs/apk/debug/picnic-list-debug.apk` |
 | sideload APK (what CI ships; not debuggable) | `./gradlew :app:assembleSideload` → `app/build/outputs/apk/sideload/picnic-list-sideload.apk` |
 | app unit + screenshot tests | `./gradlew :app:testDebugUnitTest` / `:app:recordRoborazziDebug` / `:app:verifyRoborazziDebug` / `:app:compareRoborazziDebug` |
-| lint (CI gate) | `./gradlew :app:lintDebug` |
+| lint (CI gate) | `./gradlew :app:lintDebug` (also runs `:app:checkSounds`) |
+| **Art pass:** sticker art in sync with the DSL | `./gradlew :app:checkStickers` (Python 3.11+ with `design/stickers/requirements.txt`; run locally after any change under `design/stickers/`) |
+| **Art pass:** sound clips in sync with their recipes | `./gradlew :app:checkSounds` (Python 3 standard library only) |
 
 Sandbox-only flags must **never** be committed. Use `-I <scratch>/robolectric-mirror.init.gradle` for Robolectric jar downloads. The Maven Central mirror lives in `~/.gradle/init.d`.
 
@@ -85,6 +94,8 @@ Verified on this skeleton (2026-10-01): `./gradlew -p core build` (9 contract te
 ## 3. Ownership and interfaces
 
 ### 3.1 Files per implementer
+
+**Art pass (§19.3): this table is superseded by `docs/DESIGN_STICKER.md` §21** for the art pass: ten packages (WP1–WP10) plus the **lead**, each with exclusive file ownership. The lead owns this document, DESIGN_STICKER.md, `README.md` and the wiring files every package touches (`AppContainer.kt`, `PicnicApp.kt`, `app/build.gradle.kts`'s check tasks, `settings.gradle.kts`, `res/values*/colors.xml`); packages send their hunks to the lead. Strings: one file per package (`res/values/strings_<pkg>.xml`: `strings_theme` WP4, `strings_list` WP5, `strings_motion` WP6, `strings_add` WP7, `strings_screens` WP8, `strings_eggs` WP9, `strings_a11y` WP10; `strings.xml` keeps `app_name` and `wordmark`, WP8). The table below returns once the pass is merged.
 
 | Owner | Owns (creates/edits) |
 |---|---|
@@ -115,10 +126,26 @@ Verified on this skeleton (2026-10-01): `./gradlew -p core build` (9 contract te
 | `core/…/assistant/{OpenAiGroceryAssistant,OfflineParser,AisleSync}.kt` | core | app-shell (container), app-screens |
 | `app/…/AppContainer.kt`, `PicnicApp.kt` | app-shell | app-screens |
 | `app/…/settings/AppSettings.kt` (`AppSettings`, `SettingsRepository`, `InMemorySettingsRepository`, `maskToken`), `settings/TokenStore.kt` | app-shell | app-screens |
-| `app/…/icons/IconRepository.kt` (`IconRepository`, `IconImages`, `NoOpIconRepository`) | app-shell | app-screens, theme |
+| `app/…/icons/IconRepository.kt` (`IconRepository`, `NoOpIconRepository`; `IconImages` was replaced by `StickerArt` in the art pass) | app-shell | app-screens, theme |
 | `app/…/platform/{Captures,PhotoPreparer,VoiceRecorder (AudioRecorder),TokenCipher}.kt` | app-shell | app-screens |
 | `app/…/ui/theme/*` (tokens, `PicnicTheme`, components, decor slots, `ItemIcon`, `AisleBasket`, `AisleHeader`, `AisleSectionTitle`, `AisleSectionRow`, `ItemRowCard`, `Glyph`) | app-shell | app-screens |
 | `app/…/ui/PicnicAppRoot.kt` (`PicnicAppRoot(container)`) | app-screens | app-shell (MainActivity) |
+
+**Art pass contract files** (phase-0 stubs, DESIGN_STICKER §19; provider = the owning package):
+
+| Contract file | Provider | Consumers |
+|---|---|---|
+| `core/…/model/Model.kt` (+ `Rarity`, `Trip`, `Receipt`, `NewTripMode`, `AisleStyle`, `PantryEntry`, `BasketKind.MIXING_BOWL`), `Grouping.kt` (in-place shape), `StateOps.kt` (`now` + reconcile, trip ops), `TripRules.kt`, `BookSlots.kt`, `TripStats.kt`, `Pantry.kt` (+ `PantryMatch`), `Metric.kt`, `Aisles.kt` (+ `displayName`, `storeAisleNumber`) | WP3 | WP5, WP6, WP7, WP8, WP9 |
+| `core/…/store/AlbumStore.kt` (`Album`, `TripBook`, `AlbumStore` + `flush()`, `referencedCustomIconIds()`, `JsonFileAlbumStore`, `InMemoryAlbumStore`, `AlbumReconciler`), `TripFiling.kt` (the trip ops that write both files, §6.2) | WP3 | lead (container), WP1 (bespoke sweep), WP5, WP8, WP9 |
+| `core/…/calendar/{Seasons,SunClock,Place}.kt` (`Season`, `PlaceSource`) | WP3 (Place: WP8 · WP9) | WP5, WP9 |
+| `core/…/catalog/Personality.kt` | WP3 | WP1 (manifest), WP6 (`ToggleEvent`) |
+| `app/…/ui/theme/{Theme,MotionSpec,Hanko,Lcd,PuffyText}.kt`, `ItemIcon.kt`, `Decor.kt` (`ThemeVariant`, `PicnicTheme(variant, reducedMotion)`, `LocalReducedMotion`, `PicnicMotion` tokens, `readHold`, `words`, `FixedMotionScale`, `CheckMark(checked, seed, stampText)`, `HankoText`, `ItemIcon` C parameters, `StickerFlag`, `LcdChip`, `LcdText`, `LcdPetSprite`, `LcdState`, `PuffyText`) | WP4 | every screen package, WP6, WP9 |
+| `app/…/ui/list/motion/{Choreographer,ListPresentation,AnchorRegistry}.kt` (`ToggleEvent`, `ListChange`, `IdentityChoreographer`; part 2: `Choreographer.keepCelebration` / `onUserOpen`, `ToggleEvent.newBook`, `ChangeCause.NEW_BOOK_UNDO` with `ListChange.slot`, `SpotPhase.Appearing.inPlace`), `ListMotion.kt` (`FoldToggles`, `FoldFocusEffect`) | WP6 | WP5, WP9 |
+| `app/…/ui/add/{AddUiState,AddViewModel,AddFlows,AddSheet}.kt` (part 2: `AddEvent`, `AddCommit`, `AddPhase.Failed(AddProblem)`, `AddViewModel.requireKey` / `needsKey`, `AddFlows` with `takePhoto` / `pickPhoto` / `recordVoice`, `AddActions.onOpenAppSettings`) | WP7 | WP5 (places the dock, the sheet and the toasts), WP9 (commit hooks) |
+| `app/…/ui/eggs/{SurpriseEngine,ThemeVariantSource}.kt` (`NoOpSurpriseEngine`; part 3: the hooks with defaults listed in SurpriseEngine.kt's header, `AppSurpriseEngine(…, variant)`), `EggListHost.kt` (`EggListHost`, `EggListScope`), `EggOverlays.kt` (`EggAnchors`), `EggHooks.kt` (the list pieces) | WP9 | WP4 (MainActivity), WP5 (ListScreen, part 3), WP7 |
+| `app/…/platform/{Feedback,Announcer,Timeouts}.kt` (`Cue`, no-op implementations), `app/…/ui/a11y/Semantics.kt` (`TextOverflowed`) | WP10 | WP4, WP5, WP6, WP7, WP9 |
+| `app/…/icons/StickerArt.kt` (`StickerArt`, `StickerVector`, `LiveSticker`, `AppStickerArt`; replaces `IconImages`, §8) | WP1 | `ItemIcon` (through `LocalStickerArt`), `IconRepository`, the container, previews |
+| `app/…/ui/theme/gen/*.kt`, generated by `design/stickers/build_android.py` (`StickerManifest`: key → drawable, two families, personality, face, source; `BasketManifest`, `DecorManifest`, `LcdGlyphs`, `PatternTiles`) | WP1 (stickers), WP2 (the rest) | WP4, WP5, WP6, WP9 |
 
 ### 3.3 Hand-off points between implementers (the seams that must line up)
 
@@ -128,7 +155,8 @@ Verified on this skeleton (2026-10-01): `./gradlew -p core build` (9 contract te
 | app-screens → core | `assistant.ingest/transcribe/testConnection`, `OfflineParser.parse`, `aisleSync.sync/sortItems` | Catch `LlmError` only; show `friendlyMessage`. |
 | app-screens → app-shell | `icons.submit(items)` after every commit and every rename; `icons.redraw(name)`; `icons.forgetBespoke(name)` after `setItemIcon`; `icons.busy` for row sparkles | Never wait on icons. |
 | app-shell → core | `iconDecider.decide`, `assistant.drawIcon`, `store.update { applyIconDecisions / attachCustomIcon }`, `itemsNeedingIconDecision()` | The icon cascade, §8. |
-| app-shell → app-screens | `PicnicAppRoot(container)` inside `PicnicTheme` + `LocalIconImages`; theme components | Screens use only theme tokens/components (§11). |
+| app-shell → app-screens | `PicnicAppRoot(container)` inside `PicnicTheme` + `LocalStickerArt` and `LocalTimeouts` (art pass; v1: `LocalIconImages`); theme components | Screens use only theme tokens/components (§11). |
+| app-screens → core (art pass) | `TripFiling.newTrip / deleteList / toggle / addItems / undoNewBook` | Anything that files a book writes `album.json` before `state.json` through `TripFiling`; a ViewModel never pairs StateOps with album writes itself. |
 | app-shell → core | `ConfigSource { settings.llmConfig() }`, `TokenSource { settings.token() }` | Read before every call; the token never leaves `token()`. |
 
 ---
@@ -177,6 +205,30 @@ object SectionIds { UNSORTED = "_unsorted"; CHECKED = "_checked" }
 const val UNSORTED_WIRE_ID = "unsorted"                                     // LLM enum literal only
 ```
 
+**Art pass (A5, A6; DESIGN_STICKER §7.2, §19.1).** All additive, with defaults, so a v1 file loads unchanged:
+
+```kotlin
+enum class Rarity { NONE, SHINY, JACKPOT }                                   // persisted by name
+// GroceryItem (+) checkedAt: Long? = null (check-off time; basket order, shop time), bookSlot: Int? = null, rarity: Rarity = NONE
+// GroceryList (+) openAisle: String? = null (D2), trip: Trip? = null, lastClosedAt: Long? = null   // collapsedAisles kept, ignored by C
+// StoreProfile (+) aisleStyles: Map<String, AisleStyle> = emptyMap()
+// AppState (+) favourites: Set<String> = emptySet() (normalized names), pantry: List<PantryEntry> = emptyList()
+data class Trip(val id: String /* "t-<listId>-<startedAt>" */, val startedAt: Long, val storeName: String, val lastActivityAt: Long,
+    val completedAt: Long? = null /* set iff ≥1 item and all checked */, val finaleShownAt: Long? = null,
+    val shopMinutes: Int? = null /* frozen at the first completion */, val pet: Boolean = false, val receipt: Receipt? = null,
+    val receiptSaved: Boolean = false, val napDismissed: Boolean = false,
+    val bonus: BookSticker? = null /* the celebration's bonus sticker, set once per trip (setTripBonus), filed as TripBook.bonus */)
+data class Receipt(val printedAt: Long, val dateLabel: String, val store: String, val stickers: Int, val baskets: Int, val minutes: Int?, val shiny: Int)
+data class AisleStyle(val family: String? = null, val pattern: String? = null, val storeAisle: Int? = null)
+data class PantryEntry(val name: String, val icon: IconRef? = null, val addedAt: Long)
+enum class NewTripMode { CLEAR_GOTTEN, UNCHECK_ALL }                         // not persisted
+enum class BasketKind { …, MIXING_BOWL }                                     // the 17th kind (D8)
+```
+
+`STATE_SCHEMA_VERSION` is **2**, with the real v1 → v2 step (§6.4, WP3); a v2 file without `pantry` loads with an empty pantry and needs no bump. `SectionIds.CHECKED` survives only for the v1 list screen's bridge until WP5 lays rows in place.
+
+**Trips (A5, A6; `model/TripRules.kt`, `TripStats.kt`, `BookSlots.kt`, `TripBooks.kt`, all pure).** `TripRules.reconcile(list, now, storeName = "")` ends every operation that touches items and keeps the invariants: **a trip exists exactly while the list has a sticker** (a checked item): the last un-check or delete closes it without filing, and a sticker that comes back with no trip open (a restore, a revive) opens one with id `tripId(listId, earliest check-off)`; `completedAt` is set iff the list has ≥ 1 item and all are checked; `shopMinutes` is frozen at the first completion; `lastActivityAt` moves only on check and un-check, which set it themselves. Queries: `isComplete(list)`; `finaleOwed(list)` (complete, finale not shown); `finaleIsStale(list, now)` (owed, but completed more than `FINALE_GRACE_MILLIS` = 30 min ago: mark it shown instead of playing it); `newAnchor(list)` (the open trip's `startedAt`, else `lastClosedAt`; null = no "new" stars) and `isNew(list, item)`; `startsNewBook(list, now)` (last activity more than `IDLE_MILLIS` = 12 h ago); `shopIsOver(list, now)` (idle, or the finale shown more than `SHOP_OVER_MILLIS` = 30 min ago: an un-check, a revive or a tear-off then files the book first, DESIGN_STICKER §7.1). `TripStats` (`of`, `formatMinutes`, `lastSessionStart`, `shopMinutes`): sessions break at gaps over 45 min between check-offs, and shop minutes run from the first check-off of the last session to the completion, **or to the last check-off when the completion comes more than 45 min after it** (the last item deleted at home hours later). `BookSlots.assign` / `compact` keep the book's spots; `tripBook(listId, now)` is the book New trip or a delete would file (`bookSticker`, `stamps`, the look from `AisleRotation`).
+
 There is a single store profile shared by all lists. "Unsorted" is represented only as `aisleId == null` (or an id that is not a current aisle). The literal `"unsorted"` exists only on the wire to the model.
 
 `IconFit` meanings (the icon cascade, §8.2):
@@ -191,10 +243,29 @@ There is a single store profile shared by all lists. "Unsorted" is represented o
 - `slugify(s)` = `foldText(s)` with spaces replaced by `-`. For example, "Aisle 2 - Baking & spices" → `aisle-2-baking-spices`.
 - `normalizeName(name)` = `foldText(name)` plus a conservative singularization of the **last word only**, applied when the word is longer than 3 characters: `ies→y`; `oes→o`; words ending in `ss`, `us` or `is` are left alone; otherwise a trailing `s` is dropped. This is **the** key for dedupe, corrections, icon overrides, the IconDecider batch and the bespoke-icon cache.
 - `Aisles.parse(text)`: one aisle per non-blank line. Lines starting with `#` are comments. A leading bullet (`- `, `* `, `• `, `1. `, `2) `) is stripped. `id = slugify(name)`; an empty slug becomes `aisle-<position>`, and the reserved slug `unsorted` becomes `unsorted-aisle`. Duplicates get `-2`, `-3` and so on, skipping ids already used. Positions are 1-based. The default text is the 14-aisle Ontario store used in the benchmark; its ids (`produce`, `bakery`, `deli-cheese`, …, `bulk-natural-foods`) match the research fixtures exactly.
+- **"Also here" notes (Cora, 5 October; DESIGN_STICKER §0.4, §6.7).** A trailing `(also: toothpaste, floss)` on an aisle line is `Aisle.note` (`also` in any case, `also here:` too, the closing bracket optional) and is never part of the name or the id, so ids are unchanged by any note and a text without notes parses exactly as before. A note is kept to `Aisles.NOTE_MAX` (80) characters, cut after a whole word. A note lives in `aislesText` like the rest of the aisle (nothing new is persisted, no schema change); `setAisleNote` rewrites only the end of its line, and `renameAisle`, `moveAisle` and `commitAislesText` keep each note with its aisle. Only My store shows notes; `Prompts.contextBlock` sends each aisle with its note (§7.3).
 
-### 4.2 Grouping (`ListGrouping.group(list, aisles, basketFor)`)
+### 4.2 Grouping (`ListGrouping.group(list, aisles, basketFor, styleFor)`)
 
-`group` returns a `GroupedList(sections, total, remaining)`. The rules:
+**Art pass (replaces the CHECKED-section shape below; consumer: ListViewModel / ListUiState).** There is no CHECKED section: checked rows stay in their aisle (D1).
+
+```kotlin
+enum class SectionKind { AISLE, UNSORTED }
+data class AisleSection(val id: String, val kind: SectionKind, val aisle: Aisle?, val position: Int /* walking position, 0 = UNSORTED */,
+    val displayName: String, val storeAisle: Int?, val rows: List<GroceryItem> /* every item, addedAt order */,
+    val gotten: List<GroceryItem> /* checked, checkedAt order */, val toGet: Int, val total: Int, val complete: Boolean, val basket: BasketKind)
+data class GroupedList(val sections: List<AisleSection>, val total: Int, val checked: Int, val stops: Int,
+    val currentSectionId: String?, val openSectionId: String?, val nowSectionId: String?)
+```
+
+- Sections: UNSORTED ("Everything else") first **whenever it has any item**, then every aisle with at least one item in walking order. `stops` = the number of sections.
+- `rows` are every item, oldest first; `gotten` the checked ones in check-off order (`checkedAt`, falling back to `addedAt`): what the basket holds. `complete` = at least one item and nothing left to get.
+- `displayName` is the name without its store prefix (`Aisle.displayName()`, D9); `storeAisle` is `AisleStyle.storeAisle`, else `storeAisleNumber(name)`. The number circle shows `position`.
+- `currentSectionId`: the first aisle in walking order with something left; UNSORTED only when it is all that is left. `openSectionId`: `openAisle` null → current, "" → none, a stale id → current. `nowSectionId` (the "now" ring): the open section if it has items left, else the current one.
+
+The v1 rules, kept for reference until WP5 replaces the screen (the phase-0 list bridge derives them from the shape above):
+
+`group` returned a `GroupedList(sections, total, remaining)`. The rules:
 
 - **Which section an item goes in:** its `aisleId` if that id is a current aisle, otherwise UNSORTED.
 - **Section order:** UNSORTED first (only when it has unchecked items), then the aisles in walking order, then CHECKED last (only when something is checked). Unsorted goes first because those items need the user's attention.
@@ -207,6 +278,8 @@ There is a single store profile shared by all lists. "Unsorted" is represented o
 
 The app changes state **only** through these functions, always inside `store.update { … }`. They never do I/O, treat unknown ids as a no-op, and return the *same instance* when nothing changed.
 
+**Art pass (replaces; consumers: ListViewModel, AddViewModel, AislesViewModel, AisleSync).** Every operation that touches items takes `now` and ends with `TripRules.reconcile(list, now, storeName)`, which keeps the trip invariants (§4): `toggleChecked(listId, itemId, now)` (one atomic transition: checkedAt, the book slot, opening the trip, `lastActivityAt`), `addItems(listId, items, now): Pair<AppState, AddOutcome>` (matches incoming names against **all** items: an unchecked match is dropped, a checked match is un-checked; `AddOutcome(added, alreadyThere, revived)` lists item ids), `removeItem` / `restoreItem(…, now)`, `moveItemToAisle(…, now)`, `applyAisleAssignments(map, now)`, `setAislesText(text, guess, now)`. New: `commitAislesText` (line diff; renames keep their items), `renameAisle`, `moveAisle`, `setOpenAisle(listId, sectionId?)` (replaces `setSectionCollapsed`), `newTrip(listId, mode, now): Pair<AppState, TripBook?>` (replaces `clearChecked`; the book is written to the album **before** the state), `deleteList(listId, now): Pair<AppState, TripBook?>` (files a non-empty book first), `markFinaleShown`, `hatchPet`, `printReceipt`, `saveReceipt`, `dismissNap`, `setRarity`, `setFavourite`, `setAisleStyle`, `setAisleBasket`, `setTripBonus(listId, bonus)` (`Trip.bonus`; the first one stays), and the pantry ops (`model/Pantry.kt`: `pantryText`, `setPantryText` (splits on new lines, commas, semicolons and " and ", drops quantities, dedupes by `normalizeName`, keeps the icon and `addedAt` of unchanged names), `addToPantry`, `removeFromPantry`, `setPantryIcon`, `inPantry`). **The check-off tap is `toggleCheckedStartingNewBook(listId, itemId, now): Pair<AppState, AutoNewBook?>`** (A6): it is `toggleChecked` unless it checks an item on a trip `TripRules.startsNewBook` calls idle (then the old book is filed, `newTrip(CLEAR_GOTTEN)`, and the item is checked onto a fresh trip) or un-checks one on a trip whose shop is over (`TripRules.shopIsOver`: the book is filed with the sticker in it and the item comes back unchecked on the fresh list; `addItemsStartingNewBook` and `removeItemStartingNewBook` do the same for a revive and a tear-off), and `AutoNewBook(book, undo: NewBookUndo(listId, itemId, trip, cleared, lastClosedAt, openAisle))` carries what the toast's Undo needs. `undoNewBook(undo, now)` brings the old trip and its cleared items back and checks everything checked since into the old book. Screens call both through `TripFiling` (§6.2), which writes the album first. `ingestContext` also carries the first 200 pantry entries. Full signatures: DESIGN_STICKER §19.1. Phase 0 keeps v1 behaviour where noted in `StateOps.kt`; `clearChecked` and `setSectionCollapsed` stay, deprecated, until WP5's screen stops calling them.
+
 | Function | Semantics |
 |---|---|
 | `StateOps.initialState(listId, now)` | One empty list "Groceries", default store |
@@ -215,6 +288,8 @@ The app changes state **only** through these functions, always inside `store.upd
 | `toggleChecked`, `removeItem`, `restoreItem(listId, item, index)` | For undo, the caller captures the item and its index before calling `removeItem`. |
 | `editItemDetails(listId, itemId, name, quantity, note, catalog)` | Name (blank = keep), quantity and note (blank = null). **If `normalizeName` changes**, the icon is re-resolved locally (cascade step 1): `customIconId = null`; `localIcon(newName)` → EXACT, else `DEFAULT_ICON` + PENDING. The caller then calls `icons.submit(listOf(updated))`. |
 | `moveItemToAisle(listId, itemId, aisleId?, now)` | Sets `manuallyPlaced`. When `aisleId != null`, records or replaces a `Correction(normalizeName(name), aisleId, now)`. Capped at 200. |
+| `moveItemToAisleWithUndo(…)` / `undoMove(undo, now)` | (5 October) The same move with a `MoveUndo` for its note's Undo, which puts back the old aisle (unless the item moved again since) and the correction the move replaced; the corrections exactly as before when nothing else touched them. |
+| `setAisleNote(aisleId, note?)` | (5 October) The aisle's "Also here" note (blank removes it); only the end of its line changes: no id, item, basket, style or correction. |
 | `setItemIcon(listId, itemId, key, now)` | icon = key, iconFit = EXACT, customIconId = null; records or replaces an `IconOverride(normalizeName(name), key, now)`. Capped at 200. Invalid key = no-op. The caller also calls `icons.forgetBespoke(name)`. |
 | `clearChecked`, `setSectionCollapsed(listId, sectionId, collapsed)` | |
 | `newList` (it becomes current), `switchList`, `renameList`, `deleteList` | `deleteList` never removes the last list; if the deleted list was current, a neighbouring list becomes current. |
@@ -228,7 +303,7 @@ The app changes state **only** through these functions, always inside `store.upd
 | `iconOverrideMap()` | Newest override per normalized name. |
 | `itemsNeedingIconDecision()` | One `NamedItem(id = normalizedName, name = display name)` per distinct normalized name among PENDING items (all lists). |
 | `itemsNeedingAisle()` | Items with a null or vanished aisle, excluding those the user deliberately moved to Unsorted. |
-| `ingestContext(listId)` | Aisles, the newest valid corrections (≤ 60), the names of unchecked items, and `iconOverrideMap()`. |
+| `ingestContext(listId)` | Aisles (each with its "Also here" note), the newest valid corrections (≤ 60), the names of unchecked items, and `iconOverrideMap()`. |
 
 ---
 
@@ -238,7 +313,8 @@ The catalog is `core/src/main/resources/icon_catalog.json`, a verbatim copy of `
 
 - 20 `categories` `{key,label,fallbackIcon}`; every fallback is a `<category>_generic` key
 - 235 `icons` `{key,label,category,aliases[],drawHint}` (English and French aliases)
-- 16 `baskets` `{key,label,drawHint,keywords[]}`
+- 16 `baskets` `{key,label,drawHint,keywords[]}`; **Art pass:** 17, with `mixing_bowl` (D8; its keyword tuning so the default store maps per DESIGN_STICKER §5.2 is WP3's `BasketCatalogTest`)
+- **Art pass (WP3):** per icon optional `"tags"` (`roll`, `hop`, `picnic`, `birthday`, `frozen`) and `"personality"` (`berry`, `egg`, `bread`, `can`, `frozen`; core `Personality`), and a new `peameal_bacon` key (236 icons). `displayRef` returns the capsule sentinel `IconRef(IconCatalog.CAPSULE)` (`"_capsule"`) for PENDING and busy items (D5; display only). New queries: `keysTagged(tag)`, `tagsOf(key)`, `personalityOf(key)`, `collectibleKeys` (every key but the generics) and `collectKey(item)` (what a check-off collects: `"c:<customIconId>"` (`COLLECTED_CUSTOM_PREFIX`) for a live sticker, the key for an EXACT non-generic icon, else null until it resolves).
 
 The joined keys come to about 2.2k characters, well inside the strict-schema enum budget (≤ 1000 enum values, ≤ 15k chars for an enum over 250 values).
 
@@ -279,13 +355,14 @@ class BasketCatalog(entries) { fun entry(kind); fun guess(aisleName): BasketKind
 
 | Path | Owner | Contents | Backed up? |
 |---|---|---|---|
-| `filesDir/state.json` | core `JsonFileStateStore` | `AppState` (lists, store, corrections, icon overrides) | **Yes**: the only entry on the allow-list (`data_extraction_rules.xml`, `backup_rules.xml`) |
+| `filesDir/state.json` | core `JsonFileStateStore` | `AppState` (lists, store, corrections, icon overrides; art pass: trips, favourites, pantry) | **Yes**: on the allow-list (`data_extraction_rules.xml`, `backup_rules.xml`) |
+| `filesDir/album.json` | core `JsonFileAlbumStore` (**Art pass**, A5) | `Album`: collected stickers, filed trip books, sheets, perfect-week streak | **Yes**: the second allow-list entry (`BackupAllowListTest`) |
 | `filesDir/datastore/settings.preferences_pb` | app-shell `DataStoreSettingsRepository` | `draw_icons`, `install_id`, `token_hint` (a `base_url` from older builds is removed on upgrade, §9) | no |
 | `noBackupFilesDir/token.bin` | app-shell `KeystoreTokenStore` | TokenCipher blob `base64(iv):base64(ct)` | no (and undecryptable elsewhere) |
-| `filesDir/icons/custom/<customIconId>.webp`, `filesDir/icons/index.json` | app-shell `IconRepository` | bespoke icons (192 px) and the name index | no |
+| `filesDir/icons/custom/<customIconId>.webp`, `<customIconId>.cut`, `filesDir/icons/index.json` | app-shell `IconRepository` | bespoke icons and the name index. **Art pass:** a v4 sticker is a 208 px lossless WebP plus its die-cut path (`.cut`); one without a `.cut` is a legacy 192 px icon (§8.4) | no |
 | `cacheDir/captures/*.jpg`, `cacheDir/voice/*.m4a` | app-shell platform | transient capture files; deleted after use | no |
 
-After a backup restore, items may carry a `customIconId` whose file isn't there: `IconImages.load` then falls back to the bundled key (render order, §8.5), so nothing breaks.
+After a backup restore, items may carry a `customIconId` whose file isn't there: `ItemIcon` then draws the item's library sticker (§8.5), so nothing breaks.
 
 ### 6.2 `StateStore` contract
 
@@ -293,16 +370,43 @@ After a backup restore, items may carry a `customIconId` whose file isn't there:
 interface StateStore {
     val states: Flow<AppState>                                  // current (loads on first use), then each commit
     suspend fun current(): AppState
-    suspend fun update(transform: (AppState) -> AppState): AppState   // Mutex-serialized; persist, then emit
+    suspend fun update(transform: (AppState) -> AppState): AppState   // Mutex-serialized; emit, then persist (a failed write emits the old state again and throws)
 }
 class JsonFileStateStore(file: File, initial: () -> AppState, ioDispatcher = Dispatchers.IO)
 class InMemoryStateStore(initial: AppState)                     // tests/previews (implemented)
 ```
 
 - **Loading:** lazy, on the first `states` collection or `current()`, on the IO dispatcher. Nothing is read in the constructor, so `AppContainer` stays cheap.
-- **Writing:** encode with `CoreJson.json`; write `state.json.tmp` in the same directory; `FileOutputStream.fd.sync()`; `Files.move(tmp, target, ATOMIC_MOVE, REPLACE_EXISTING)`. If the write fails, `update` throws `IOException`; memory and observers keep the previous state. The UI shows the snackbar "Couldn't save."
+- **Writing:** encode with `CoreJson.json`; write `state.json.tmp` in the same directory; `FileOutputStream.fd.sync()`; `Files.move(tmp, target, ATOMIC_MOVE, REPLACE_EXISTING)`. The new state is emitted before the write, so a check-off's chain starts at her tap rather than after the fsync (§8.3 beats are measured from the tap). If the write fails, memory and observers go back to the previous state (emitted again) and `update` throws `IOException`. The UI shows the snackbar "Couldn't save."
 - **Unreadable JSON:** rename the file to `state.json.corrupt-<ms>` and start from `initial()`. Never crash on a bad file.
 - **Missing file:** start from `initial()`; nothing is written until the first update.
+
+**Art pass (replaces; consumers: AppContainer, the backup rules).** `JsonFileStateStore` is refactored onto a generic `JsonFileStore<T>(file, serializer, version, migrations, repair)` (atomic write, migrations, repair), and `JsonFileAlbumStore` uses it for `album.json`:
+
+```kotlin
+interface AlbumStore { val album: Flow<Album>; suspend fun current(): Album; suspend fun update(transform: (Album) -> Album): Album
+    suspend fun flush()                                    // writes a coalesced update now; throws IOException
+    suspend fun referencedCustomIconIds(): Set<String> }   // filed books + "c:<id>" collected keys (§8.4)
+suspend fun AlbumStore.file(book: TripBook): Album      // files and flushes: durable before state.json changes
+class InMemoryAlbumStore(initial: Album = Album()) : AlbumStore     // tests, previews, the Surprise lab sandbox
+// Album ops (pure): file(book) (idempotent by trip id; counts finished trips and the perfect streak), unfile(book, before),
+// collect(item, tripId, catalog, now), addHolo, addPicnic, markSeen, unlockSheet. Album.tally holds "<tripId>|<itemId>|<key>"
+// for each sticker counted on a trip still open, so collecting is idempotent; filing drops the trip's entries.
+object AlbumReconciler { fun reconcile(state: AppState, album: Album, catalog: IconCatalog, now: Long): Album }
+object TripFiling {   // store/TripFiling.kt: the trip operations that write both files, album first
+    suspend fun newTrip(store, album, listId, mode, now): TripBook?
+    suspend fun deleteList(store, album, listId, now): TripBook?
+    suspend fun toggle(store, album, catalog, listId, itemId, now): Toggle   // Toggle(autoNewBook: AutoNewBook?, albumBefore: Album?)
+    suspend fun addItems(store, album, listId, items, now, then): Add         // (item 315) an add after 12 h idle files the
+        // book first (addItemsStartingNewBook); Add(state, outcome, newBook: Toggle?)
+    suspend fun removeItem(store, album, listId, itemId, now): Tear           // the tear-off; a got row of a shop that is over
+        // (TripRules.shopIsOver) files the book first (removeItemStartingNewBook); Tear(removed, newBook: Toggle?)
+    suspend fun undoNewBook(store, album, toggle: Toggle, now): Boolean      // the state first (only while newBookStands),
+        // then Album.unfile; false when a newer book stands
+    fun launchAlbumSync(scope, store, album, catalog, clock): Job }         // AppContainer.startOnce launches it once
+```
+
+Album writes are coalesced (one per 500 ms burst). **New trip, deleting a list with a book and the automatic new book (A6) write the album first, then `state.json`**, through `TripFiling`; filing is idempotent by trip id. `launchAlbumSync` runs `AlbumReconciler` on every committed state: it collects check-offs (and stickers that resolve after theirs), skips trips already filed and drops stale tally entries, so a crash between the two files or inside the coalesce window is repaired on the next start. Filed books are capped at 200 (`Album.MAX_BOOKS`), newest first.
 
 ### 6.3 Format (example)
 
@@ -337,6 +441,8 @@ class InMemoryStateStore(initial: AppState)                     // tests/preview
 
 - If `version < STATE_SCHEMA_VERSION`, run `StateMigrations.migrate(raw JsonObject, from)` before decoding. It runs one `(JsonObject) -> JsonObject` step per version.
 - If `version > current` (a downgrade), decode leniently. Copy the file to `state.json.v<version>.bak` before the first write.
+
+**Art pass:** schema **v2** (DESIGN_STICKER §7.2) is a real step: checked items get `checkedAt = addedAt` and book slots, a list with checked items gets a trip (`finaleShownAt` set, so no surprise finale on her first open), stored basket kinds that equal the v1 heuristic's guess are re-guessed once, and pre-v4 bespoke icons are marked legacy. `StateMigrationV2Test` has one fixture per case. The step has landed (WP3): `STATE_SCHEMA_VERSION` is 2. `JsonFileStateStore` and `JsonFileAlbumStore` share `JsonFileStore<T>` (atomic write, migrations, quarantine of an unreadable file, `.v<old>.bak` before the first write over another version).
 
 Nothing has shipped yet, so v1 includes `IconFit.PENDING` and `iconOverrides`. From the first sideloaded APK on, to change the schema: bump `STATE_SCHEMA_VERSION`, add a migration step, add a fixture test that reads an old file. Adding a field with a default needs no migration; renaming, removing or changing the meaning of one does. Persisted names (field names, enum serial names, icon and basket keys, the slug and normalize rules) never change without a migration.
 
@@ -378,11 +484,12 @@ class OpenAiClient(config: ConfigSource, token: TokenSource) {
     suspend fun responses(body: JsonObject, timeout: Duration = LlmTimeouts.INGEST): ApiResult
     suspend fun transcription(model: TranscriptionModel, audio: ByteArray, fileName: String,
                               keywords: List<String>, timeout: Duration = LlmTimeouts.TRANSCRIBE): ApiResult
-    suspend fun imageEdit(model: ImageModel, prompt: String, reference: ByteArray, referenceFileName: String,
-                          timeout: Duration = LlmTimeouts.IMAGE): ImageResult
+    suspend fun imageEdit(model: ImageModel, prompt: String, images: List<ImagePart>, mask: ImagePart? = null,
+                          timeout: Duration = LlmTimeouts.IMAGE): ImageResult   // art pass (v4): replaced imageEdit(…, reference, …)
     suspend fun model(id: String, timeout: Duration = LlmTimeouts.TEST_CONNECTION): ApiResult
 }
 data class ApiResult(val json: JsonObject, val requestId: String?, val latencyMs: Long)
+class ImagePart(val bytes: ByteArray, val fileName: String, val mimeType: String = OpenAiClient.imageMediaType(fileName))
 class ImageResult(val bytes: ByteArray, val requestId: String?, val latencyMs: Long)
 ```
 
@@ -421,11 +528,17 @@ interface GroceryAssistant {
 }
 sealed interface IngestInput { Text(text); Image(bytes, mimeType = "image/jpeg"); Transcript(text) }
 data class IngestContext(aisles, corrections /*newest first*/, existingNames /*unchecked*/,
-                         iconOverrides: Map<String, String> = emptyMap() /*normalized name -> key*/)
-data class ProposedItem(name, quantity?, note?, aisleId? /*current id or null*/, icon /*valid*/, iconFit, aisleFromCorrection)
-data class IngestResult(items, message, sources: List<WebSource>, skippedDuplicates, meta: CallMeta)
+                         iconOverrides: Map<String, String> = emptyMap() /*normalized name -> key*/,
+                         appLanguage: String = "English", pantry: List<String> = emptyList() /*art pass: first 200, as written*/)
+data class ProposedItem(name, quantity?, note?, aisleId? /*current id or null*/, icon /*valid*/, iconFit, aisleFromCorrection,
+                        skipReason: SkipReason = NONE, named: Boolean = true, pantryEntry: String? = null)   // art pass
+enum class SkipReason { NONE, ALREADY_ON_LIST, OPTIONAL, IN_PANTRY }                                        // art pass
+data class IngestResult(items, message, sources: List<WebSource>, skippedDuplicates, meta: CallMeta,
+                        lines: List<PhotoLine> = emptyList(), recipe: RecipeInfo? = null)                    // art pass
+data class PhotoLine(text, crossedOut, correctionOf?, itemIndex?); data class RecipeInfo(title, recipesCompared?, servings?)
 data class CallMeta(model?, requestId?, latencyMs, webSearches)
-class IconDrawRequest(itemName, hint? = null, styleReference: ByteArray, styleReferenceFileName = "_style_reference.png")
+class IconDrawRequest(itemName, sheet: ByteArray, mask: ByteArray, subject: String, families: List<String>)
+    // art pass (v4, WP1): replaced IconDrawRequest(itemName, hint?, styleReference); consumers AppIconRepository, LiveIconDrawer
 class DrawnIcon(bytes, mimeType = "image/webp", meta); data class ConnectionCheck(model, meta)
 fun ProposedItem.toGroceryItem(id, now, source): GroceryItem
 suspend fun GroceryAssistant.assignBasketsOrGuess(aisles, guess): Map<String, BasketKind>   // never throws LlmError
@@ -433,22 +546,26 @@ suspend fun GroceryAssistant.assignBasketsOrGuess(aisles, guess): Map<String, Ba
 
 Every operation is main-safe and cancellable, and throws only `LlmError` (plus `CancellationException`).
 
+**Art pass (owner WP3; consumers WP7, the Add flows).** The ingest schema gains per item `skip_reason` (`none` / `already_on_list` / `optional` / `in_pantry`), `named` (she named it versus the model worked it out) and `pantry_entry` (the covering entry, "" unless `in_pantry`), and top-level `lines` (photos: `[{text, crossed_out, correction_of, item_index}]`, else empty) and `recipe` (`{title, recipes_compared, servings}` or null); client side these are `ProposedItem.skipReason` / `named` / `pantryEntry`, `IngestResult.lines` / `recipe`. `IngestContext.pantry` carries the first 200 pantry entries as written (`PANTRY_IN_CONTEXT`) and the context block prints them on the line "In the pantry (she keeps these at home): …" ("nothing yet" when empty). **`PantryMatch` backs the model up:** `covers(entry, itemName)` is `normalizeName` equality with singular/plural folding of the last word and nothing more ("flour" does not cover "almond flour"); `apply(items, pantry)` never skips a named item for the pantry and skips a worked-out item an entry covers as `in_pantry`, even when the model kept it. `AisleSync.resortAll()` re-files every item not placed by hand; `normalizeMetric(quantity)` (`model/Metric.kt`) turns lb, oz, fl oz, qt and gal into metric (cup, tbsp and tsp only as a recipe amount). `IconDecision` gains `look` and `families` (additive, WP1, §7.4).
+
+**Aisle notes (Cora, 5 October; DESIGN_STICKER §0.4).** The context block writes each aisle with its "Also here" note (`- produce: Produce (also here: toothpaste)`; an aisle without one reads as before), so ingest, recategorize and AisleSync all see it; both rule files say a note beats where things usually go and a learned correction still wins (corrections are applied client-side first anyway). `assignBaskets` sends names only (a basket suits the aisle's main goods). PROMPTS.md §2.2, §3.
+
 **ingest** makes one `POST /responses` call to `ModelDefaults.SMART` (body shape verified live, `research/openai_api.md` §2.1):
 
 - **Fixed fields:** `store: false`, `max_output_tokens`, `reasoning.effort`, `safety_identifier`.
-- **Output format:** `text.format` is a **strict** `json_schema` named `grocery_items`: `{items:[{name, quantity|null, note|null, aisle_id: enum(current aisle ids + "unsorted"), icon: enum(catalog keys), icon_fit: enum("exact","approximate")}], message}`.
+- **Output format:** `text.format` is a **strict** `json_schema` named `grocery_items`: `{items:[{name, quantity|null, note|null, aisle_id: enum(current aisle ids + "unsorted"), icon: enum(catalog keys), icon_fit: enum("exact","approximate")}], message}`. **Art pass:** each item adds `skip_reason`, `named` and `pantry_entry`, and the answer adds `lines` and `recipe` (above).
 - **Input (cache-friendly order):**
   1. A developer message with the stable RULES (`prompts/ingest_rules.txt`), ending in `prompt_cache_breakpoint` (only on models that take it).
-  2. A developer message with the aisles in walking order (`id: name`), the learned corrections (`name -> aisle id`) and the names already on the list.
+  2. A developer message with the aisles in walking order (`id: name`), the learned corrections (`name -> aisle id`), the names already on the list and (art pass) the pantry line.
   3. The user message.
 - **Text input:** `tools: [{type: "web_search", search_context_size, user_location}]`, `tool_choice: "auto"` and `include: ["web_search_call.action.sources"]` (from `ModelDefaults.WEB_SEARCH`; always on).
-- **Image input:** `[input_text "Photo of a handwritten shopping list. Add its items.", input_image data:image/jpeg;base64,…, detail "high"]`, with **no tools**. The app sends a JPEG with long edge ≤ 1600 px at q≈85.
+- **Image input:** `[input_text "Photo of a shopping list or a recipe. Add what to buy.", input_image data:image/jpeg;base64,…, detail "high"]`, with **no tools**. The app sends a JPEG with long edge ≤ 1600 px at q≈85.
 - **Transcript input:** `"Voice note transcript: <text>"`, with the same tools as text input.
 - **Parsing:**
   - `status == "incomplete"` (any `incomplete_details.reason`) → `BadResponse`, even if a partial message exists. A response with **no message item at all** (seen live: only a reasoning item, 0 usage) → `BadResponse`. Never parse partial JSON.
   - Use the **last** `message` output item whose `phase` is not `"commentary"` (a missing phase counts as final). A `refusal` content part → `Refusal`. If its JSON doesn't parse, try earlier final messages. Never concatenate `output_text`.
   - Sources come from `web_search_call.action.sources[].url`, `action.url` (from `open_page`) and `url_citation` annotations, deduplicated. In `message`, markdown links `[t](u)` are reduced to `t`.
-- **Post-processing:** trim names; a learned correction overrides `aisle_id`; `"unsorted"` or an unknown id becomes `null`; a learned icon override replaces `icon` with fit EXACT; an invalid icon becomes `DEFAULT_ICON` + APPROXIMATE; dedupe by `normalizeName` against `existingNames` and within the answer (duplicates go to `skippedDuplicates`).
+- **Post-processing:** trim names; a learned correction overrides `aisle_id`; `"unsorted"` or an unknown id becomes `null`; a learned icon override replaces `icon` with fit EXACT; an invalid icon becomes `DEFAULT_ICON` + APPROXIMATE; dedupe by `normalizeName` against `existingNames` and within the answer (duplicates go to `skippedDuplicates`); art pass: `PantryMatch.apply` with the request's pantry.
 
 **transcribe** makes one `POST /audio/transcriptions` (multipart) call: `model`, `response_format=json`, `languages[]` and `prompt` from `ModelDefaults.TRANSCRIBE`, `keywords[]` (at most 100, each one line with `<` and `>` stripped; from the list's names and the correction names), and `file=recording.m4a`. **The extension selects the decoder**; `.aac` and `.3gp` are rejected. Blank `text` means nothing was heard: return `Transcript("")` rather than an error.
 
@@ -456,7 +573,7 @@ Every operation is main-safe and cancellable, and throws only `LlmError` (plus `
 
 **assignBaskets** uses `ModelDefaults.FAST` with the strict schema `{baskets:[{aisle_id: enum(ids), basket: enum(16 kinds)}]}`. A missing aisle falls back to the heuristic inside `assignBasketsOrGuess`.
 
-**drawIcon** (cascade step 3) makes one `POST /images/edits` (multipart) call: `model`, `prompt`, `image[]` = the style reference PNG, then `background`, `output_format`, `output_compression`, `quality`, `size` from `ModelDefaults.IMAGE`, and `n=1`. The prompt is `prompts/icon_prompt.txt` (from `research/openai_api.md` §6.1) with the item name substituted, plus the optional hint. It returns the decoded `data[0].b64_json` bytes; trimming and downscaling happen on the device (§8.4).
+**drawIcon** (cascade step 3; live stickers v4 since the art pass, DESIGN_STICKER §18.3) makes one `POST /images/edits` (multipart) call: `model`, `prompt`, `image[]` = the 1024² neighbour sheet (three library stickers and an empty fourth cell, §8.3), `mask` = the bundled mask that opens only that cell, then `background`, `output_format`, `output_compression`, `quality` (`low`), `size` from `ModelDefaults.IMAGE`, and `n=1`. The prompt is `prompts/icon_prompt.txt` with `{subject}` (the decider's `look`, or "one <name>, as it is sold in a Canadian grocery store"), `{colours}`, `{body}` and `{band}` from the request's two sticker families (`StickerPalette`). It returns the decoded `data[0].b64_json` bytes; everything else happens on the device (§8.3).
 
 **testConnection** calls `GET /models/{ModelDefaults.SMART.id}`. It is free, and it checks the key and access to the model in one go. A restricted key needs only **List models: Read** for it (`api.model.read`), so a passing test doesn't prove the other two permissions (`docs/OPENAI_KEY.md`).
 
@@ -464,7 +581,8 @@ Every operation is main-safe and cancellable, and throws only `LlmError` (plus `
 
 ```kotlin
 interface IconDecider { suspend fun decide(items: List<NamedItem>): Map<String, IconDecision> }
-data class IconDecision(val icon: String? /* non-generic key or null = "none" */, val category: String?) {
+data class IconDecision(val icon: String? /* non-generic key or null = "none" */, val category: String?,
+    val look: String? = null /* art pass: with "none", what to draw */, val families: List<String> = emptyList() /* body first, ≤ 2 */) {
     companion object { val NONE: IconDecision } }
 fun IconDecision.resolve(catalog): ResolvedIcon   // match -> (icon, EXACT); none -> (category fallback ?: DEFAULT_ICON, APPROXIMATE)
 class ResponsesIconDecider(client: OpenAiClient, catalog: IconCatalog, model: ResponsesModel = ModelDefaults.FAST) : IconDecider
@@ -491,6 +609,7 @@ class ResponsesIconDecider(client: OpenAiClient, catalog: IconCatalog, model: Re
 
 - RULES (`prompts/icon_decider_rules.txt`, core tunes it): pick the key that depicts the item itself (same product or an obvious packaging of it); a related or same-category icon is **not** a match (gochujang is not `hot_sauce`); generic keys are never a match; `category` is always required. The probe answered: Gochujang → none/condiments, Oat milk → `plant_milk`, Kimchi → none/pantry, Spatula → none/household, Timbits → `donut`, Fish sauce → `soy_sauce` (too generous: tighten the rules).
 - Client side, `resolve` treats an unknown or generic key as "none".
+- **Art pass (WP1).** The schema adds `look` (one line: what the live drawing shows; "" for a match) and `body` / `accent` (enums of the ten sticker families), so every "none" carries the drawing's brief. `LiveIconDrawer(assistant, decider)` is the network half of a live sticker: `brief(key, name, known)` asks the decider once more only for a name that reached drawing without a brief (ingest's "approximate", a redraw, a legacy icon), and `draw(request): DrawOutcome` (`Drawn`, `Refused`, `Failed`) makes one `drawIcon` call, retried once after 3 s on RateLimited, Network or Timeout.
 
 ### 7.5 Prompts, CLI, tests
 
@@ -504,10 +623,21 @@ class ResponsesIconDecider(client: OpenAiClient, catalog: IconCatalog, model: Re
 
 ### 8.1 Bundled library
 
-- **Files:** `app/src/main/assets/icons/<key>.webp`, 192×192 transparent WebP, one per catalog key. The art pass produces them from sprite sheets (`research/openai_api.md` §6.4).
-- **Style reference:** `assets/icons/_style_reference.png`, the sheet used for live drawing. Until the art pass, app-shell copies `research/openai/icons/_style_reference_512.png` (330 KB; it costs the same 1,024 input tokens as the 1024 px version).
-- **Missing art:** if no asset exists, `IconImages.load` returns null and `ItemIcon` draws placeholder art. Build the bundled-key set once from `assets.list("icons")`.
-- **Memory cache:** an `LruCache` of `ImageBitmap`s. Decode with `BitmapFactory` on `Dispatchers.IO`.
+**Art pass (§3.2 and §8.3, `IconImages` → `StickerArt`, replaces; consumers: `ItemIcon`, `IconRepository`, previews; owner WP1).** Library stickers become generated **vector drawables** `res/drawable/sk_i_<key>.xml` with named groups (`cut`, `fills`, `lines`, `gloss`, `dominant`, optional `face`) listed in the generated `StickerManifest`; live stickers are a 208 px bitmap plus a stored cut path (`.cut`), or legacy (pre-v4, no cut). One render path draws both:
+
+```kotlin
+interface StickerArt { fun vector(key: String): StickerVector?; fun cached(customIconId: String): LiveSticker?
+    suspend fun load(customIconId: String): LiveSticker?; fun isBundled(key: String): Boolean /* from StickerManifest */
+    object None : StickerArt }                                     // previews and tests: library vectors only
+data class StickerVector(@DrawableRes val id: Int, val groups: Set<String>)
+data class LiveSticker(val bitmap: ImageBitmap, val cut: Path? /* bitmap pixel space */, val legacy: Boolean)
+class AppStickerArt(customDir: File, maxBytes: Int = 8 MB) : StickerArt { fun evict(customIconId: String) }
+```
+
+- **Library:** one generated `sk_i_<key>.xml` per catalog key (236), from the sticker DSL in `design/stickers/` (`build_android.py`; `:app:checkStickers` fails on drift or a lint error). `StickerManifest` lists each key's drawable, its two families, personality, face and source.
+- **Live stickers:** `AppStickerArt` reads `filesDir/icons/custom/<id>.webp` and `<id>.cut` on `Dispatchers.IO` into a byte-bounded `LruCache` and remembers misses, so a row whose file is gone never hits the disk on every scroll. `evict(id)` drops one after a redraw deleted its file (the repository's `onIconReplaced`). A v4 sticker whose `.cut` can't be read still draws (its alpha is the silhouette); only its ghost loses the cut.
+- **Rendering:** `ItemIcon` reads `StickerArt` through `LocalStickerArt` (§11.1, §11.4). Nothing renders from `assets/icons/` any more: the only asset left there is the live-drawing `mask.png` (`BundledIcons.mask()`).
+- History: v1 bundled 192 px `assets/icons/<key>.webp` files behind `IconImages` / `AssetIconImages`; the art pass replaced both.
 
 ### 8.2 The cascade (amendment A2)
 
@@ -517,7 +647,7 @@ Every item ends with a catalog icon and an `IconFit`; `APPROXIMATE` items may al
 |---|---|---|---|
 | 1. Local | Learned `IconOverride` for the normalized name, else `IconCatalog.match(name)` | core, synchronous: `AppState.localIcon`, used by `OfflineParser` and `editItemDetails`; ingest applies overrides in post-processing | No match → `DEFAULT_ICON` + PENDING |
 | 2. Decide | `IconDecider.decide` on PENDING names; ingest's own `icon`/`icon_fit` counts as step 2 for the items it returns | app-shell `IconRepository` (batcher) → core `ResponsesIconDecider` | `LlmError` (or no token yet) → items stay PENDING, showing the fallback; retried by `resumePending()` once per process start and whenever a token is added (§10.1) |
-| 3. Draw | `assistant.drawIcon` for APPROXIMATE items when "Draw new icons with AI" is on | app-shell `IconRepository` (queue) → core `drawIcon` | Item keeps its APPROXIMATE catalog icon (the closest key, or its category's `*_generic`) |
+| 3. Draw | a live sticker (v4) for APPROXIMATE items when "Draw new icons with AI" is on | app-shell `IconRepository` (queue, neighbour sheet, post-processing) → core `LiveIconDrawer` → `drawIcon` | Item keeps its APPROXIMATE catalog icon (the closest key, or its category's `*_generic`) |
 
 Entry paths:
 
@@ -536,20 +666,17 @@ Before steps 2 and 3, a cached bespoke icon for the normalized name is attached 
 ```kotlin
 interface IconRepository {
     val busy: StateFlow<Set<String>>           // normalized names being decided or drawn (rows show the sparkle)
-    fun isBundled(key: String): Boolean        // assets/icons/<key>.webp exists
+    fun isBundled(key: String): Boolean        // art pass: the key has library art (StickerManifest)
     fun submit(items: List<GroceryItem>)       // after commits and renames: attach cache / decide / draw
-    fun resumePending()                        // once per process start, and when a token is added: submit every PENDING item
+    fun resumePending()                        // once per process start, and when a token is added: submit every PENDING item;
+                                               // art pass: also sweeps orphaned files and queues legacy redraws (§8.4)
     fun redraw(itemName: String)               // edit sheet "Draw a new icon" (forced; overwrites)
     fun forgetBespoke(itemName: String)        // the user picked a catalog icon for this name
-}
-interface IconImages {                          // provided to the theme via LocalIconImages
-    fun cached(ref: IconRef): ImageBitmap?      // memory only, composition-safe
-    suspend fun load(ref: IconRef): ImageBitmap? // custom -> bundled key -> bundled fallback -> null
 }
 class NoOpIconRepository(busyNames: Set<String> = emptySet()) : IconRepository   // previews/tests
 ```
 
-Production implementation (app-shell): `AppIconRepository(app, store, settings, assistant, iconDecider, catalog, appScope, clock)`.
+Production implementation (app-shell): `AppIconRepository(app, store, settings, assistant, iconDecider, catalog, appScope, clock, bundled = BundledIcons(app), album: AlbumStore?, onIconReplaced: (String) -> Unit)`; the container passes its album (filed stickers keep their files) and `AppStickerArt::evict`.
 
 ```
 commit / rename ──► store.update{...} ──► icons.submit(items)       (returns immediately; work in appScope)
@@ -562,15 +689,21 @@ Decide batcher (single coroutine): debounce 300 ms, ≤ 40 keys per call
     iconDecider.decide(NamedItem(key, name)…) → store.update{applyIconDecisions(key -> decision.resolve(catalog))}
     busy -= keys; resolved APPROXIMATE keys continue to the draw rule above
     LlmError → busy -= keys (items stay PENDING; resumePending() retries next start or when a token is added)
-Draw workers (2 coroutines on a Channel = max 2 concurrent):
-    styleRef bytes (read once, cached) → assistant.drawIcon(IconDrawRequest(name, styleReference = …))
+Draw workers (2 coroutines on a Channel = max 2 concurrent), live stickers v4 (art pass, DESIGN_STICKER §18.3 step 5):
+    brief = the decider's "none" (look + two families), else LiveIconDrawer.brief asks once more for this name
+    sheet = SheetComposer: the approximate key and the two closest same-category library stickers, art only, on a
+            1024² 2 × 2 sheet, with the bundled mask.png opening the empty 4th cell (no mask → drawing is off)
+    LiveIconDrawer.draw → assistant.drawIcon(IconDrawRequest(name, sheet, mask, subject, families))
       RateLimited / Network / Timeout → wait 3 s, retry ONCE (imageEdit itself never retries: at most 2 requests per drawing)
       Refusal (moderation) → blocked += key (never auto-draw this name again)
       other → give up silently (the item keeps its APPROXIMATE catalog icon)
-    decode → trim transparent bounds → fit in 176 px → centre on 192×192 transparent
-    → WEBP_LOSSY q82 (API 30+) / WEBP (26-29) → filesDir/icons/custom/<id>.webp (tmp + rename)
-    → index.byName[key] = id (index.json atomic write) → store.update{attachCustomIcon(key, id, overwrite = redraw)}
-    → evict caches; busy -= key; delete the replaced file on a redraw
+    LiveStickerProcessor (IconPostProcessorV4, < 100 ms on Dispatchers.Default): cut the 4th cell, snap every pixel to
+      the two families + white + lemon pastel, remove specks, size and base on the library grid, 4u white die-cut,
+      cut path, procedural gloss, 2u trace
+    → 208 px lossless WebP + <id>.cut → filesDir/icons/custom/ (tmp + rename) → index.byName[key] = id
+    → store.update{attachCustomIcon(key, id, overwrite = redraw)} (a legacy redraw replaces the old id everywhere)
+    → busy -= key; the replaced file is deleted only when no list, pantry entry or album.json references it,
+      and onIconReplaced(old id) drops it from StickerArt's memory
 ```
 
 Rows read `busy` and show `IconCatalog.displayRef(item, busy = normalizeName(item.name) in busy)` with `drawing = busy` (sparkle).
@@ -579,6 +712,7 @@ Rows read `busy` and show `IconCatalog.displayRef(item, busy = normalizeName(ite
 
 - **Icon id:** `customIconId = "c-" + sha1(key).take(10) + "-" + base36(epochSeconds)`. A redraw gets a new id, so a stale bitmap is never shown from cache.
 - **Index file:** `index.json` = `{"version":1,"byName":{…},"blocked":[…],"day":"2026-10-01","drawnToday":3}`. `forgetBespoke(name)` removes `byName[key]` (the file stays while items reference it; orphaned files are swept at start).
+- **Art pass (live icons v4, replaces; consumers: AppIconRepository, LiveIconDrawer, BespokeIconCache).** Output is 208 px plus a `.cut` file. A redraw, and the start-up sweep (files older than 10 min that nothing points at), delete a replaced file only when **no list, pantry entry or `album.json`** references it (`AlbumStore.referencedCustomIconIds()`): filed books keep their stickers; if the album can't be read, nothing is deleted. **Legacy icons** (drawn before v4: 192 px, no `.cut`) render as they are and are redrawn in v4 in the background from `resumePending()`, oldest first, under the daily cap, only with a key set and drawing on.
 - **Daily cap:** 40 automatic drawings per day protects against runaway cost. A redraw ignores the cap.
 - **Settings toggle:** "Draw new icons with AI", on by default, with the cost note "Drawing a new icon takes about 10 s and costs about 1.5¢ (US)." It gates step 3 only; step 2 (≈ US$0.0002 per batch) always runs when a token is set.
 - **Offline:** nothing is re-queued for drawing automatically later. The item shows its catalog icon, and the user can choose "Draw a new icon".
@@ -586,10 +720,12 @@ Rows read `busy` and show `IconCatalog.displayRef(item, busy = normalizeName(ite
 ### 8.5 Display rule (core `IconCatalog.displayRef(item, busy)`, implemented)
 
 1. A bespoke icon attached → `IconRef(item.icon, customIconId)`.
-2. `busy` or `iconFit == PENDING` → `IconRef(fallbackFor(item.icon))` (the category fallback; `DEFAULT_ICON` for PENDING), and the row overlays the "drawing…" sparkle while busy.
-3. Otherwise → `IconRef(item.icon)`.
+2. `busy`, `iconFit == PENDING`, or the `DEFAULT_ICON` kept because nothing matched (fit not EXACT; `IconCatalog.showsCapsule(icon, fit)`) → **art pass (D5):** the capsule sentinel `IconRef(IconCatalog.CAPSULE)`, tinted by its aisle (v1: the category fallback), and the row overlays the "drawing…" sparkle while busy.
+3. Otherwise → `IconRef(item.icon)`: an item matched EXACT to `paper_bag` ("grocery bags") shows the kraft "Shopping bag" sticker.
 
-`IconImages.load` then renders: custom file → bundled `<key>.webp` → bundled category fallback → null (placeholder art).
+The same `showsCapsule` rule picks the sticker a twin is filed with (`GroceryItem.bookIcon()`: filed trip books, the album's book thumbnails, the finale's stops and basket riders), the add flows' preview rows, and whether Change sticker opens on a category (an item still showing the capsule has none yet, and no cell wears the selection ring).
+
+`ItemIcon` then draws (art pass): the live sticker from `StickerArt` for a `customIconId` (the library art while it loads, or if its file is gone) → the key's library sticker (`paper_bag` included) → its category's generic → the capsule (an unknown key, whose fallback is `DEFAULT_ICON`, draws the capsule, not the bag). v1 rendered through `IconImages.load` and placeholder art.
 
 ### 8.6 Decisions API seam (TODO, not implemented)
 
@@ -639,7 +775,9 @@ fun maskToken(token: String): String              // "sk-…a1b2"
 - **Failed writes.** Every settings write runs through one wrapper that turns a DataStore `IOException` into `notice = "Couldn't save. Try again."` instead of a crash. A key the Keystore refused (nothing stored) gets the same notice and stays in the field.
 - **Where it can appear.** It is decrypted only inside `token()`, which `TokenSource` calls per request. It is never put in a data class, a `StateFlow`, a log line or an exception message. The Settings field is write-only: it shows `tokenHint` and is never pre-filled. `LlmError.Unauthorized` discards the server text, which echoes a masked key. There is no `HttpLoggingInterceptor` in any build type.
 - **Tests.** The Keystore doesn't exist under Robolectric, so tests use `InMemoryTokenStore`.
-- **Network.** Cleartext is blocked by default at targetSdk ≥ 28, the only host is api.openai.com, and `normalizeBaseUrl` refuses `http://` except loopback.
+- **Network.** Cleartext is blocked by default at targetSdk ≥ 28, the only host is api.openai.com, and `normalizeBaseUrl` refuses `http://` except loopback. **Art pass (one opt-in exception; consumers: PRIVACY.md, the Data safety form):** with **Weather surprises** on, the app also fetches Environment Canada's city forecast feed (`weather.gc.ca`, at most every 3 h, no identifier; DESIGN_STICKER §12.4). With **Use my area** on (A6), the only thing that leaves the device about location is the nearest forecast city in that same request (its feed is named by the city's own coordinates, `weather.gc.ca/rss/weather/<lat>_<lon>_e.xml`); the rounded point stays on the phone.
+
+**Art pass (A4).** `AppSettings` gains the Surprises switches: `eggs = true`, `sounds = false`, `haptics = true`, `nextStopCard = true`, `celebration = true`, `weather = false`, `useMyArea = false` (A6), and the egg state `duskBinder = false`, `surpriseLab = false`. WP8 adds their DataStore keys (`eggs`, `sounds`, `haptics`, `next_stop_card`, `celebration`, `weather`, `use_my_area`, `dusk_binder`, `surprise_lab`, plus the weather cache keys) and setters. Egg 17's last parade day is egg state too: `ants_day` (her local date), read and written through `SettingsRepository.antsDay()` / `markAntsDay(day)`, so the parade marches at most once a day across processes (DESIGN_STICKER §0.4). The one-time move notes are device-local too (5 October): `moveNoteShown` / `move_note_shown` (the first move's fuller note) and `holdHintDone` / `hold_hint_done` (the hold hint), set through `markMoveNoteShown()` / `markHoldHintDone()`. Reduced motion still follows the system.
 
 ---
 
@@ -662,27 +800,31 @@ fun maskToken(token: String): String              // "sk-…a1b2"
   | `assistant` | `OpenAiGroceryAssistant(client, catalog)`; models come from `ModelDefaults` |
   | `iconDecider` | `ResponsesIconDecider(client, catalog)` (the Decisions API swap point, §8.6) |
   | `aisleSync` | |
-  | `icons`, `iconImages` | `AppIconRepository`, `AssetIconImages` |
+  | `icons`, `stickerArt` | `AppIconRepository` (with the album and `onIconReplaced = AppStickerArt::evict`), `AppStickerArt(filesDir/icons/custom)`; art pass: `stickerArt` replaced `iconImages` / `AssetIconImages` |
   | `photos` | `PhotoPreparer` |
   | `newVoiceRecorder()` | |
-  | `ready: StateFlow<Boolean>` | True once `startOnce()` has parsed the icon catalog (≈105 KB JSON) and listed the bundled icons off the main thread |
-  | `startOnce()` | Once per process (an `AtomicBoolean`; MainActivity calls it on every `onCreate`), in `appScope`: warm the catalog → `ready = true` → `icons.resumePending()` → `Captures.sweepStale`. It also starts the token watcher: each "no token → token" change (`onTokenAdded`) runs `icons.resumePending()` and `aisleSync.sortItems(...)` for TYPED items still needing an aisle, so items added before a token existed catch up without a cold start. |
+  | `ready: StateFlow<Boolean>` | True once `startOnce()` has parsed the icon catalog (≈110 KB JSON) off the main thread |
+  | **Art pass:** `album` | `JsonFileAlbumStore(filesDir/album.json)` (WP3), kept in step with the state by `TripFiling.launchAlbumSync` (`startOnce`) |
+  | **Art pass:** `feedback`, `announcer`, `timeouts` | WP10's services: `AndroidFeedback.create(app, settings.settings, appScope)` (sounds and haptics, each gated by its switch; built in `startOnce` before the first resume so its window tracker sees the activity), `AndroidAnnouncer` (polite, de-duplicated within 1 s), `AndroidTimeouts` ("Time to take action", "Touch & hold delay"). Tests use `FakeFeedback`, `FakeAnnouncer`, `FakeTimeouts`; previews the no-ops (`NoOpFeedback`, `NoOpAnnouncer`, `DefaultTimeouts`). |
+  | **Art pass:** `places`, `surprises`, `themeVariants` | `PlaceSource` (Toronto until "Use my area" lands), `SurpriseEngine` (phase 0: `NoOpSurpriseEngine`), `ThemeVariantSource(settings, clock, SunClock, places)` |
+  | `startOnce()` | Once per process (an `AtomicBoolean`; MainActivity calls it on every `onCreate`), in `appScope`: build `feedback` → warm the catalog → `ready = true` → `TripFiling.launchAlbumSync(appScope, store, album, catalog, clock)` (art pass) → `icons.resumePending()` → `Captures.sweepStale`. It also starts the token watcher: each "no token → token" change (`onTokenAdded`) runs `icons.resumePending()` and `aisleSync.sortItems(...)` for TYPED items still needing an aisle, so items added before a token existed catch up without a cold start. |
 - **ViewModels take their dependencies individually**, never the container. Their factories read the container:
 
   ```kotlin
   val Factory = viewModelFactory { initializer {
       val c = (this[APPLICATION_KEY] as PicnicApp).container
-      ListViewModel(c.store, c.icons, c.settings, c.catalog, c.clock, c::newId, c.appScope) } }
+      ListViewModel(c.store, c.album, c.icons, c.settings, c.catalog, c.clock, c::newId, c.appScope) } }
   ```
 
-  Tests then pass `InMemoryStateStore`, `InMemorySettingsRepository`, `NoOpIconRepository` and a fake `GroceryAssistant`.
+  Tests then pass `InMemoryStateStore`, `InMemoryAlbumStore`, `InMemorySettingsRepository`, `NoOpIconRepository` and a fake `GroceryAssistant`.
 
 ### 10.2 Activity and navigation
 
 `MainActivity` is owned by app-shell:
 
 - Call `installSplashScreen()`, then `super.onCreate`, then `enableEdgeToEdge()` with bar styles that follow the system theme, then `container.startOnce()` (unconditionally: a process killed in the background restarts with a `savedInstanceState`, and must still resume the cascade), then `splash.setKeepOnScreenCondition { !container.ready.value }`, then `setContent`. Inside, nothing below `PicnicTheme` composes until `ready` is true, so no ViewModel factory parses the catalog on the main thread. Activity results (a camera capture after process death) wait in the `ActivityResultRegistry` until the launchers register.
-- Inside `setContent`: `PicnicTheme(darkTheme = isSystemInDarkTheme(), reducedMotion = <system animator duration scale == 0>) { CompositionLocalProvider(LocalIconImages provides container.iconImages) { PicnicAppRoot(container) } }`.
+- Inside `setContent` (v1): `PicnicTheme(darkTheme = isSystemInDarkTheme(), reducedMotion = <system animator duration scale == 0>) { CompositionLocalProvider(LocalIconImages provides container.iconImages) { PicnicAppRoot(container) } }`.
+- **Art pass (D12, owner WP4):** `PicnicTheme(variant = container.themeVariants.variant, reducedMotion) { CompositionLocalProvider(LocalStickerArt provides container.stickerArt, LocalTimeouts provides container.timeouts) { PicnicAppRoot(container) } }`, where reduced motion is on when the animator **or** the transition scale is 0 (read from `Settings.Global` at start and on every resume), and the status and navigation bar icon styles follow the resolved variant (dark icons on Day, Dusk and Golden; the celebration always composes in Day).
 - Never lock orientation.
 
 `PicnicAppRoot` is owned by app-screens:
@@ -698,12 +840,12 @@ The names below are binding. Implementers may add fields. Every screen is split 
 
 ```kotlin
 // ui/list
-class ListViewModel(store: StateStore, icons: IconRepository, settings: SettingsRepository, catalog: IconCatalog,
-                    clock: () -> Long, newId: () -> String, appScope: CoroutineScope) : ViewModel() {
+class ListViewModel(store: StateStore, album: AlbumStore /* art pass */, icons: IconRepository, settings: SettingsRepository,
+                    catalog: IconCatalog, clock: () -> Long, newId: () -> String, appScope: CoroutineScope) : ViewModel() {
     val state: StateFlow<ListUiState>; val events: Flow<ListEvent>
     fun toggle(itemId); fun delete(itemId); fun undoDelete(item: GroceryItem, index: Int)
     fun toggleSection(sectionId); fun clearChecked(); fun newList(title); fun switchList(id)
-    fun renameList(id, title); fun deleteList(id)
+    fun renameList(id, title); fun deleteList(id)  // art pass: TripFiling.deleteList, the book is filed first
     fun openEdit(itemId); fun closeEdit()
     fun saveEdit(name, quantity, note)     // editItemDetails(..., catalog); icons.submit(updated) if renamed
     fun moveToAisle(itemId, aisleId: String?)  // moveItemToAisle: learned correction
@@ -749,14 +891,20 @@ class AislesViewModel(store, aisleSync, baskets, appScope)   // save(): setStore
 
 // ui/settings (amendment A1: the OpenAI key + draw-icons only)
 data class SettingsUiState(val tokenInput: String = "", val hasToken: Boolean, val tokenHint: String?, val drawIcons: Boolean,
-    val test: ConnectionTestUi = ConnectionTestUi.Idle, val appVersion: String, val tokenVisible: Boolean = false,
+    val test: ConnectionTestUi = ConnectionTestUi.Idle, val tokenVisible: Boolean = false,
     val canSave: Boolean = false, val loading: Boolean = true, val notice: String? = null /* failed write */)
 sealed interface ConnectionTestUi { Idle; Running; Ok(latencyMs: Long); Failed(message: String) }
-class SettingsViewModel(settings: SettingsRepository, assistant: GroceryAssistant, appVersion: String)
+class SettingsViewModel(settings: SettingsRepository, assistant: GroceryAssistant, places: PlaceSource, listTitle: Flow<String>)
     // setTokenInput, toggleTokenVisible(), saveConnection() (save, then test), clearToken(), setDrawIcons(on), testConnection()
 ```
 
-- **Settings screen content:** a "Your OpenAI key" card (a short intro, a write-only key field with Show/Hide that shows `tokenHint` once saved, Save, Remove key, the note "Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.", and Test connection with the result inline), an "Icons" card ("Draw new icons with AI" switch plus the cost note), and an "About your key" card (hard monthly budget, restricted key with its three permissions, a line saying whoever made the key has a step-by-step guide (that guide is `docs/OPENAI_KEY.md`; the repository is private, so the app names no path or link), and what is sent). The app version is the footer. Nothing about models or server addresses.
+**Art pass, part 2 (WP7; replaces the `ui/add` shapes above; consumers: WP5's List screen, WP9's commit hooks; DESIGN_STICKER §6.2, §19.2).** The add flows are one holder, `rememberAddFlows(vm): AddFlows` (the ViewModel, the platform launchers, the bar's fold and focus, `dockHeight`), placed by the List screen as the dock, the toasts (`AddEventsEffect`) and the sheet. `AddPhase.Failed(problem: AddProblem, message?, retryable, canUsePlainLines, needsSettings)` replaces `Failed(message, …)`: `AddProblem` (`AI`, `PHOTO_UNREADABLE`, `CAMERA_UNAVAILABLE`, `MIC_UNAVAILABLE`, `MIC_DENIED`, `TOO_SHORT`, `NOTHING_HEARD`, `SAVE_FAILED`) names the app's own copy, and an AI error carries core's friendly `message`. `AddEvent` is redesigned as the list's one-off events: `Committed(AddCommit)` (`added`, `alreadyThere`, `revived`, `aisleTitle`, `asTypedNoKey`; `canUndo`, `popDelayMillis(i)` for the 80 ms pops), `Undone(commitId)`, `SaveFailed`, `SortFailed(friendlyMessage, leftUnsorted)`, `FocusField`. Snap and Speak need the key before anything is captured: `AddViewModel.requireKey(mode, capture)` opens the sheet on that mode with "Add your OpenAI key in Settings first." and never runs `capture` without one (`needsKey()` says which), and `AddFlows.takePhoto()` / `pickPhoto()` / `recordVoice()` go through it. `AddActions.onOpenAppSettings` is "Open phone settings" after the microphone was refused for good.
+
+**Art pass, part 3 (integration of WP5 and WP9; DESIGN_STICKER §12, §19.2).** The List screen sits in WP9's `EggListHost` (`ListScreen(…, surprises, feedback, imeVisible)`; `ListRoute` hands it `ListViewModel.surpriseEngine`): the host calls `onListShown` / `onListHidden`, runs the shake detector and the keyboard observer, scrolls each egg's scene into the list's room, and its `overlays` ride in MotionOverlay's `eggs` slot, above the bar's measured top (`dock(bar)` puts `addbar`, the bar's `text:` keep-out and `eggAddBar()` on the docked bar). The list's pieces read the eggs' state through `LocalListEggs` (the LCD's words and pet, the holo title, the sun, the pixel and gold stickers, the twinkle, HAPPY / B-DAY!, the basket's hello, the nap cat in its basket, the snack doodle beside the frozen tab, the ladybug along a strip, the roll home under a row's words, the page stickers' budget) and register the anchors the overlays look for (`list`, `strip:`, `tab:`, `line:`, and `text:` on every word). The add flows tell the engine about a commit once (`AddViewModel`); the list only pops its rows. While it rains the list's viewport ends above the umbrella's band, so no row lies under the canopy. The default `StaticDock` (previews, goldens, the lab) wears the eggs' tape when they run, the rain's included. The letter-set sheet's scroll viewport starts 16 dp under its perforated top, so scrolled content passes under the paper's edge and the washi handle instead of over them (§4.16; at rest nothing moves).
+
+**Art pass, part 2 (WP6; consumers: WP5, WP9; DESIGN_STICKER §8, §19.2).** `Choreographer` adds `keepCelebration()` (§0.4 Q7: a tap on the summary keeps it open) and `onUserOpen(sectionId?)` (her own tap on a strip, or `null` for the open tray's chevron, wins at once over an aisle-done chain; WP5 calls it from those handlers only). `ToggleEvent.newBook` marks the check-off that started a new sticker book on its own (A6: the book turns to the fresh page); its Undo is a `ListChange` with cause `NEW_BOOK_UNDO`, empty aisle sets and `slot` (the spot the item takes again), shown with `SpotPhase.Appearing(t0, inPlace = true)` (a 120 ms fade, no bloom). `FoldToggles` counts her own fold and unfold taps per section and `FoldFocusEffect` moves focus after her fold (item 193).
+
+- **Settings screen content:** a "Your OpenAI key" card (a short intro, a write-only key field with Show/Hide that shows `tokenHint` once saved, Save, Remove key, the note "Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.", and Test connection with the result inline), an "Icons" card ("Draw new icons with AI" switch plus the cost note), and an "About your key" card (hard monthly budget, restricted key with its three permissions, a line saying whoever made the key has a step-by-step guide (that guide is `docs/OPENAI_KEY.md`; the repository is private, so the app names no path or link), and what is sent). The app version is not on Settings: it shows on About & licences (DESIGN_STICKER §6.9, `AboutUiState.appVersion`). Nothing about models or server addresses.
 - **Lifecycle of saves.** Commits, deletes, edits and aisle syncs run in `appScope` (via the store), so closing a sheet or screen doesn't cancel a save. LLM calls the user is waiting for run in `viewModelScope`, so they are cancelled when the user dismisses the sheet.
 - **Snackbars.** Swipe-to-delete emits `ListEvent.Deleted`. The screen shows "Removed <name>" with **Undo**, which calls `undoDelete(item, index)`.
 - **Edit sheet:** rename, quantity and note use `saveEdit`; "Move to aisle" uses `moveToAisle` (learned correction); "Change icon" shows a grid of catalog keys, starting with the item's category, and calls `setIcon` (learned override); "Draw a new icon" calls `redrawIcon` (shown when `canDraw`).
@@ -805,6 +953,35 @@ The ingest context is taken when the request is sent (`state.ingestContext(listI
 
 The art pass then mostly edits `ui/theme/**` and assets, not screens.
 
+**Art pass (§11 theme contract; consumers: every screen package, WP6, WP9).** The C theme adds **variants** and the C components (DESIGN_STICKER §2, §4, §19.2):
+
+```kotlin
+enum class ThemeVariant { Day, Glow, Dusk, Golden }
+@Composable fun PicnicTheme(variant: ThemeVariant, reducedMotion: Boolean = LocalReducedMotion.current, content)   // v1 darkTheme form kept for now
+val LocalReducedMotion: ProvidableCompositionLocal<Boolean>; val LocalThemeVariant: ProvidableCompositionLocal<ThemeVariant>
+@Composable fun CheckMark(checked: Boolean, seed: String, stampText: HankoText = HankoText.GotIt, modifier = Modifier)
+@Composable fun ItemIcon(icon, contentDescription, modifier, size, aisleIndex = -1, ghost = false, holo = false, pixel = false,
+    flags: Set<StickerFlag> = emptySet(), drawing = false, lifted = false,
+    jackpot = false /* gold capsule */, mono = false, face = false /* album, achievements, empty states */, shadow = true,
+    glint = true /* part 2 (WP6): false keeps holo foil still on a text plate's hold */)
+@Composable fun LcdChip(state: LcdState, modifier, onHold: (() -> Unit)? = null, pitch: Dp = 1.9.dp)
+@Composable fun LcdText(text, pitch: Dp, modifier, color = ballpoint, grid: Color? = lcdGrid, moon = false, bold = false,
+    starAlpha = 1f /* polish: dims only the ★ / moon cells, the chip's blink; a blink never moves a dot */)
+@Composable fun LcdPetSprite(pose: PetPose, modifier)
+@Composable fun PuffyText(text: String | AnnotatedString, style, [fill: Color, String only], stroke: Dp, modifier,
+    strokeColor = colors.puffyStroke, shadow: DpOffset? = shadows.hs, shadowColor = shadows.color,
+    minFontSize = TextUnit.Unspecified, maxLines = 1, textAlign = TextAlign.Start, heading = false, wrapLast = false,
+    fillBrush: (() -> Brush)? = null /* egg 7 */)   // polish: an emoji draws its shadow and stroke in tinted layers
+@Composable fun Wordmark(text: String, modifier, compact = false)   // only shrinks, then stacks; never ellipsized
+@Composable fun PicnicText(text, style, modifier, color, textAlign, maxLines,
+    overflow = TextOverflow.Clip, onTextLayout = null)   // part 2 (WP6): inline ♡ ★ vectors; a cut reports through onTextLayout
+class ToastHostState { …; var paused: Boolean }          // part 2 (WP6): the celebration covers the toasts; their holds wait
+```
+
+**Large text (polish, WP4).** The theme's fixed-size pieces are minimums: `NumberCircle` (24 / 20 dp) grows with its numeral's text box and further, until its ring keeps 0.75 dp from its numeral's ink (measured on the glyphs, drawn once into a small bitmap: a two-digit numeral's corners reach past its box's circle; every numeral 1 to 24 clears it at 1.0, so the drawn size holds there), `ChipFace` (and with it every label, aisle and source chip) grows with its label, the store-aisle and rarity chips scale with their label's text box (face and the store chip's basket glyph alike, keeping their 1.0 proportions), and the pills' 52 / 48 dp faces grow with a taller label, so nothing clips at font scale 2.0; at 1.0 each keeps its drawn size. The store-aisle and rarity chips are never drawn under their 1.0 size, so their words never fall under 13 sp (`Modifier.fitChipToSlot`: above 1.0, in a slot narrower than the chip, the whole chip is drawn smaller to fit, down to its 1.0 size; narrower still, it runs on past the slot uncut, so such a caller gives it a line of its own); `storeAisleChipWidth(number)` is the store chip's laid-out width for a caller that plans round it (the Next card), and the tray header offers its chip only what `indexTabLeastWidth(position, displayName, look, size)` (the narrowest tab that shows the whole name at 16 sp, its number circle as drawn) leaves, never less than its 1.0 size, so the chip gives way before the aisle name is cut; when even its 1.0 size would cut the name (a long name at any scale; "Baking" from about 1.5 on a 360 dp phone), the chip leaves the header (the tab's heading still says "store aisle 2", and the folded strip's meta line shows it). The index tab's number circle is the kit's `NumberCircle` (it grows with its numeral, and the tab's fit counts the grown circle), but it gives way to the name: `NumberCircle(…, maxSize)` caps its growth at what leaves the whole name room at 16 sp (never under 24 dp), and `fitNumeral` then sets the numeral smaller, 0.5 sp at a time, until it keeps 0.75 dp from the ring. The Next card's number circle stays 30 dp at every scale (item 170) and fits its numeral on its ink instead (`fitNumeral`, from min(17 × fontScale, 21) dp), its ring drawn as the kit draws it. A ruled multi-line field's rule pitch is its text's line height: the `textStyle`'s own when it sets one, else `RULED_LINE_PITCH` (24 sp), in px following Compose's non-linear line-height rule (`lineHeightPx`), so rules sit under the lines at any scale. `PuffyText` fills the pinholes and hairline cracks its glyphs' halos leave (DESIGN_STICKER §2.7) and ellipsizes to the longest fitting start without the space before the "…". `Wordmark` never ellipsizes: it shrinks to one line, then stacks "Basket" under "Kirakira" in a box as wide as its longer word. A pill's or a chip's label wraps onto `PILL_LABEL_LINES` / `CHIP_LABEL_LINES` (2) balanced lines (`LineBreak.Heading`), its face growing round them with its one-line caps (`CappedStadium`) and a one-line label's room above and below (on the secondary, the label's ink keeps 3 dp from the inset ring); past 2 lines it ends in "…" and sets `TextOverflowed`, and no screen swaps in a short label for large text. `ChipFace(press, leadingHeight, focused)`: a chip shows its own pressed state (no ripple) and the pills' 2 dp focus ring (in the page's ink: ballpoint in Day, white in Glow); `PicnicChip` and `SourceChip` take an `interactionSource` and `PicnicChip` a `leadingHeight` (how tall its leading content stands). `PinholeWork { Inline, Background }` and `LocalPinholeWork` say where `PuffyText` works out its pinhole patch: the app root (`MainActivity`) provides `Background` (a worker); any other root or harness that leaves it out gets `Inline`, which scans on the main thread.
+
+**Motion (`ui/theme/MotionSpec.kt`).** Every timing lives in `object PicnicMotion` (the §8.2 tokens: `pose`, `sparkle`, `layout`, `standard`, `sheetIn`/`sheetOut`, `toastIn`/`toastOut`, `hop`/`hopPersonality`, `cardIn`/`cardOut`, `glint`, `rmFade`, the reading floors), with `Stepped(n)` easing, `readHold(words, floor)` and `words(text)` (the reading rule, DESIGN_STICKER §9). Reduced motion is decided from **both** Android scales; animations never follow the system scale: chains, overlays, toasts, sheets and the celebration run under `FixedMotionScale` (a `MotionDurationScale` of 1) and measure holds on the frame clock (§8.8 there). The v1 `PicnicTheme.motion` (`ThemeMotion`: `reduced`, `stepFps`, `shortMillis`, `mediumMillis`) stays until WP4 moves its callers. `TripProgress` is removed (its slot becomes the sticker book, WP5) once the v1 list screen stops using it.
+
 ### 11.1 Tokens (`ui/theme/Tokens.kt`, `Theme.kt`)
 
 ```kotlin
@@ -823,13 +1000,14 @@ data class PicnicShapes(card, row, chip, button, field, sheet /*top corners*/, b
 data class PicnicDimens(gutter=16, xxs..xxl, rowGap, sectionGap=14, sectionInset=8 /*tray wall*/, rule=1.5,
     rowMinHeight=64, touchTarget=48, itemIcon=40, miniIcon=20, basket=64, medallion=44, outline=2, hardShadow=DpOffset(0,3))
 data class PicnicMotion(reduced, stepFps = 8, shortMillis = 150, mediumMillis = 280)
-val LocalIconImages: ProvidableCompositionLocal<IconImages>   // default IconImages.None (placeholder art)
+val LocalStickerArt: ProvidableCompositionLocal<StickerArt>   // art pass (replaced LocalIconImages); default StickerArt.None
 val LocalIconCatalog: ProvidableCompositionLocal<IconCatalog> // default IconCatalog.default
 ```
 
 - **Palettes.** Two placeholder palettes: light "picnic at noon" and dark "picnic at dusk", chosen by the system dark mode. Both share an 8-colour aisle rotation (strawberry, sky, lemon, leaf, grape, tangerine, bubblegum, cocoa). An aisle's colour is `aisles[(position-1) % 8]`.
 - **Aisle identity.** An aisle is identified by colour, pattern, number and name, never by colour alone.
 - **Neutral sections.** Unsorted and In the basket use `colors.neutral` (what `aisle(-1)` returns): a low-chroma paper tone, never one of the rotation pastels or `surfaceSunken`, so they can't pass for an aisle. Its pastel stays light in both palettes, like the rotation's, so its tray reads the same way (light tray, row panel inside). `TokensContrastTest` checks it is low-chroma and at least ΔE 8 from every rotation pastel.
+- **Paper decides the ink** (DESIGN_STICKER §2.4.1). Content takes its ink set from the paper under it, through `OnPaper` (§11.2): in Glow, dark paper (binder, page, backing) gives Glow's inks and light paper (white, pastels, notes, vinyl, LCD, receipt) Day's, and the shadow follows the same paper (Day's periwinkle on light paper in Glow, the night's on dark), while the variant never changes. Day, Dusk and Golden have no dark paper. Colours are read inside the paper's scope, never from a `PicnicTheme.colors` captured above it.
 - **Fonts.** These must be **bundled** TTF/OTF files in `res/font`, subsetted, with their OFL licences shown in-app. Robolectric can't render downloadable fonts. The skeleton uses system families as placeholders.
 
 ### 11.2 Components (`ui/theme/Components.kt`)
@@ -837,10 +1015,11 @@ val LocalIconCatalog: ProvidableCompositionLocal<IconCatalog> // default IconCat
 | Composable | Purpose |
 |---|---|
 | `PicnicSurface(modifier, shape, color, outlined, shadow, content: BoxScope.()->Unit)` | Every card or row container: fill, ink outline and a **hard offset shadow** (no blur elevation) |
+| `OnPaper(paper: Color?, content)` (`ui/theme/Paper.kt`, with `LocalPaperColor`, `paperColors`, `isLightPaper`, `paperFocusInk` and `accentInk`, a family's trace on light paper and mid on dark) | Provides the paper, its focus-ring ink and, in Glow, the ink set and shadows of light or dark paper (`GlowLightColors` and `paperShadows`, Day's periwinkle, on light paper; the soft-ink copy on aisle pastels and mid faces in every variant); never the variant. Floating layers re-root on the binder, then lay their own paper: the letter-set sheet with `OnPaper(null)`, the overflow menu and pop cards with `OnPaper(binder)`, which keeps their navy Glow card's white kiss-cut edge (`PicnicSurface` drops it only on the binder itself or the page). `PicnicSurface` and the letter-set sheet call it; an object's own shadow, border and fill stay outside it. |
 | `PicnicButton(text, onClick, modifier, style: Primary/Secondary/Text, enabled, glyph?)` | Buttons, at least 48 dp tall. Gloss is a palette setting, `colors.buttonGloss` (null = none). Any gloss must read as an intentional cel highlight: a shape of its own on the face, clear of the outline and the label, never a loose stroke or a second top edge. The placeholder Primary draws a tapered lens centred under the top outline at noon (about half the face wide, capped at 96 dp) and none at dusk, where the pale face gives a highlight nothing to contrast with. At dusk Primary buttons also wear a 2.5 dp halo in the ground colour, so the pale face never melts into a pastel band behind it. |
 | `PicnicIconButton(glyph, contentDescription, onClick, modifier, enabled, emphasized)` | 48 dp round glyph button |
-| `PicnicChip(text, selected, onClick, modifier, leading?)` | Aisle chips, Sources chips and filter chips |
-| `PicnicTextField(value, onValueChange, modifier, placeholder, label, singleLine, minLines, maxLines, isError, supportingText, enabled, keyboardOptions, keyboardActions, visualTransformation, trailing?)` | All text input. For the token field, pass `PasswordVisualTransformation`. The visible `label` is the editable node's content description (TalkBack: "Amount, 2, edit box") and is cleared from the label `Text`; tests find fields by `hasContentDescription(label)`. |
+| `PicnicChip(text, selected, onClick, modifier, leading?, family, leadingHeight, interactionSource?)` | Aisle chips, Sources chips and filter chips |
+| `PicnicTextField(value, onValueChange, modifier, placeholder, label, singleLine, minLines, maxLines, isError, supportingText, enabled, keyboardOptions, keyboardActions, visualTransformation, trailing?, textStyle?, example?, interactionSource?)` | All text input. Multi-line, its rules sit one per line at the text's line height (`textStyle`'s own, else `RULED_LINE_PITCH`, 24 sp). For the token field, pass `PasswordVisualTransformation`. The visible `label` is the editable node's content description (TalkBack: "Amount, 2, edit box") and is cleared from the label `Text`; tests find fields by `hasContentDescription(label)`. |
 | `PicnicTopBar(title, modifier, subtitle, navigation?, actions, bottom?)` | Title card. `bottom` takes `TripProgress` or tabs. Applies no insets itself. |
 | `PicnicSwitch(checked, onCheckedChange, modifier, enabled)` | Settings toggles |
 | `PicnicSnackbar(data, modifier)` | Use as `SnackbarHost(host) { PicnicSnackbar(it) }` |
@@ -901,9 +1080,10 @@ itemsIndexed(items, key = { _, r -> r.id }) { i, r ->
 - **Pinned bands.** On the List screen every section header is a `stickyHeader`. Once an open section's rows scroll under the top, its band stays pinned, drawn closed (`rowsBelow = false`) as a card over its own rows, so a long aisle is never a run of rows without a name. A one-pixel sticky marker after each section pushes the band off as the section ends (the list ignores zero-size items when choosing which header to pin). The list's viewport starts under the top bar (top inset as padding, not content padding), so the pinned band sits just below the bar.
 - **Pinned bands are backed.** A pinned band (`AisleHeader(pinned = true)`) repaints the screen ground behind itself, from the top of the list's viewport down to its own bottom edge and across the full width, in line with the real ground (`PicnicBackground` provides its position; the gingham and dusk stars keep its grid). No part of a row scrolling underneath may show above or beside the pinned band, its transparent rounded corners included; rows appear only below it, under its hard shadow. The card itself looks the same. The backing relies on the list clipping to its viewport (a `LazyColumn` does). Golden: `list_pinned` (Aisle 2's rows mid-scroll under it).
 - **Ticking off.** A just-ticked row stays in its aisle, ticked, for 600 ms so the check stamp plays in place, then fades out of the aisle and into the basket. Basket rows are keyed `basket:<id>`, so a row never slides its slice across the sections in between. This is presentation only: the state and its counts are unchanged.
-- **No offset shadows inside a section.** Circles and boxes in a row (item stickers, the checkbox) lie flat. An offset drop reads as a smudge or crescent next to the checkbox, not as depth. Lift (hard offset shadow) is only for free-floating cards, buttons and stickers on the ground: `ItemIcon(lifted = true)` for the edit sheet's hero icon.
+- **Art pass (replaces the next rule; consumers: `ItemIcon`, `ListPieces`):** item stickers carry their own hard die-cut shadow in rows (C's sticker look, DESIGN_STICKER §3.3); everything else in a row (the checkbox spot, the hanko) still lies flat.
+- **No offset shadows inside a section (v1).** Circles and boxes in a row (item stickers, the checkbox) lie flat. An offset drop reads as a smudge or crescent next to the checkbox, not as depth. Lift (hard offset shadow) is only for free-floating cards, buttons and stickers on the ground: `ItemIcon(lifted = true)` for the edit sheet's hero icon.
 
-- **ItemIcon** uses `LocalIconImages.cached(ref)` first; if that's null, it calls `load(ref)` in `produceState`; if the result is still null, it draws placeholder art keyed by the icon's category. `drawing` overlays `DrawingSparkle`. `lifted` adds the placeholder sticker's drop shadow; it is off by default, so stickers lie flat in rows, chips and pickers. Bespoke and bundled bitmaps are drawn as they are. Rows pass `contentDescription = null`, because the row text already names the item. Callers pass `IconCatalog.displayRef(item, busy)`.
+- **ItemIcon** (art pass, DESIGN_STICKER §3.3): library stickers are vectors (the key, else its category's generic, else the capsule); a `customIconId` draws the live sticker from `LocalStickerArt` (`cached(id)` first, then `load(id)` in `produceState`; the library art meanwhile, and the previous sticker stays until a new one is decoded). One render path for both: the hard shadow at render time from the theme, the sticker, its look (ghost, holo, pixel, mono, capsule), the corner flags. A v4 live sticker's shadow, white die-cut edge and ghost come from its stored cut path; a legacy one is drawn as it is, with no added shadow, and its ghost is the mono silhouette at 18 %. `drawing` overlays `BusySparkle`. Rows pass `contentDescription = null`, because the row text already names the item. Callers pass `IconCatalog.displayRef(item, busy)`. (v1: `LocalIconImages` bitmaps and placeholder art.)
 - **AisleBasket** draws the container art for `kind` (one vector or bitmap per basket kind from the art pass; the catalog's `drawHint`s describe each). **The basket holds what has already been gotten** (amendment A3): `inBasket` are the icons of the aisle's checked items, and the first of them (at most 5) peek out of the basket, overlapping. Items still to get are never passed. An empty `inBasket` (nothing gotten yet, or the list's empty state) draws the basket of that kind with no item minis in it. Kinds whose look comes from their contents (flower bucket, ice bucket, bottle carrier, candy jar) keep that built-in decoration when empty (amendment A3: Cora prefers maximalism to a bare container). A `count` badge (what is still to get) shows when `count > 0`. It is decorative.
 - **AisleHeader** is the single toggle target for its section. Collapsed: `AisleBasket` (basket kind, the gotten items in it, the to-get badge) beside the title. Expanded: `AisleMedallion` and the title (no basket). Cleared: a "cleared" stamp in the trailing slot, replacing the count and the chevron (nothing is left to show or hide), never laid over them; collapsed, its basket is full. It announces "`<title>`, `<count>` to get, `<gotten>` in the basket" (the checked section, `gotten = null`: "`<title>`, `<count>` items"), plus "All picked up!" when cleared, with the state description collapsed or expanded. Unsorted and the checked section use it with `number = null` and `aisleIndex = -1`. With `rowsBelow = true` it is the open top band of its section, otherwise a closed card. The halftone accent fades out before an open band's bottom edge.
 - **ItemRowCard** holds the visual content of a row only, opaque on the section's inner surface. Wrap it in `AisleSectionRow`; it draws no card, outline or shadow of its own. The screen adds click (toggles checked), long-press (opens edit) and `SwipeToDismissBox` (delete with undo). A checked item shows the filled `CheckMark`, a strike-through and the softer `inkSoft` colour. State is never shown by colour alone. `pressed` (from the screen's interaction source) is the press feedback: the row takes its section's pastel wash at once (it has no card edge to move or shrink). `TokensContrastTest` keeps ink, inkSoft and the checkbox ring readable on it.
@@ -911,8 +1091,9 @@ itemsIndexed(items, key = { _, r -> r.id }) { i, r ->
 
 ### 11.5 Previews and accessibility rules
 
-- **Previews (app-shell).** Every theme component gets an `@Preview` in light and dark. Roborazzi's preview scanner captures every `@Preview` under `earth.cora.picnic` automatically, at `w411dp-h891dp-night-xxhdpi` with SDK 36. `ThemeSampler.kt` is the first one (verified to render). Previews must render without the app container, through `IconImages.None` placeholder art and `IconCatalog.default`.
+- **Previews (app-shell).** Every theme component gets an `@Preview` in light and dark. Roborazzi's preview scanner captures every `@Preview` under `earth.cora.picnic` automatically, at `w411dp-h891dp-night-xxhdpi` with SDK 36. `ThemeSampler.kt` is the first one (verified to render). Previews must render without the app container, through `StickerArt.None` (library vectors only) and `IconCatalog.default`.
 - **Accessibility.** Item names use `type.itemName`, never smaller than 16 sp. Font scale is supported up to 200 %. Touch targets are at least 48 dp. Respect `PicnicTheme.motion.reduced`: no decorative loops, and fades of 150 ms or less. Nothing flashes faster than 3 Hz.
+- **Art pass (WP10).** `ui/a11y`: `spokenDetail`, `spokenItemLabel` and `spokenDuration` (units in words for TalkBack: "4 L bag" → "4 litre bag"), `Modifier.decorative()` (no TalkBack node; a test-visible `Decorative` key), `TextOverflowed` (set by `PuffyText` and `LcdText` when their text doesn't fit) and `isScreenReaderOn()`. `platform`: `Feedback.cue(Cue)` (a sound and haptic pair, §10.1), `RepeatingCue` (repeats a cue while the screen is resumed), `Announcer.polite`, `Timeouts.recommended(holdMs, controls)` and `holdThresholdMs`.
 
 ---
 
@@ -947,7 +1128,7 @@ Core's own log messages (`LlmError.message`) are safe to log. The UI shows `frie
 - **Store.** `StateStore.update` is serialized by a `Mutex`. Transforms must be pure and fast: no suspension and no I/O inside them.
 - **Scopes.** `viewModelScope` is for work tied to a screen: the LLM calls the user waits for, and polling the recording level. `appScope` is for commits, aisle sync, `sortItems` and the icon cascade (decider batcher and draw workers).
 - **Cancellation.** Cancelling a coroutine cancels its OkHttp call. Closing the Add sheet cancels the in-flight ingest (`AddViewModel.cancel()`).
-- **Bitmaps.** Decoding, the icon trim/downscale and JPEG/WebP encoding run on `Dispatchers.Default`/`IO`, never in composition. `IconImages.cached` touches memory only.
+- **Bitmaps.** Decoding, the icon trim/downscale and JPEG/WebP encoding run on `Dispatchers.Default`/`IO`, never in composition. `StickerArt.cached` touches memory only.
 - **Recording.** It is foreground-only and stops on `Lifecycle.Event.ON_STOP`, except during a configuration change (`activity.isChangingConfigurations`): the recorder and meter live in the ViewModel and survive a rotation.
 
 ---
@@ -956,11 +1137,12 @@ Core's own log messages (`LlmError.message`) are safe to log. The UI shows `frie
 
 The tool is **Roborazzi 1.76.0** with Robolectric 4.17, native graphics, Robolectric **SDK pinned to 36** (`app/src/test/resources/robolectric.properties`; SDK 37 crashes Espresso's input injection) and `--add-opens java.base/jdk.internal.access`. The skeleton runs `recordRoborazziDebug` successfully. Paparazzi 2.0.0-alpha also works, but it is alpha; don't mix the two.
 
+- **Art pass:** fixture goldens (the Appendix A "Saturday shop" fixture of DESIGN_STICKER) render at `w360dp-h760dp-xxhdpi` (the mockup's phone width, so the book has its 8 columns), with selected `w411dp-h891dp` variants named `…_w411`; names and the required set follow DESIGN_STICKER §20 and its Appendix C manifest (a reference: no test reads it). Each package records only its own goldens.
 - **Goldens** live in `app/src/test/screenshots/`. Previews (app-shell) are named `<Class>.<Function>.<Preview_name>.png`. Explicit screen tests (app-screens) are named `<screen>_<state>_<light|dark>.png`.
 - **Explicit screen tests.** Use `@RunWith(AndroidJUnit4::class)`, `@GraphicsMode(NATIVE)`, `@Config(qualifiers = "w411dp-h891dp-night-xxhdpi")` (or without `-night`) and `androidx.compose.ui.test.junit4.v2.createComposeRule`. Render the **stateless** `XxxScreen(state)`, then call `onRoot().captureRoboImage("src/test/screenshots/<name>.png")`.
 - **Qualifier order.** `night` comes before the density. The other order throws.
 - **States to cover:** List: empty; mixed sections with collapsed baskets (some items gotten; nothing gotten, an empty basket; a cleared aisle, a full basket), a drawing sparkle, a PENDING item and checked items; rows scrolled under a pinned band (`list_pinned`). Add sheet: write, thinking, preview with sources, failed with plain lines, and speak with a transcript. Edit sheet (with the icon grid). Aisles editor. Settings: no key, a key typed and shown, a saved key with a passing test, a failed test (a missing permission), and the "About your key" card scrolled into view.
-- **Commands.** Record locally with `recordRoborazziDebug`. CI runs `compareRoborazziDebug`, which doesn't fail, and uploads the diffs. Switch CI to `verifyRoborazziDebug` once the art settles.
+- **Commands.** Record locally with `recordRoborazziDebug`. CI runs `compareRoborazziDebug`, which doesn't fail, and uploads the diffs. It stays that way: moving CI to `verifyRoborazziDebug` (DESIGN_STICKER item 305) was retired on 4 October.
 
 ---
 
@@ -969,7 +1151,7 @@ The tool is **Roborazzi 1.76.0** with Robolectric 4.17, native graphics, Robolec
 The workflow is `.github/workflows/android.yml`. Copy it verbatim from `research/android_build.md` §6, where it is proven and passes actionlint.
 
 - **Triggers and environment:** push to any branch, tags `v*`, pull requests and `workflow_dispatch`. The runner is ubuntu-24.04 with JDK 21. setup-android installs `platforms;android-37.0 build-tools;36.0.0`. Gradle uses `cache-provider: basic`.
-- **Jobs:** `build` (no secrets): (1) `./gradlew -p core test`; (2) `./gradlew :app:compareRoborazziDebug :app:lintDebug :app:assembleDebug`; (3) upload the reports. Then `apk`, on its own runner with the signing key: `:app:assembleSideload -Ppicnic.versionCode=<run_number> -Ppicnic.versionName=<ver>`, a check that the APK carries exactly the registered certificate, and the bare **sideload** APK uploaded as `picnic-list-<ver>.apk` (`archive: false`).
+- **Jobs:** `build` (no secrets): (1) `./gradlew -p core test`; (2) `./gradlew :app:compareRoborazziDebug :app:lintDebug :app:assembleDebug` (`lintDebug` depends on `:app:checkSounds`; `:app:checkStickers` needs Python packages a runner lacks, so it runs locally); (3) upload the reports. Then `apk`, on its own runner with the signing key: `:app:assembleSideload -Ppicnic.versionCode=<run_number> -Ppicnic.versionName=<ver>`, a check that the APK carries exactly the registered certificate, and the bare **sideload** APK uploaded as `picnic-list-<ver>.apk` (`archive: false`).
 - **Releases:** on a `v*` tag, a release job attaches the APK to a GitHub Release.
 - **The installable APK is the `sideload` build type:** `initWith(debug)` (same code, not minified, no `debugImplementation` tooling) but `isDebuggable = false`, signed with the app's private key. A debuggable APK would let anyone with brief USB access `adb shell run-as` into the app's files and Keystore key (the stored token) or attach a debugger. Successive sideloads update in place; debug APKs (debug key) don't mix with them. `assembleDebug` stays for development.
 - **Signing:** sideload (and release) builds are signed with the private key registered for `earth.cora.picnic` in Android Developer Console, from the `PICNIC_SIGNING_*` settings (docs/RELEASING.md); without them, sideload falls back to the committed `app/debug.keystore`, which also signs debug builds and must never be registered.
@@ -979,9 +1161,10 @@ The workflow is `.github/workflows/android.yml`. Copy it verbatim from `research
 
 ## 16. Privacy and Play compliance
 
-- **Permissions:** `INTERNET` and `RECORD_AUDIO` (runtime, foreground only). There is **no `CAMERA` permission**, because the system camera intent is used. `<uses-feature>` marks camera and microphone as `required="false"`. The photo picker needs no permission. The `<queries>` entry for `IMAGE_CAPTURE` is present. Verified in the merged manifest: INTERNET, RECORD_AUDIO and androidx's `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` only.
+- **Permissions:** `INTERNET` and `RECORD_AUDIO` (runtime, foreground only). **Art pass (A6):** plus `ACCESS_COARSE_LOCATION`, requested only when she turns on "Use my area" (after the rationale in DESIGN_STICKER §0.4); never fine or background location (`ManifestPermissionsTest`, owners WP8 · WP9). There is **no `CAMERA` permission**, because the system camera intent is used. `<uses-feature>` marks camera and microphone as `required="false"`. The photo picker needs no permission. The `<queries>` entry for `IMAGE_CAPTURE` is present. Verified in the merged manifest: INTERNET, RECORD_AUDIO and androidx's `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` only.
 - **Data sent off the device:** text, photos and audio go directly to OpenAI only when the user asks; item names go there in the background, including for "Add as typed": to the fast model for aisle placement and icon decisions, and to the image model for bespoke icons (when "Draw new icons with AI" is on). The Settings help text says the same. Requests use `store: false`. Nothing else leaves the device, and there are no analytics.
-- **Backups:** only `state.json` is backed up.
+- **Backups:** only `state.json` is backed up. **Art pass:** `state.json` and `album.json`.
+- **Art pass:** the pantry is stored on the phone and sent to OpenAI with each AI request (never without a key); the opt-in weather feed and the approximate area are as in §9. PRIVACY.md says so (WP8 · WP10).
 - **Play:** a later Play release needs a privacy policy URL (because of `RECORD_AUDIO`) and a Data safety form that discloses the processing.
 - **Security:** no secrets in the repo or APK, ever. `*.env` and `.env*` are gitignored.
 - **Legal and IP:** OFL fonts are bundled with their licences. Art uses only generic genre motifs (see the IP rules in `research/directions.md`), with no real brand packaging.

@@ -61,6 +61,55 @@ class IconDeciderTest {
     }
 
     @Test
+    fun noneCarriesLookAndFamilies() = runTest {
+        api.enqueue(
+            200,
+            TestSupport.responseEnvelope(
+                """{"decisions":[
+                  {"id":"i1","icon":"none","category":"pantry","look":"one squat glass jar of kimchi with a round screw lid; a few chunky folded cabbage leaves show through the glass.","body":"strawberry","accent":"melon"},
+                  {"id":"i2","icon":"plant_milk","category":"plant_based","look":"a carton","body":"ramune","accent":"cocoa"},
+                  {"id":"i3","icon":"none","category":"bakery","look":"  two plump bagels\nstanding on edge  ","body":"cocoa","accent":"cocoa"},
+                  {"id":"i4","icon":"none","category":"fruit","look":"","body":"neutral","accent":"sakura"}
+                ]}""",
+            ),
+        )
+        val result = decider.decide(
+            listOf(NamedItem("kimchi", "Kimchi"), NamedItem("oat milk", "Oat milk"), NamedItem("bagels", "Bagels"), NamedItem("pitaya", "Pitaya")),
+        )
+        assertEquals(
+            IconDecision(
+                icon = null,
+                category = "pantry",
+                look = "one squat glass jar of kimchi with a round screw lid; a few chunky folded cabbage leaves show through the glass",
+                families = listOf("strawberry", "melon"),
+            ),
+            result["kimchi"],
+        )
+        // A match keeps its families but never a look (only a drawing needs one).
+        assertEquals(IconDecision("plant_milk", "plant_based", look = null, families = listOf("ramune", "cocoa")), result["oat milk"])
+        // One-colour items name the body twice: one family. Whitespace and newlines fold to one line.
+        assertEquals(IconDecision(null, "bakery", "two plump bagels standing on edge", listOf("cocoa")), result["bagels"])
+        // An empty look is no look; a family outside the sticker palette is dropped.
+        assertEquals(IconDecision(null, "fruit", null, listOf("sakura")), result["pitaya"])
+        // "none" still resolves to the category generic, APPROXIMATE: the item is a live-drawing candidate.
+        assertEquals(ResolvedIcon("pantry_generic", IconFit.APPROXIMATE), result.getValue("kimchi").resolve(catalog))
+
+        val props = api.takeJson().path("text", "format", "schema", "properties", "decisions", "items", "properties")!!.jsonObject
+        assertEquals("string", props.path("look", "type")!!.str())
+        assertEquals(StickerPalette.NAMES, props.path("body", "enum")!!.strings())
+        assertEquals(StickerPalette.NAMES, props.path("accent", "enum")!!.strings())
+        assertEquals(setOf("id", "icon", "category", "look", "body", "accent"), props.keys)
+    }
+
+    @Test
+    fun theRulesAskForALookAndFamiliesWithEveryNone() {
+        val rules = Prompts.iconDeciderRules
+        assertTrue("- look: when icon is \"none\"" in rules)
+        assertTrue("- body and accent:" in rules)
+        StickerPalette.NAMES.forEach { assertTrue("$it (" in rules, it) }
+    }
+
+    @Test
     fun skippedIdsGenericAndUnknownKeysBecomeNone() = runTest {
         api.enqueue(
             200,

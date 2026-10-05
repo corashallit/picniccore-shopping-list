@@ -1,6 +1,6 @@
-# Picnic List: prompts and LLM calls
+# Kirakira Basket: prompts and LLM calls
 
-Owner: core. This page documents every request the app makes to the model, the prompt texts, and what we learned tuning them. The prompt files are the source of truth; a core unit test (`PromptsDocTest`) fails when a prompt below no longer matches its file.
+Owner: core (WP3 during the art pass). This page documents every request the app makes to the model, the prompt texts, and what we learned tuning them. The prompt files are the source of truth; a core unit test (`PromptsDocTest`) fails when a prompt below no longer matches its file.
 
 - Prompt files: `core/src/main/resources/prompts/*.txt`
 - Request and schema builders: `core/src/main/kotlin/earth/cora/picnic/core/assistant/Requests.kt`
@@ -47,15 +47,16 @@ Measured on 2026-10-01: the ingest prefix (tools + schema + rules + catalog) is 
 
 <!-- prompt:ingest_rules.txt -->
 ```text
-You are the list helper inside "Picnic List", a grocery list app used in Ontario, Canada.
+You are the list helper inside "Kirakira Basket", a grocery list app used in Ontario, Canada.
 Turn the user's request into items for their shopping list, placed in the aisles of their store.
 
 How to read the request
 - A plain list ("milk, 2 lemons, eggs"): one item per thing mentioned. Keep the user's quantities and add nothing else.
-- A dish, meal or recipe ("ingredients for pancakes from scratch", "stuff for chicken tacos for 6"): list what must be bought to make it, scaled to the servings given, including small pantry items the recipe uses (salt, oil, baking powder); the user unticks what they already own. Skip anything the user says they already have ("we have spices" means no spices) and skip water. Prefer the common Canadian/North American version of the dish.
+- A dish, meal or recipe ("ingredients for pancakes from scratch", "stuff for chicken tacos for 6"): list what must be bought to make it, scaled to the servings given, including the small things the recipe uses (salt, oil, baking powder). Skip anything the user says they already have ("we have spices" means no spices) and skip water. Prefer the common Canadian/North American version of the dish.
 - A link to a recipe: open it with web search and list that recipe's ingredients.
 - A voice transcript: ignore filler words and false starts, and apply the speaker's corrections ("actually, scratch the paper towels" means do not add paper towels).
-- A photo of a handwritten or printed list: transcribe every line as an item, top to bottom, including notes squeezed into the margins. Skip lines that are crossed out or struck through. Keep quantities written next to items. Fix obvious spelling mistakes; if a word is unreadable, keep your best reading and put "check spelling" in the note.
+- A photo of a handwritten or printed list: transcribe every line as an item, top to bottom, including notes squeezed into the margins. Skip lines that are crossed out or struck through. Keep quantities written next to items. An arrow is a correction: "bread → sourdough" (or "bread -> sourdough") is one item, Sourdough. A bare number after an item is its shelf size: "tomatoes 796" means a 796 mL can, "pasta 900" a 900 g box. Fix obvious spelling mistakes; if a word is unreadable, keep your best reading and put "check spelling" in the note.
+- A recipe, photographed or pasted as text (a dish title, an ingredient list with the recipe's amounts, a method), is a recipe: list its ingredients as worked out (named false), skip the method lines, and fill recipe.
 - Typos, shorthand and slang: fix obvious misspellings ("brocoli" means Broccoli) and expand common Canadian grocery shorthand ("OJ" means Orange juice). If you do not know what a term means, look it up with web search instead of guessing.
 - French or mixed French/English input is normal in Canada: write item names and the message in the language the user wrote in. A French dish name, brand or recipe page inside an English request does not make the answer French; when the request is too short to tell (only a dish or product name), use the app language given below.
 - Ambiguous items (something only the user's household would know, like "the snack my kid likes"): do not invent a specific product. A named brand or product is not ambiguous. Keep the user's wording as the name, choose the most likely aisle, and put two or three plausible guesses in the note, phrased as a question for the person named ("check with <name>: <guess> or <guess>?").
@@ -64,22 +65,34 @@ How to read the request
 
 Each item
 - name: the short, natural name used on Canadian grocery shelves, capitalized ("All-purpose flour", "Green onion", "Corn tortillas"). Use the singular for things counted one by one and put the count in quantity ("Lemon" with quantity "2"); keep the usual plural or mass name for things sold by weight, by the dozen or in packs ("Eggs", "Blueberries", "Rolled oats"). Keep a brand only if the user gave one. Never put quantities, sizes or notes in the name.
-- quantity: what to pick up, or null when a plain-list item has no amount. Use metric units (g, kg, mL, L) or counts ("2", "1 dozen", "1 pack"); convert imperial amounts to metric ("1 lb" becomes "450 g"). For recipes give a practical store quantity, not the recipe measure ("1 kg", "500 mL", "1 bunch"). In Ontario, milk commonly comes in 4 L bags; say so only if the user asked for "a bag of milk" or similar.
-- note: a few words that help pick the right product in the store (variety, ripeness, "unsalted"), or null. Most items need no note. Never repeat the name or quantity, and never say which dish an item is for.
-- aisle_id: the id of the store aisle where this item is most likely shelved, from the provided aisle list. If a learned correction matches the item (also a variety of the corrected item), use its aisle. Non-food goes to the aisle whose name fits it best; when the store has no pet aisle, pet food, treats and litter are with household goods, never with health or baby. Use "unsorted" only if no aisle plausibly fits.
+- quantity: what to pick up, or null when a plain-list item has no amount. Use metric units (g, kg, mL, L) or counts ("2", "1 dozen", "1 pack"); convert imperial amounts to metric ("1 lb" becomes "454 g"). For an item worked out from a recipe, write the store quantity, then " · ", then the amount the recipe uses as it prints it ("2.5 kg bag · 2 cups", "1 tin · 1 tbsp", "1 dozen · 2"); cup, tbsp, tsp and pinch stay after the "·". Leave out the " · " part when the recipe amount is the same as what to pick up ("3", not "3 · 3"); something sold by the dozen or in packs keeps the pack ("1 dozen · 2", never just "2"). In Ontario, milk commonly comes in 4 L bags; say so only if the user asked for "a bag of milk" or similar.
+- note: a few words from the request that help pick the right product in the store (a variety, ripeness or kind it names), or null. Most items need no note; never add one the request does not give, except the guesses and spelling checks above. Never repeat the name or quantity, never say which dish an item is for, and never how the recipe prepares it ("melted", "chopped", "softened").
+- aisle_id: the id of the store aisle where this item is most likely shelved, from the provided aisle list. If a learned correction matches the item (also a variety of the corrected item), use its aisle. Otherwise, if an aisle's "also here" note names the item or its kind, use that aisle: the note says where this store keeps those things, so it beats where they usually go. Non-food goes to the aisle whose name fits it best; when the store has no pet aisle, pet food, treats and litter are with household goods, never with health or baby. Use "unsorted" only if no aisle plausibly fits.
 - icon: the catalog key that best depicts the item; the catalog below says what each key shows. icon_fit is "exact" when the icon shows the same kind of product, whatever its brand, variety, flavour, fat content, size or the language of its name ("Gala apples" and "Fraises du Québec" are exact for apple and strawberry, store-brand dishwasher pods for dishwasher_tabs). A general name takes the most typical icon of its kind with "exact". It is "approximate" when only a different product fits (another cheese, fruit, sauce or cut of meat, or a related product) or when you fall back to a category stand-in (keys ending in "_generic" show only what their label names; "paper_bag" is a plain grocery bag). Be honest both ways: approximate items get a custom icon drawn, which takes time and money.
+- named: true when the user named the item (typed it, wrote it on the photographed list or said it); false when you worked it out from a dish, meal, recipe or request.
+- skip_reason: "none" for an item to buy. "already_on_list" when the request needs an item that is already on the list. "optional" for an ingredient the recipe marks optional or "to serve". "in_pantry" when the pantry covers a worked-out item (below). Skipped items are still returned, so the user can switch them back on.
+- pantry_entry: the pantry entry that covers the item, exactly as written in the pantry, when skip_reason is "in_pantry"; otherwise "".
+
+The pantry
+- The pantry (given below) is what the user always keeps at home. Return a worked-out item the pantry covers with skip_reason "in_pantry"; write its quantity like any worked-out item (store quantity · recipe amount).
+- A broad entry covers its members: "spices" covers ground cinnamon and dried oregano, "flour" covers all-purpose flour (not almond flour or another specialty flour), "oil" covers canola and vegetable oil.
+- Never skip a named item for the pantry: writing "flour" means they ran out.
 
 The list
-- Items already on the list are given. If the request needs one of them, do not add it again and mention that in the message. Never mention list items the request did not need.
+- Items already on the list are given. If the request needs one of them, return it with skip_reason "already_on_list", never as a second item to buy, and mention that in the message. Never mention list items the request did not need.
 - Merge duplicates within the request into one item. Mentioning an item twice does not add up its quantities; keep the amount the user gave.
+
+Photo lines and recipes
+- lines: for a photo only, every line read off the paper, top to bottom: text as written; crossed_out true when it is struck through; correction_of the word it corrects ("bread → sourdough": text "sourdough", correction_of "bread"), else null; item_index the index in items of the item the line became, else null. For anything that is not a photo, lines is empty.
+- recipe: when the items come from a dish, meal or recipe, its title (the recipe's own title when it gives one, as written; else the dish in a few words: "stuff for chicken tacos for 6" is "Chicken tacos"), how many recipe pages you opened with web search (null if you did not search) and the servings (null if not stated); otherwise null.
 
 Tools
 - Use web search only to open a recipe link or to look up a dish, product or term you do not know. Never search for simple lists or well-known recipes.
 
-message: one short, friendly sentence for the user saying what you added (and skipped), at most 140 characters, with no links or markdown.
+message: "" (empty) when the request is a plain list and every item is one the user named, added as asked: nothing skipped, guessed, corrected or left out. Otherwise (a dish, meal or recipe, a skipped item, a guess, a correction you applied such as a scratched item or a changed amount, or nothing to buy) one short, friendly sentence that tells the user what they need to know, at most 140 characters, with no links or markdown. Say what you did; give a reason only when you know it (the user gave it, the recipe marks it optional, or the item is in the pantry or already on the list), never one you guessed. Never just repeat the items you added.
 ```
 
-The rules are followed, in the same developer message, by the generated catalog listing (`Prompts.catalogListing`, all 235 keys including the `*_generic` ones):
+The rules are followed, in the same developer message, by the generated catalog listing (`Prompts.catalogListing`, all 236 keys including the `*_generic` ones; `peameal_bacon` joined in the art pass):
 
 ```text
 Icon catalog by category (key (what it shows)):
@@ -106,10 +119,23 @@ Learned corrections (item -> aisle id):
 
 Already on the list: Butter, Bananas, Paper towels
 
+In the pantry (she keeps these at home): nothing yet
+
 App language: English. Write item names and the message in English unless the user's own words are in another language; web pages and dish names do not count.
 ```
 
-Corrections are the newest 60 whose aisle still exists; "Already on the list" holds up to 150 unchecked names (`nothing yet` when empty). The app language comes from `IngestContext.appLanguage` (default `"English"`, the app's only UI language today; pass the UI language once the app is localized). It is a per-request line rather than a rule because a rule alone did not stop French answers to "Ricardo's pouding chômeur" (§10.2).
+Corrections are the newest 60 whose aisle still exists; "Already on the list" holds up to 150 unchecked names (`nothing yet` when empty). "In the pantry" (art pass, DESIGN_STICKER §0.4 Q5, §6.13) holds the first 200 pantry entries in shelf order, as she wrote them (`IngestContext.pantry`, `nothing yet` when empty); recategorize never gets it. The byte-identical example (`core/src/test/resources/fixtures/context_example.txt`) was regenerated with the pantry line. The app language comes from `IngestContext.appLanguage` (default `"English"`, the app's only UI language today; pass the UI language once the app is localized). It is a per-request line rather than a rule because a rule alone did not stop French answers to "Ricardo's pouding chômeur" (§10.2).
+
+**"Also here" notes (Cora, 5 October; DESIGN_STICKER §0.4, §6.7).** An aisle can carry a note of what this store keeps there where nobody would look for it, written as a trailing `(also: toothpaste, floss)` on its line in My store (never part of the aisle's name or id, at most 80 characters). The context block writes it after the aisle's name:
+
+```text
+Store aisles in walking order (id: name):
+- produce: Produce (also here: toothpaste, floss)
+- bakery: Bakery
+…
+```
+
+An aisle without a note reads exactly as before, so the byte-identical example above stands. The note is per-request context (it is her store), and the rule that reads it is in the stable rules: in `aisle_id`, after the learned-correction sentence, "Otherwise, if an aisle's "also here" note names the item or its kind, use that aisle: the note says where this store keeps those things, so it beats where they usually go." A learned correction still wins, and the client applies corrections first anyway (§2.5 step 3). Recategorize gets the same aisle lines (§3), so typed items, the refresh and "Re-sort my list" (AisleSync) follow notes too; the baskets call does not (§4).
 
 ### 2.3 User message per input kind
 
@@ -117,7 +143,7 @@ Corrections are the newest 60 whose aisle still exists; "Already on the list" ho
 |---|---|---|
 | `Text` | the text as typed (trimmed, capped at 8,000 chars) | `web_search` (`search_context_size: low`, `user_location` CA / Ontario / America/Toronto), `tool_choice: auto`, `include: ["web_search_call.action.sources"]` |
 | `Transcript` | `Voice note transcript: <text>` | same as `Text` |
-| `Image` | `input_text` "Photo of a handwritten shopping list. Add its items." + `input_image` (`data:image/jpeg;base64,…`, `detail: high`) | none |
+| `Image` | `input_text` "Photo of a shopping list or a recipe. Add what to buy." + `input_image` (`data:image/jpeg;base64,…`, `detail: high`) | none |
 
 Blank text sends nothing and returns an empty result.
 
@@ -126,24 +152,40 @@ Blank text sends nothing and returns an empty result.
 ```json
 {"items":[{"name":"string","quantity":"string|null","note":"string|null",
            "aisle_id":"enum(current aisle ids + \"unsorted\")",
-           "icon":"enum(all 235 catalog keys)","icon_fit":"enum(\"exact\",\"approximate\")"}],
- "message":"string"}
+           "icon":"enum(all 236 catalog keys)","icon_fit":"enum(\"exact\",\"approximate\")",
+           "skip_reason":"enum(\"none\",\"already_on_list\",\"optional\",\"in_pantry\")",
+           "named":"boolean","pantry_entry":"string"}],
+ "message":"string",
+ "lines":[{"text":"string","crossed_out":"boolean","correction_of":"string|null","item_index":"integer|null"}],
+ "recipe":{"title":"string","recipes_compared":"integer|null","servings":"integer|null"} | null}
 ```
 
-Every object lists all properties in `required` and sets `additionalProperties: false` (built that way by `Schemas.strictObject`; a test walks every schema to check). The icon enum is 2,160 chars, well within the documented limits (≤ 1000 enum values per schema; an enum over 250 values ≤ 15,000 chars).
+Every object lists all properties in `required` and sets `additionalProperties: false` (built that way by `Schemas.strictObject`; a test walks every schema to check). `recipe` is `anyOf [object, null]`. The icon enum is about 2,170 chars, well within the documented limits (≤ 1000 enum values per schema; an enum over 250 values ≤ 15,000 chars).
+
+The art-pass fields (DESIGN_STICKER §19.1, `IngestSchemaTest`):
+
+- `skip_reason`: the recipe card's skipped rows (§4.17): "already on your list", "optional · skipped", "in your pantry". Skipped rows are returned, not dropped, so she can switch them back on.
+- `named`: she named the item (typed, photographed, spoken) versus the model worked it out from a dish, meal or request. A named item is never skipped for the pantry.
+- `pantry_entry`: the covering entry as written, `""` unless `in_pantry`.
+- `lines`: photos only (§4.19): every line read off the paper, crossed-out lines and corrections (`bread → sourdough`) included, each pointing at the item it became. Revealed one by one after the answer (D16).
+- `recipe`: the thinking box's and the recipe card's facts (§4.17, §4.18): only shown when they are real.
 
 ### 2.5 Client-side post-processing (`OpenAiGroceryAssistant.postProcess`)
 
 In order, per item:
 
-1. Trim and collapse whitespace; drop blank names; `"null"` or blank quantity and note become null.
-2. **Dedupe** by `normalizeName`: names already on the list (unchecked) and repeats within the answer go to `skippedDuplicates`. A repeat lends its quantity or note to the first copy when that copy lacks one.
+1. Trim and collapse whitespace; drop blank names; `"null"` or blank quantity and note become null. Quantities go through `normalizeMetric` (lb, oz, fl oz, qt, gal → g, kg, mL, L: "1 lb" → "454 g", "3 lb bag" → "1.36 kg bag"; cups, tbsp and tsp survive only as a recipe amount after a "·"; "3 · 3", the same on both sides, becomes "3"). `OfflineParser` does the same for typed text.
+2. **Rows already on the list** (by `normalizeName`, unchecked names only) stay in `items` as skipped rows, `skip_reason` `already_on_list`, and are also named in `skippedDuplicates`. The model cannot mark a name that is not on the list as `already_on_list` (it becomes `none`). **Repeats** within the answer are merged into the first copy (named in `skippedDuplicates`); a repeat lends its quantity or note to the first copy when that copy lacks one.
 3. **Aisle:** a learned correction for the normalized name wins; otherwise the model's `aisle_id` if it is a current aisle; `"unsorted"` and unknown ids become null (Unsorted).
 4. **Icon** (cascade steps 1 and 2 for AI items):
    - a learned icon override for the name, with fit EXACT;
    - else the model's icon with `"exact"`, kept as EXACT, unless it is a `*_generic` key (a category stand-in; see the next step);
    - else, if `IconCatalog.matchExact(name)` finds the name itself in the curated catalog (key, label or alias, ignoring a leading quantity and freshness/organic words such as "fraîche" or "organic"), that key with fit EXACT. The catalog deliberately lists, for example, cilantro under `parsley`, birthday candles under `candle` and bread under `bakery_generic`, so these need no bespoke drawing even when the model was modest. Head-noun guesses (`IconCatalog.match` step 2) do not count here: the model saw the catalog and judged them ("Nutritional yeast" is not the baking `yeast` icon);
    - else the model's icon (or `paper_bag` if invalid) with fit APPROXIMATE, which makes the item a candidate for a live-drawn icon.
+5. **The pantry backstop** (`PantryMatch.apply`, §6.2 rule 8): a named item is never skipped for the pantry (an `in_pantry` row she named is switched back on), and a worked-out item whose name equals a pantry entry after `normalizeName` and singular/plural folding ("eggs"/"egg", "tomatoes"/"tomato", "berries"/"berry") is skipped as `in_pantry` even when the model kept it. Nothing more: "flour" does not cover "almond flour" here, and broad entries ("spices" → cinnamon) are the model's call.
+6. **Photo lines** keep their order; blank lines go; `item_index` is re-pointed at the processed items (a merged repeat points at the row it joined, an unknown index becomes null). Text and voice answers carry no lines. A `recipe` with a blank title is no recipe; non-positive counts become null.
+
+The app commits only the rows she keeps (`skipReason` NONE by default); `addItems` then matches every name against every item on the list, so a duplicate of an unchecked item pops it and a duplicate of a checked item revives it (§6.2 rule 7).
 
 ---
 
@@ -155,27 +197,30 @@ Used by `AisleSync` after the aisle list changes, and for typed items committed 
 ```text
 You sort grocery list items into the aisles of the user's store in Ontario, Canada.
 - For each item id, choose the aisle where a typical Canadian supermarket shelves that item, judging by the aisle names (they may be English or French).
-- If a learned correction matches the item, use its aisle.
+- If a learned correction matches the item (also a variety of the corrected item), use its aisle.
+- Otherwise, if an aisle's "also here" note names the item or its kind, use that aisle: the note says where this store keeps those things, so it beats where they usually go and the rules below.
 - Fresh and refrigerated foods stay in the refrigerated sections (produce, dairy, deli, meat, fish) even when a dry-goods or international aisle sounds related; only shelf-stable products go to the numbered aisles.
 - Non-food items (cleaning, paper, health, baby, pet, garden) go to the aisle whose name fits them best. Without a pet aisle, pet food and treats sit with household goods.
 - Use "unsorted" only when no aisle plausibly fits.
 - Return every item id exactly once.
 ```
 
-Developer message 2 is the context block without the "Already on the list" line. User message: `Items:\ni1: Sriracha\ni2: Diapers\n…`. Schema `aisle_assignments`: `{assignments:[{id: enum(i1..iN), aisle_id: enum(aisle ids + "unsorted")}]}`.
+Developer message 2 is the context block without the "Already on the list" line; its aisle lines carry their "Also here" notes (§2.2), so AisleSync's sorting and "Re-sort my list" follow them. The rule after the correction rule says a note beats where things usually go and the rules below it; the correction rule itself now names varieties, as the ingest rule always did (a moved item's other kinds follow it, which the app's first-move note tells her, DESIGN_STICKER §6.3). User message: `Items:\ni1: Sriracha\ni2: Diapers\n…`. Schema `aisle_assignments`: `{assignments:[{id: enum(i1..iN), aisle_id: enum(aisle ids + "unsorted")}]}`.
 
 ## 4. Baskets (`baskets_rules.txt`)
 
 <!-- prompt:baskets_rules.txt -->
 ```text
-You decorate a grocery list app. When an aisle section is collapsed, the app draws a little container holding tiny icons of that aisle's items. For each store aisle, pick the container that best suits what is sold there.
+You decorate a grocery list app. Each store aisle has a little container that fills with tiny stickers of what was bought there. For each store aisle, pick the container that best suits what is sold there.
 - Judge by the aisle's main goods; the first thing its name mentions usually matters most.
 - Each container below lists the kinds of aisles it suits; prefer the container whose list fits the aisle name best.
-- Use "wicker_picnic" only for mixed, seasonal or unclear aisles (for example "Aisle 12" with no description).
+- Use "wicker_picnic" for produce and for mixed, seasonal or unclear aisles (for example "Aisle 12" with no description).
 - Return every aisle id exactly once.
 ```
 
-It is followed by `Containers (key: what it is; suits):` with one line per `BasketKind` (catalog label plus up to 20 English keywords). User message: `Aisles:\n- produce: Produce\n…`. Schema `aisle_baskets`: `{baskets:[{aisle_id: enum(ids), basket: enum(16 kinds)}]}`. A missing or invalid row falls back to the offline keyword heuristic (`BasketCatalog.guess`) in `assignBasketsOrGuess` and `AisleSync`.
+It is followed by `Containers (key: what it is; suits):` with one line per `BasketKind` (catalog label plus up to 20 English keywords). User message: `Aisles:\n- produce: Produce\n…`, names only: a basket suits the aisle's main goods, and an "Also here" note lists the exceptions (a note about toothpaste must not turn Produce's hamper into a tote). Schema `aisle_baskets`: `{baskets:[{aisle_id: enum(ids), basket: enum(17 kinds)}]}`. A missing or invalid row falls back to the offline keyword heuristic (`BasketCatalog.guess`) in `assignBasketsOrGuess` and `AisleSync`.
+
+**Art pass (DESIGN_STICKER §5.2, D8).** `mixing_bowl` is the 17th kind, and the catalog's keywords were re-tuned so the friend's store gets the table's default kinds from the heuristic alone (`BasketCatalogTest.fixtureStoreKinds`): Produce → `wicker_picnic`, Bakery → `bread_basket`, Deli & meat → `bento_box`, Baking → `mixing_bowl`, Breakfast → `fruit_crate`, Dairy & eggs → `egg_basket`, Frozen → `cooler`, Household → `canvas_tote`, Pantry → `jar_shelf`, Farmers' market → `berry_punnet` ("Everything else" always has the `wire_basket`, chosen by the app, not by this call). The prompt's "wicker_picnic" line follows. The schema v1 → v2 migration re-guesses, once, every stored kind that equals what the v1 heuristic guessed (`StateMigrationV2Test.reguessesHeuristicBaskets`).
 
 ## 5. IconDecider (`icon_decider_rules.txt`, cascade step 2)
 
@@ -188,23 +233,27 @@ You pick icons for a grocery list app. For each item, choose the catalog icon th
 - Not a match: a related product, an ingredient of it, something from the same shelf, or a version made of something else or prepared differently. Miso paste is not soy_sauce, coconut water is not coconut_milk, beef jerky is not steak, bread pudding is not sliced_bread, a whisk is not plastic_cutlery. Meat products and plant-based alternatives are never each other's icons: veggie_burger is only for plant-based products, never for burgers made of meat, poultry or fish. When the catalog has no icon for the product itself, answer "none"; the app then draws a new icon for it.
 - Category icons (keys ending in "_generic") are not offered. Answer "none" rather than pick a loose fit.
 - category: always give the item's catalog category, even when icon is "none".
+- look: when icon is "none", one line of at most 30 words telling an illustrator what the new sticker shows: the item as it is usually sold in a Canadian grocery store, seen from the front, how many pieces and their shape, its packaging if it comes in one, and one or two details that make it recognisable. For example "one squat glass jar of kimchi with a round screw lid; a few chunky folded cabbage leaves show through the glass" or "exactly three plump half-moon pierogi dumplings with crimped edges, two behind and one overlapping in front". No brand names, no writing on the packaging, no face, no background. When icon is a catalog key, look is "".
+- body and accent: the sticker colour families closest to the item's real colours. body is the colour of its largest part, accent the second colour (leaves, a stem, a lid, a label); use the body family again for a one-colour item. A white or clear item takes the colour of its packaging or label. Families: strawberry (red), peach (orange), lemon (yellow, cream), melon (green), mint (teal, sea green), ramune (light blue), periwinkle (blue, blue-violet), grape (purple), sakura (pink), cocoa (brown, tan, beige).
 - Return every item id exactly once.
 ```
 
-It is followed by the catalog listing **without** the 20 `*_generic` keys. Schema `icon_decisions`: `{decisions:[{id: enum(i1..iN), icon: enum(decidable keys + "none"), category: enum(20 categories)}]}`. Client side, an unknown or generic key counts as `"none"`, and a skipped id becomes `IconDecision.NONE`. `resolve()` then turns a match into (key, EXACT) and "none" into (the category's `*_generic`, APPROXIMATE).
+It is followed by the catalog listing **without** the 20 `*_generic` keys. Schema `icon_decisions`: `{decisions:[{id: enum(i1..iN), icon: enum(decidable keys + "none"), category: enum(20 categories), look: string, body: enum(10 sticker families), accent: enum(10 sticker families)}]}`. Client side, an unknown or generic key counts as `"none"`, and a skipped id becomes `IconDecision.NONE`. `resolve()` then turns a match into (key, EXACT) and "none" into (the category's `*_generic`, APPROXIMATE). `look` (kept only with "none", one line, ≤ 300 chars) and `families` (body, then accent if different) brief the live drawing (§6): `IconDecision.look` and `IconDecision.families`.
 
 **Decisions API seam.** OpenAI's Decisions API (`POST /v1/decisions`) is the intended future implementation of this step. It is a limited preview without a public schema, and it answers 403 "Decision API is not enabled for this user" for the project key, so there is no client for it yet. `IconDecider` is the seam; the switch-over checklist is in ARCHITECTURE §8.6.
 
-## 6. Live icon prompt (`icon_prompt.txt`, cascade step 3)
+## 6. Live icon prompt (`icon_prompt.txt`, cascade step 3, live stickers v4)
 
-`POST /images/edits` (multipart) with `image[]` = the bundled style sheet (`assets/icons/_style_reference.png`), `background=transparent`, `output_format=webp`, `output_compression=80`, `quality=low`, `size=1024x1024`, `n=1`. `{item}` is the item's display name on one line (≤ 80 chars). An optional hint is appended as `Details about the item: <hint>.` The device trims the result to 176 px on a 192 px canvas.
+`POST /images/edits` (multipart) with `image[]` = a 1024 × 1024 PNG sheet on a transparent background holding three finished library stickers (art only: no die-cut, no shadow; 512 px cells, the approximate key and two same-category keys, picked and drawn by the app's `SheetComposer`), `mask` = the bundled `assets/icons/mask.png` (opaque except the empty bottom-right cell), `background=transparent`, `output_format=webp`, `output_compression=80`, `quality=low`, `size=1024x1024`, `n=1` (docs/DESIGN_STICKER.md §18.3; ≈ US$0.015 at quality low). The model copies its neighbours' size, line weight and gloss instead of guessing them from words.
+
+Placeholders: `{subject}` is the IconDecider's `look` on one line (≤ 300 chars), or "one <name>, as it is sold in a Canadian grocery store" when there is none; `{colours}` lists pastel, mid and trace of the item's two families (body first: "kimchi" → strawberry and melon); `{body}` is the body pastel and `{band}` the body mid. The device then cuts the fourth cell out, snaps every pixel to those families plus white and lemon pastel, removes specks and the model's own gloss, normalises size and base, grows the trace to 2u, draws the procedural gloss and the 4u white die-cut, and stores a 208 px WebP plus its cut path (`LiveStickerProcessor`).
 
 <!-- prompt:icon_prompt.txt -->
 ```text
-Draw ONE new sticker icon of {item}, as it is sold in a Canadian grocery store, in exactly the same art style as the reference sheet: same ink outline weight and colour, same flat fills and palette, one hard lavender cel shadow on the lower right, one white glint upper left, white die-cut sticker border. A single object only, centred, filling about 80% of the canvas, three-quarter view from slightly above. Transparent background. No text, no labels, no brand names, no other objects.
+This is a 2 x 2 sticker sheet on a fully transparent background. Three cells already hold finished sticker artworks; the bottom-right cell is empty. Draw ONE new artwork in the empty bottom-right cell only: {subject}, grouped into one compact pile no wider than 1.3 times its height. Match the three neighbours exactly as if drawn by the same hand: the same size in the cell, the base at the same height, the same outline thickness in pixels, the same interior line thickness, and the same white gloss: one thick white curved stroke as thick as the outline hugging the upper-left inside edge for about a quarter of the outline, plus one white dot of the same thickness. No specks smaller than the outline thickness, at most three interior marks. Colours only: {colours}, white #FFFFFF. Main body {body}. Every shape is outlined in its own trace colour, never black or grey. Bottom quarter is a flat {band} band following the curve. No face, text, letters, brand names, border, sticker outline or shadow. Keep everything around the new artwork fully transparent. Do not change the other three cells.
 ```
 
-The closest catalog icon's `drawHint` is deliberately not added; it would pull the drawing towards the wrong object.
+The prompt core is the mockup's v4 (`design/mockup/ai4`, six stickers, every one usable after post-processing) with "letters, brand names" added to the exclusions. The closest catalog icon's `drawHint` is not added: the neighbours already show the style, and the look says what the object is.
 
 ## 7. Transcription
 
@@ -236,6 +285,38 @@ Items 10-16 come from the eval set (§10, where each change is measured):
 15. **Repeats are not additions.** "2 onions, …, onions" became 3 until the duplicates rule said so.
 16. **Refrigerated goods stay in refrigerated sections.** The fast model sent firm tofu to "World foods" whenever an international aisle existed.
 
+Items 17-21 come from the art pass (DESIGN_STICKER §0.4, §6.2, §19.1; 2026-10-02, measured in §10.3):
+
+17. **Skipped rows are returned, not dropped.** The recipe card shows what was left out and why ("already on your list", "optional · skipped", "in your pantry") with a keep switch, so the model returns those rows with `skip_reason` instead of leaving them out. "Already on the list" used to mean "do not add it again"; it now means "return it as `already_on_list`", and the client still decides (only an unchecked name on the list counts).
+18. **The pantry is per-request context, the rule is stable.** The pantry entries go in developer message 2 ("In the pantry (she keeps these at home): …") so the cached prefix stays the same for every user; the rule (worked-out items only, broad entries cover their members, never a named item) is in the rules. A client backstop (`PantryMatch`) enforces the two hard parts: named items are never skipped, and an exact pantry name is always skipped.
+19. **A plain "banana bread" has no spice to skip.** terra lists no cinnamon for "banana bread" with or without a pantry, so the broad-entry case asks for "spiced banana bread" (the word asks for spices without naming one).
+20. **"Spices" sometimes covers salt.** With only "spices" in the pantry, terra skipped salt as `in_pantry` in 2 of 3 early runs. Salt is a seasoning, not a spice, but many kitchens shelve them together; it shows as a switched-off row she can turn on, so it is left to the model for now (§10.6).
+21. **"Ground cinnamon" was approximate once.** The catalog listed "cinnamon" but not "ground cinnamon"; `spice_jar` now lists the ground spices too, so the client upgrades the fit to exact.
+
+Item 22 comes from the WP7 audit (DESIGN_STICKER §6.2 rule 4, checklist 201; 2026-10-03, measured in §10.3):
+
+22. **A plain list needs no message.** The v-C rule asked for "one short, friendly sentence saying what you added" on every answer, so almost every answer carried a message that was not an echo of the note, and the app's quick add (≤ 3 items, nothing skipped, no message worth showing) almost never happened. The message is now empty for a plain list added exactly as named, and present only when there is something to explain: a skipped or left-out row and why, a guess, or nothing to buy. The eval checks the message only when something needs explaining, and its language only when there is one.
+
+Item 23 comes from the polish package (2026-10-03, measured in §10.3):
+
+23. **A correction she made is worth a message.** Item 22's wording ("nothing skipped, guessed or left out") let a voice note that changed its mind ("two kilos of potatoes, no wait, just one kilo", "scratch the paper towels") come back as a plain list with an empty message, so the app added it without showing that the correction was heard. The rule now lists what earns a message: a dish, meal or recipe, a skipped item, a guess, a correction it applied (a scratched item or a changed amount), or nothing to buy; a plain list added as asked stays silent. The eval asks for a message on the cases tagged `self-correction` too.
+
+Item 24 comes from the polish audit (2026-10-04, measured in §10.3):
+
+24. **A reason only when it is known.** The audit read item 23's sample answer "Skipped paper towels—you said you already have some." as a reason the model made up. It was not: the voice note says "scratch the paper towels, we have some". The rule now says outright what the message holds, so a note that gives no reason never gets one: what it did, and a reason only when it is known (the user gave it, or the item is in the pantry or already on the list), never a guessed one. `voice-cat-food`, which changes an amount and gives no reason, fails a message that claims she already has something. The second audit (2026-10-04) noted that the list of known reasons left out the third skip reason the same prompt defines, `optional` (an ingredient the recipe marks optional or "to serve"): read literally, it told the model not to explain an optional skip the recipe card shows as "optional · skipped". The parenthesis now names it ("the user gave it, the recipe marks it optional, or the item is in the pantry or already on the list"), and `recipe-pancakes`, whose maple syrup is "to serve", fails a message that claims she already has something.
+
+Item 25 comes from the owner's review (2026-10-04, measured in §10.3):
+
+25. **A recipe row says the pack and the amount.** The recipe card's detail line is "2.5 kg bag · 2 cups" and a pantry row keeps its amount ("in your pantry · ½ tsp", §4.17), but the quantity rule asked for "a practical store quantity, not the recipe measure", so real answers carried the pack only and a bare "2 cups" came back as "500 mL". The rule now asks for the store quantity, " · ", then the amount the recipe prints, with cup, tbsp, tsp and pinch kept after the "·" (the client's `normalizeMetric` already allowed exactly that). Two more fixes from the same review: a photo of a printed recipe was read as a shopping list (every ingredient named, the pantry never applied, method lines as items), so the request rules now say a recipe photo is a recipe and the photo's instruction reads "Photo of a shopping list or a recipe. Add what to buy."; and `recipes_compared` now means recipe pages opened with web search, null without a search, while the app shows "Compared n recipes" and "n recipes" only when the answer's metadata says a search ran (D16). The eval's metric check reads the same way as the app: cooking measures pass after the "·", never before it.
+
+Item 26 comes from the review of the live quantity check (2026-10-05, measured in §10.3):
+
+26. **Notes and titles come from the request.** A recipe row's note said how the recipe prepares it ("unsalted, melted" for "1/3 cup melted butter") or was guessed from the rule's own example ("Unsalted"), and "Pancakes: …" was titled "Pancakes from scratch", the rule's example title copied. A note now takes only what the request names (a variety, ripeness or kind; the ambiguity guesses and spelling checks stay) and never a preparation ("melted", "chopped", "softened"); the title is the recipe's own when it gives one, else the dish in a few words, shown with a request that is not a recipe ("stuff for chicken tacos for 6" is "Chicken tacos"). Two fixes from the same runs: a pasted recipe is a recipe like a photographed one (worked out, named false), since one run marked every banana bread row named, which keeps pantry items on her list; and a thing sold by the dozen or in packs keeps its pack ("1 dozen · 2", never just "2"), since item 25's "3, not 3 · 3" let one egg come back as Egg "1".
+
+Item 27 comes from Cora's aisle notes (2026-10-05, checked live in §10.3):
+
+27. **Her store's exceptions are context; the rule that reads them is stable.** An "Also here" note ("Produce (also here: toothpaste)") rides in developer message 2 with the aisle it belongs to, so the cached prefix stays the same for every store; the stable rules say once how to read it: a note names where this store keeps those things and beats where they usually go, a learned correction still wins. The baskets call keeps names only. No example in the rules names a real item: the live check below asks for toothpaste, and examples leak (item 1).
+
 ### Live results with the shipped prompts (2026-10-01, `./gradlew -p core test -Plive=true`, prompts v1)
 
 | Case | Result | Latency |
@@ -246,7 +327,7 @@ Items 10-16 come from the eval set (§10, where each change is measured):
 | "lait, 2 citrons, oeufs, pain tranché, fromage râpé" (CLI) | French names and a French message | 3.3 s |
 | "ingredients for kuku sabzi for 4" (CLI) | one web search; 15 sensible items; sources returned | 9.2 s |
 | Handwritten photo (12 lines, one crossed out, one margin note, bananas on the list) | 12 items; spinach and bananas skipped; quantities kept; 4 L bag → `milk_bag` | 6.3-7.5 s |
-| Voice note (23 s m4a) → transcript → ingest | transcript correct, including "Oatly"; paper towels dropped after "scratch the paper towels" | 2.4 s + 3.5 s |
+| Voice note (23 s m4a) → transcript → ingest | transcript correct, including the oat-milk brand she names; paper towels dropped after "scratch the paper towels" | 2.4 s + 3.5 s |
 | 2 s of silence | empty transcript | 0.9 s |
 | recategorize (7 trap items) | diapers → health/baby, chocolate chips → baking, edamame → frozen, cat litter → household | 1.8 s |
 | assignBaskets (14 default aisles) | all sensible; identical to the keyword heuristic | 2.4 s |
@@ -266,7 +347,7 @@ source <env file with OPENAI_API_KEY>          # never commit or print the key
 ./gradlew -p core run --args="icons Gochujang Spatula Cheez-Its"      # local match, then the IconDecider
 ./gradlew -p core run --args="recat Sriracha Diapers 'Cat litter'"
 ./gradlew -p core run --args="baskets"                                 # model vs heuristic, per aisle
-./gradlew -p core run --args="draw Gochujang out.webp --style=path/to/_style_reference.png"
+./gradlew -p core run --args="draw Kimchi ../app/src/test/resources/icons/ai4/sheet_kimchi.png out.webp --families=strawberry,melon"   # live sticker v4 (raw answer), about US$0.015
 ./gradlew -p core run --args="match 'Meyer lemons' 'garlic bread'"     # offline, no key needed
 ./gradlew -p core run --args="parse '2 lemons, 500g flour, milk x2'"   # offline parser, no key needed
 ./gradlew -p core test -Plive=true                                     # live suite, about US$0.10
@@ -284,7 +365,7 @@ After changing a prompt: run the unit tests (this page must still quote the file
 
 ### 10.1 What is measured
 
-`core/src/test/resources/eval/cases.json` holds 28 cases. They run on the default 14-aisle Ontario store (`Aisles.DEFAULT_TEXT`) and on two edited layouts:
+`core/src/test/resources/eval/cases.json` holds 33 cases (28 from 2026-10-01 plus the 5 pantry cases of the art pass). They run on the default 14-aisle Ontario store (`Aisles.DEFAULT_TEXT`) and on two edited layouts:
 
 | Kind | Cases | What they test |
 |---|---|---|
@@ -293,13 +374,15 @@ After changing a prompt: run the unit tests (this page must still quote the file
 | `voice` (2) | **Fillers:** the 23 s note with fillers and "scratch the paper towels".<br>**Cat food:** a new 23 s note (gpt-4o-mini-tts) that changes a quantity mid-sentence ("two kilos… no wait, just one kilo") and names the cat "Miso" | transcript words, then the same ingest scoring |
 | `aisle-edit` (2) | The list is re-sorted after the user switches to a 17-aisle discount layout (a pet aisle appears, a manually placed item, a correction) or to a French 14-aisle layout | the real `AisleSync.sync()` (baskets + recategorize) on an `InMemoryStateStore`; only items whose aisle vanished are scored |
 | `icons` (1) | 40 typed names | icon cascade steps 1–2: `IconCatalog.match`, then the `IconDecider` for the rest |
+| `pantry` (5: 4 `text`, 1 `photo`; tag `pantry`) | **Pancakes from scratch** with {flour, sugar, salt, baking powder} in the pantry: those four skipped `in_pantry`, milk and eggs kept.<br>**Spiced banana bread** with "spices": cinnamon (and nutmeg) skipped, covered by "spices".<br>**French macarons** with "flour": almond flour kept.<br>**"flour, milk"** with flour in the pantry: both kept (named).<br>**A photographed list with salt on it** (a synthetic note, `eval/media/pantry_salt_list.jpg`) with salt in the pantry: salt kept | each expectation's `skip` (the row's `skip_reason`), plus the usual items, aisles and icons. **Gate** (DESIGN_STICKER checklist 322): over 3 runs, ≥ 95% of the pantry-covered worked-out items skipped and 0 named items skipped |
 
 **How expectations are written.** They are tolerant:
 
 - **Names:** phrases that ignore accents, case and plurals and match whole words, or `re:` regexes.
 - **Aisles and icons:** a set of acceptable aisles, and the catalog keys that depict the item. A matching key is expected with fit exact. `approx` is set when no key depicts the item, so a live drawing is the right outcome.
 - **Allowed and forbidden items:** optional items cover reasonable recipe variations. Forbidden items catch what the user said they have, crossed-out lines and spices.
-- **Other checks:** quantity and detail regexes, the message (≤ 140 chars, no unrelated list items, language) and search behaviour (a pasted link must be opened; plain lists and well-known recipes should not search).
+- **Other checks:** quantity and detail regexes, the message (≤ 140 chars; present when something was skipped or worked out, or there is nothing to buy; no unrelated list items; its language when there is one) and search behaviour (a pasted link must be opened; plain lists and well-known recipes should not search).
+- **Skip reasons:** an expectation's `skip` ("none", "in_pantry", "optional") is checked against the matched row's `skip_reason`. A case's `pantry` goes into the context block. Rows already on the list are not counted as produced (they used to be dropped; they are named in `skipped`).
 
 Icon expectations follow the catalog's own curation: ricotta is `sour_cream` ("Sour cream & cottage cheese"), kimchi is `pickles`, bread is `bakery_generic`. `EvalSetTest` validates the file offline. Every alias, key, basket, regex and media file must resolve, and an ideal answer built from the expectations must score 100%. `EvalScoringTest` covers the scorer and the pricing.
 
@@ -321,9 +404,10 @@ A **clean** case run gets everything right.
 
 ```bash
 source <env file with OPENAI_API_KEY>           # never commit or print the key
-./gradlew -p core liveEval -Plive=true                                   # 28 cases on ModelDefaults: ~3 min, ~US$0.22
+./gradlew -p core liveEval -Plive=true                                   # 33 cases on ModelDefaults: ~3 min, ~US$0.27
 ./gradlew -p core liveEval -Plive=true --args="--repeat=2"               # for decisions (variance is real)
 ./gradlew -p core liveEval -Plive=true --args="--only=recipe-pancakes,photo-sticky-note"
+./gradlew -p core liveEval -Plive=true --args="--tag=pantry --repeat=3"           # the pantry gate (checklist 322)
 ./gradlew -p core liveEval -Plive=true --args="--kind=text,photo,voice --parallel=3 --smart=gpt-6.1-sol --smart-effort=low"
 ./gradlew -p core liveEval --args="--rescore=build/eval/<label>.json"    # re-score a saved run (offline, free)
 ```
@@ -347,6 +431,31 @@ Every row is re-scored against the final `cases.json`, so the rows are comparabl
 | alternative | v2 | gpt-5.6-terra / medium | 20/25 | 99.3% | 99.4% | 99.4% | 98.3% | 92.0% | 98.8% | | | 3.0 / 6.5 s | $0.0057 |
 | alternative | v2 | gpt-5.6-terra / none | 20/25 | 100% | 98.3% | 99.4% | 99.4% | 93.3% | 98.8% | | | 3.0 / 4.6 s | $0.0057 |
 | alternative | v2 | gpt-6-luna / low | 18/25 | 99.3% | 99.4% | 100% | 99.4% | 93.0% | 96.4% | | | 3.2 / 7.2 s | $0.0003 |
+
+**Art pass, prompts "C" (2026-10-02): the C schema, the pantry rule, arrow corrections and bare paper numbers.** `--tag=pantry --repeat=3` and a regression sample of 8 existing cases on the shipped `ModelDefaults` (gpt-5.6-terra / low):
+
+| Run | Cases | Clean | Recall | Precision | Aisle | Icon | Exact fit | Checks | Ingest latency median / p90 | Cost |
+|---|---|---|---|---|---|---|---|---|---|---|
+| pantry-v1 | 5 pantry × 3 (banana bread unspiced) | 12/15 | 100% | 95.6% | 100% | 100% | 98.9% | 100% | 3.5 / 8.6 s | $0.15 |
+| pantry-v2 | the 2 revised cases × 3 | 4/6 | 92.6% | 100% | 100% | 100% | 100% | 100% | 6.6 / 7.2 s | $0.06 |
+| regress-v1 | recipe-pancakes, banana-bread-have-some, already-on-list, duplicates, imperial units, typos, both list photos × 1 | **8/8** | 100% | 100% | 100% | 100% | 97.9% | 100% | 4.4 / 8.9 s | $0.08 |
+| **pantry-final** | **5 pantry × 3** | **14/15** | **100%** | **100%** | **100%** | **97.8%** | **96.7%** | **100%** | **3.7 / 6.5 s** | **$0.12** |
+
+**Message rule (2026-10-03, §8 item 22), one run each on the shipped `ModelDefaults`:** `recipe-pancakes`, `list-canadian-shorthand`, `list-french`, `list-vague-sam`, `list-already-on-list`, `list-learned-corrections`, `nothing-to-buy`, `pantry-plain-list`: **8/8 clean**, recall, precision, aisle and icon 100%, checks 46/46, latency median 2.7 s, US$0.067 in all. The four plain lists answered with an empty message; the recipe ("Butter is already on your list."), the duplicates, the vague item ("check with Sam") and the small talk each said why.
+
+**Message rule, corrections (2026-10-03, §8 item 23), one run each on the shipped `ModelDefaults`:** the two `self-correction` voice cases (`voice-feta-oat-milk`, `voice-cat-food`), `list-canadian-shorthand`, `list-french`, `pantry-plain-list`, `recipe-pancakes`, `list-already-on-list`, `nothing-to-buy`: **6/8 clean**, recall and precision 97.4% (37/38), aisle and icon 100%, checks 63/64, ingest latency median 3.3 s, US$0.074 in all. Every message check passed: the three plain lists answered with an empty message; the two voice notes said what they corrected ("Skipped paper towels—you said you already have some.", "Updated the potatoes to 1 kg."); the recipe, the duplicates and the small talk each said why. The two unclean runs are not about the message: the known transcription miss (§10.6) and "Cat wet food" for the expected "cat food".
+
+**Message rule, known reasons only (2026-10-04, §8 item 24), two runs each on the shipped `ModelDefaults`:** `voice-feta-oat-milk`, `voice-cat-food`, `recipe-pancakes`, `list-already-on-list`: **4/8 clean**, recall and precision 95.7% (44/46), aisle and icon 100%, checks 80/82 (re-scored on the final `cases.json`), ingest latency median 3.6 s, US$0.087 in all. Every message was true and every reason was one the request or the list gave: "Removed paper towels—you already have some." (she said "we have some"), "Updated the potatoes to 1 kg." (no reason given, none added), "Added pancake ingredients; butter is already on your list.", "Eggs, bananas, and paper towels are already on your list." The four unclean runs are the known ones: the transcription spells "Oatly" as "oatley" (§10.6) and "Cat wet food" for the expected "cat food".
+
+**Pantry gate (pantry-final, 3 runs):** pantry-covered worked-out items skipped **18/18** (flour, sugar, salt and baking powder in every pancake run; cinnamon and nutmeg in every spiced banana bread run); named items skipped for the pantry **0/21** ("flour, milk" and the photographed salt were kept every time); almond flour kept 3/3. The one unclean run was "Ground cinnamon" / "Ground nutmeg" answered approximate (fixed afterwards in the catalog, §8 item 21). pantry-v1 and v2 misses were eval gaps (macarons with a pinch of salt and a buttercream, brown sugar in a spiced loaf), fixed in `cases.json`. The art pass spent about **US$0.42** (the runs above and one CLI probe).
+
+**Recipe amounts (2026-10-04, §8 item 25), one run each on the shipped `ModelDefaults`:** `recipe-pancakes` and the five `pantry` cases: **6/6 clean** (re-scored with the eval's metric check reading the "·" as the app does; before that change the four recipe cases failed only that check, on amounts such as "1 tin · 3.5 tsp"), recall, precision, aisle and icon 100%, checks 52/52, ingest latency median 6.0 s, no web searches, US$0.087 in all. Every worked-out row carried a pack and the recipe's amount: "2.5 kg bag · 1.5 cups" (flour), "1 tin · 3.5 tsp" (baking powder), "1 L carton · 1.25 cups" (milk), "454 g package · 1/3 cup" (butter), "1 container · pinch" (salt); the pantry still left out flour, sugar, salt and baking powder, and cinnamon and nutmeg under "spices"; "flour, milk" and the photographed salt were kept. A count that matched read twice ("3 · 3" for bananas), so the rule now leaves out the " · " part when the two are the same, and `normalizeMetric` keeps one half when both sides of the "·" match; "1 dozen · 1" (buy a dozen, the recipe uses one) still says something and stays. The live check below ran that sentence.
+
+**Matching amounts, live (2026-10-05, the rule as shipped), one call each on the shipped `ModelDefaults` through the production request builders (`Requests.responses`, the default aisles, no pantry), raw answers before `normalizeMetric`:** "3 bananas" → Banana "3"; "a dozen eggs" → Eggs "1 dozen"; "milk, bread, 2 cans of chickpeas" → Milk and Bread with no quantity, Chickpeas "2 cans"; a pasted pancake recipe → "2.5 kg bag · 1 1/2 cups" (flour), "1 container · 3 1/2 tsp" (baking powder), "2 kg bag · 1 tbsp" (sugar), "1 container · 1/4 tsp" (salt), "1 L · 1 1/4 cups" (milk), "1 dozen · 1" (eggs), "454 g · 3 tbsp" (butter); a pasted banana bread recipe with "3 ripe bananas" → Banana "3" (not "3 · 3") and Eggs "1 dozen · 2". The plain lists came back with an empty message, the two recipes with one sentence. Nothing needed `normalizeMetric`'s backstop; no web searches; about US$0.05 for the five calls. No change to the quantity rule from that run. The same answers broke two other rules, which this run did not score; the next paragraph records them and the fix.
+
+**Notes, titles and pasted recipes, live (2026-10-05, §8 item 26), on the shipped `ModelDefaults` through the same builders.** The run above gave the banana bread's butter the note "unsalted, melted" and the pancakes' butter "Unsalted" (both recipes said "melted butter": "melted" is how the recipe prepares it, and "unsalted" was the note rule's own example, guessed), and it titled "Pancakes: …" "Pancakes from scratch", the recipe rule's example title word for word, which the message then repeated ("…pancakes from scratch"). The note rule now says never how the recipe prepares an item ("melted", "chopped", "softened"), and the title is the recipe's own when it gives one, else the dish in a few words. First check, one call each: titles "Banana bread" and "Pancakes", no "melted", but every banana bread row came back named (true), which would keep a pantry item on her list, so a pasted recipe now reads as a recipe, like a photographed one (worked out, named false). Second check, two calls each: named false every time, but "Unsalted" still came back twice and once the pancakes' one egg came back as Egg "1"; the note rule lost its "unsalted" example (notes come from the request: a variety, ripeness or kind it names, besides the guesses and spelling checks) and the quantity rule now says a thing sold by the dozen or in packs keeps its pack ("1 dozen · 2", never just "2"). Final check, five calls on the rules as shipped: three "Pancakes: …" (title "Pancakes", Eggs "1 dozen · 1" each time, no notes, message "Added the ingredients for pancakes."), the banana bread (title "Banana bread", Banana "3" with the note "ripe", Eggs "1 dozen · 2", Butter "454 g · 1/3 cup" with no note) and "3 bananas" (Banana "3", empty message); every recipe row named false. Then the whole eval once (`notes-title-v1`, 33 cases): ingest recall, precision, aisle and icon **100%** (205/205), checks 220/221; the 4 unclean cases are the known ones in prompts this change does not touch ("Oatly" transcribed "oatley", §10.6; one recategorize, two basket and one icon-decider miss). The notes the last full run had invented ("unsalted" on recipe butter, "lean or medium", "mild or hot", "oven-ready or regular") are gone; notes the request gives ("ripe", "vanilla", "dark roast", "for Sam") and the "check with Sam: …" guesses stay. About US$0.48 in all (15 calls and the eval).
+
+**Aisle notes, live (2026-10-05, §8 item 27), one call on the shipped `ModelDefaults` through the production request code (`OpenAiGroceryAssistant.ingest` via the CLI, so `Requests.responses` and `Prompts.contextBlock`):** the default 14-aisle store with its first line written "Produce (also: toothpaste)" (so "Aisle 6 - Household & cleaning" and "Aisle 7 - Health, beauty & baby" were there to compete), the text "toothpaste, milk", no corrections. Answer: Toothpaste in **Produce** (`toothpaste`, exact), Milk in Dairy & eggs (`milk_carton`, exact), an empty message, no web search; 4.0 s, 9,747 tokens in (a cache write, since the rules had changed), 116 out, about US$0.03. No eval run: the change adds context and one sentence the other cases never trigger (they have no notes).
 
 **Final run, all 28 cases × 2 on the shipped `ModelDefaults`:**
 
@@ -410,8 +519,9 @@ This study spent about **US$2.77**: the eval runs, probes and the two generated 
 
 ### 10.6 Known misses in the final run
 
-- **Transcription.** "Oatly" is transcribed as "oatley". The ingest still writes "Oatly", so only the transcript shown on screen is affected. Names already on the list are sent as `keywords[]`, so a brand already on the list is spelled right.
+- **Transcription.** The oat-milk brand in the voice note is transcribed misspelled. The ingest still writes it right, so only the transcript shown on screen is affected. Names already on the list are sent as `keywords[]`, so a brand already on the list is spelled right.
 - **IconDecider.** "PC chicken burgers" → `chicken_breast`: 1 of 40 names, on effort `none`.
 - **Lasagna for 12.** It adds béchamel (flour, butter, milk) on top of ricotta in 1 of 2 runs.
 - **Condiments.** Salsa landed in "Baking & spices" once. The default store has no condiments aisle, so placements vary between canned, pasta and snacks. A learned correction fixes it for the user.
 - **Pouding chômeur.** It still answers in French about 1 run in 5 (1 of 5 with the final line).
+- **"Spices" covering salt** (art pass). With only "spices" in the pantry, salt came back `in_pantry` in 2 of 3 early spiced-banana-bread runs (none in the final runs). It is a switched-off row she can turn on, and the entry it names ("spices") makes the reason clear.

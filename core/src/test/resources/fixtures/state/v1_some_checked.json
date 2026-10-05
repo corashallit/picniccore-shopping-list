@@ -1,0 +1,18 @@
+{
+  "currentListId": "sat",
+  "lists": [{
+    "id": "sat", "title": "Saturday shop", "createdAt": 1759330000000,
+    "items": [
+      {"id": "a", "name": "Bananas", "aisleId": "produce", "icon": "banana", "checked": true, "addedAt": 1759330300000},
+      {"id": "b", "name": "Milk", "aisleId": "dairy-eggs", "icon": "milk_bag", "checked": false, "addedAt": 1759330100000},
+      {"id": "c", "name": "Croissants", "aisleId": "bakery", "icon": "croissant", "checked": true, "addedAt": 1759330100000},
+      {"id": "d", "name": "Carrots", "aisleId": "produce", "icon": "carrot", "checked": true, "addedAt": 1759330200000}
+    ]
+  }, {
+    "id": "party", "title": "Party", "createdAt": 1759330000000,
+    "items": [
+      {"id": "p", "name": "Paper plates", "icon": "paper_plates", "checked": false, "addedAt": 1759330000000}
+    ]
+  }],
+  "store": {"name": "Hillcrest Market", "aislesText": "Produce\nBakery\nDairy & eggs"}
+}

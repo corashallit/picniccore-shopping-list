@@ -1,0 +1,77 @@
+/* ---------- r4 · R1: an expanded aisle OWNS its rows (aisle tray) ---------- */
+§ .sk-tray{position:relative;background:var(--ap);border:3px solid #fff;border-radius:12px;box-shadow:var(--sk-hs);padding:0 5px 12px;margin:12px 0}
+§ .sk-trh{display:flex;align-items:center;gap:7px;min-height:40px;padding:6px 4px 5px 3px;position:relative}
+§ .sk-trh .sk-num{width:24px;height:24px;font-size:14px}
+§ .sk-trh .sk-trlead{width:24px;height:24px;border-radius:50%;background:#fff;border:2px solid var(--at);color:var(--at);display:grid;place-items:center;flex:none}
+§ .sk-trn{font:700 17px/1.1 var(--sk-f-puff);color:#25307C;min-width:0}
+§ .sk-trn.is-big{font-size:20px;color:var(--at)}
+§ .sk-trm{margin-left:auto;font:700 12.5px/1.2 var(--sk-f-body);color:#25307C;white-space:nowrap;padding:0 3px}
+§ .sk-trb{position:relative;z-index:1;background:var(--sk-pad);border-radius:8px;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--am) 60%,transparent);padding:0 6px 0 8px;margin:0;list-style:none}
+§ .sk-trb>li+li{border-top:1px solid var(--sk-rule)}
+§ .sk-trb>.sk-irow{border-bottom:0}
+§ .sk-trcap{position:absolute;left:0;right:0;bottom:0;height:12px;border-radius:0 0 9px 9px;background:var(--am);-webkit-mask:var(--pat) 0 0/var(--pats,10px) repeat;mask:var(--pat) 0 0/var(--pats,10px) repeat;opacity:.5;pointer-events:none}
+§ .sk-trbk{position:absolute;right:2px;bottom:-3px;line-height:0;z-index:2}
+§ .sk-tray .sk-row{min-height:54px}
+§ .sk-tray.is-compact{padding-bottom:11px}
+§ .sk-tray.is-compact .sk-trh{min-height:34px;padding:4px 4px 3px 3px}
+§ .sk-tray.is-compact .sk-trn{font-size:16px}
+§ .sk-tray.is-compact .sk-trcap{height:11px}
+§ .sk-tray.is-compact .sk-row{min-height:48px;height:48px;gap:6px}
+§ .sk-tray.is-compact .sk-row .sk-ico,§ .sk-tray.is-compact .sk-row .sk-ico>svg{width:40px;height:40px}
+§ .sk-tray.is-compact .sk-row .sk-nm{font-size:16px}
+§ .sk-tray.is-compact .sk-row .sk-dt{font-size:12.5px}
+§ .sk-tray.is-compact .sk-row .sk-ico .sk-badgeico{width:17px;height:17px;right:-5px;top:-5px}
+/* dark: stickers keep their colours; the inner panel is the navy page */
+§ .sk-dark .sk-tray{box-shadow:1.6px 2.2px 0 #0B0D24}
+§ .sk-dark .sk-trb{background:#222861;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--am) 70%,transparent)}
+§ .sk-dark .sk-trb>li+li{border-top-color:#3A438A}
+/* found-sticker trays (snap / speak): two columns on the lighter panel */
+§ .sk-trb.sk-found{display:grid;grid-template-columns:1fr 1fr;gap:0 8px;padding:0 8px}
+§ .sk-trb.sk-found>li+li{border-top:0}
+§ .sk-trb.sk-found>li:nth-child(n+3){border-top:1px solid var(--sk-rule)}
+§ .sk-s-snap .sk-tray{margin:8px 0 6px}
+§ .sk-recipe .sk-tray{margin:12px 0 4px}
+§ .sk-recipe .sk-tray .sk-irow{min-height:50px}
+§ .sk-aitrays{display:flex;flex-wrap:wrap;gap:4px 16px}
+§ .sk-aitrays .sk-tray{flex:1 1 280px;max-width:380px;margin:4px 0 10px}
+/* ---------- r4 · R3: candy-pill gloss = one crescent hugging the inside of the left cap + a dot; never on the border, never near the label ---------- */
+§ .sk-btn::before{left:5px;top:5px;width:36px;height:36px;border-radius:50%;background:none;border:3.5px solid transparent;border-top-color:#fff;transform:rotate(-45deg);box-sizing:border-box}
+§ .sk-btn::after{content:"";position:absolute;left:27px;top:5px;width:3.6px;height:3.6px;border-radius:50%;background:#fff;pointer-events:none}
+§ .sk-btn.sk-gr::before{left:5px;right:auto}
+§ .sk-btn.is-disabled::after{display:none}
+/* ---------- r4 · stages that now hold a full tray ---------- */
+§ .sk-mstage{height:212px}
+§ .sk-egg .sk-estage{height:168px}
+§ .sk-m-tray{position:absolute;left:10px;right:10px;top:12px;margin:0}
+§ .sk-m-tray .sk-row{cursor:pointer}
+§ .sk-m-slot{position:relative;height:48px;background:var(--sk-backing);background-image:radial-gradient(circle,var(--sk-bp2) 1px,transparent 1.3px),radial-gradient(circle,var(--sk-bp2) 1px,transparent 1.3px);background-size:6px 2px,6px 2px;background-position:0 0,0 100%;background-repeat:repeat-x}
+§ .sk-m-slot .sk-m-tear{left:-8px;right:-6px;top:0;height:48px}
+§ .sk-m-slot .sk-m-tear>div{box-shadow:none;animation-name:sticker-tearl,sticker-tsh;animation-duration:3.2s,3.2s;animation-timing-function:cubic-bezier(.5,0,.7,1),steps(1,end);animation-iteration-count:infinite,infinite}
+§ .sk-m-slot .sk-m-tear .sk-tr{animation-name:sticker-tear,sticker-tsh}
+§ .sk-m-slot .sk-m-tear .sk-tl{border-radius:0;padding-left:8px}
+§ .sk-m-slot .sk-m-tear .sk-tr{border-radius:0}
+@keyframes sticker-tsh{0%,11%{box-shadow:0 0 0 transparent}12%,100%{box-shadow:1.6px 2.2px 0 var(--sk-shadow)}}
+§ .sk-e-tray{position:absolute;left:10px;right:10px;top:6px;margin:0}
+§ .sk-e-tray .sk-trcap{height:14px}
+§ .sk-e-tray.sk-tray{padding-bottom:14px}
+/* ---------- r4 · celebration start frame: the flash + heart iris open over the finished list ---------- */
+§ .sk-cele{background:transparent}
+§ .sk-cele .c-under{inset:0;z-index:0;isolation:isolate;background:var(--sk-binder);background-image:repeating-linear-gradient(90deg,var(--sk-stripe) 0 2px,transparent 2px 10px);pointer-events:none}
+§ .sk-cele .c-under .sk-scroll{overflow:hidden}
+§ .sk-celehost .c-under{display:none}
+§ .sk-celewrap .sk-cele:not(.is-play) .c-under{visibility:hidden}
+§ .sk-btn:not(.sk-wide){padding:0 24px 0 30px}
+§ .sk-s-snap .sk-snap{margin:4px 0 2px}
+§ .sk-s-snap .sk-photo{height:138px}
+§ .sk-s-snap .sk-tray{margin:4px 0 4px;padding-bottom:10px}
+§ .sk-s-snap .sk-trh{min-height:32px;padding:3px 4px 2px 3px}
+§ .sk-s-snap .sk-trn{font-size:16px}
+§ .sk-s-snap .sk-trcap{height:10px}
+§ .sk-s-snap .sk-found .sk-irow{min-height:40px}
+§ .sk-s-snap .sk-divider{margin:4px 0}
+/* r4 fix: an unchecked row never draws its peeled ghost (the ghost spilled under the icon into the next row / below the page) */
+§ .sk-row:not(.is-checked) .sk-ico>svg.sk-ghost{display:none}
+§ .sk-m-slot .sk-txt{display:flex;flex-direction:column;min-width:0}
+§ .sk-m-slot .sk-nm{display:block;font:700 16px/1.2 var(--sk-f-body);color:var(--sk-bp)}
+§ .sk-m-slot .sk-dt{display:block;font:500 12.5px/1.25 var(--sk-f-body);color:var(--sk-bp2)}
+§ .sk-m-tray .sk-trb{overflow-x:clip}

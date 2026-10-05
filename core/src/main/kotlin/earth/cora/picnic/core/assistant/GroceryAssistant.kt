@@ -16,14 +16,17 @@ interface GroceryAssistant {
     /**
      * One Responses API call to ModelDefaults.SMART with a strict JSON schema. Text and transcript
      * input may use web_search (the model decides; ModelDefaults.WEB_SEARCH). Post-processing is
-     * already applied to the result: learned corrections override aisle_id, unknown/"unsorted"
-     * aisle -> null, learned icon overrides replace icon (fit EXACT), "exact" on a *_generic key holds
-     * only when the catalog lists the name for it, a model "approximate" becomes EXACT when IconCatalog.matchExact knows the name
-     * (curated key, label or alias; no head-noun guess), an invalid icon ->
-     * IconCatalog.DEFAULT_ICON + APPROXIMATE, duplicates (vs context.existingNames and within the
-     * answer) removed and reported in [IngestResult.skippedDuplicates]. The model's icon/icon_fit
-     * counts as step 2 of the icon cascade for these items. Blank input returns an empty result
-     * without a request. Sources are capped at 8 (cited and opened pages first).
+     * already applied to the result: quantities in metric (normalizeMetric), learned corrections override
+     * aisle_id, unknown/"unsorted" aisle -> null, learned icon overrides replace icon (fit EXACT), "exact" on a
+     * *_generic key holds only when the catalog lists the name for it, a model "approximate" becomes EXACT when
+     * IconCatalog.matchExact knows the name (curated key, label or alias; no head-noun guess), an invalid icon ->
+     * IconCatalog.DEFAULT_ICON + APPROXIMATE. Skipped rows (§4.17) stay in [IngestResult.items] with their
+     * [ProposedItem.skipReason]: names already on the list (vs context.existingNames) come back as
+     * ALREADY_ON_LIST and are also named in [IngestResult.skippedDuplicates], repeats within the answer are merged
+     * (also named there), and the pantry backstop (PantryMatch) runs last. Commit only the rows she keeps
+     * (skipReason NONE by default). Photos carry [IngestResult.lines]; recipe answers [IngestResult.recipe].
+     * The model's icon/icon_fit counts as step 2 of the icon cascade for these items. Blank input returns an
+     * empty result without a request. Sources are capped at 8 (cited and opened pages first).
      */
     suspend fun ingest(input: IngestInput, context: IngestContext): IngestResult
 
@@ -49,8 +52,10 @@ interface GroceryAssistant {
     suspend fun assignBaskets(aisles: List<Aisle>): Map<String, BasketKind>
 
     /**
-     * Icon cascade step 3: /images/edits with ModelDefaults.IMAGE and the bundled style reference sheet.
-     * Returns the raw image (webp, 1024 px, alpha); the app trims and downsizes it to 192 px.
+     * Icon cascade step 3, live stickers v4: one /images/edits call with ModelDefaults.IMAGE, the neighbour
+     * sheet as `image[]`, the mask and the v4 prompt (prompts/icon_prompt.txt with the subject and the
+     * families' colours). Returns the raw 1024 px image with alpha; the app cuts the fourth cell out and
+     * post-processes it into a 208 px sticker plus its cut path. Never retried here.
      * Image moderation (moderation_blocked) -> LlmError.Refusal.
      */
     suspend fun drawIcon(request: IconDrawRequest): DrawnIcon
@@ -87,11 +92,20 @@ data class IngestContext(
      * chômeur" alone). The app is English-only today; pass the UI language once it is localized.
      */
     val appLanguage: String = DEFAULT_APP_LANGUAGE,
+    /**
+     * The pantry entry names as she wrote them, the first 200 in shelf order (§0.4 Q5, §6.2 rule 8): the context
+     * block prints them ("In the pantry (she keeps these at home): …", "nothing yet" when empty) and the model
+     * leaves out the worked-out items they cover (PantryMatch backs it up).
+     */
+    val pantry: List<String> = emptyList(),
 ) {
     companion object {
         const val DEFAULT_APP_LANGUAGE: String = "English"
     }
 }
+
+/** Why a proposed row starts switched off (§4.17, §6.2). Wire values: none / already_on_list / optional / in_pantry. */
+enum class SkipReason { NONE, ALREADY_ON_LIST, OPTIONAL, IN_PANTRY }
 
 /** One item the model proposed, after client-side post-processing. */
 data class ProposedItem(
@@ -106,6 +120,12 @@ data class ProposedItem(
     val iconFit: IconFit,
     /** True when a learned correction decided the aisle. */
     val aisleFromCorrection: Boolean = false,
+    /** Why the row starts switched off (the recipe card shows it as the reason); NONE = kept. */
+    val skipReason: SkipReason = SkipReason.NONE,
+    /** She named it (typed, photographed or spoken) versus the model worked it out; a named item is never skipped for the pantry. */
+    val named: Boolean = true,
+    /** The pantry entry that covers it ("spices" for cinnamon), when [skipReason] is IN_PANTRY. */
+    val pantryEntry: String? = null,
 )
 
 fun ProposedItem.toGroceryItem(id: String, now: Long, source: ItemSource): GroceryItem = GroceryItem(
@@ -129,6 +149,8 @@ data class CallMeta(
     val latencyMs: Long,
     /** Billable web searches (tool_usage.web_search.num_requests). */
     val webSearches: Int = 0,
+    /** What the web searches looked for (the actions' queries, in order; empty without a search). */
+    val searchQueries: List<String> = emptyList(),
     /** Token usage of /responses calls (for logs and the developer CLI), when reported. */
     val usage: TokenUsage? = null,
 )
@@ -150,7 +172,17 @@ data class IngestResult(
     /** Display names the model returned that were already on the list (or repeated). */
     val skippedDuplicates: List<String>,
     val meta: CallMeta,
+    /** Photos only: the transcribed lines, revealed one by one after the answer (§4.19, D16); else empty. */
+    val lines: List<PhotoLine> = emptyList(),
+    /** The recipe the answer worked from, or null (§4.17). */
+    val recipe: RecipeInfo? = null,
 )
+
+/** One line read off a photographed list (§4.19). [itemIndex] points into [IngestResult.items], or null. */
+data class PhotoLine(val text: String, val crossedOut: Boolean, val correctionOf: String?, val itemIndex: Int?)
+
+/** The recipe card's header facts (§4.17, §4.18): shown only from real fields in the answer (D16). */
+data class RecipeInfo(val title: String, val recipesCompared: Int?, val servings: Int?)
 
 /** Audio as recorded on device: MPEG-4/AAC with an ".m4a" file name (the extension matters). */
 class AudioClip(val bytes: ByteArray, val fileName: String = "recording.m4a")
@@ -161,20 +193,27 @@ data class Transcript(val text: String) {
 
 data class NamedItem(val id: String, val name: String)
 
+/**
+ * One live sticker drawing, v4 (docs/DESIGN_STICKER.md §18.3): the model fills the empty fourth cell of a 2 x 2
+ * sheet that already holds three finished library stickers, so it copies their line weight, size and gloss.
+ */
 class IconDrawRequest(
-    /** Display name of the item ("Gochujang"); the prompt names it. */
+    /** Display name of the item ("Kimchi"); logged and used when [subject] is blank. */
     val itemName: String,
+    /** The 1024 x 1024 PNG neighbour sheet on a transparent background (the app's SheetComposer). */
+    val sheet: ByteArray,
+    /** The bundled mask (app: assets/icons/mask.png): opaque everywhere except the empty bottom-right cell. */
+    val mask: ByteArray,
     /**
-     * Optional extra description, e.g. the item's note. The closest catalog icon's drawHint is
-     * deliberately NOT used: it would bias the drawing towards the wrong object.
+     * What to draw, one line: the IconDecider's `look` ("one squat glass jar of kimchi with a round screw lid; …").
+     * Blank: "one <itemName>, as it is sold in a Canadian grocery store".
      */
-    val hint: String? = null,
-    /** The bundled style sheet (app: assets/icons/_style_reference.png). */
-    val styleReference: ByteArray,
-    val styleReferenceFileName: String = "_style_reference.png",
+    val subject: String,
+    /** The sticker families to draw in, body first ([StickerPalette.FAMILIES]); unknown names are dropped. */
+    val families: List<String>,
 )
 
-/** Raw image as returned by the API (webp, 1024x1024, transparent). The app downsizes to 192 px. */
+/** Raw image as returned by the API (webp, 1024x1024, transparent). The app post-processes it (v4). */
 class DrawnIcon(val bytes: ByteArray, val mimeType: String = "image/webp", val meta: CallMeta)
 
 data class ConnectionCheck(val model: String, val meta: CallMeta)

@@ -69,7 +69,7 @@
       "id": "recipe-pancakes",
       "kind": "text",
       "tags": ["recipe"],
-      "about": "Well-known recipe; butter is already on the list; unrelated list items must not be mentioned",
+      "about": "Well-known recipe; butter is already on the list; unrelated list items must not be mentioned; an optional skip (maple syrup to serve) is never explained as something she already has",
       "input": "ingredients for pancakes from scratch",
       "existing": ["Butter", "Paper towels"],
       "search": "avoid",
@@ -87,7 +87,7 @@
         {"match": ["baking soda"], "aisle": ["baking"], "icons": ["baking_soda"], "optional": true}
       ],
       "forbidden": ["re:^(unsalted |salted )?butter$", "paper towel"],
-      "message": {"mustNot": ["paper towel"]}
+      "message": {"mustNot": ["paper towel", "re:\\balready (have|got)\\b"]}
     },
     {
       "id": "recipe-tacos-no-spices",
@@ -501,7 +501,7 @@
       "forbidden": ["chip", "croustille", "epicerie", "grocer"]
     },
     {
-      "id": "voice-feta-oatly",
+      "id": "voice-feta-oat-milk",
       "kind": "voice",
       "tags": ["voice", "self-correction"],
       "about": "23 s voice note with fillers and 'scratch the paper towels'",
@@ -535,7 +535,8 @@
         {"match": ["cat food"], "aisle": ["household"], "icons": ["cat_food"], "detail": "salmon"},
         {"match": ["naan"], "aisle": ["bakery", "pasta"], "icons": ["pita"]}
       ],
-      "forbidden": ["miso paste", "re:^miso$"]
+      "forbidden": ["miso paste", "re:^miso$"],
+      "message": {"mustNot": ["re:\\balready (have|got)\\b"]}
     },
     {
       "id": "aisle-edit-discount-store",
@@ -669,6 +670,99 @@
         {"name": "Hamburger buns", "icons": ["buns"]},
         {"name": "Smoked salmon", "approx": true, "icons": ["salmon_fillet"]},
         {"name": "Charcoal briquettes", "icons": ["charcoal"]}
+      ]
+    },
+    {
+      "id": "pantry-pancakes",
+      "kind": "text",
+      "tags": ["pantry", "recipe"],
+      "about": "Worked out from a dish with flour, sugar, salt and baking powder in the pantry: those four come back skipped in_pantry; milk and eggs are kept",
+      "input": "ingredients for pancakes from scratch",
+      "pantry": ["flour", "sugar", "salt", "baking powder"],
+      "search": "avoid",
+      "expect": [
+        {"match": ["flour", "farine"], "aisle": ["baking"], "icons": ["flour"], "exclude": ["almond"], "skip": "in_pantry"},
+        {"match": ["sugar"], "aisle": ["baking"], "icons": ["sugar"], "exclude": ["icing"], "skip": "in_pantry"},
+        {"match": ["salt"], "aisle": ["baking"], "icons": ["salt"], "skip": "in_pantry"},
+        {"match": ["baking powder"], "aisle": ["baking"], "icons": ["baking_soda"], "skip": "in_pantry"},
+        {"match": ["milk"], "aisle": ["dairy"], "icons": ["milk_carton", "milk_bag"], "exclude": ["butter", "oat"], "skip": "none"},
+        {"match": ["egg"], "aisle": ["dairy"], "icons": ["eggs"], "skip": "none"},
+        {"match": ["vanilla"], "aisle": ["baking"], "icons": ["vanilla"], "optional": true},
+        {"match": ["maple syrup"], "aisle": ["breakfast", "baking"], "icons": ["maple_syrup"], "optional": true},
+        {"match": ["butter", "oil"], "aisle": ["dairy", "baking"], "icons": ["butter", "canola_oil", "olive_oil"], "exclude": ["peanut", "buttermilk"], "optional": true, "many": true},
+        {"match": ["buttermilk"], "aisle": ["dairy"], "icons": ["milk_carton", "dairy_generic"], "approx": true, "optional": true}
+      ]
+    },
+    {
+      "id": "pantry-banana-bread-spices",
+      "kind": "text",
+      "tags": ["pantry", "recipe"],
+      "about": "A broad pantry entry covers its members: with \"spices\" in the pantry, the spices a spiced banana bread needs (cinnamon first) are skipped in_pantry. (Plain \"banana bread\" brings no spice at all on terra, with or without a pantry, so it would test nothing.)",
+      "input": "spiced banana bread",
+      "pantry": ["spices"],
+      "search": "avoid",
+      "expect": [
+        {"match": ["banana"], "aisle": ["produce"], "icons": ["banana"], "skip": "none"},
+        {"match": ["flour", "farine"], "aisle": ["baking"], "icons": ["flour"], "skip": "none"},
+        {"match": ["sugar", "brown sugar"], "aisle": ["baking"], "icons": ["sugar"], "exclude": ["icing"], "skip": "none"},
+        {"match": ["egg"], "aisle": ["dairy"], "icons": ["eggs"], "skip": "none"},
+        {"match": ["baking soda"], "aisle": ["baking"], "icons": ["baking_soda"], "skip": "none"},
+        {"match": ["cinnamon"], "aisle": ["baking"], "icons": ["spice_jar"], "skip": "in_pantry"},
+        {"match": ["nutmeg", "allspice", "clove", "ginger", "cardamom", "re:pumpkin pie spice", "re:mixed spice"], "aisle": ["baking"], "icons": ["spice_jar"], "optional": true, "many": true, "skip": "in_pantry"},
+        {"match": ["butter", "oil"], "aisle": ["dairy", "baking"], "icons": ["butter", "canola_oil", "olive_oil"], "exclude": ["peanut", "buttermilk"], "optional": true, "many": true},
+        {"match": ["vanilla"], "aisle": ["baking"], "icons": ["vanilla"], "optional": true},
+        {"match": ["salt"], "aisle": ["baking"], "icons": ["salt"], "optional": true},
+        {"match": ["baking powder"], "aisle": ["baking"], "icons": ["baking_soda"], "optional": true},
+        {"match": ["walnut", "pecan", "nut"], "aisle": ["baking", "bulk", "snacks"], "icons": ["nuts"], "optional": true},
+        {"match": ["chocolate chip"], "aisle": ["baking", "bulk"], "icons": ["chocolate_chips"], "optional": true},
+        {"match": ["sour cream", "yogurt", "buttermilk", "milk"], "aisle": ["dairy"], "icons": ["sour_cream", "yogurt", "milk_carton", "dairy_generic"], "approx": true, "optional": true}
+      ]
+    },
+    {
+      "id": "pantry-almond-flour",
+      "kind": "text",
+      "tags": ["pantry", "recipe"],
+      "about": "\"flour\" in the pantry does not cover almond flour: a dish that needs almond flour keeps it",
+      "input": "french macarons",
+      "pantry": ["flour"],
+      "search": "avoid",
+      "expect": [
+        {"match": ["almond flour", "ground almond", "almond meal", "poudre d'amande"], "aisle": ["baking", "bulk"], "icons": ["flour", "nuts"], "approx": true, "skip": "none"},
+        {"match": ["icing sugar", "powdered sugar", "confectioners sugar"], "aisle": ["baking"], "icons": ["sugar"], "skip": "none"},
+        {"match": ["egg"], "aisle": ["dairy"], "icons": ["eggs"], "skip": "none"},
+        {"match": ["sugar"], "aisle": ["baking"], "icons": ["sugar"], "exclude": ["icing", "powdered", "confectioner"], "optional": true},
+        {"match": ["cream of tartar"], "aisle": ["baking"], "icons": ["baking_soda", "spice_jar", "baking_generic"], "approx": true, "optional": true},
+        {"match": ["food colouring", "food coloring", "gel colour"], "aisle": ["baking"], "icons": ["baking_generic", "sprinkles"], "approx": true, "optional": true},
+        {"match": ["butter", "cream", "jam", "chocolate", "vanilla", "ganache", "milk"], "exclude": ["almond milk"], "aisle": ["dairy", "baking", "breakfast"], "icons": ["butter", "cream", "jam", "chocolate_bar", "chocolate_chips", "vanilla", "milk_carton", "milk_bag"], "optional": true, "many": true, "approx": true},
+        {"match": ["salt"], "aisle": ["baking"], "icons": ["salt"], "optional": true}
+      ]
+    },
+    {
+      "id": "pantry-plain-list",
+      "kind": "text",
+      "tags": ["pantry", "list"],
+      "about": "Named items are never skipped for the pantry: writing \"flour\" means she ran out",
+      "input": "flour, milk",
+      "pantry": ["flour", "salt"],
+      "search": "avoid",
+      "expect": [
+        {"match": ["flour", "farine"], "aisle": ["baking"], "icons": ["flour"], "skip": "none"},
+        {"match": ["milk"], "aisle": ["dairy"], "icons": ["milk_carton", "milk_bag"], "skip": "none"}
+      ]
+    },
+    {
+      "id": "pantry-photo-salt",
+      "kind": "photo",
+      "tags": ["pantry", "photo"],
+      "about": "A photographed list with salt on it and salt in the pantry: salt is kept (she wrote it)",
+      "file": "eval/media/pantry_salt_list.jpg",
+      "pantry": ["salt", "pepper", "oil"],
+      "expect": [
+        {"match": ["milk"], "aisle": ["dairy"], "icons": ["milk_carton", "milk_bag"], "skip": "none"},
+        {"match": ["salt"], "aisle": ["baking"], "icons": ["salt"], "skip": "none"},
+        {"match": ["bread"], "aisle": ["bakery"], "icons": ["sliced_bread", "bakery_generic"], "skip": "none"},
+        {"match": ["apple"], "aisle": ["produce"], "icons": ["apple"], "skip": "none"},
+        {"match": ["dish soap"], "aisle": ["household"], "icons": ["dish_soap"], "skip": "none"}
       ]
     }
   ]

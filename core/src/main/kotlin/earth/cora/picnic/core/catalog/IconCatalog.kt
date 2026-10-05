@@ -29,6 +29,13 @@ data class IconEntry(
     val aliases: List<String>,
     /** One sentence for image generation (library sheets and live icons). */
     val drawHint: String,
+    /**
+     * Easter-egg tags (§12.2, CatalogTagsTest): "roll" / "hop" (egg 3, rolling produce and hopping berries),
+     * "picnic" (egg 17, the ant parade), "birthday" (egg 9), "frozen" (the frozen goods).
+     */
+    val tags: List<String> = emptyList(),
+    /** How the sticker hops into its basket (§8.3); StickerManifest repeats it per drawable. */
+    val personality: Personality = Personality.NONE,
 )
 
 @Serializable
@@ -177,23 +184,66 @@ class IconCatalog(val file: CatalogFile) {
     }
 
     /**
-     * What a row shows for [item]. CONTRACT:
-     * - bespoke icon attached -> IconRef(item.icon, customIconId);
-     * - [busy] (IconRepository is deciding or drawing this name) or iconFit == PENDING ->
-     *   IconRef(fallbackFor(item.icon)) and the row overlays the "drawing..." sparkle when busy;
-     * - otherwise IconRef(item.icon) (an APPROXIMATE item that won't be drawn keeps its closest icon).
+     * What a row shows for [item]. CONTRACT (D5, DisplayRefTest):
+     * - bespoke icon attached -> IconRef(item.icon, customIconId) (a redraw in progress keeps showing it);
+     * - [busy] (IconRepository is deciding or drawing this name), iconFit == PENDING, or the stored [DEFAULT_ICON] that
+     *   was not chosen EXACT (nothing matched: [showsCapsule]) -> the gashapon capsule sentinel IconRef([CAPSULE]),
+     *   tinted by its aisle (gold for a jackpot) by ItemIcon, with the "drawing..." sparkle when busy. Display only:
+     *   nothing persisted changes;
+     * - otherwise IconRef(item.icon): an APPROXIMATE item that won't be drawn keeps its closest icon, and an item matched
+     *   EXACT to `paper_bag` ("grocery bags") shows the kraft shopping bag.
      */
     fun displayRef(item: GroceryItem, busy: Boolean): IconRef = when {
         item.customIconId != null -> IconRef(item.icon, item.customIconId)
-        busy || item.iconFit == IconFit.PENDING -> IconRef(fallbackFor(item.icon))
+        busy || showsCapsule(item.icon, item.iconFit) -> IconRef(CAPSULE)
         else -> IconRef(item.icon)
     }
+
+    /** Keys with egg tag [tag] ("roll", "hop", "picnic", "birthday", "frozen"), in catalog order. */
+    fun keysTagged(tag: String): List<String> = file.icons.filter { tag in it.tags }.map { it.key }
+
+    /** [key]'s egg tags; empty for unknown keys. */
+    fun tagsOf(key: String): List<String> = byKey[key]?.tags.orEmpty()
+
+    /** [key]'s hop personality (§8.3); NONE for unknown keys and the capsule. */
+    fun personalityOf(key: String): Personality = byKey[key]?.personality ?: Personality.NONE
+
+    /**
+     * The album key an item is collected under when it is checked (§7.2 "collected = really bought"): its
+     * live-drawn sticker ("c:<customIconId>") or its catalog key when the fit is EXACT and the key is not a
+     * category generic (generics are not collectible, §6.10). Null for PENDING and APPROXIMATE items: they are
+     * collected later, when they resolve or get their live sticker.
+     */
+    fun collectKey(item: GroceryItem): String? = when {
+        item.customIconId != null -> COLLECTED_CUSTOM_PREFIX + item.customIconId
+        item.iconFit == IconFit.EXACT && item.icon in byKey && !isGeneric(item.icon) -> item.icon
+        else -> null
+    }
+
+    /** What the album can collect from the catalog: every key but the category generics (§6.10). */
+    val collectibleKeys: List<String> = keys.filterNot { it in genericKeys }
 
     val baskets: BasketCatalog by lazy { BasketCatalog(file.baskets) }
 
     companion object {
-        /** Generic "some groceries" icon (a paper grocery bag) for unknown and PENDING items. */
+        /**
+         * The catalog key stored for unknown and PENDING items (a paper grocery bag; always a valid key). Rows show
+         * the [CAPSULE] for PENDING items instead (D5).
+         */
         const val DEFAULT_ICON: String = "paper_bag"
+
+        /** D5: the gashapon capsule shown for PENDING and busy items. A display-only sentinel, never a catalog key. */
+        const val CAPSULE: String = "_capsule"
+
+        /**
+         * Whether an item's stored [icon] and [fit] still show the [CAPSULE] (D5): PENDING, or the [DEFAULT_ICON] kept
+         * because nothing matched (not EXACT). `paper_bag` chosen EXACT is the real "Shopping bag" sticker.
+         */
+        fun showsCapsule(icon: String, fit: IconFit): Boolean =
+            fit == IconFit.PENDING || (icon == DEFAULT_ICON && fit != IconFit.EXACT)
+
+        /** Album collected-key prefix for live-drawn stickers: "c:<customIconId>" (§7.2). */
+        const val COLLECTED_CUSTOM_PREFIX: String = "c:"
 
         const val RESOURCE: String = "/icon_catalog.json"
 

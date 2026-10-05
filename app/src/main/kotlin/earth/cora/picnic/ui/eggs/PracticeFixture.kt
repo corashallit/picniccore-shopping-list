@@ -1,0 +1,99 @@
+package earth.cora.picnic.ui.eggs
+
+import earth.cora.picnic.core.model.AppState
+import earth.cora.picnic.core.model.GroceryItem
+import earth.cora.picnic.core.model.GroceryList
+import earth.cora.picnic.core.model.IconFit
+import earth.cora.picnic.core.model.ItemSource
+import earth.cora.picnic.core.model.Rarity
+import earth.cora.picnic.core.model.StoreProfile
+import earth.cora.picnic.core.model.addItems
+import earth.cora.picnic.core.model.normalizeName
+import earth.cora.picnic.core.model.setFavourite
+import earth.cora.picnic.core.model.setOpenAisle
+import earth.cora.picnic.core.model.setRarity
+import earth.cora.picnic.core.model.toggleChecked
+
+/**
+ * The Surprise lab's practice copy (docs/DESIGN_STICKER.md §6.9): the Appendix A fixture "Saturday shop" at Hillcrest
+ * Market on Saturday 3 October 2026 at 10:24, mid-trip (10 of 24 checked, Baking open, maple syrup shiny), built through
+ * the real StateOps exactly as the tests' fixture is. It lives only in memory while the lab is open. Owner: WP9.
+ */
+object PracticeFixture {
+    const val LIST_ID = "saturday"
+    const val STORE = "Hillcrest Market"
+    const val AISLES = "Produce\nBakery\nDeli & meat\nAisle 2 - Baking\nBreakfast\nDairy & eggs\nFrozen\nHousehold"
+
+    /** 2026-10-03 10:24 America/Toronto. */
+    const val NOW = 1_791_037_440_000L
+
+    /** 2026-10-03 09:58, the first check-off (bananas). */
+    const val TRIP_START = 1_791_035_880_000L
+
+    /** Tuesday 2026-09-29 19:00: when the list was written. */
+    const val WRITTEN = 1_790_722_800_000L
+
+    const val MIN = 60_000L
+
+    private data class Row(val id: String, val name: String, val quantity: String, val aisle: String, val icon: String, val addedAt: Long)
+
+    private val rows = listOf(
+        Row("strawberries", "Strawberries", "1 L basket", "produce", "strawberry", WRITTEN),
+        Row("bananas", "Bananas", "6 bananas", "produce", "banana", WRITTEN + 1),
+        Row("apples", "McIntosh apples", "1.36 kg bag", "produce", "apple", WRITTEN + 2),
+        Row("carrots", "Carrots", "907 g bag", "produce", "carrot", WRITTEN + 3),
+        Row("broccoli", "Broccoli", "1 crown", "produce", "broccoli", WRITTEN + 4),
+        Row("sourdough", "Sourdough", "800 g boule", "bakery", "bakery_generic", WRITTEN + 5),
+        Row("croissants", "Croissants", "4 pack", "bakery", "croissant", WRITTEN + 6),
+        Row("baguette", "Baguette", "1 stick", "bakery", "baguette", WRITTEN + 7),
+        Row("ham", "Spiral ham", "1.5 kg", "deli-meat", "deli_meat", WRITTEN + 8),
+        Row("peameal", "Peameal bacon", "600 g roast", "deli-meat", "peameal_bacon", WRITTEN + 9),
+        Row("flour", "All-purpose flour", "2.5 kg bag", "aisle-2-baking", "flour", WRITTEN + 10),
+        Row("sugar", "White sugar", "2 kg bag", "aisle-2-baking", "sugar", WRITTEN + 11),
+        Row("baking-powder", "Baking powder", "225 g tin · from your recipe", "aisle-2-baking", "baking_soda", TRIP_START + 13 * MIN),
+        Row("coffee", "Coffee beans", "340 g bag", "breakfast", "coffee", WRITTEN + 12),
+        Row("maple", "Maple syrup", "540 mL tin", "breakfast", "maple_syrup", WRITTEN + 13),
+        Row("milk", "Milk, 2 %", "4 L bag", "dairy-eggs", "milk_bag", WRITTEN + 14),
+        Row("eggs", "Eggs, large", "dozen", "dairy-eggs", "eggs", TRIP_START + 12 * MIN),
+        Row("butter", "Butter, salted", "454 g brick", "dairy-eggs", "butter", TRIP_START + 10 * MIN),
+        Row("peas", "Frozen peas", "750 g bag", "frozen", "frozen_vegetables", WRITTEN + 15),
+        Row("ice-cream", "Ice cream", "1.5 L tub", "frozen", "ice_cream", WRITTEN + 16),
+        Row("toilet-paper", "Toilet paper", "12 double rolls", "household", "toilet_paper", WRITTEN + 17),
+        Row("dish-soap", "Dish soap", "740 mL", "household", "dish_soap", WRITTEN + 18),
+        Row("cat-food", "Dry cat food", "7 kg bag · pets", "household", "cat_food", WRITTEN + 19),
+        Row("toothpaste", "Toothpaste", "100 mL tube", "household", "toothpaste", WRITTEN + 20),
+    )
+
+    /** The check-off order and minutes after [TRIP_START]: what the baskets and the book hold. */
+    val CHECKS: List<Pair<String, Long>> = listOf(
+        "bananas" to 0L, "carrots" to 2L, "broccoli" to 3L, "croissants" to 6L, "ham" to 9L,
+        "peameal" to 10L, "flour" to 17L, "sugar" to 18L, "coffee" to 22L, "butter" to 25L,
+    )
+
+    fun item(row: String): GroceryItem {
+        val r = rows.single { it.id == row }
+        return GroceryItem(
+            id = r.id, name = r.name, quantity = r.quantity, aisleId = r.aisle, icon = r.icon, iconFit = IconFit.EXACT,
+            addedAt = r.addedAt, source = ItemSource.AI_TEXT,
+        )
+    }
+
+    /** The store and the 24 items before any check-off. */
+    fun unchecked(): AppState {
+        val base = AppState(
+            lists = listOf(GroceryList(LIST_ID, "Saturday shop", WRITTEN)),
+            currentListId = LIST_ID,
+            store = StoreProfile(name = STORE, aislesText = AISLES),
+        )
+        return rows.sortedBy { it.addedAt }.fold(base) { s, r -> s.addItems(LIST_ID, listOf(item(r.id)), r.addedAt).first }
+    }
+
+    /** The fixture at [NOW]: 10 of 24 checked, maple syrup shiny, coffee a favourite, Baking open. */
+    fun state(): AppState {
+        val checked = CHECKS.fold(unchecked()) { s, (id, minutes) -> s.toggleChecked(LIST_ID, id, TRIP_START + minutes * MIN) }
+        return checked
+            .setRarity(LIST_ID, "maple", Rarity.SHINY)
+            .setFavourite(normalizeName("Coffee beans"), true)
+            .setOpenAisle(LIST_ID, "aisle-2-baking")
+    }
+}

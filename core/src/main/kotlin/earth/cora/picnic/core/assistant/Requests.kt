@@ -5,6 +5,7 @@ import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.llm.ResponsesModel
 import earth.cora.picnic.core.llm.WebSearchSpec
 import earth.cora.picnic.core.model.Aisle
+import earth.cora.picnic.core.model.Aisles
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.Correction
 import earth.cora.picnic.core.model.UNSORTED_WIRE_ID
@@ -28,6 +29,20 @@ internal object Schemas {
 
     fun nullableString(): JsonObject = buildJsonObject {
         putJsonArray("type") { add(JsonPrimitive("string")); add(JsonPrimitive("null")) }
+    }
+
+    fun boolean(): JsonObject = buildJsonObject { put("type", "boolean") }
+
+    fun nullableInteger(): JsonObject = buildJsonObject {
+        putJsonArray("type") { add(JsonPrimitive("integer")); add(JsonPrimitive("null")) }
+    }
+
+    /** An object or null (strict mode: anyOf with a null branch). */
+    fun nullable(schema: JsonObject): JsonObject = buildJsonObject {
+        putJsonArray("anyOf") {
+            add(schema)
+            add(buildJsonObject { put("type", "null") })
+        }
     }
 
     fun enumString(values: List<String>): JsonObject {
@@ -60,7 +75,11 @@ internal object Schemas {
         }
     }
 
-    /** grocery_items: {items:[{name, quantity|null, note|null, aisle_id, icon, icon_fit}], message}. */
+    /**
+     * grocery_items (docs/DESIGN_STICKER.md §19.1): {items:[{name, quantity|null, note|null, aisle_id, icon, icon_fit,
+     * skip_reason, named, pantry_entry}], message, lines:[{text, crossed_out, correction_of|null, item_index|null}],
+     * recipe:{title, recipes_compared|null, servings|null}|null}.
+     */
     fun ingest(aisleIds: List<String>, iconKeys: List<String>): JsonObject = strictObject(
         "items" to array(
             strictObject(
@@ -70,9 +89,27 @@ internal object Schemas {
                 "aisle_id" to enumString(aisleIds + UNSORTED_WIRE_ID),
                 "icon" to enumString(iconKeys),
                 "icon_fit" to enumString(listOf(ICON_FIT_EXACT, ICON_FIT_APPROXIMATE)),
+                "skip_reason" to enumString(SKIP_REASONS),
+                "named" to boolean(),
+                "pantry_entry" to string(),
             ),
         ),
         "message" to string(),
+        "lines" to array(
+            strictObject(
+                "text" to string(),
+                "crossed_out" to boolean(),
+                "correction_of" to nullableString(),
+                "item_index" to nullableInteger(),
+            ),
+        ),
+        "recipe" to nullable(
+            strictObject(
+                "title" to string(),
+                "recipes_compared" to nullableInteger(),
+                "servings" to nullableInteger(),
+            ),
+        ),
     )
 
     /** aisle_assignments: {assignments:[{id: enum(i1..iN), aisle_id: enum(aisles + "unsorted")}]}. */
@@ -95,13 +132,25 @@ internal object Schemas {
         ),
     )
 
-    /** icon_decisions: {decisions:[{id: enum(i1..iN), icon: enum(decidable keys + "none"), category: enum(categories)}]}. */
-    fun iconDecisions(itemIds: List<String>, iconKeys: List<String>, categoryKeys: List<String>): JsonObject = strictObject(
+    /**
+     * icon_decisions: {decisions:[{id: enum(i1..iN), icon: enum(decidable keys + "none"), category: enum(categories),
+     * look: string, body: enum(sticker families), accent: enum(sticker families)}]}. look, body and accent brief a
+     * live drawing (v4, docs/DESIGN_STICKER.md §18.3); look is "" for a match.
+     */
+    fun iconDecisions(
+        itemIds: List<String>,
+        iconKeys: List<String>,
+        categoryKeys: List<String>,
+        familyKeys: List<String>,
+    ): JsonObject = strictObject(
         "decisions" to array(
             strictObject(
                 "id" to enumString(itemIds),
                 "icon" to enumString(iconKeys + ICON_NONE),
                 "category" to enumString(categoryKeys),
+                "look" to string(),
+                "body" to enumString(familyKeys),
+                "accent" to enumString(familyKeys),
             ),
         ),
     )
@@ -109,6 +158,9 @@ internal object Schemas {
     const val ICON_FIT_EXACT = "exact"
     const val ICON_FIT_APPROXIMATE = "approximate"
     const val ICON_NONE = "none"
+
+    /** Wire values of SkipReason, in its order. */
+    val SKIP_REASONS: List<String> = listOf("none", "already_on_list", "optional", "in_pantry")
 }
 
 /** Prompt texts (core/src/main/resources/prompts, documented in docs/PROMPTS.md) and context blocks. */
@@ -161,16 +213,24 @@ internal object Prompts {
 
     /**
      * The per-request developer message (research/openai/examples/context_example.txt): aisles in
-     * walking order, learned corrections, and (for ingest) the names already on the list.
+     * walking order, each with its "Also here" note when it has one ("- produce: Produce (also here: toothpaste)",
+     * Cora, 5 October; an aisle without one reads exactly as before), learned corrections, and (for ingest) the names
+     * already on the list and the pantry ("In the pantry (she keeps these at home): …", "nothing yet" when empty, §6.2
+     * rule 8). Ingest and recategorize (so AisleSync too) both send it.
      */
     fun contextBlock(
         aisles: List<Aisle>,
         corrections: List<Correction>,
         existingNames: List<String>?,
         appLanguage: String? = null,
+        pantry: List<String>? = null,
     ): String = buildString {
         append("Store aisles in walking order (id: name):\n")
-        aisles.forEach { append("- ").append(it.id).append(": ").append(oneLine(it.name, 120)).append('\n') }
+        aisles.forEach { aisle ->
+            append("- ").append(aisle.id).append(": ").append(oneLine(aisle.name, 120))
+            aisle.note?.let { oneLine(it, Aisles.NOTE_MAX) }?.takeIf { it.isNotEmpty() }?.let { append(" (also here: ").append(it).append(')') }
+            append('\n')
+        }
         append("- ").append(UNSORTED_WIRE_ID).append(": (no matching aisle)\n")
         append("\nLearned corrections (item -> aisle id):\n")
         if (corrections.isEmpty()) append("- none\n")
@@ -179,6 +239,11 @@ internal object Prompts {
             val names = existingNames.map { oneLine(it, 80) }.filter { it.isNotEmpty() }.take(MAX_EXISTING_NAMES)
             append("\nAlready on the list: ")
             append(if (names.isEmpty()) "nothing yet" else names.joinToString(", "))
+        }
+        if (pantry != null) {
+            val entries = pantry.map { oneLine(it, 80) }.filter { it.isNotEmpty() }.take(MAX_PANTRY_ENTRIES)
+            append("\n\nIn the pantry (she keeps these at home): ")
+            append(if (entries.isEmpty()) "nothing yet" else entries.joinToString(", "))
         }
         appLanguage?.let { oneLine(it, 40) }?.takeIf { it.isNotEmpty() }?.let { language ->
             append("\n\nApp language: ").append(language)
@@ -191,23 +256,43 @@ internal object Prompts {
     fun itemsBlock(names: List<String>): String =
         "Items:\n" + names.mapIndexed { i, name -> "${wireId(i)}: ${oneLine(name, 120)}" }.joinToString("\n")
 
-    /** "Aisles:\n- produce: Produce\n…" */
+    /**
+     * "Aisles:\n- produce: Produce\n…", for the baskets call. Names only: a basket suits the aisle's main goods, and an
+     * "Also here" note lists exceptions, so a note about toothpaste never turns Produce's hamper into a tote.
+     */
     fun aislesBlock(aisles: List<Aisle>): String =
         "Aisles:\n" + aisles.joinToString("\n") { "- ${it.id}: ${oneLine(it.name, 120)}" }
 
-    fun iconPrompt(itemName: String, hint: String?): String {
-        val prompt = iconPromptTemplate.replace("{item}", oneLine(itemName, 80).ifEmpty { "a grocery item" })
-        val extra = hint?.let { oneLine(it, 160) }?.takeIf { it.isNotEmpty() }
-        return if (extra == null) prompt else "$prompt Details about the item: $extra."
+    /**
+     * The live-sticker v4 prompt (icon_prompt.txt): {subject} = [subject] on one line (≤ 300 chars), or
+     * "one <itemName>, as it is sold in a Canadian grocery store" when blank; {colours} = pastel, mid and trace
+     * of each of the first two known [families] (body first); {body} = the body pastel; {band} = the body mid.
+     */
+    fun iconPrompt(itemName: String, subject: String, families: List<String>): String {
+        val what = oneLine(subject, 300).trimEnd('.').ifEmpty { LiveIconDrawer.fallbackSubject(itemName) }
+        val fams = StickerPalette.normalize(families)
+        val colours = fams.joinToString(", ") { name ->
+            val f = StickerPalette.family(name)!!
+            "$name pastel ${f.pastel}, $name mid ${f.mid}, $name trace ${f.trace}"
+        }
+        val body = StickerPalette.family(fams.first())!!
+        return iconPromptTemplate
+            .replace("{subject}", what)
+            .replace("{colours}", colours)
+            .replace("{body}", body.pastel)
+            .replace("{band}", body.mid)
     }
 
     fun wireId(index: Int): String = "i${index + 1}"
 
     fun oneLine(text: String, max: Int): String = text.replace(Regex("\\s+"), " ").trim().take(max)
 
-    const val PHOTO_INSTRUCTION = "Photo of a handwritten shopping list. Add its items."
+    const val PHOTO_INSTRUCTION = "Photo of a shopping list or a recipe. Add what to buy."
     const val TRANSCRIPT_PREFIX = "Voice note transcript: "
     const val MAX_EXISTING_NAMES = 150
+
+    /** Pantry entries in the context block (AppState.ingestContext already caps them at PANTRY_IN_CONTEXT). */
+    const val MAX_PANTRY_ENTRIES = 200
 }
 
 /** Builds /responses bodies in the cache-friendly order (research/openai_api.md §2.1). */

@@ -1,0 +1,554 @@
+package earth.cora.picnic.ui.list
+
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import earth.cora.picnic.R
+import earth.cora.picnic.ui.eggs.EggAnchors
+import earth.cora.picnic.ui.eggs.LocalListRoom
+import earth.cora.picnic.ui.eggs.eggTwinkle
+import earth.cora.picnic.ui.eggs.eggTitleSticker
+import earth.cora.picnic.ui.eggs.lcd
+import earth.cora.picnic.ui.eggs.rememberKirakiraBrush
+import earth.cora.picnic.ui.eggs.rememberPetPose
+import earth.cora.picnic.ui.list.motion.AnchorRegistry
+import earth.cora.picnic.ui.list.motion.BookPaging
+import earth.cora.picnic.ui.list.motion.ListPresentation
+import earth.cora.picnic.ui.list.motion.MotionChoreographer
+import earth.cora.picnic.ui.theme.BookDateCaption
+import earth.cora.picnic.ui.theme.BookLayout
+import earth.cora.picnic.ui.theme.Families
+import earth.cora.picnic.ui.theme.FixedMotionScale
+import earth.cora.picnic.ui.theme.FlatStar
+import earth.cora.picnic.ui.theme.LcdChip
+import earth.cora.picnic.ui.theme.LcdMode
+import earth.cora.picnic.ui.theme.LocalReducedMotion
+import earth.cora.picnic.ui.theme.NAME_TAG_PAD_X
+import earth.cora.picnic.ui.theme.NAME_TAG_PAD_Y
+import earth.cora.picnic.ui.theme.NAME_TAG_RIM
+import earth.cora.picnic.ui.theme.NameTag
+import earth.cora.picnic.ui.theme.PadPatch
+import earth.cora.picnic.ui.theme.PetPose
+import earth.cora.picnic.ui.theme.PicnicGlyph
+import earth.cora.picnic.ui.theme.PicnicIconButton
+import earth.cora.picnic.ui.theme.PicnicMotion
+import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.PuffyText
+import earth.cora.picnic.ui.theme.StickerBook
+import earth.cora.picnic.ui.theme.SunSticker
+import earth.cora.picnic.ui.theme.ThemeVariant
+import earth.cora.picnic.ui.theme.nameTagStyle
+import kotlin.math.ceil
+import kotlinx.coroutines.withContext
+
+/*
+ * The top stack (docs/DESIGN_STICKER.md §6.1 item 1, §4.2, §7): the status bar inset, the binder top (the puffy title,
+ * the sun, the subtitle on a pad patch, the LCD and More) and the trip's sticker book with 12 dp side margins and 8 dp
+ * below. Nothing scrolls above or around it (R6): the list's viewport starts under it. On scroll-down the app bar and the
+ * book collapse together (56 + 40 dp); every height change animates (`standard`, 200 ms). Owner: WP5.
+ */
+
+/** What the top stack shows of the screen's transient state. */
+internal class TopStackUi(
+    val barCollapsed: Boolean,
+    val bookCollapsed: Boolean,
+    /** Pull to refresh: the LCD reads SYNC (1500 ms). */
+    val syncing: Boolean,
+    /** Bumped on each refresh: the sun spins 360° once (400 ms). */
+    val sunSpin: Int,
+)
+
+@Composable
+internal fun TopStack(
+    state: ListUiState,
+    presentation: ListPresentation,
+    engine: MotionChoreographer,
+    ui: TopStackUi,
+    actions: ListActions,
+    onMore: () -> Unit,
+    onMoreBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
+    /** Opens the Trip book sheet at the book's [slot] (§6.6: the page the book shows). */
+    onOpenBook: (slot: Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val fontScale = LocalDensity.current.fontScale
+    val book = state.book
+    val dateOnPage = fontScale <= 1.3f
+    // Large text (§4.2): when the LCD would take a line of its own under the subtitle, it sits at the right end of the
+    // book's date-caption row instead, which has the room. The bar decides (it knows whether the title or the subtitle
+    // leaves room beside them) and the LCD follows; its size is kept so the bar can decide while it sits below.
+    val spot = remember { LcdSpot() }
+    val captionRow = fontScale >= LARGE_TEXT && !dateOnPage && book != null && !state.loading
+    val lcdBelow = captionRow && spot.inCaption
+    val petPose = rememberPetPose(LocalListEggs.current)
+    val lcd: @Composable () -> Unit = {
+        Box(Modifier.testTag(ListTags.LCD_SLOT).onSizeChanged { spot.size = it }) {
+            TopLcd(state, presentation, engine.anchors, ui, actions, petPose)
+        }
+    }
+    Column(modifier.fillMaxWidth().statusBarsPadding().testTag(ListTags.TOP_STACK)) {
+        AppBar(state, presentation, engine.anchors, ui, actions, onMore, onMoreBounds, lcd = if (lcdBelow) null else lcd, spot = if (captionRow) spot else null)
+        if (book != null && !state.loading) {
+            BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp), contentAlignment = Alignment.TopCenter) {
+                val width = BookLayout.widthFor(maxWidth.value + 24f).dp
+                val layout = remember(width, book.stamps.size, book.total) { BookLayout.of(width.value, book.stamps.size, book.total) }
+                val shown = layout.shownPage(book.takenSlots, finished = book.perfect)
+                androidx.compose.runtime.SideEffect { engine.bookPaging = BookPaging(layout.perPage, shown) }
+                // Above font scale 1.3 the stamp name tag joins the date's caption row (§7.4, §7.7, item 157).
+                var captionTag by remember { mutableStateOf<String?>(null) }
+                BookWithCaption(
+                    // The caption's date is words: the eggs keep clear of it (the receipt, the bursts; `text:date`, §12.1).
+                    caption = if (dateOnPage) null else { { BookDateCaption(book.dateLabel, season = book.season, modifier = with(engine.anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "date") }) } },
+                    tag = captionTag,
+                    lcd = if (lcdBelow) lcd else null,
+                    book = {
+                        StickerBook(
+                            state = book,
+                            presentation = presentation.book,
+                            clock = engine.clock,
+                            width = width,
+                            collapsed = ui.bookCollapsed,
+                            anchors = engine.anchors,
+                            dateOnPage = dateOnPage,
+                            turnKey = state.bookTurn,
+                            onOpenAt = onOpenBook,
+                            onStampTap = actions.onStampTap,
+                            pageNumber = LocalListEggs.current.rolling == null,
+                            onNameTag = if (dateOnPage) null else { text -> captionTag = text },
+                            // Egg 7: the book's twins twinkle once with the rows' stickers (§12.2).
+                            twinkle = LocalListEggs.current.let { eggs -> { slot -> Modifier.eggTwinkle(eggs, slot) } },
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The book under its date caption (large text, §7.4), and the stamp name [tag] while it holds: in the caption row after
+ * the date, growing down over the book's right side as far as the book goes, never past it (so never over the list).
+ * When the column after the date cannot hold every word, the tag widens leftwards over the caption, up to the book's
+ * width, rather than lose one. The tag lies over the caption and the book; it moves nothing.
+ *
+ * The app bar's [lcd] may sit at the right end of the caption row (§4.2), on the caption's centre line; the row is as
+ * tall as the taller of the two, and the tag keeps clear of the LCD. When the date and the LCD cannot share the row,
+ * the LCD takes a line of its own at the right, above the date.
+ */
+@Composable
+private fun BookWithCaption(caption: (@Composable () -> Unit)?, tag: String?, book: @Composable () -> Unit, lcd: (@Composable () -> Unit)? = null) {
+    val measurer = rememberTextMeasurer()
+    val tagStyle = nameTagStyle()
+    Layout(
+        content = {
+            if (caption != null) Box(Modifier.layoutId("caption")) { caption() }
+            Box(Modifier.layoutId("book")) { book() }
+            if (lcd != null) Box(Modifier.layoutId("lcd")) { lcd() }
+            if (tag != null) Box(Modifier.layoutId("tag")) { NameTag(tag) }
+        },
+    ) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0, minHeight = 0)
+        val gap = 6.dp.roundToPx()
+        val captionP = measurables.firstOrNull { it.layoutId == "caption" }?.measure(loose)
+        val bookP = measurables.first { it.layoutId == "book" }.measure(loose)
+        val lcdP = measurables.firstOrNull { it.layoutId == "lcd" }?.measure(loose)?.takeIf { it.width > 0 }
+        val width = maxOf(bookP.width, captionP?.width ?: 0)
+        val captionH = captionP?.height ?: 0
+        val lcdW = lcdP?.width ?: 0
+        val lcdH = lcdP?.height ?: 0
+        val afterDate = captionP?.let { it.width + 8.dp.roundToPx() } ?: 0
+        // The LCD shares the caption row when the date leaves it room; else it takes a line of its own above the date.
+        val shared = lcdP != null && afterDate + lcdW <= width
+        val lcdLine = if (lcdP != null && !shared) lcdH + gap else 0
+        val rowH = if (shared) maxOf(captionH, lcdH) else captionH
+        val captionY = lcdLine + (rowH - captionH) / 2
+        val bookY = lcdLine + if (captionP != null || shared) rowH + gap else 0
+        val height = bookY + bookP.height
+        // The tag's room: from the caption row's top (under an LCD line of its own) to the book's bottom, after the date
+        // and short of an LCD sharing the row.
+        val tagTop = lcdLine
+        val tagEnd = if (shared) width - lcdW - 8.dp.roundToPx() else width
+        val tagRoomH = height - tagTop
+        // Does every word fit in the column after the date, within the height the tag may take? (The text's own height:
+        // the round face's first and last lines stand taller than its line height.)
+        val frameX = 2 * (NAME_TAG_RIM + NAME_TAG_PAD_X).roundToPx()
+        val frameY = 2 * (NAME_TAG_RIM + NAME_TAG_PAD_Y).roundToPx()
+        val fitsAfterDate = tag == null || run {
+            val column = (tagEnd - afterDate - frameX).coerceAtLeast(1)
+            measurer.measure(earth.cora.picnic.ui.theme.keepWithNextWord(tag), tagStyle, constraints = Constraints(maxWidth = column)).size.height <= tagRoomH - frameY
+        }
+        val tagWidth = if (fitsAfterDate) tagEnd - afterDate else tagEnd
+        val tagP = measurables.firstOrNull { it.layoutId == "tag" }?.measure(
+            Constraints(maxWidth = tagWidth.coerceAtLeast(0), maxHeight = tagRoomH.coerceAtLeast(0)),
+        )
+        val tagX = if (fitsAfterDate) afterDate else tagEnd - (tagP?.width ?: 0)
+        layout(width, height) {
+            captionP?.place(0, captionY)
+            bookP.place(0, bookY)
+            lcdP?.place(width - lcdW, if (shared) (rowH - lcdH) / 2 else 0)
+            tagP?.place(tagX, tagTop, zIndex = 1f)
+        }
+    }
+}
+
+/** Where the app bar's LCD sits under large text (§4.2), decided by the bar's layout. */
+@androidx.compose.runtime.Stable
+private class LcdSpot {
+    /** At the right end of the book's date-caption row, where it would otherwise take a line of its own. */
+    var inCaption by mutableStateOf(true)
+
+    /** The LCD's size as last laid out, wherever it sat: the bar decides with it while the LCD sits below. */
+    var size by mutableStateOf(IntSize.Zero)
+}
+
+/**
+ * The binder top (§4.2): no bar shape. The puffy title (24 sp, shrinking to 20 sp to stay on one line, then an
+ * ellipsis; 20 sp collapsed), the sun sticker (the moon in Dusk and Glow), the subtitle "★ Hillcrest Market · 8 stops"
+ * on a pad patch (hidden collapsed); on the right the LCD and the 40 dp More round button. 72 dp, 56 dp collapsed; it
+ * grows with large text.
+ */
+@Composable
+private fun AppBar(
+    state: ListUiState,
+    presentation: ListPresentation,
+    anchors: AnchorRegistry,
+    ui: TopStackUi,
+    actions: ListActions,
+    onMore: () -> Unit,
+    onMoreBounds: (androidx.compose.ui.geometry.Rect) -> Unit,
+    /** The LCD ([TopLcd]); null while it sits in the book's caption row ([spot]). */
+    lcd: (@Composable () -> Unit)?,
+    /** Under large text with the book's date caption showing: where the LCD sits, which this bar decides. */
+    spot: LcdSpot?,
+) {
+    val c = PicnicTheme.colors
+    val t = PicnicTheme.type
+    val reduced = LocalReducedMotion.current
+    val collapsed = ui.barCollapsed
+    // The eggs on the binder top (§12.2): egg 7's holo title, egg 1's sun (hidden while the Dusk change draws its own), egg
+    // 12's sinking sun; the LCD's words and pet (eggs 5, 10, 15, 18) are TopLcd's.
+    val eggs = LocalListEggs.current
+    val titleBrush = rememberKirakiraBrush(eggs)
+    // One animation drives every height change of the bar (§4.2, §6.1, item 161): 1 = expanded, 0 = collapsed. The bar's
+    // height, the subtitle's height and alpha and the title's size all follow it (`standard`, 200 ms, on the fixed motion
+    // scale like the book below it; at once under reduced motion), so nothing snaps in one frame and the list never jumps.
+    val open = remember { Animatable(if (collapsed) 0f else 1f) }
+    LaunchedEffect(collapsed, reduced) {
+        val target = if (collapsed) 0f else 1f
+        if (reduced) {
+            open.snapTo(target)
+        } else {
+            withContext(FixedMotionScale) { open.animateTo(target, tween(PicnicMotion.standard.durationMillis, easing = PicnicMotion.standard.easing)) }
+        }
+    }
+    val e = open.value
+    val minHeight = androidx.compose.ui.unit.lerp(PicnicTheme.dimens.appBarCollapsed, PicnicTheme.dimens.appBar, e)
+    // The title's size in half-sp steps (each a fresh fit of the puffy title): 20 sp collapsed, 24 sp expanded.
+    val titleStyle = t.screenTitle.copy(
+        fontSize = (kotlin.math.round(lerpF(t.screenTitleCollapsed.fontSize.value, t.screenTitle.fontSize.value, e) * 2f) / 2f).sp,
+        lineHeight = (kotlin.math.round(lerpF(t.screenTitleCollapsed.lineHeight.value, t.screenTitle.lineHeight.value, e) * 2f) / 2f).sp,
+    )
+    val moon = c.variant == ThemeVariant.Dusk || c.variant == ThemeVariant.Glow
+    val title = state.title.ifEmpty { stringResource(R.string.app_name) }
+    val subtitle = when {
+        state.loading -> null
+        state.total == 0 -> state.storeName.ifBlank { null }
+        else -> {
+            val stops = pluralStringResource(R.plurals.list_stops, state.stops, state.stops)
+            if (state.storeName.isBlank()) stops else stringResource(R.string.list_subtitle, state.storeName, stops)
+        }
+    }
+    val large = LocalDensity.current.fontScale >= LARGE_TEXT
+    val spin = remember { Animatable(0f) }
+    LaunchedEffect(ui.sunSpin) {
+        if (ui.sunSpin == 0 || reduced) return@LaunchedEffect
+        withContext(FixedMotionScale) {
+            spin.snapTo(0f)
+            spin.animateTo(360f, tween(400))
+            spin.snapTo(0f)
+        }
+    }
+    val titleRow: @Composable (Modifier) -> Unit = { m ->
+        Row(m, verticalAlignment = Alignment.CenterVertically) {
+            PuffyText(
+                title,
+                style = titleStyle,
+                fill = c.ink,
+                stroke = TITLE_STROKE,
+                minFontSize = 20.sp,
+                // One line at every font scale (§4.2, item 24): it shrinks 24 → 20 sp, then ellipsizes with its stroke
+                // whole (item 334); at large text the bar grows to two rows, and TalkBack reads the whole title.
+                maxLines = 1,
+                heading = true,
+                fillBrush = titleBrush,
+                modifier = Modifier.weight(1f, fill = false).then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "title") }),
+            )
+            with(anchors) {
+                SunSticker(
+                    onTap = if (moon) actions.onMoonTap else actions.onSunTap,
+                    goldenMinutesLeft = eggs.goldenMinutesLeft,
+                    modifier = Modifier
+                        .overhang(SUN_ROOM_W, SUN_ROOM_H)
+                        .anchor(AnchorRegistry.SUN)
+                        .eggTitleSticker(eggs, c.variant)
+                        .graphicsLayer { rotationZ = spin.value },
+                )
+            }
+        }
+    }
+    val subtitleRow: @Composable (Modifier) -> Unit = { m ->
+        if (subtitle != null && e > 0f) {
+            PadPatch(m.revealHeight(e).graphicsLayer { alpha = e }.padding(start = 2.dp, bottom = 4.dp).then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "subtitle") })) {
+                // Large text may wrap the line: the star stays on the first line and the patch hugs the widest one.
+                val style = t.appBarSubtitle.copy(color = c.onPadSoft)
+                val firstLine = with(LocalDensity.current) { style.lineHeight.toDp() }
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Box(Modifier.heightIn(min = firstLine), contentAlignment = Alignment.Center) {
+                        FlatStar(Modifier.size(13.dp), fill = Families.lemon.mid)
+                    }
+                    SnugText(subtitle, style)
+                }
+            }
+        }
+    }
+    val more: @Composable () -> Unit = {
+        Box(
+            Modifier
+                .testTag(ListTags.MORE)
+                .onGloballyPositioned { onMoreBounds(it.boundsInWindow()) }
+                // Egg 1's sparkle burst keeps clear of it (§12.2).
+                .then(with(anchors) { Modifier.anchor(EggAnchors.MORE) }),
+        ) {
+            PicnicIconButton(PicnicGlyph.More, stringResource(R.string.theme_more_options), onMore)
+        }
+    }
+    if (large) {
+        // Large text (§4.2, §15): the bar grows to two rows, and the subtitle keeps the whole width, wrapping only when it
+        // must. The LCD sits on the title row before More when the title fits there at full size beside it; else beside
+        // the subtitle when the two fit side by side; else at the right end of the book's date-caption row ([spot]), or,
+        // with no caption below, on a line of its own at the right, under the subtitle.
+        val titleMeasurer = rememberTextMeasurer(cacheSize = 2)
+        val titleNeed = with(LocalDensity.current) {
+            remember(title, titleStyle, this) {
+                titleMeasurer.measure(title, titleStyle, maxLines = 1, softWrap = false).size.width + (TITLE_STROKE * 2).roundToPx() + SUN_ROOM_W.roundToPx()
+            }
+        }
+        Layout(
+            content = {
+                Box(Modifier.layoutId("title")) { titleRow(Modifier) }
+                Box(Modifier.layoutId("more")) { more() }
+                Box(Modifier.layoutId("lcd")) { lcd?.invoke() }
+                Box(Modifier.layoutId("subtitle")) { subtitleRow(Modifier) }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = minHeight)
+                .padding(start = 8.dp, end = 4.dp),
+        ) { measurables, constraints ->
+            val w = constraints.maxWidth
+            val gap = 2.dp.roundToPx()
+            val loose = Constraints(maxWidth = w)
+            val moreP = measurables.first { it.layoutId == "more" }.measure(loose)
+            val lcdP = measurables.first { it.layoutId == "lcd" }.measure(loose)
+            val here = lcdP.width > 0
+            // While the LCD sits in the caption row the bar decides with its last size.
+            val lcdW = if (here) lcdP.width else if (lcd == null && spot != null) spot.size.width else 0
+            val lcdOnTitle = lcdW > 0 && titleNeed + lcdW + moreP.width <= w
+            val titleMax = (w - moreP.width - if (lcdOnTitle && here) lcdW else 0).coerceAtLeast(0)
+            val titleP = measurables.first { it.layoutId == "title" }.measure(Constraints(maxWidth = titleMax))
+            val subtitleP = measurables.first { it.layoutId == "subtitle" }.measure(loose)
+            val beside = !lcdOnTitle && lcdW > 0 && subtitleP.width + lcdW <= w
+            // Decided with the subtitle in view (collapsed it is hidden, and the LCD stays where it was).
+            if (spot != null && lcdW > 0 && (subtitleP.width > 0 || subtitle == null)) {
+                val below = !lcdOnTitle && !beside
+                if (spot.inCaption != below) spot.inCaption = below
+            }
+            val row1 = maxOf(titleP.height, moreP.height, if (lcdOnTitle && here) lcdP.height else 0)
+            val row2Top = row1 + gap
+            val ownLine = here && !lcdOnTitle && !beside
+            val row2 = if (beside && here) maxOf(subtitleP.height, lcdP.height) else subtitleP.height
+            val lcdTop = when {
+                lcdOnTitle -> (row1 - lcdP.height) / 2
+                beside -> row2Top
+                else -> row2Top + subtitleP.height + if (subtitleP.height > 0) gap else 0
+            }
+            val bottom = maxOf(row2Top + row2, if (ownLine) lcdTop + lcdP.height else 0)
+            val h = maxOf(constraints.minHeight, bottom)
+            layout(w, h) {
+                titleP.place(0, (row1 - titleP.height) / 2)
+                moreP.place(w - moreP.width, (row1 - moreP.height) / 2)
+                subtitleP.place(0, row2Top)
+                val lcdX = if (lcdOnTitle) w - moreP.width - lcdW else w - lcdW
+                lcdP.place(lcdX, lcdTop)
+            }
+        }
+    } else {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = minHeight)
+                .padding(start = 8.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                titleRow(Modifier)
+                subtitleRow(Modifier)
+            }
+            lcd?.invoke()
+            more()
+        }
+    }
+}
+
+/**
+ * The app bar's LCD (§4.2, §13.1): the count, SYNC while the list re-syncs, the eggs' words and pet. It sits in the bar,
+ * or under large text at the right end of the book's date-caption row (TopStack).
+ */
+@Composable
+private fun TopLcd(
+    state: ListUiState,
+    presentation: ListPresentation,
+    anchors: AnchorRegistry,
+    ui: TopStackUi,
+    actions: ListActions,
+    petPose: PetPose,
+) {
+    val eggs = LocalListEggs.current
+    // An empty list has nothing to count: the LCD comes with the first item (§4.21).
+    if (!state.loading && state.total > 0) {
+        val lcd = when {
+            // SYNC stands in for the count (and for the bee while it lives here: the chip keeps their room, §13.1).
+            ui.syncing -> state.lcd.copy(mode = LcdMode.Text, text = SYNC, petLives = state.lcd.mode == LcdMode.Pet)
+            else -> {
+                val shown = presentation.lcdCount(state.checked)
+                val base = state.lcd.copy(count = shown, mode = presentation.lcd?.mode ?: state.lcd.mode)
+                // The chain's own LCD (WP6) wins while it plays; otherwise the eggs' word, pet and receipt (§13.1). With
+                // Easter eggs off the list's own state already shows the plain count (§2.5).
+                if (presentation.lcd != null || !eggs.enabled) base else eggs.lcd(base, petPose)
+            }
+        }
+        // Egg 18: a printed receipt hangs from the LCD wherever it is (snapshot state, so a waiting one follows it).
+        val room = LocalListRoom.current
+        if (room != null) androidx.compose.runtime.DisposableEffect(room) { onDispose { room.lcd = null } }
+        with(anchors) {
+            LcdChip(
+                lcd,
+                // The LCD's digits are words too: the bursts are cut clear of them.
+                Modifier
+                    .padding(horizontal = 2.dp)
+                    .anchor(AnchorRegistry.LCD)
+                    .anchor(EggAnchors.TEXT_PREFIX + "lcd")
+                    .then(if (room != null) Modifier.onGloballyPositioned { room.lcd = it.boundsInWindow() } else Modifier),
+                onHold = if (state.eggs) actions.onLcdHold else null,
+                // One width whatever it shows: SYNC, and the eggs' words while they are on (§13.1, item 259).
+                words = if (state.eggs || eggs.enabled) LCD_WORDS_EGGS else LCD_WORDS,
+                // Egg 15's bee may hatch here: its room is kept from the start, so hatching moves nothing.
+                petRoom = state.eggs || eggs.enabled,
+            )
+        }
+    }
+}
+
+/**
+ * From this font scale the bar takes two rows (§4.2: the bar grows): beside the LCD and More, "Saturday shop" would
+ * already ellipsize at 1.3 even at its 20 sp floor. The book keeps its date on the page up to 1.3 (§7.4).
+ */
+private const val LARGE_TEXT: Float = 1.3f
+
+/**
+ * Lays out a 48 dp target as [w] × [h] dp, centred on it, so the 22 dp sun sits by the title without taking the
+ * title's room: the target still receives touches over its full 48 dp (it is placed after the title, and before the LCD
+ * and More, so those keep their own touches where they overlap).
+ */
+private fun Modifier.overhang(w: androidx.compose.ui.unit.Dp, h: androidx.compose.ui.unit.Dp): Modifier =
+    layout { measurable, _ ->
+        val p = measurable.measure(androidx.compose.ui.unit.Constraints())
+        val lw = w.roundToPx()
+        val lh = h.roundToPx()
+        layout(lw, lh) { p.place((lw - p.width) / 2, (lh - p.height) / 2) }
+    }
+
+/**
+ * Text that, when it wraps, is only as wide as its widest line (plain Text takes the whole width it was offered), so
+ * the pad patch around a wrapped subtitle has no empty tail.
+ */
+@Composable
+private fun SnugText(text: String, style: TextStyle) {
+    val measurer = rememberTextMeasurer()
+    Layout(content = { Text(text, style = style) }) { measurables, constraints ->
+        val probe = measurer.measure(text, style, constraints = Constraints(maxWidth = constraints.maxWidth))
+        val widest = (0 until probe.lineCount).maxOf { probe.getLineRight(it) - probe.getLineLeft(it) }
+        val w = if (probe.lineCount > 1) ceil(widest).toInt().coerceIn(constraints.minWidth, constraints.maxWidth) else constraints.maxWidth
+        val p = measurables.single().measure(constraints.copy(minWidth = 0, maxWidth = w))
+        layout(p.width, p.height) { p.place(0, 0) }
+    }
+}
+
+private fun lerpF(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+/**
+ * Lays the content out at its full height but takes only [fraction] of it, clipped to that (the subtitle folding into
+ * the collapsing bar): the content's top stays put while its bottom edge slides.
+ */
+private fun Modifier.revealHeight(fraction: Float): Modifier =
+    if (fraction >= 1f) {
+        this
+    } else {
+        this
+            .clipToBounds()
+            .layout { measurable, constraints ->
+                val p = measurable.measure(constraints.copy(minHeight = 0))
+                val h = kotlin.math.round(p.height * fraction.coerceIn(0f, 1f)).toInt()
+                layout(p.width, h) { p.place(0, 0) }
+            }
+    }
+
+/** The puffy title's stroke (§2.7): the room its outline takes on each side of the words. */
+private val TITLE_STROKE = 6.dp
+
+/** The sun's layout room by the title (its face is 22 dp, its target 48 dp). */
+private val SUN_ROOM_W = 30.dp
+private val SUN_ROOM_H = 32.dp
+
+/** The LCD word while the list re-syncs (§6.1). */
+private const val SYNC: String = "SYNC"
+
+/** The words the app bar's LCD can show in place of its count (§13.1): SYNC, and the eggs' while they are on. */
+private val LCD_WORDS: List<String> = listOf(SYNC)
+private val LCD_WORDS_EGGS: List<String> = LCD_WORDS + earth.cora.picnic.ui.eggs.EggRules.LCD_WORDS

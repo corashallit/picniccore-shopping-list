@@ -1,0 +1,208 @@
+/* ===================== round 3 ===================== */
+/* count badge: a 20 dp number-circle sticker in the basket's top-right flag slot; never on the basket art */
+§ .sk-bkw>.sk-badge,§ .sk-tabrow .sk-bkw>.sk-badge{position:absolute;left:auto;bottom:auto;right:-12px;top:8px;min-width:20px;height:20px;border-radius:10px;padding:0 4px;background:#fff;border:2px solid var(--at);color:var(--at);font:700 12px/16px var(--sk-f-puff);box-shadow:var(--sk-hs);z-index:3}
+§ .sk-tabrow .sk-bkw>.sk-badge{top:2px;right:-12px}
+§ .sk-badge[hidden]{display:none}
+/* boxes stand their lid open behind the back wall until the aisle is done */
+§ .bk.is-done .bk-lidopen{display:none}
+/* rows never ellipsize: names and details wrap and the row grows (64 dp on two lines) */
+§ .sk-row{height:auto;min-height:56px}
+§ .sk-row .sk-nm,§ .sk-row .sk-dt,§ .sk-irow .sk-nm,§ .sk-irow .sk-dt{white-space:normal;overflow:visible;text-overflow:clip}
+§ .sk-row .sk-dt .sk-shinychip{white-space:nowrap}
+/* add bar: 84 dp envelope strip, 4 dp perforation bites every 10 dp, a 12 dp pad fade above it */
+§ .sk-addbar{height:84px;background:linear-gradient(var(--sk-pad),var(--sk-pad)) 0 4px/100% 100% no-repeat;box-shadow:none;padding:12px 10px 14px 14px}
+§ .sk-addbar::before{top:0;height:4px;background:radial-gradient(circle at 5px 0,transparent 4px,rgba(110,123,208,.55) 4.1px 5.1px,var(--sk-pad) 5.4px) 0 0/10px 4px repeat-x}
+§ .sk-addbar::after{content:"";position:absolute;left:0;right:0;top:-12px;height:12px;background:linear-gradient(rgba(255,255,255,0),var(--sk-pad));pointer-events:none}
+§ .sk-dark .sk-addbar::after{background:linear-gradient(rgba(34,40,97,0),var(--sk-pad))}
+§ .sk-addbar .sk-tape{left:-6px;top:4px;width:56px;height:18px;transform:rotate(-4deg)}
+§ .sk-addbar .sk-adddoodle{left:62px;top:6px;font-size:13px;transform:rotate(-2deg)}
+§ .sk-addbar .sk-field{height:auto;padding-bottom:6px;align-self:flex-end}
+§ .sk-addbar .sk-field .sk-fv{white-space:normal;line-height:1.2;font-size:15px}
+§ .sk-addbar .sk-fv .sk-phx{display:block;font-size:13.5px;font-weight:500}
+§ .sk-tdoodle{font-size:13px}
+/* small text floor: 13 sp for chips, details and doodles */
+§ .sk-nextchip{font:700 13px/1 var(--sk-f-body);padding:5px 9px}
+/* code, hex values and stamps: on-brand rounded figures instead of a system monospace */
+§ code{font-family:var(--sk-f-body);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+§ .sk-celewrap code{font:400 14px/1.2 var(--sk-f-lcd);background:var(--sk-lcd);color:#25307C;padding:3px 6px;border:2px solid #fff;box-shadow:var(--sk-hs)}
+/* section headers: centre the tab against long intros */
+§ .sk-block>.sk-bhead{align-items:center}
+/* palette: four swatches per sticker colour */
+§ .sk-trio .sk-tsw i{width:26px}
+/* gpt-image prompt */
+§ .sk-prompt{margin:12px 0 4px;background:var(--sk-backing);border:3px solid #fff;border-radius:10px;box-shadow:var(--sk-hs);padding:8px 12px}
+§ .sk-prompt summary{font:700 14px/1.3 var(--sk-f-body);cursor:pointer;min-height:32px;display:flex;align-items:center}
+§ .sk-prompt p{font:500 13.5px/1.5 var(--sk-f-body);color:var(--sk-bp);margin-top:6px}
+§ .sk-prompt mark{background:var(--sk-lemon-p);color:var(--sk-bp);border-radius:3px;padding:0 3px}
+§ .sk-qab svg{width:52px;height:52px;display:block}
+/* haptics table becomes cards on narrow screens */
+@media (max-width:560px){
+§ .sk-cues table,§ .sk-cues tbody,§ .sk-cues tr,§ .sk-cues td{display:block;min-width:0;width:auto}
+§ .sk-cues thead{display:none}
+§ .sk-cues tr{background:var(--sk-backing);border-radius:10px;padding:8px 10px;margin:0 0 8px;border:2px solid #fff;box-shadow:0 1px 0 var(--sk-rule)}
+§ .sk-cues td{border:0;padding:2px 0;display:grid;grid-template-columns:72px 1fr;gap:6px}
+§ .sk-cues td::before{content:attr(data-l);font:700 11px/1.6 var(--sk-f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--sk-bp2)}
+§ .sk-cues td:first-child{display:block;font:700 15px/1.3 var(--sk-f-body);margin-bottom:2px}
+§ .sk-cues td:first-child::before{display:none}
+}
+/* phones keep their 360 dp screen and scale as a whole on narrow viewports (JS sets the exact factor) */
+§ .sk-phone{max-width:none;zoom:var(--skz,1)}
+§ .sk-screen{max-width:none}
+@media (max-width:440px){
+§ .sk-phone{padding:12px;border-radius:52px;border-width:4px;--skz:.92}
+§ .sk-phone::before,§ .sk-phone::after{display:block}
+§ .sk-appbar h3{font-size:21px}
+}
+@media (max-width:400px){§ .sk-phone{--skz:.83}}
+@media (max-width:360px){§ .sk-phone{--skz:.74}}
+/* hero: the star sticker sits beside the wordmark, never on a glyph */
+§ .sk-wordmark{position:relative}
+/* basket peek: press and hold a folded basket; the lid opens in 2 frames, a lemon sticky note lists what is in it */
+§ .sk-peeknote{position:absolute;right:54px;top:calc(100% + 2px);z-index:9;width:168px;transform:rotate(-2deg);background:var(--sk-lemon-p);border:3px solid #fff;box-shadow:var(--sk-hs2);padding:5px 10px 7px;display:none;flex-direction:column;gap:1px;font:700 13px/1.3 var(--sk-f-body);color:#25307C;pointer-events:none}
+§ .sk-peeknote.is-up{top:auto;bottom:calc(100% + 2px)}
+§ .sk-peeknote b{font:700 14px/1.2 var(--sk-f-puff);margin-bottom:1px}
+§ .sk-peeknote span::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--sk-strawberry-m);border:1.5px solid #fff;margin-right:5px;vertical-align:1px}
+§ .sk-peeknote span.is-in{color:#4F5BA6;text-decoration:line-through;text-decoration-color:var(--sk-hanko)}
+§ .sk-peeknote span.is-in::before{background:var(--sk-melon-m)}
+§ .sk-aw.is-peek .sk-peeknote{display:flex;animation:sticker-c-pop .16s steps(2,end) both}
+§ .sk-aw.is-peek .sk-folded .bk-lid{display:none}
+§ .sk-aw.is-peek .sk-folded .bk.is-done .bk-lidopen{display:inline}
+§ .sk-folded .bk-in{transform-box:fill-box;transition:transform .16s steps(2,end)}
+§ .sk-aw.is-peek .sk-folded .bk-in{transform:translateY(-8px)}
+§ .sk-aw.is-peek .sk-folded .bk{animation:sticker-bwob .36s steps(4,end)}
+/* ladybug stroll (egg 2): long-press a basket for a second; she walks the strip's bottom edge, clear of the text */
+§ .sk-ladyegg{left:226px;top:42px;z-index:5;animation:sticker-ladystrip 5s steps(1,end) both}
+§ .sk-ladyegg svg{transform:rotate(-90deg);animation:sticker-waddle2 .25s steps(2,end) infinite}
+@keyframes sticker-ladystrip{0%{transform:translateX(0)}10%{transform:translateX(-18px)}20%{transform:translateX(-36px)}30%{transform:translateX(-54px)}40%,60%{transform:translateX(-72px)}70%{transform:translateX(-90px)}80%{transform:translateX(-108px);opacity:1}90%,100%{transform:translateX(-108px) translateY(-30px);opacity:0}}
+@keyframes sticker-waddle2{0%{transform:rotate(-95deg)}50%{transform:rotate(-85deg)}}
+§ .sk-beefly{left:226px;top:-8px}
+§ .sk-s-list .sk-scroll{padding-top:11px}
+§ .sk-s-list .sk-page{margin-bottom:7px}
+/* ---------- "List complete!" round 3: flash, heart iris, ribbon ride, kira, banner, shake, page curl ---------- */
+§ .sk-cele .c-scene{position:absolute;inset:0;overflow:hidden;clip-path:polygon(0 0,100% 0,100% calc(100% - 150px),calc(100% - 150px) 100%,0 100%)}
+§ .sk-cele .c-scene>*{position:absolute}
+§ .sk-cele .c-album{inset:0;clip-path:polygon(100% calc(100% - 152px),100% 100%,calc(100% - 152px) 100%);background-color:#FFE9F2;background-image:repeating-linear-gradient(90deg,#FFD6E8 0 2px,transparent 2px 10px)}
+§ .sk-cele .c-pocket{position:absolute;right:14px;bottom:16px;width:58px;height:62px;border-radius:8px;background:rgba(255,255,255,.6);box-shadow:inset 0 0 0 1.5px #fff,0 1.5px 0 rgba(176,46,107,.25)}
+§ .sk-cele .c-pocket::before{content:"";position:absolute;left:0;right:0;top:0;height:10px;border-radius:8px 8px 0 0;background:rgba(255,255,255,.75);border-bottom:1px solid rgba(176,46,107,.25)}
+§ .sk-cele .c-pocket.c-p2{right:80px;bottom:-30px}
+§ .sk-cele .c-pocketstk{position:absolute;right:21px;bottom:24px}
+§ .sk-cele .c-flap{right:0;bottom:0;width:150px;height:150px;clip-path:polygon(0 0,100% 0,0 100%);background:linear-gradient(315deg,transparent 0 50%,#9AA8F5 50% 52%,#DCE1FF 52% 62%,#FFFFFF 62%)}
+§ .sk-cele .c-flash{inset:0;background:#fff;opacity:0;pointer-events:none}
+§ .sk-cele .c-title b{position:relative}
+§ .sk-cele .c-title b::after{content:attr(data-t);position:absolute;inset:0;-webkit-text-stroke:0;color:transparent;background:linear-gradient(100deg,transparent 0 40%,rgba(255,255,255,.95) 44%,#CCEBFF 47%,#FFF3A6 50%,rgba(255,255,255,.95) 53%,transparent 57%) no-repeat;background-size:300% 100%;background-position:-30% 0;-webkit-background-clip:text;background-clip:text;pointer-events:none}
+§ .sk-cele .c-kira{position:absolute}
+§ .sk-cele .c-banner{left:18px;top:380px;width:324px;height:46px;transform-origin:50% 50%}
+§ .sk-cele .c-banner svg{display:block}
+§ .sk-cele .c-banner span{position:absolute;left:24px;right:24px;top:4px;height:32px;display:grid;place-items:center;font:700 14px/1 var(--sk-f-puff);color:#fff;-webkit-text-stroke:4px #B02E6B;paint-order:stroke fill;white-space:nowrap;letter-spacing:.01em}
+§ .sk-cele .c-ribbon{left:0;top:0;pointer-events:none;opacity:0}
+§ .sk-cele .c-hop{left:0;top:0;offset-anchor:50% 50%;offset-rotate:0deg;offset-distance:100%;opacity:0}
+§ .sk-cele .c-conf{top:-34px;opacity:0}
+§ .sk-cele .c-perfect{right:-34px;top:-36px}
+§ .sk-cele .c-ink{position:absolute;inset:4px;border-radius:50%;border:3px solid var(--sk-hanko);opacity:0;pointer-events:none}
+§ .sk-cele .c-bonus{left:-44px;width:132px}
+§ .sk-cele .c-bonus b{font-size:14px}
+§ .sk-cele .c-bonus span{font-size:13px}
+§ .sk-cele .c-bonus .c-bico{display:block;line-height:0;opacity:0}
+§ .sk-celewrap .sk-replay{left:20px;transform:none}
+§ .sk-cele.is-play .c-flash{animation:sticker-c-flash .17s steps(2,end) both}
+§ .sk-cele.is-play .c-scene{animation:sticker-c-iris .42s steps(4,end) .04s backwards,sticker-c-shake .17s steps(2,end) 2.92s,sticker-c-curl .4s steps(4,end) 3.3s both}
+§ .sk-cele.is-play .c-flap{animation:sticker-c-flap .4s steps(4,end) 3.3s both}
+§ .sk-cele.is-play .c-pocketstk{animation:sticker-c-pocket .5s steps(5,end) 3.75s both}
+§ .sk-cele.is-play .c-bonus .c-bico{animation:sticker-c-bico 3.75s steps(1,end) both}
+§ .sk-cele.is-play .c-kira{animation:sticker-c-kirapop .25s steps(3,end) var(--kd) both,sticker-twinkle .375s steps(3,end) calc(var(--kd) + .25s) infinite}
+§ .sk-cele.is-play .c-title b::after{animation:sticker-c-glint 1.2s steps(12,end) 1.9s both}
+§ .sk-cele.is-play .c-ribbon{animation:sticker-c-rib 1.75s steps(1,end) .35s both}
+§ .sk-cele.is-play .c-rdraw{stroke-dasharray:100 101;animation:sticker-c-draw 1s steps(12,end) .35s both}
+§ .sk-cele.is-play .c-rstitch{animation:sticker-c-rib2 1.75s steps(1,end) .35s both}
+§ .sk-cele.is-play .c-hop{animation:sticker-c-ride .5s steps(10,end) both}
+§ .sk-cele.is-play .c-conf{animation-name:sticker-c-conf2;animation-timing-function:steps(10,end);animation-fill-mode:both}
+§ .sk-cele.is-play .c-banner{animation:sticker-c-banner .3s steps(3,end) 2s both}
+§ .sk-cele.is-play .c-ink{animation:sticker-c-ink .17s steps(2,end) 2.92s both}
+@keyframes sticker-c-flash{0%{opacity:1}50%{opacity:.92}100%{opacity:0}}
+/* r6: the mask lives only in the keyframes and the iris runs with fill-mode backwards, so the scene always ends unmasked (any origin ends fully revealed) */
+@keyframes sticker-c-iris{0%{-webkit-mask-image:var(--sk-heart);mask-image:var(--sk-heart);-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:1px 1px;mask-size:1px 1px;-webkit-mask-position:var(--ix) var(--iy);mask-position:var(--ix) var(--iy)}
+ 25%{-webkit-mask-image:var(--sk-heart);mask-image:var(--sk-heart);-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:80px 80px;mask-size:80px 80px;-webkit-mask-position:calc(var(--ix) - 40px) calc(var(--iy) - 40px);mask-position:calc(var(--ix) - 40px) calc(var(--iy) - 40px)}
+ 50%{-webkit-mask-image:var(--sk-heart);mask-image:var(--sk-heart);-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:260px 260px;mask-size:260px 260px;-webkit-mask-position:calc(var(--ix) - 130px) calc(var(--iy) - 130px);mask-position:calc(var(--ix) - 130px) calc(var(--iy) - 130px)}
+ 75%{-webkit-mask-image:var(--sk-heart);mask-image:var(--sk-heart);-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:820px 820px;mask-size:820px 820px;-webkit-mask-position:calc(var(--ix) - 410px) calc(var(--iy) - 410px);mask-position:calc(var(--ix) - 410px) calc(var(--iy) - 410px)}
+ 100%{-webkit-mask-image:var(--sk-heart);mask-image:var(--sk-heart);-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:3000px 3000px;mask-size:3000px 3000px;-webkit-mask-position:calc(var(--ix) - 1500px) calc(var(--iy) - 1500px);mask-position:calc(var(--ix) - 1500px) calc(var(--iy) - 1500px)}}
+@keyframes sticker-c-shake{0%{transform:translate(3px,-2px)}50%{transform:translate(-3px,2px)}100%{transform:none}}
+@keyframes sticker-c-curl{0%{clip-path:polygon(0 0,100% 0,100% 100%,100% 100%,0 100%)}100%{clip-path:polygon(0 0,100% 0,100% calc(100% - 150px),calc(100% - 150px) 100%,0 100%)}}
+@keyframes sticker-c-flap{0%{width:0;height:0}100%{width:150px;height:150px}}
+@keyframes sticker-c-pocket{0%{transform:translate(-40px,-170px) rotate(-30deg) scale(.8);opacity:1}60%{transform:translate(0,4px) scale(1.12,.84)}80%{transform:translate(0,-3px)}100%{transform:none;opacity:1}}
+@keyframes sticker-c-bico{0%,99%{opacity:1}100%{opacity:0}}
+@keyframes sticker-c-kirapop{0%{transform:scale(0)}50%{transform:scale(1.4)}100%{transform:scale(1)}}
+@keyframes sticker-c-glint{0%{background-position:120% 0}100%{background-position:-30% 0}}
+@keyframes sticker-c-rib{0%,90%{opacity:1}100%{opacity:0}}
+@keyframes sticker-c-rib2{0%,57%{opacity:0}58%,90%{opacity:1}100%{opacity:0}}
+@keyframes sticker-c-draw{0%{stroke-dashoffset:100}100%{stroke-dashoffset:0}}
+@keyframes sticker-c-ride{0%{offset-distance:0%;opacity:1;transform:translateY(0) scale(1)}10%{transform:translateY(-6px) rotate(-12deg) scale(1.1)}20%{transform:translateY(0) scale(1)}40%{transform:translateY(-5px) rotate(8deg)}50%{transform:none}70%{transform:translateY(-4px) rotate(-6deg) scale(.9)}88%{offset-distance:100%;opacity:1;transform:scale(1.15,.8)}100%{offset-distance:100%;opacity:0;transform:scale(.7)}}
+@keyframes sticker-c-conf2{0%{transform:translate(0,0) rotate(0);opacity:1}100%{transform:translate(var(--fx,10px),840px) rotate(var(--r,200deg));opacity:1}}
+@keyframes sticker-c-banner{0%{transform:scaleX(.1);opacity:0}50%{transform:scaleX(1.08);opacity:1}100%{transform:none;opacity:1}}
+@keyframes sticker-c-ink{0%{transform:scale(1);opacity:.4}100%{transform:scale(1.08);opacity:0}}
+/* row check-off: a 1-frame ink-spread ring after the hanko slam, and a thunk ripple through the ruled line */
+§ .sk-row .sk-cb::after{content:"";position:absolute;left:4px;top:4px;width:40px;height:40px;border-radius:50%;border:2.5px solid var(--sk-hanko);opacity:0;pointer-events:none}
+§ .sk-row.is-slam .sk-cb::after{animation:sticker-c-ink .17s steps(2,end) .16s both}
+§ .sk-row.is-slam::after{content:"";position:absolute;left:-30px;right:-6px;bottom:-1px;height:2px;background:var(--sk-rule);animation:sticker-thunkline .17s steps(2,end) both;pointer-events:none}
+@keyframes sticker-thunkline{0%{transform:translateY(-2px) scaleY(2)}50%{transform:translateY(1px)}100%{transform:none}}
+§ .sk-cele.is-play .c-album{animation:sticker-c-albumon 3.3s steps(1,end) both}
+@keyframes sticker-c-albumon{0%,99%{visibility:hidden}100%{visibility:visible}}
+§ .sk-wmstars{position:relative;display:inline-block;width:40px;height:40px;margin-right:24px;flex:none}
+/* screen 2: the three steps tick in order on a 2.4 s loop (tick lands in 2 frames, the line darkens), rows pop in 80 ms apart */
+§ .sk-think li{color:var(--sk-bp2)}
+§ .sk-think li svg{transform-box:fill-box;transform-origin:50% 50%}
+§ .sk-think li.sk-st1{animation:sticker-st1 2.4s steps(1,end) infinite}
+§ .sk-think li.sk-st2{animation:sticker-st2 2.4s steps(1,end) infinite}
+§ .sk-think li.sk-st3{animation:sticker-st3 2.4s steps(1,end) infinite}
+§ .sk-think li.sk-st1 svg{animation:sticker-ck1 2.4s steps(1,end) infinite}
+§ .sk-think li.sk-st2 svg{animation:sticker-ck2 2.4s steps(1,end) infinite}
+§ .sk-think li.sk-st3 svg{animation:sticker-ck3 2.4s steps(1,end) infinite}
+@keyframes sticker-st1{0%,9.9%{color:var(--sk-bp2)}10%,100%{color:var(--sk-bp)}}
+@keyframes sticker-st2{0%,39.9%{color:var(--sk-bp2)}40%,100%{color:var(--sk-bp)}}
+@keyframes sticker-st3{0%,69.9%{color:var(--sk-bp2)}70%,100%{color:var(--sk-bp)}}
+@keyframes sticker-ck1{0%,9.9%{transform:scale(0)}10%{transform:scale(1.3)}13.4%,100%{transform:none}}
+@keyframes sticker-ck2{0%,39.9%{transform:scale(0)}40%{transform:scale(1.3)}43.4%,100%{transform:none}}
+@keyframes sticker-ck3{0%,69.9%{transform:scale(0)}70%{transform:scale(1.3)}73.4%,100%{transform:none}}
+§ .sk-recipe .sk-rpop{animation:sticker-rpop 2.4s steps(1,end) var(--rd,0s) infinite}
+@keyframes sticker-rpop{0%{opacity:.25;transform:scale(.92)}3.4%{opacity:1;transform:scale(1.04)}6.8%,100%{opacity:1;transform:none}}
+/* screen 4: the lifted Frozen label never sits on Dairy's name; only its shadow meets Dairy's bottom border */
+@keyframes sticker-drag{0%,8%{transform:translate(6px,4px) rotate(-2.4deg)}50%,58%{transform:translate(6px,-3px) rotate(2deg)}100%{transform:translate(6px,4px) rotate(-2.4deg)}}
+@keyframes sticker-shift{0%,8%{transform:none}50%,58%{transform:translateY(-6px)}100%{transform:none}}
+/* screen 5: '?' pockets wobble, a kira star visits a holo pocket, holo foil tilts on hover */
+§ .sk-pocket.is-empty.is-wob .sk-q{display:inline-block;animation:sticker-wobble .25s steps(3,end) 1}
+§ .sk-pocket .sk-pkira{position:absolute;right:2px;top:2px;width:18px;height:18px;pointer-events:none;animation:sticker-twinkle .375s steps(3,end) 3}
+§ .sk-pocket.is-holo:hover{background:conic-gradient(from 225deg,#FFD6E8,#CCEBFF,#C9F2E3,#FFF3A6,#E4D6FF,#FFD6E8)}
+§ .sk-pocket.is-holo:hover::after{left:62%}
+/* egg 1, dusk binder: sun sinks behind the title in 3 poses, a full moon rises with a sparkle burst, three posterised dusk bands */
+§ .sk-screen.is-dusk{background-color:#E9DDF7;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.4) 0 2px,transparent 2px 10px),linear-gradient(180deg,#FFDCC6 0 40px,#E4D6FF 40px 80px,#DCE1FF 80px 120px,#E9DDF7 120px)}
+§ .sk-screen.is-dusk .sk-sunegg>svg{visibility:visible;animation:sticker-sunsink .6s steps(3,end) both}
+§ .sk-screen.is-dusk .sk-moonegg{display:block;animation:sticker-moonrise .6s steps(3,end) .6s both}
+@keyframes sticker-sunsink{0%{transform:none;opacity:1}33%{transform:translate(-4px,7px) scale(.85);opacity:1}66%{transform:translate(-8px,13px) scale(.7);opacity:.7}100%{transform:translate(-10px,18px) scale(.5);opacity:0}}
+@keyframes sticker-moonrise{0%{transform:translateY(18px) scale(.6);opacity:0}33%{transform:translateY(10px) scale(.8);opacity:1}66%{transform:translateY(3px) scale(1.05);opacity:1}100%{transform:none;opacity:1}}
+§ .sk-duskstar{position:absolute;z-index:4;pointer-events:none;display:none}
+§ .sk-screen.is-dusk .sk-duskstar{display:block}
+§ .sk-estage.is-dusk{background-color:#E9DDF7;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.4) 0 2px,transparent 2px 10px),linear-gradient(180deg,#FFDCC6 0 36px,#E4D6FF 36px 72px,#DCE1FF 72px 108px,#E9DDF7 108px)}
+/* eggs 17-18 */
+§ .sk-perfrow{position:absolute;left:0;right:0;top:-4px;height:4px;background:radial-gradient(circle at 5px 0,transparent 4px,rgba(110,123,208,.55) 4.1px 5.1px,#fff 5.4px) 0 0/10px 4px repeat-x}
+§ .sk-ant{position:absolute;left:-30px;top:52px;animation:sticker-antmarch 4.2s steps(21,end) infinite}
+§ .sk-ant svg{display:block;transform:scaleX(-1);animation:sticker-antstep .25s steps(2,end) infinite}
+@keyframes sticker-antmarch{0%{transform:translateX(0)}100%{transform:translateX(330px)}}
+@keyframes sticker-antstep{0%{transform:scaleX(-1) translateY(0)}50%{transform:scaleX(-1) translateY(-2px)}}
+§ .sk-receipt{position:absolute;right:16px;top:10px;width:150px;padding:8px 10px 12px;background:#FFF9E8;border:3px solid #fff;box-shadow:var(--sk-hs);transform:rotate(3deg);display:flex;flex-direction:column;gap:1px;font:400 12px/1.3 var(--sk-f-lcd);color:#25307C;-webkit-mask:radial-gradient(circle at 5px 100%,transparent 3px,#000 3.4px) 0 0/10px 100% repeat-x;mask:radial-gradient(circle at 5px 100%,transparent 3px,#000 3.4px) 0 0/10px 100% repeat-x}
+§ .sk-receipt b{font-weight:400;font-size:12px;text-align:center}
+§ .sk-receipt i{height:1px;background:repeating-linear-gradient(90deg,#4F5BA6 0 3px,transparent 3px 6px);margin:3px 0}
+/* a finished aisle's strip is tied with a sakura ribbon like a furoku gift (3 stepped frames as it folds); it runs under the stickers, never over text */
+§ .sk-folded .sk-fold{position:relative;z-index:1}
+§ .sk-folded .sk-ribbon{position:absolute;top:0;bottom:0;right:134px;width:10px;display:none;z-index:0;background:linear-gradient(90deg,#fff 0 1.5px,var(--sk-sakura-m) 1.5px 8.5px,#fff 8.5px);pointer-events:none}
+§ .sk-folded .sk-ribbon svg{position:absolute;left:50%;top:-13px;margin-left:-15px;z-index:2}
+§ .sk-aw.is-complete .sk-folded .sk-ribbon{display:block}
+§ .sk-folded .sk-fold .sk-tab,§ .sk-folded .sk-fold .sk-bkw{position:relative;z-index:1}
+§ .sk-aw.is-complete.is-anim .sk-folded .sk-ribbon{transform-origin:50% 0;animation:sticker-tie .3s steps(3,end) .1s both}
+§ .sk-aw.is-complete.is-anim .sk-folded .sk-ribbon svg{animation:sticker-c-kirapop .3s steps(3,end) .3s both}
+@keyframes sticker-tie{0%{transform:scaleY(0)}100%{transform:scaleY(1)}}
+@supports not (zoom:1){
+§ .sk-phone{max-width:100%}
+§ .sk-screen{max-width:100%}
+§ .sk-appbar .sk-sub{white-space:normal}
+}
+§ .sk-lcd.has-pet{gap:3px;padding-left:5px;padding-right:6px}
+§ .sk-appbar:has(.sk-lcd.has-pet) h3{font-size:19.5px}

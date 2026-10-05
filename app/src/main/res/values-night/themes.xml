@@ -3,4 +3,7 @@
     <style name="Theme.Picnic" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/picnic_ground</item>
     </style>
+
+    <!-- Night splash (WP2, §2.5): the Glow binder behind the same hamper sticker. -->
+    <color name="splash_binder">#FF161A3E</color>
 </resources>

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "categories": [
     {
       "key": "fruit",
@@ -131,7 +131,10 @@
         "honeycrisp",
         "granny smith"
       ],
-      "drawHint": "A single round red apple with a short brown stem and one green leaf."
+      "drawHint": "A single round red apple with a short brown stem and one green leaf.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "banana",
@@ -158,7 +161,10 @@
         "valencia oranges",
         "cara cara oranges"
       ],
-      "drawHint": "A whole round orange with dimpled peel and a small green leaf at the stem."
+      "drawHint": "A whole round orange with dimpled peel and a small green leaf at the stem.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "clementine",
@@ -173,7 +179,10 @@
         "tangerines",
         "box of clementines"
       ],
-      "drawHint": "Two small flattened orange mandarins with glossy peel sharing one stem with a pair of dark green leaves."
+      "drawHint": "Two small flattened orange mandarins with glossy peel sharing one stem with a pair of dark green leaves.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "lemon",
@@ -185,7 +194,10 @@
         "citrons",
         "meyer lemons"
       ],
-      "drawHint": "A bright yellow oval lemon with pointed ends and a small green leaf."
+      "drawHint": "A bright yellow oval lemon with pointed ends and a small green leaf.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "lime",
@@ -197,7 +209,10 @@
         "limes vertes",
         "key limes"
       ],
-      "drawHint": "A small round green lime beside its cut half showing pale green wedges."
+      "drawHint": "A small round green lime beside its cut half showing pale green wedges.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "strawberry",
@@ -210,7 +225,12 @@
         "ontario strawberries",
         "fraises du québec"
       ],
-      "drawHint": "A plump red heart-shaped strawberry with tiny yellow seeds and a green leafy cap."
+      "drawHint": "A plump red heart-shaped strawberry with tiny yellow seeds and a green leafy cap.",
+      "tags": [
+        "hop",
+        "picnic"
+      ],
+      "personality": "berry"
     },
     {
       "key": "blueberries",
@@ -223,7 +243,11 @@
         "wild blueberries",
         "pint of blueberries"
       ],
-      "drawHint": "A small heap of round dusty-blue blueberries, each with a tiny star-shaped crown."
+      "drawHint": "A small heap of round dusty-blue blueberries, each with a tiny star-shaped crown.",
+      "tags": [
+        "hop"
+      ],
+      "personality": "berry"
     },
     {
       "key": "raspberries",
@@ -237,7 +261,11 @@
         "blackberry",
         "mûres"
       ],
-      "drawHint": "A few bumpy deep pink-red raspberries clustered together, one tipped to show its hollow centre."
+      "drawHint": "A few bumpy deep pink-red raspberries clustered together, one tipped to show its hollow centre.",
+      "tags": [
+        "hop"
+      ],
+      "personality": "berry"
     },
     {
       "key": "grapes",
@@ -251,7 +279,10 @@
         "concord grapes",
         "cotton candy grapes"
       ],
-      "drawHint": "A hanging bunch of round purple-red grapes with a short woody stem and a curling vine leaf."
+      "drawHint": "A hanging bunch of round purple-red grapes with a short woody stem and a curling vine leaf.",
+      "tags": [
+        "picnic"
+      ]
     },
     {
       "key": "watermelon",
@@ -264,7 +295,11 @@
         "seedless watermelon",
         "mini watermelon"
       ],
-      "drawHint": "A thick triangular wedge of watermelon with red flesh, black seeds and a striped green rind."
+      "drawHint": "A thick triangular wedge of watermelon with red flesh, black seeds and a striped green rind.",
+      "tags": [
+        "roll",
+        "picnic"
+      ]
     },
     {
       "key": "pineapple",
@@ -290,7 +325,10 @@
         "ataulfo mangoes",
         "champagne mango"
       ],
-      "drawHint": "A plump kidney-shaped mango blushing from green to orange-red with a tiny stem."
+      "drawHint": "A plump kidney-shaped mango blushing from green to orange-red with a tiny stem.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "peach",
@@ -305,7 +343,10 @@
         "apricots",
         "niagara peaches"
       ],
-      "drawHint": "A round fuzzy peach in warm orange and rosy pink with a crease down one side and a small leaf."
+      "drawHint": "A round fuzzy peach in warm orange and rosy pink with a crease down one side and a small leaf.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "pear",
@@ -319,7 +360,10 @@
         "bosc pears",
         "anjou pears"
       ],
-      "drawHint": "A single yellow-green pear with a teardrop shape, a soft blush and a thin brown stem."
+      "drawHint": "A single yellow-green pear with a teardrop shape, a soft blush and a thin brown stem.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "cherries",
@@ -333,7 +377,12 @@
         "sour cherries",
         "bing cherries"
       ],
-      "drawHint": "Two glossy dark red cherries hanging from joined green stems with one leaf."
+      "drawHint": "Two glossy dark red cherries hanging from joined green stems with one leaf.",
+      "tags": [
+        "hop",
+        "picnic"
+      ],
+      "personality": "berry"
     },
     {
       "key": "kiwi",
@@ -345,7 +394,10 @@
         "kiwi fruit",
         "golden kiwi"
       ],
-      "drawHint": "A brown fuzzy oval kiwi beside its cut half showing bright green flesh, a pale centre and a ring of tiny black seeds."
+      "drawHint": "A brown fuzzy oval kiwi beside its cut half showing bright green flesh, a pale centre and a ring of tiny black seeds.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "avocado",
@@ -486,7 +538,10 @@
         "grape tomatoes",
         "tomatoes on the vine"
       ],
-      "drawHint": "A round shiny red tomato with a star-shaped green calyx on top."
+      "drawHint": "A round shiny red tomato with a star-shaped green calyx on top.",
+      "tags": [
+        "roll"
+      ]
     },
     {
       "key": "cucumber",
@@ -767,7 +822,8 @@
         "rye bread",
         "pain de campagne"
       ],
-      "drawHint": "A round rustic loaf of crusty golden-brown bread with a scored cross on top and a light dusting of flour."
+      "drawHint": "A round rustic loaf of crusty golden-brown bread with a scored cross on top and a light dusting of flour.",
+      "personality": "bread"
     },
     {
       "key": "sliced_bread",
@@ -782,7 +838,11 @@
         "multigrain bread",
         "pain blanc"
       ],
-      "drawHint": "A sliced sandwich loaf in a clear bag twisted shut with a tag, one slice tipped forward."
+      "drawHint": "A sliced sandwich loaf in a clear bag twisted shut with a tag, one slice tipped forward.",
+      "tags": [
+        "picnic"
+      ],
+      "personality": "bread"
     },
     {
       "key": "baguette",
@@ -795,7 +855,11 @@
         "pain baguette",
         "ficelle"
       ],
-      "drawHint": "A long thin golden baguette with diagonal slashes, partly tucked into a paper sleeve."
+      "drawHint": "A long thin golden baguette with diagonal slashes, partly tucked into a paper sleeve.",
+      "tags": [
+        "picnic"
+      ],
+      "personality": "bread"
     },
     {
       "key": "bagel",
@@ -808,7 +872,8 @@
         "everything bagels",
         "bagels au sésame"
       ],
-      "drawHint": "A round golden bagel with a hole in the middle, sprinkled with sesame seeds."
+      "drawHint": "A round golden bagel with a hole in the middle, sprinkled with sesame seeds.",
+      "personality": "bread"
     },
     {
       "key": "croissant",
@@ -822,7 +887,8 @@
         "pain au chocolat",
         "almond croissant"
       ],
-      "drawHint": "A flaky crescent-shaped golden croissant with visible curved layers."
+      "drawHint": "A flaky crescent-shaped golden croissant with visible curved layers.",
+      "personality": "bread"
     },
     {
       "key": "buns",
@@ -838,7 +904,8 @@
         "brioche buns",
         "sausage buns"
       ],
-      "drawHint": "Two soft round golden hamburger buns with glossy tops, one sprinkled with sesame seeds."
+      "drawHint": "Two soft round golden hamburger buns with glossy tops, one sprinkled with sesame seeds.",
+      "personality": "bread"
     },
     {
       "key": "tortillas",
@@ -852,7 +919,8 @@
         "tortillas de blé",
         "soft tacos"
       ],
-      "drawHint": "A small stack of thin round pale flour tortillas with toasty brown spots, the top one folded over."
+      "drawHint": "A small stack of thin round pale flour tortillas with toasty brown spots, the top one folded over.",
+      "personality": "bread"
     },
     {
       "key": "pita",
@@ -867,7 +935,8 @@
         "flatbread",
         "pain naan"
       ],
-      "drawHint": "A round puffy pita flatbread with golden toasted spots, opened slightly to show its pocket."
+      "drawHint": "A round puffy pita flatbread with golden toasted spots, opened slightly to show its pocket.",
+      "personality": "bread"
     },
     {
       "key": "muffin",
@@ -880,7 +949,8 @@
         "muffins aux bleuets",
         "cupcakes"
       ],
-      "drawHint": "A domed muffin with a golden top studded with blueberries, in a pleated paper liner."
+      "drawHint": "A domed muffin with a golden top studded with blueberries, in a pleated paper liner.",
+      "personality": "bread"
     },
     {
       "key": "donut",
@@ -895,7 +965,8 @@
         "timbits",
         "crullers"
       ],
-      "drawHint": "A ring doughnut with pink icing and colourful sprinkles, showing the hole in the middle."
+      "drawHint": "A ring doughnut with pink icing and colourful sprinkles, showing the hole in the middle.",
+      "personality": "bread"
     },
     {
       "key": "cake",
@@ -910,7 +981,11 @@
         "gâteau d'anniversaire",
         "slab cake"
       ],
-      "drawHint": "A small round layer cake with white frosting, a drip of pink glaze and a single cherry on top."
+      "drawHint": "A small round layer cake with white frosting, a drip of pink glaze and a single cherry on top.",
+      "tags": [
+        "birthday"
+      ],
+      "personality": "bread"
     },
     {
       "key": "pie",
@@ -925,7 +1000,8 @@
         "pie shells",
         "tarte aux pommes"
       ],
-      "drawHint": "A round golden pie with a crimped crust and a lattice top showing red fruit filling."
+      "drawHint": "A round golden pie with a crimped crust and a lattice top showing red fruit filling.",
+      "personality": "bread"
     },
     {
       "key": "butter_tart",
@@ -939,7 +1015,11 @@
         "pecan butter tarts",
         "tarts"
       ],
-      "drawHint": "A small round tart in a fluted golden pastry shell filled with glossy caramel-brown syrupy filling and a few raisins."
+      "drawHint": "A small round tart in a fluted golden pastry shell filled with glossy caramel-brown syrupy filling and a few raisins.",
+      "tags": [
+        "picnic"
+      ],
+      "personality": "bread"
     },
     {
       "key": "deli_generic",
@@ -970,7 +1050,10 @@
         "black forest ham",
         "lunch meat"
       ],
-      "drawHint": "A fan of thin folded pink ham slices on a sheet of white deli paper."
+      "drawHint": "A fan of thin folded pink ham slices on a sheet of white deli paper.",
+      "tags": [
+        "picnic"
+      ]
     },
     {
       "key": "salami",
@@ -1201,14 +1284,25 @@
       "category": "meat",
       "aliases": [
         "bacon strips",
-        "back bacon",
-        "peameal bacon",
         "turkey bacon",
         "pancetta",
-        "bacon de dos",
         "bacon tranché"
       ],
       "drawHint": "Two wavy strips of bacon striped with pink meat and white fat."
+    },
+    {
+      "key": "peameal_bacon",
+      "label": "Peameal bacon",
+      "category": "meat",
+      "aliases": [
+        "peameal",
+        "peameal bacon",
+        "back bacon",
+        "bacon de dos",
+        "cornmeal bacon",
+        "peameal roast"
+      ],
+      "drawHint": "Two round slices of cornmeal-rolled back bacon on edge, pink centres in a lemon rim."
     },
     {
       "key": "sausages",
@@ -1408,7 +1502,8 @@
         "large eggs",
         "egg whites"
       ],
-      "drawHint": "An open pulp egg carton showing a row of smooth white and brown eggs."
+      "drawHint": "An open pulp egg carton showing a row of smooth white and brown eggs.",
+      "personality": "egg"
     },
     {
       "key": "butter",
@@ -1633,7 +1728,8 @@
         "beurre d'érable",
         "table syrup"
       ],
-      "drawHint": "A small glass jug of amber maple syrup with a loop handle and a red maple leaf on its label."
+      "drawHint": "A small glass jug of amber maple syrup with a loop handle and a red maple leaf on its label.",
+      "personality": "can"
     },
     {
       "key": "honey",
@@ -1885,7 +1981,14 @@
         "cumin",
         "paprika",
         "oregano",
-        "garlic powder"
+        "garlic powder",
+        "ground cinnamon",
+        "nutmeg",
+        "ground nutmeg",
+        "muscade",
+        "allspice",
+        "cloves",
+        "ground ginger"
       ],
       "drawHint": "A small glass spice jar with a cork lid filled with rust-red ground spice, a cinnamon stick leaning against it."
     },
@@ -2159,7 +2262,8 @@
         "passata",
         "whole tomatoes"
       ],
-      "drawHint": "An open tin can with a red label showing a tomato, filled with chunky diced tomatoes."
+      "drawHint": "An open tin can with a red label showing a tomato, filled with chunky diced tomatoes.",
+      "personality": "can"
     },
     {
       "key": "canned_beans",
@@ -2175,7 +2279,8 @@
         "fèves au lard",
         "refried beans"
       ],
-      "drawHint": "An opened tin can filled with glossy beans, with a few chickpeas and black beans spilling beside it."
+      "drawHint": "An opened tin can filled with glossy beans, with a few chickpeas and black beans spilling beside it.",
+      "personality": "can"
     },
     {
       "key": "lentils",
@@ -2206,7 +2311,8 @@
         "soup mix",
         "canned chili"
       ],
-      "drawHint": "A classic tin can of soup with a red-and-white blank label and a small steaming bowl in front."
+      "drawHint": "A classic tin can of soup with a red-and-white blank label and a small steaming bowl in front.",
+      "personality": "can"
     },
     {
       "key": "broth",
@@ -2222,7 +2328,8 @@
         "stock cubes",
         "gravy mix"
       ],
-      "drawHint": "A tall rectangular carton of broth with a screw cap and a golden-amber band, two little bouillon cubes beside it."
+      "drawHint": "A tall rectangular carton of broth with a screw cap and a golden-amber band, two little bouillon cubes beside it.",
+      "personality": "can"
     },
     {
       "key": "canned_tuna",
@@ -2238,7 +2345,8 @@
         "chunk light tuna",
         "saumon en conserve"
       ],
-      "drawHint": "A short flat round tin of tuna with its pull-tab lid rolled back to show pale pink flaked fish."
+      "drawHint": "A short flat round tin of tuna with its pull-tab lid rolled back to show pale pink flaked fish.",
+      "personality": "can"
     },
     {
       "key": "pickles",
@@ -2283,7 +2391,8 @@
         "light coconut milk",
         "coconut"
       ],
-      "drawHint": "A tin can beside a halved brown hairy coconut showing its white flesh."
+      "drawHint": "A tin can beside a halved brown hairy coconut showing its white flesh.",
+      "personality": "can"
     },
     {
       "key": "curry_sauce",
@@ -2330,7 +2439,10 @@
         "ripple chips",
         "sour cream and onion chips"
       ],
-      "drawHint": "A puffy crinkled chip bag with a blank front and a few golden wavy potato chips spilling out."
+      "drawHint": "A puffy crinkled chip bag with a blank front and a few golden wavy potato chips spilling out.",
+      "tags": [
+        "picnic"
+      ]
     },
     {
       "key": "tortilla_chips",
@@ -2390,7 +2502,10 @@
         "shortbread",
         "galettes"
       ],
-      "drawHint": "Two round golden chocolate chip cookies, one with a bite taken out."
+      "drawHint": "Two round golden chocolate chip cookies, one with a bite taken out.",
+      "tags": [
+        "picnic"
+      ]
     },
     {
       "key": "chocolate_bar",
@@ -2608,7 +2723,10 @@
         "tonic water",
         "eau gazéifiée"
       ],
-      "drawHint": "A slim aluminum can in pastel teal with rising bubbles and a lime slice beside it."
+      "drawHint": "A slim aluminum can in pastel teal with rising bubbles and a lime slice beside it.",
+      "tags": [
+        "picnic"
+      ]
     },
     {
       "key": "soda",
@@ -2638,7 +2756,10 @@
         "lemon drink",
         "citronnade"
       ],
-      "drawHint": "A glass pitcher of pale yellow lemonade with ice cubes, floating lemon slices and a striped straw."
+      "drawHint": "A glass pitcher of pale yellow lemonade with ice cubes, floating lemon slices and a striped straw.",
+      "tags": [
+        "picnic"
+      ]
     },
     {
       "key": "beer",
@@ -2686,7 +2807,11 @@
         "frozen dinners",
         "tv dinner"
       ],
-      "drawHint": "A frosty pale blue box with a big white snowflake on its blank front and little ice crystals around it."
+      "drawHint": "A frosty pale blue box with a big white snowflake on its blank front and little ice crystals around it.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "ice_cream",
@@ -2702,7 +2827,11 @@
         "ice cream sandwiches",
         "ice cream bars"
       ],
-      "drawHint": "A waffle cone holding two scoops of ice cream, one strawberry pink and one mint green."
+      "drawHint": "A waffle cone holding two scoops of ice cream, one strawberry pink and one mint green.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "popsicle",
@@ -2717,7 +2846,11 @@
         "frozen treats",
         "ice lollies"
       ],
-      "drawHint": "A rocket-shaped popsicle with red, white and blue stripes on a wooden stick, with a bite out of the top."
+      "drawHint": "A rocket-shaped popsicle with red, white and blue stripes on a wooden stick, with a bite out of the top.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "frozen_pizza",
@@ -2732,7 +2865,11 @@
         "naan pizza",
         "pizza rolls"
       ],
-      "drawHint": "A whole round pepperoni pizza with melted cheese and one slice partly pulled away."
+      "drawHint": "A whole round pepperoni pizza with melted cheese and one slice partly pulled away.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "french_fries",
@@ -2748,7 +2885,11 @@
         "frites surgelées",
         "potato wedges"
       ],
-      "drawHint": "A red paper fry carton overflowing with golden french fries."
+      "drawHint": "A red paper fry carton overflowing with golden french fries.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "frozen_vegetables",
@@ -2764,7 +2905,11 @@
         "edamame",
         "stir-fry vegetables"
       ],
-      "drawHint": "A frosty clear bag of bright green peas and orange carrot cubes with a snowflake on one corner."
+      "drawHint": "A frosty clear bag of bright green peas and orange carrot cubes with a snowflake on one corner.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "frozen_berries",
@@ -2780,7 +2925,11 @@
         "smoothie mix",
         "petits fruits surgelés"
       ],
-      "drawHint": "A frosty clear bag of mixed red and blue berries dusted with ice crystals and a snowflake on one corner."
+      "drawHint": "A frosty clear bag of mixed red and blue berries dusted with ice crystals and a snowflake on one corner.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "perogies",
@@ -2796,7 +2945,11 @@
         "raviolis chinois",
         "dumpling"
       ],
-      "drawHint": "Three plump half-moon perogies with crimped edges and golden browned spots."
+      "drawHint": "Three plump half-moon perogies with crimped edges and golden browned spots.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "chicken_nuggets",
@@ -2812,7 +2965,11 @@
         "bâtonnets de poisson",
         "popcorn chicken"
       ],
-      "drawHint": "Three golden breaded chicken nuggets in rounded blobby shapes beside a little cup of dipping sauce."
+      "drawHint": "Three golden breaded chicken nuggets in rounded blobby shapes beside a little cup of dipping sauce.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "ice_bag",
@@ -2828,7 +2985,11 @@
         "ice block",
         "party ice"
       ],
-      "drawHint": "A frosty clear plastic bag of ice cubes knotted at the top, with a blue snowflake and drips of melt."
+      "drawHint": "A frosty clear plastic bag of ice cubes knotted at the top, with a blue snowflake and drips of melt.",
+      "tags": [
+        "frozen"
+      ],
+      "personality": "frozen"
     },
     {
       "key": "baby_generic",
@@ -2948,7 +3109,8 @@
         "kitten food",
         "pâtée pour chat"
       ],
-      "drawHint": "A short round tin of wet cat food with its pull-tab lid peeled back and a fish-shaped decal."
+      "drawHint": "A short round tin of wet cat food with its pull-tab lid peeled back and a fish-shaped decal.",
+      "personality": "can"
     },
     {
       "key": "cat_litter",
@@ -3547,7 +3709,10 @@
         "tealights",
         "scented candle"
       ],
-      "drawHint": "A short cream pillar candle in a little glass jar with a softly glowing flame."
+      "drawHint": "A short cream pillar candle in a little glass jar with a softly glowing flame.",
+      "tags": [
+        "birthday"
+      ]
     },
     {
       "key": "picnic_blanket",
@@ -3562,7 +3727,10 @@
         "nappe",
         "gingham blanket"
       ],
-      "drawHint": "A folded red-and-white gingham picnic blanket with fringed edges, rolled up and tied with a leather strap."
+      "drawHint": "A folded red-and-white gingham picnic blanket with fringed edges, rolled up and tied with a leather strap.",
+      "tags": [
+        "picnic"
+      ]
     },
     {
       "key": "paper_plates",
@@ -3577,7 +3745,10 @@
         "plates",
         "party plates"
       ],
-      "drawHint": "A small stack of round white paper plates with fluted rims and a pastel border."
+      "drawHint": "A small stack of round white paper plates with fluted rims and a pastel border.",
+      "tags": [
+        "picnic"
+      ]
     },
     {
       "key": "paper_cups",
@@ -3593,7 +3764,10 @@
         "verres jetables",
         "coffee cups"
       ],
-      "drawHint": "A stack of two red-and-white striped paper cups, the top one slightly offset."
+      "drawHint": "A stack of two red-and-white striped paper cups, the top one slightly offset.",
+      "tags": [
+        "picnic"
+      ]
     },
     {
       "key": "plastic_cutlery",
@@ -3609,7 +3783,10 @@
         "ustensiles en plastique",
         "straws"
       ],
-      "drawHint": "A plastic fork, knife and spoon crossed together and tied with a small ribbon."
+      "drawHint": "A plastic fork, knife and spoon crossed together and tied with a small ribbon.",
+      "tags": [
+        "picnic"
+      ]
     }
   ],
   "baskets": [
@@ -3618,6 +3795,22 @@
       "label": "Wicker picnic hamper",
       "drawHint": "A classic woven wicker picnic hamper with two hinged lids propped open, a red gingham cloth peeking out and a looped carry handle.",
       "keywords": [
+        "produce",
+        "fresh produce",
+        "vegetables",
+        "veggies",
+        "veg",
+        "légumes",
+        "fruits et légumes",
+        "fruits & légumes",
+        "fruits and vegetables",
+        "fruit & veg",
+        "fruit and veg",
+        "salad",
+        "salads",
+        "salades",
+        "herbs",
+        "fines herbes",
         "picnic",
         "pique-nique",
         "seasonal",
@@ -3626,13 +3819,6 @@
         "été",
         "bbq",
         "barbecue",
-        "misc",
-        "miscellaneous",
-        "divers",
-        "other",
-        "autres",
-        "unsorted",
-        "non classé",
         "front of store",
         "checkout",
         "caisses",
@@ -3667,26 +3853,23 @@
       "label": "Wooden produce crate",
       "drawHint": "A slatted wooden farmers'-market crate with rope handles at each end and a stencilled leaf on the side.",
       "keywords": [
-        "produce",
-        "fresh produce",
-        "vegetables",
-        "veggies",
-        "veg",
-        "légumes",
-        "fruits et légumes",
-        "fruits & légumes",
-        "fruits and vegetables",
-        "fruit & veg",
-        "salad",
-        "salads",
-        "salades",
-        "herbs",
-        "fines herbes",
-        "organic",
-        "biologique",
-        "bio",
-        "farmers market",
-        "marché"
+        "breakfast",
+        "déjeuner",
+        "petit-déjeuner",
+        "petits-déjeuners",
+        "cereal",
+        "cereals",
+        "céréales",
+        "spreads",
+        "tartinades",
+        "syrup",
+        "sirop",
+        "jam",
+        "confitures",
+        "honey",
+        "miel",
+        "oatmeal",
+        "gruau"
       ]
     },
     {
@@ -3704,7 +3887,15 @@
         "fruits coupés",
         "fruit stand",
         "tropical fruit",
-        "melons"
+        "melons",
+        "farmers' market",
+        "farmers market",
+        "farmer's market",
+        "marché",
+        "marché fermier",
+        "organic",
+        "biologique",
+        "bio"
       ]
     },
     {
@@ -3712,18 +3903,15 @@
       "label": "Wire market basket",
       "drawHint": "A rounded metal wire basket with a wooden-grip swing handle, its open grid showing what is inside.",
       "keywords": [
-        "household",
-        "ménager",
-        "ménagers",
-        "entretien ménager",
-        "cleaning",
-        "nettoyage",
-        "laundry",
-        "lessive",
-        "paper",
-        "papier",
-        "paper goods",
-        "produits de papier",
+        "everything else",
+        "misc",
+        "miscellaneous",
+        "divers",
+        "other",
+        "autres",
+        "unsorted",
+        "non classé",
+        "general merchandise",
         "hardware",
         "quincaillerie",
         "housewares",
@@ -3746,20 +3934,13 @@
         "eggs",
         "egg",
         "oeufs",
-        "breakfast",
-        "déjeuner",
-        "petit-déjeuner",
-        "cereal",
-        "cereals",
-        "céréales",
-        "spreads",
-        "tartinades",
-        "syrup",
-        "sirop",
-        "jam",
-        "confitures",
-        "honey",
-        "miel"
+        "dairy & eggs",
+        "dairy and eggs",
+        "eggs & dairy",
+        "eggs and dairy",
+        "produits laitiers et oeufs",
+        "oeufs et produits laitiers",
+        "laitiers et oeufs"
       ]
     },
     {
@@ -3795,6 +3976,47 @@
       "label": "Picnic cooler",
       "drawHint": "A retro two-tone picnic cooler with a white lid, a coloured body, a swing handle and a little drain spout.",
       "keywords": [
+        "frozen",
+        "frozen foods",
+        "frozen food",
+        "surgelés",
+        "produits surgelés",
+        "congelés",
+        "congelé",
+        "freezer",
+        "congélateur",
+        "seafood",
+        "fish",
+        "poisson",
+        "poissons",
+        "poissonnerie",
+        "fruits de mer"
+      ]
+    },
+    {
+      "key": "ice_bucket",
+      "label": "Ice bucket",
+      "drawHint": "A galvanized metal pail brimming with ice cubes, beaded with frost and cold droplets.",
+      "keywords": [
+        "ice cream",
+        "crème glacée",
+        "ice",
+        "glace",
+        "cold drinks",
+        "boissons froides",
+        "cold beverages"
+      ]
+    },
+    {
+      "key": "bento_box",
+      "label": "Bento box",
+      "drawHint": "A lacquered two-tier bento box with its lid tilted open, tied with a pastel furoshiki cloth knot.",
+      "keywords": [
+        "deli",
+        "charcuterie",
+        "charcuteries",
+        "cold cuts",
+        "viandes froides",
         "meat",
         "meats",
         "viande",
@@ -3803,44 +4025,6 @@
         "boucherie",
         "poultry",
         "volaille",
-        "seafood",
-        "fish",
-        "poisson",
-        "poissons",
-        "poissonnerie",
-        "fruits de mer",
-        "deli",
-        "charcuterie",
-        "charcuteries",
-        "cold cuts",
-        "viandes froides"
-      ]
-    },
-    {
-      "key": "ice_bucket",
-      "label": "Ice bucket",
-      "drawHint": "A galvanized metal pail brimming with ice cubes, beaded with frost and cold droplets.",
-      "keywords": [
-        "frozen",
-        "frozen foods",
-        "frozen food",
-        "surgelés",
-        "produits surgelés",
-        "congelés",
-        "congelé",
-        "ice cream",
-        "crème glacée",
-        "freezer",
-        "congélateur",
-        "ice",
-        "glace"
-      ]
-    },
-    {
-      "key": "bento_box",
-      "label": "Bento box",
-      "drawHint": "A lacquered two-tier bento box with its lid tilted open, tied with a pastel furoshiki cloth knot.",
-      "keywords": [
         "international",
         "world foods",
         "world food",
@@ -3871,6 +4055,8 @@
       "label": "Jar shelf",
       "drawHint": "A little wooden wall shelf lined with three glass mason jars of different heights with gingham cloth lids.",
       "keywords": [
+        "pantry",
+        "garde-manger",
         "canned",
         "canned goods",
         "cans",
@@ -3894,7 +4080,23 @@
         "vinaigrettes",
         "seasonings",
         "assaisonnements",
-        "ketchup"
+        "ketchup",
+        "pasta",
+        "pâtes",
+        "rice",
+        "riz",
+        "grains",
+        "bulk",
+        "bulk foods",
+        "vrac",
+        "dry goods",
+        "beans",
+        "lentils",
+        "lentilles",
+        "nuts",
+        "noix",
+        "natural foods",
+        "aliments naturels"
       ]
     },
     {
@@ -3902,28 +4104,20 @@
       "label": "Canvas tote",
       "drawHint": "A sturdy cream canvas tote bag with two long handles and a small embroidered strawberry patch.",
       "keywords": [
-        "pasta",
-        "pâtes",
-        "rice",
-        "riz",
-        "grains",
-        "baking",
-        "cuisson",
-        "flour",
-        "farine",
-        "sugar",
-        "sucre",
-        "bulk",
-        "bulk foods",
-        "vrac",
-        "dry goods",
-        "pantry",
-        "garde-manger",
-        "beans",
-        "lentils",
-        "lentilles",
-        "nuts",
-        "noix"
+        "household",
+        "ménager",
+        "ménagers",
+        "entretien ménager",
+        "cleaning",
+        "nettoyage",
+        "laundry",
+        "lessive",
+        "paper",
+        "papier",
+        "paper goods",
+        "produits de papier",
+        "home",
+        "maison"
       ]
     },
     {
@@ -4038,6 +4232,22 @@
         "vitamins",
         "vitamines",
         "first aid"
+      ]
+    },
+    {
+      "key": "mixing_bowl",
+      "label": "Mixing bowl",
+      "drawHint": "A round polka-dot mixing bowl with a wire whisk leaning out of it.",
+      "keywords": [
+        "baking",
+        "bake",
+        "baking supplies",
+        "flour",
+        "farine",
+        "sugar",
+        "sucre",
+        "cuisson",
+        "pâtisserie maison"
       ]
     }
   ]

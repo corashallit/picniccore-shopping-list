@@ -10,6 +10,8 @@ import earth.cora.picnic.core.assistant.NamedItem
 import earth.cora.picnic.core.assistant.OpenAiGroceryAssistant
 import earth.cora.picnic.core.assistant.ResponsesIconDecider
 import earth.cora.picnic.core.assistant.ResponsesOutput
+import earth.cora.picnic.core.assistant.Schemas
+import earth.cora.picnic.core.assistant.SkipReason
 import earth.cora.picnic.core.assistant.resolve
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.cli.jpegForUpload
@@ -315,12 +317,16 @@ class EvalRunner(private val options: EvalOptions) {
         val corrections = case.corrections.entries.mapIndexed { i, (name, alias) ->
             Correction(normalizeName(name), requireNotNull(store.resolve(alias)) { "correction to unsorted" }, at = i + 1L)
         }.reversed() // newest first, like AppState.ingestContext
-        return IngestContext(aisles = store.aisles, corrections = corrections, existingNames = case.existing)
+        return IngestContext(aisles = store.aisles, corrections = corrections, existingNames = case.existing, pantry = case.pantry)
     }
 
     private suspend fun ingestCase(case: EvalCase, input: IngestInput, transcript: String? = null, notes: List<String> = emptyList()): CaseResult {
         val result: IngestResult = assistant.ingest(input, context(case))
-        val produced = result.items.map { Produced(it.name, it.quantity, it.note, it.aisleId, it.icon, it.iconFit) }
+        // Rows already on the list are not produced (they are named in skippedDuplicates, as before the C schema);
+        // optional and pantry rows are, with their skip reason.
+        val produced = result.items.filter { it.skipReason != SkipReason.ALREADY_ON_LIST }.map {
+            Produced(it.name, it.quantity, it.note, it.aisleId, it.icon, it.iconFit, skip = Schemas.SKIP_REASONS[it.skipReason.ordinal], named = it.named)
+        }
         val toolCalls = currentCoroutineContext()[CallMeter]?.calls?.filter { it.path == "responses" }?.sumOf { it.toolCalls } ?: 0
         val score = EvalScoring.scoreIngest(case, file.store(case.store), produced, result.message, toolCalls, transcript)
         return CaseResult(
@@ -369,9 +375,9 @@ class EvalRunner(private val options: EvalOptions) {
             Correction(normalizeName(name), requireNotNull(new.resolve(alias)), at = i + 1L)
         }
         val initial = StateOps.initialState(listId, 0).copy(store = StoreProfile(aislesText = old.aislesText), corrections = corrections)
-            .addItems(listId, items)
+            .addItems(listId, items, 0L).first
         val store = InMemoryStateStore(initial)
-        store.update { it.setAislesText(new.aislesText, catalog.baskets::guess) }
+        store.update { it.setAislesText(new.aislesText, catalog.baskets::guess, 0L) }
         val report = AisleSync(store, assistant, catalog.baskets).sync()
         val state = store.current()
         val finalAisles = requireNotNull(state.list(listId)).items.associate { it.name to it.aisleId }

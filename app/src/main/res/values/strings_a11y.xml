@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accessibility, announcements strings: WP10 (docs/DESIGN_STICKER.md §21). -->
+
+    <!-- The scrim under a letter-set sheet, for TalkBack (read after the sheet's own controls). -->
+    <string name="a11y_close_sheet">Close sheet</string>
+    <!-- Announced once an Undo has run (§15 Announcements): the note it undid. -->
+    <string name="a11y_undone">Undone: %1$s</string>
+</resources>

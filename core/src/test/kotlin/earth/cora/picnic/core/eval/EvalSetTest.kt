@@ -1,6 +1,7 @@
 package earth.cora.picnic.core.eval
 
 import earth.cora.picnic.core.TestSupport
+import earth.cora.picnic.core.assistant.Schemas
 import earth.cora.picnic.core.model.Aisles
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.IconFit
@@ -43,6 +44,7 @@ class EvalSetTest {
                 e.detail?.let { Regex(it) }
                 (e.match + e.exclude).forEach { Phrase.regex(it) }
                 assertTrue(!e.many || e.optional, "${case.id}: 'many' is for optional expectations only")
+                e.skip?.let { assertTrue(it in Schemas.SKIP_REASONS, "${case.id}: skip '$it' is a skip_reason wire value") }
             }
             val correctionStore = if (case.kind == CaseKind.AISLE_EDIT) file.store(requireNotNull(case.newStore)) else store
             case.corrections.values.forEach { assertTrue(correctionStore.resolve(it) != null, "${case.id}: correction to a real aisle") }
@@ -72,9 +74,10 @@ class EvalSetTest {
             val ideal = case.expect.filter { !it.optional }.map { e ->
                 val phrase = e.match.first { !it.startsWith("re:") }
                 val (icon, fit) = if (e.icons.isNotEmpty()) e.icons.first() to IconFit.EXACT else "paper_bag" to IconFit.APPROXIMATE
-                Produced(name = phrase, aisleId = e.aisle.firstOrNull()?.let(store::resolve), icon = icon, fit = fit)
+                Produced(name = phrase, aisleId = e.aisle.firstOrNull()?.let(store::resolve), icon = icon, fit = fit, skip = e.skip ?: "none")
             }
             val score = EvalScoring.scoreIngest(case, store, ideal, message = "", webSearches = 0)
+            assertTrue(score.checks.none { it.what.startsWith("skip ") && !it.ok }, "${case.id}: ${score.failedChecks}")
             assertEquals(score.requiredTotal, score.requiredMatched, "${case.id}: misses ${score.misses}")
             assertEquals(score.produced, score.producedMatched, "${case.id}: extras ${score.extras}")
             assertEquals(score.aisleTotal, score.aisleOk, "${case.id}: ${score.wrong}")

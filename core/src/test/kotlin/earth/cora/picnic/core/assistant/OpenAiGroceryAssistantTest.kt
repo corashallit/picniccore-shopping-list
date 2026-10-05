@@ -84,7 +84,7 @@ class OpenAiGroceryAssistantTest {
         val ctx = input[1]["content"]!!.jsonArray.single().jsonObject["text"]!!.str()
         assertTrue(ctx.startsWith("Store aisles in walking order (id: name):\n- produce: Produce\n"))
         assertTrue("- nutritional yeast -> bulk-natural-foods" in ctx)
-        assertTrue("Already on the list: Butter, Bananas, Paper towels\n\nApp language: English." in ctx)
+        assertTrue("Already on the list: Butter, Bananas, Paper towels\n\nIn the pantry (she keeps these at home): nothing yet\n\nApp language: English." in ctx)
         assertEquals("ingredients for pancakes from scratch", input[2]["content"]!!.jsonArray.single().jsonObject["text"]!!.str())
 
         val tool = body["tools"]!!.jsonArray.single().jsonObject
@@ -112,7 +112,7 @@ class OpenAiGroceryAssistantTest {
         )
         assertEquals(
             TestSupport.fixture("context_example.txt").trim(),
-            Prompts.contextBlock(benchmark.aisles, benchmark.corrections, benchmark.existingNames),
+            Prompts.contextBlock(benchmark.aisles, benchmark.corrections, benchmark.existingNames, pantry = benchmark.pantry),
         )
         assertTrue(Prompts.contextBlock(emptyList(), emptyList(), emptyList()).endsWith("- none\n\nAlready on the list: nothing yet"))
         assertFalse("Already on the list" in Prompts.contextBlock(aisles, emptyList(), null))
@@ -282,10 +282,16 @@ class OpenAiGroceryAssistantTest {
             ),
         )
         val result = assistant.ingest(IngestInput.Text("x"), context)
-        assertEquals(listOf("Eggs", "Lemon"), result.items.map { it.name })
-        assertEquals("12", result.items.first().quantity, "the duplicate's quantity fills the gap")
-        assertNull(result.items[1].quantity)
-        assertNull(result.items[1].note)
+        assertEquals(listOf("Butter", "Banana", "Eggs", "Lemon"), result.items.map { it.name })
+        assertEquals(
+            listOf(SkipReason.ALREADY_ON_LIST, SkipReason.ALREADY_ON_LIST, SkipReason.NONE, SkipReason.NONE),
+            result.items.map { it.skipReason },
+            "names already on the list stay as skipped rows (\"already on your list\")",
+        )
+        val eggs = result.items[2]
+        assertEquals("12", eggs.quantity, "the duplicate's quantity fills the gap")
+        assertNull(result.items[3].quantity)
+        assertNull(result.items[3].note)
         assertEquals(listOf("Butter", "Banana", "eggs"), result.skippedDuplicates)
         assertEquals("Added stuff (example.com).", result.message)
     }
@@ -382,7 +388,7 @@ class OpenAiGroceryAssistantTest {
         assertEquals(aisles.size, partial.size)
         api.token = null
         val offline = assistant.assignBasketsOrGuess(aisles, catalog.baskets::guess)
-        assertEquals(BasketKind.FRUIT_CRATE, offline["produce"])
+        assertEquals(BasketKind.WICKER_PICNIC, offline["produce"])
     }
 
     @Test
@@ -405,15 +411,36 @@ class OpenAiGroceryAssistantTest {
     @Test
     fun drawIcon() = runTest {
         api.enqueueFixture(200, "other/image_edit.json", "x-request-id" to "req_draw")
-        val icon = assistant.drawIcon(IconDrawRequest("Gochujang", hint = "red tub", styleReference = byteArrayOf(1, 2, 3)))
+        val sheet = byteArrayOf(1, 2, 3)
+        val mask = byteArrayOf(4, 5)
+        val icon = assistant.drawIcon(
+            IconDrawRequest(
+                itemName = "Kimchi",
+                sheet = sheet,
+                mask = mask,
+                subject = "one squat glass jar of kimchi with a round screw lid",
+                families = listOf("strawberry", "melon"),
+            ),
+        )
         assertContentEquals(TestSupport.fixtureBytes("other/tiny.webp"), icon.bytes)
         assertEquals("image/webp", icon.mimeType)
         assertEquals("req_draw", icon.meta.requestId)
+        assertEquals("gpt-image-2.5-flare", icon.meta.model)
         val fields = api.take().formFields()
         assertEquals(listOf("gpt-image-2.5-flare"), fields["model"])
-        assertTrue(fields["prompt"]!!.single().startsWith("Draw ONE new sticker icon of Gochujang"))
-        assertTrue(fields["prompt"]!!.single().endsWith("Details about the item: red tub."))
-        assertEquals(listOf("filename:_style_reference.png"), fields["image[]"])
+        val prompt = fields["prompt"]!!.single()
+        assertTrue(prompt.startsWith("This is a 2 x 2 sticker sheet on a fully transparent background."), prompt)
+        assertTrue("in the empty bottom-right cell only: one squat glass jar of kimchi with a round screw lid, grouped" in prompt, prompt)
+        assertTrue(
+            "Colours only: strawberry pastel #FFC4D1, strawberry mid #FF6F8E, strawberry trace #C3264F, " +
+                "melon pastel #D3F4C5, melon mid #8EDB76, melon trace #2E8239, white #FFFFFF." in prompt,
+            prompt,
+        )
+        assertTrue("Main body #FFC4D1." in prompt && "flat #FF6F8E band" in prompt, prompt)
+        assertEquals(listOf("filename:sheet.png"), fields["image[]"])
+        assertEquals(listOf("filename:mask.png"), fields["mask"])
+        assertEquals(listOf("transparent"), fields["background"])
+        assertEquals(listOf("low"), fields["quality"])
     }
 
     @Test
@@ -425,6 +452,6 @@ class OpenAiGroceryAssistantTest {
         assertEquals("/v1/models/gpt-5.6-terra", api.take().url.encodedPath)
         api.enqueueFixture(404, "errors/404_model_not_found.json")
         val e = assertFailsWith<LlmError.BadResponse> { assistant.testConnection() }
-        assertTrue(e.friendlyMessage.contains("can't use one of the AI models"))
+        assertTrue(e.friendlyMessage.contains("can’t use one of the AI models"))
     }
 }

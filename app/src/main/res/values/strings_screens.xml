@@ -1,50 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Screen strings (app-screens). Theme-layer strings live in strings.xml (app-shell).
+    <!-- Screen strings of WP8 (settings, aisles, edit sheet, list switcher; docs/DESIGN_STICKER.md §21).
+         One strings file per package: strings_list.xml (WP5), strings_add.xml (WP7), strings_theme.xml (WP4),
+         strings_motion.xml (WP6), strings_eggs.xml (WP9), strings_a11y.xml (WP10); strings.xml keeps app_name
+         and wordmark (WP8). Nobody edits another package's file.
          Messages that ViewModels produce (errors, "Didn't catch that") come from code:
          ui/common/ScreenText.kt and core's LlmError.friendlyMessage. -->
 
     <!-- Shared -->
     <string name="screens_back">Back</string>
     <string name="screens_cancel">Cancel</string>
-    <string name="screens_close">Close</string>
+    <string name="screens_done">Done</string>
+    <string name="screens_more_options">More options</string>
 
-    <!-- List -->
-    <string name="list_add">Add</string>
-    <string name="list_switch_lists">Your lists</string>
-    <string name="list_open_aisles">Store aisles</string>
-    <string name="list_open_settings">Settings</string>
-    <string name="list_progress">%1$d of %2$d in the basket</string>
-    <string name="list_section_unsorted">Unsorted</string>
-    <string name="list_section_checked">In the basket</string>
-    <string name="list_empty_title">The basket is empty</string>
-    <string name="list_empty_body">Write, snap or say what you need. It gets sorted into your store\'s aisles.</string>
-    <string name="list_empty_action">Add items</string>
-    <string name="list_gesture_hint">Tap to tick off · hold to edit · swipe to remove</string>
-    <string name="list_row_checked">in the basket</string>
-    <string name="list_row_unchecked">still to get</string>
-    <string name="list_row_edit">Edit</string>
-    <string name="list_row_remove">Remove</string>
-    <string name="list_removed">Removed %1$s</string>
-    <string name="list_undo">Undo</string>
-    <plurals name="list_clear_checked">
-        <item quantity="one">Clear %1$d checked item</item>
-        <item quantity="other">Clear %1$d checked items</item>
-    </plurals>
-    <plurals name="list_cleared">
-        <item quantity="one">Cleared %1$d item</item>
-        <item quantity="other">Cleared %1$d items</item>
-    </plurals>
-    <plurals name="list_added">
-        <item quantity="one">Added %1$d item</item>
-        <item quantity="other">Added %1$d items</item>
-    </plurals>
-    <plurals name="list_sort_failed">
-        <item quantity="one">%1$s %2$d item is waiting in Unsorted.</item>
-        <item quantity="other">%1$s %2$d items are waiting in Unsorted.</item>
-    </plurals>
-
-    <!-- List switcher -->
+    <!-- List switcher (§6.4) -->
     <string name="lists_title">Your lists</string>
     <string name="lists_all_done">All picked up</string>
     <plurals name="lists_remaining">
@@ -52,146 +21,344 @@
         <item quantity="other">%1$d to get</item>
     </plurals>
     <string name="lists_rename">Rename %1$s</string>
+    <string name="lists_rename_label">List name</string>
     <string name="lists_rename_save">Save the new name</string>
     <string name="lists_delete">Delete %1$s</string>
-    <string name="lists_delete_confirm_empty">Delete \"%1$s\"?</string>
-    <plurals name="lists_delete_confirm">
-        <item quantity="one">Delete \"%1$s\" and its %2$d item?</item>
-        <item quantity="other">Delete \"%1$s\" and its %2$d items?</item>
-    </plurals>
+    <string name="lists_delete_title">Delete %1$s?</string>
+    <string name="lists_delete_book">Its sticker book goes into your album.</string>
     <string name="lists_delete_yes">Delete</string>
-    <string name="lists_delete_no">Keep it</string>
+    <string name="lists_delete_no">Not yet</string>
     <string name="lists_new_label">New list</string>
-    <string name="lists_new_placeholder">Costco run, party snacks…</string>
+    <string name="lists_new_placeholder">Big shop, party snacks…</string>
     <string name="lists_new_action">Start the new list</string>
 
-    <!-- Edit sheet -->
-    <string name="edit_title">Edit item</string>
+    <!-- Edit sheet (§6.3) -->
+    <string name="edit_hero">%1$s sticker</string>
+    <string name="edit_favourite">Favourite</string>
+    <string name="edit_in_pantry">In my pantry</string>
+    <string name="edit_pantry_on">%1$s is in your pantry · recipes will leave it out</string>
+    <string name="edit_pantry_off">%1$s is off your pantry shelf</string>
     <string name="edit_name">Name</string>
     <string name="edit_quantity">Amount</string>
     <string name="edit_quantity_placeholder">2, 500 g, 4 L</string>
     <string name="edit_note">Note</string>
-    <string name="edit_note_placeholder">ripe ones, on sale…</string>
-    <string name="edit_aisle">Aisle</string>
-    <string name="edit_aisle_hint">Moving it teaches the app where this lives next time.</string>
-    <string name="edit_aisle_unsorted">Unsorted</string>
-    <string name="edit_icon">Icon</string>
-    <string name="edit_all_icons">All icons</string>
-    <string name="edit_icons_title">An icon for %1$s</string>
-    <string name="edit_draw">Draw a new icon</string>
-    <string name="edit_drawing">Drawing…</string>
-    <string name="edit_draw_hint">Draws a one-of-a-kind icon for \"%1$s\". It takes about 10 seconds and costs about 1.5¢ (US).</string>
+    <string name="edit_note_placeholder">brand, size, ripeness…</string>
+    <string name="edit_aisle">Move to aisle</string>
+    <string name="edit_aisle_hint">The app puts it there next time too.</string>
+    <string name="edit_everything_else">Everything else</string>
+    <string name="edit_sticker">Change sticker</string>
+    <string name="edit_more_stickers">More stickers</string>
+    <string name="edit_fewer_stickers">Fewer stickers</string>
+    <string name="edit_draw">Draw a new sticker</string>
+    <string name="edit_drawing">Drawing a new sticker…</string>
+    <string name="edit_draw_hint">Takes about 10&#160;s and uses your OpenAI key.</string>
+    <string name="edit_draw_no_key">Add your OpenAI key in Settings to draw new stickers.</string>
     <string name="edit_save">Save</string>
-    <string name="edit_remove">Remove</string>
+    <string name="edit_delete">Delete</string>
 
-    <!-- Add sheet -->
-    <string name="add_title">Add to your list</string>
-    <string name="add_title_preview">Here\'s what I found</string>
-    <string name="add_mode_write">Write</string>
-    <string name="add_mode_snap">Snap</string>
-    <string name="add_mode_speak">Speak</string>
-    <string name="add_write_placeholder">milk, 2 lemons, eggs…\nor \"ingredients for pancakes from scratch\"</string>
-    <string name="add_write_ai">Sort it out</string>
-    <string name="add_write_typed">Add as typed</string>
-    <string name="add_write_hint">\"Sort it out\" can look up recipes on the web and puts everything in your aisles. \"Add as typed\" adds each line as it is.</string>
-    <string name="add_snap_camera">Take a photo</string>
-    <string name="add_snap_gallery">Choose a photo</string>
-    <string name="add_snap_hint">A clear, well-lit photo of a handwritten list works best.</string>
-    <string name="add_speak_start">Tap to speak</string>
-    <string name="add_speak_again">Record again</string>
-    <string name="add_speak_hint">Say your list out loud, like \"milk, two lemons and stuff for tacos\".</string>
-    <string name="add_speak_listening">Listening…</string>
-    <string name="add_speak_done">Done</string>
-    <string name="add_speak_limit">Recordings stop by themselves after 5 minutes.</string>
-    <string name="add_busy_transcribing">Transcribing…</string>
-    <string name="add_busy_photo">Reading your handwriting…</string>
-    <string name="add_busy_recipe">Looking up a recipe…</string>
-    <string name="add_busy_voice">Turning that into a list…</string>
-    <string name="add_busy_list">Sorting your list into aisles…</string>
-    <string name="add_busy_slow">Still working. A recipe with a web search can take up to a minute.</string>
-    <string name="add_retry">Try again</string>
-    <string name="add_open_settings">Open Settings</string>
-    <string name="add_plain_lines">Add as plain lines</string>
-    <string name="add_transcript_label">You said</string>
-    <string name="add_transcript_quoted">\"%1$s\"</string>
-    <string name="add_transcript_edit">Fix the words</string>
-    <string name="add_preview_plain_note">Added line by line, without AI. Items without an aisle get sorted in the background.</string>
-    <string name="add_preview_empty">Nothing new to add.</string>
-    <string name="add_preview_keep">will be added</string>
-    <string name="add_preview_skip">left out</string>
-    <string name="add_preview_skipped">Already on your list: %1$s</string>
-    <string name="add_preview_sources">Sources</string>
-    <string name="add_start_over">Start over</string>
-    <plurals name="add_commit">
-        <item quantity="one">Add %1$d item</item>
-        <item quantity="other">Add %1$d items</item>
-    </plurals>
-
-    <!-- Aisles -->
-    <string name="aisles_title">Store aisles</string>
-    <string name="aisles_store_card">Your store</string>
-    <string name="aisles_store_name">Store name</string>
-    <string name="aisles_text_label">Aisles, in walking order</string>
-    <string name="aisles_text_placeholder">Produce\nBakery\nAisle 2 - Baking &amp; spices</string>
-    <string name="aisles_text_hint">One aisle per line, in the order you walk through the store. Lines starting with # are notes.</string>
-    <plurals name="aisles_preview_title">
-        <item quantity="one">%1$d aisle</item>
-        <item quantity="other">%1$d aisles</item>
-    </plurals>
-    <string name="aisles_preview_empty">No aisles yet: everything goes to Unsorted.</string>
-    <plurals name="aisles_preview_detail">
-        <item quantity="one">%1$s · %2$d item</item>
-        <item quantity="other">%1$s · %2$d items</item>
-    </plurals>
-    <string name="aisles_save">Save aisles</string>
+    <!-- My store (§6.7, §4.26): no model names, no AI card -->
+    <string name="aisles_title">My store</string>
+    <string name="aisles_subtitle">walking order · colours · baskets</string>
+    <string name="aisles_store_label">Store:</string>
+    <string name="aisles_store_hint">your store’s name</string>
+    <string name="aisles_text_label">Aisles as text:</string>
+    <string name="aisles_text_hint">One aisle per line, in the order you walk through the store. Add “(also: toothpaste, floss)” after an aisle for things this store keeps there. Lines starting with # are left out.</string>
+    <string name="aisles_store_aisle">store aisle %1$d</string>
+    <string name="aisles_store_aisle_field">Store aisle</string>
+    <string name="aisles_label">%1$s, aisle %2$d</string>
+    <string name="aisles_label_store">%1$s, aisle %2$d, store aisle %3$d</string>
+    <string name="aisles_edit">Edit %1$s</string>
+    <string name="aisles_edit_done">Done editing %1$s</string>
+    <string name="aisles_name_field">Aisle name</string>
+    <!-- "Also here" (Cora, 5 October; §6.7, §4.26): what this store keeps in an aisle where you would not look for it. Only
+         My store shows it; the sorting reads it. -->
+    <string name="aisles_note_field">Also here</string>
+    <string name="aisles_note_placeholder">toothpaste, floss…</string>
+    <string name="aisles_note_hint">Things this store keeps in this aisle, up to %1$d characters.</string>
+    <string name="aisles_note_line">also here: %1$s</string>
+    <string name="aisles_label_note">%1$s, also here: %2$s</string>
+    <string name="aisles_note_saved">New items follow this note. Re-sort to use it on what is already on your list.</string>
+    <string name="aisles_note_resort">Re-sort</string>
+    <string name="aisles_move_up">Move up</string>
+    <string name="aisles_move_down">Move down</string>
+    <string name="aisles_colour">Colour</string>
+    <string name="aisles_pattern">Pattern</string>
+    <string name="aisles_basket">Basket</string>
+    <string name="aisles_add">Add aisle</string>
+    <string name="aisles_new_name">New aisle</string>
     <string name="aisles_resort">Re-sort my list</string>
-    <string name="aisles_resort_hint">Re-sorting picks a basket for each aisle and places items that have no aisle.</string>
-    <plurals name="aisles_resort_hint_count">
-        <item quantity="one">Re-sorting picks a basket for each aisle and places the %1$d item that has no aisle.</item>
-        <item quantity="other">Re-sorting picks a basket for each aisle and places the %1$d items that have no aisle.</item>
-    </plurals>
-    <string name="aisles_syncing">Sorting your list into the aisles…</string>
-    <string name="aisles_save_failed">Couldn\'t save. Try again.</string>
-    <string name="aisles_report_nothing">Aisles saved. Everything is already in place.</string>
+    <string name="aisles_resorting">Sorting your list into the aisles…</string>
+    <string name="aisles_preview_note">Showing your text. It is saved when you tap Done or leave the field.</string>
+    <string name="aisles_empty">No aisles yet, so every item goes in Everything else.</string>
     <plurals name="aisles_report_sorted">
         <item quantity="one">Sorted %1$d item</item>
         <item quantity="other">Sorted %1$d items</item>
     </plurals>
-    <plurals name="aisles_report_left">
-        <item quantity="one">%1$d item left in Unsorted.</item>
-        <item quantity="other">%1$d items left in Unsorted.</item>
-    </plurals>
+    <string name="aisles_report_left">%1$d left in Everything else</string>
     <string name="aisles_report_both">%1$s · %2$s</string>
-    <string name="aisles_leave_title">Save your aisle changes?</string>
-    <string name="aisles_leave_save">Save</string>
-    <string name="aisles_leave_discard">Discard</string>
-    <string name="aisles_leave_keep">Keep editing</string>
+    <string name="aisles_report_nothing">Everything is already in place.</string>
+    <!-- "Aisles as text" removed aisles (their items went to Everything else); the toast offers Undo. -->
+    <plurals name="aisles_removed">
+        <item quantity="one">Removed %1$d aisle · its items are in Everything else</item>
+        <item quantity="other">Removed %1$d aisles · their items are in Everything else</item>
+    </plurals>
+    <string-array name="aisles_family_names">
+        <item>Strawberry</item>
+        <item>Ramune blue</item>
+        <item>Lemon</item>
+        <item>Melon</item>
+        <item>Grape</item>
+        <item>Peach</item>
+        <item>Mint</item>
+        <item>Sakura</item>
+        <item>Cocoa</item>
+        <item>Periwinkle</item>
+    </string-array>
+    <string-array name="aisles_pattern_names">
+        <item>Gingham</item>
+        <item>Polka dots</item>
+        <item>Stripes</item>
+        <item>Hearts</item>
+        <item>Stars</item>
+        <item>Clouds</item>
+        <item>Small check</item>
+        <item>Waves</item>
+        <item>Flowers</item>
+        <item>Plain</item>
+    </string-array>
+    <string-array name="aisles_basket_names">
+        <item>Wicker picnic basket</item>
+        <item>Bread basket</item>
+        <item>Fruit crate</item>
+        <item>Berry punnet</item>
+        <item>Wire basket</item>
+        <item>Egg basket</item>
+        <item>Milk crate</item>
+        <item>Cooler</item>
+        <item>Ice bucket</item>
+        <item>Bento box</item>
+        <item>Jar shelf</item>
+        <item>Canvas tote</item>
+        <item>Flower bucket</item>
+        <item>Bottle carrier</item>
+        <item>Candy jar</item>
+        <item>Vanity case</item>
+        <item>Mixing bowl</item>
+    </string-array>
 
-    <!-- Settings (amendment A1: the OpenAI key and icons only, nothing about models or addresses) -->
+    <!-- Settings (§6.8; amendment A4: the Surprises card; nothing about models or addresses) -->
     <string name="settings_title">Settings</string>
     <string name="settings_key_title">Your OpenAI key</string>
-    <string name="settings_key_intro">Picnic List uses OpenAI to sort your items into aisles, read photos and voice notes, and draw icons. Paste an OpenAI API key to turn that on.</string>
+    <string name="settings_key_intro">Kirakira Basket uses OpenAI to sort your items into aisles, read photos and voice notes, and pick or draw stickers. Paste an OpenAI API key to turn that on.</string>
     <string name="settings_key_label">OpenAI API key</string>
     <string name="settings_key_placeholder">sk-…</string>
-    <string name="settings_key_saved_placeholder">Saved: %1$s</string>
     <string name="settings_key_saved">Saved. Paste a new key here to replace it.</string>
     <string name="settings_key_missing">Not set yet: adding items with AI needs it.</string>
-    <string name="settings_key_show">Show</string>
-    <string name="settings_key_hide">Hide</string>
     <string name="settings_save">Save</string>
     <string name="settings_remove_key">Remove key</string>
+    <string name="settings_remove_key_title">Remove your OpenAI key?</string>
+    <string name="settings_remove_key_body">Adding with AI stops until you paste a key again. The app can’t show this key again.</string>
+    <string name="settings_remove_key_no">Not yet</string>
     <string name="settings_key_storage">Stored encrypted on this phone (Android Keystore) and sent only to OpenAI.</string>
     <string name="settings_test">Test connection</string>
     <string name="settings_test_running">Checking…</string>
-    <string name="settings_test_ok">Connected · %1$d ms</string>
-    <string name="settings_test_failed">Couldn\'t connect. %1$s</string>
-    <string name="settings_icons">Icons</string>
-    <string name="settings_draw_icons">Draw new icons with AI</string>
-    <string name="settings_draw_icons_note">When the icon library has nothing that fits, the app draws one. Drawing a new icon takes about 10 s and costs about 1.5¢ (US).</string>
+    <string name="settings_test_ok">Connected</string>
+    <string name="settings_stickers">Stickers</string>
+    <string name="settings_draw_icons">Draw new stickers with AI</string>
+    <string name="settings_draw_icons_note">Drawing a new sticker takes about 10&#160;s and uses your OpenAI key.</string>
+    <string name="settings_surprises">Surprises</string>
+    <string name="settings_eggs">Easter eggs</string>
+    <string name="settings_eggs_hint">all 18 secrets</string>
+    <string name="settings_sounds">Sounds</string>
+    <string name="settings_sounds_hint">thunk, tk, pff, pon!</string>
+    <string name="settings_haptics">Haptics</string>
+    <string name="settings_haptics_hint">hanko thunk, peel tick</string>
+    <string name="settings_next_card">“Next stop” card</string>
+    <string name="settings_next_card_hint">between aisles</string>
+    <string name="settings_celebration">Celebration</string>
+    <string name="settings_celebration_hint">when the list is done</string>
+    <string name="settings_weather">Weather surprises</string>
+    <string name="settings_weather_hint">rain and first-snow stickers; asks Environment Canada for Toronto’s forecast</string>
+    <string name="settings_weather_hint_area">rain and first-snow stickers; asks Environment Canada for the forecast for %1$s</string>
+    <string name="settings_area">Use my area</string>
+    <string name="settings_area_hint">tonight’s sunset and the forecast near you, not Toronto’s</string>
+    <string name="settings_area_hint_on">sunset and forecast near %1$s; approximate area only</string>
+    <string name="settings_area_hint_finding">sunset and forecast near you; approximate area only</string>
+    <string name="settings_area_hint_denied">location isn’t allowed, so Toronto for now</string>
+    <string name="settings_area_hint_no_fix">couldn’t find your area yet, so Toronto for now</string>
+    <string name="settings_needs_eggs">needs Easter eggs on</string>
+    <string name="settings_surprises_footer">Reduced motion follows your phone’s setting.</string>
+    <string name="settings_area_rationale_title">Use my area?</string>
+    <!-- §0.4 Q6, verbatim; PRIVACY.md says the same (PrivacyDocTest). -->
+    <string name="settings_area_rationale">Kirakira Basket can use your approximate area to find tonight’s sunset and the local forecast for its weather surprises. Your area stays on this phone; only the forecast request names the nearest city.</string>
+    <string name="settings_area_continue">Continue</string>
+    <string name="settings_area_not_now">Not now</string>
+    <string name="settings_area_denied">Location wasn’t allowed, so the surprises use Toronto.</string>
+    <!-- Android no longer shows its location prompt (denied for good): the rationale's button opens the app's page in Android settings. -->
+    <string name="settings_area_open_settings">Open Android settings</string>
+    <string name="settings_area_denied_for_good">Location is off for Kirakira Basket. You can allow it in Android settings.</string>
     <string name="settings_help_title">About your key</string>
-    <string name="settings_help_budget">Make the key in its own OpenAI project with a monthly budget and \"Enforce a hard limit\" turned on, so a lost phone or a leaked key can\'t run up a big bill.</string>
+    <string name="settings_help_budget">Make the key in its own OpenAI project with a monthly budget and “Enforce a hard limit” turned on, so a lost phone or a leaked key can’t run up a big bill.</string>
     <string name="settings_help_restricted">A restricted key is enough: List models (Read), Model capabilities (Request) and Responses API (Write). One key per person.</string>
     <string name="settings_help_guide">If someone else made your key, they have a step-by-step guide for these settings.</string>
-    <string name="settings_help_privacy">Text, photos and recordings go to OpenAI when you ask the app to sort or read them. Item names also go there in the background, to sort them into aisles and to pick or draw their icons (you can turn drawing off above).</string>
-    <string name="settings_version">%1$s %2$s</string>
+    <string name="settings_help_privacy">Text, photos, recordings and your pantry go to OpenAI when you ask the app to sort or read something. Item names also go there in the background, to sort them into aisles and to pick or draw their stickers (you can turn drawing off above).</string>
+    <string name="settings_about_row">About &amp; licences</string>
+    <string name="settings_about_row_hint">fonts, credits and the version</string>
+
+    <!-- The More menu of the Album and Settings screens (§4.24) -->
+    <string name="menu_back_to_list">Back to %1$s</string>
+    <string name="menu_back_to_your_list">Back to your list</string>
+    <string name="menu_my_store">My store &amp; aisles</string>
+    <string name="menu_my_pantry">My pantry</string>
+    <string name="menu_album">Sticker album</string>
+    <string name="menu_settings">Settings</string>
+
+    <!-- About & licences (§6.9) -->
+    <string name="about_title">About &amp; licences</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_made_for">Made for one friend in Ontario</string>
+    <string name="about_sun_hint">tap the sun?</string>
+    <string name="about_licences">Licences</string>
+    <string name="about_licences_intro">The lettering uses free fonts under the SIL Open Font License 1.1. Tap a font to read its licence.</string>
+    <string name="about_licence_expanded">open</string>
+    <string name="about_licence_collapsed">closed</string>
+    <string name="about_art">Sticker art</string>
+    <string name="about_art_credit">Every sticker, basket and doodle is original, made for this app.</string>
+    <string name="about_lab">Surprise lab</string>
+    <string name="about_lab_hint">try every surprise on a practice list</string>
+    <string name="about_lab_unlocked">Surprise lab unlocked ★</string>
+
+    <!-- Surprise lab shell (§6.9; the eggs and the sandbox are WP9's) -->
+    <string name="lab_title">Surprise lab</string>
+    <string name="lab_subtitle">every surprise, on a practice list</string>
+    <string name="lab_ribbon">Surprise lab · practice list</string>
+    <string name="lab_note">Each surprise plays on a practice list called “Saturday shop”. Nothing here touches your lists, your album or your settings.</string>
+    <string name="lab_try">Try it</string>
+    <string name="lab_try_egg">Try %1$s</string>
+    <string name="lab_needs_motion">needs animations on (your phone’s settings)</string>
+    <string name="lab_egg_number">%1$d · %2$s</string>
+    <string-array name="lab_egg_names">
+        <item>Dusk binder</item>
+        <item>Ladybug stroll</item>
+        <item>Rolling produce</item>
+        <item>Petal shake</item>
+        <item>Midnight snack</item>
+        <item>Shiny sticker</item>
+        <item>Magic word</item>
+        <item>Nap time</item>
+        <item>Birthday cake</item>
+        <item>Bonus stage</item>
+        <item>Seasonal sheets</item>
+        <item>Golden hour</item>
+        <item>Gashapon jackpot</item>
+        <item>Perfect week</item>
+        <item>LCD pet</item>
+        <item>Rainy day</item>
+        <item>Ant parade</item>
+        <item>LCD receipt</item>
+    </string-array>
+    <string-array name="lab_egg_tries">
+        <item>Tap the sun by the title.</item>
+        <item>Press and hold a folded basket for a second.</item>
+        <item>Add apples, lemons or strawberries.</item>
+        <item>Give the phone two quick, firm shakes.</item>
+        <item>Open the list between 11\u00A0pm and 4\u00A0am.</item>
+        <item>Every new item has a 1 in 200 chance.</item>
+        <item>Send “kirakira” from the add bar.</item>
+        <item>Check off every aisle but one, and leave that basket empty.</item>
+        <item>Add a birthday cake, then check it off.</item>
+        <item>Within 6 seconds, tap the first four stamps: 1st, 1st, 2nd, 2nd, 3rd, 4th, 3rd, 4th.</item>
+        <item>Open the list in the two weeks up to a holiday, like Thanksgiving or Halloween.</item>
+        <item>Open the list in the half hour before sunset.</item>
+        <item>A newly drawn sticker has a 1 in 100 chance.</item>
+        <item>Finish four trips in a row with everything checked.</item>
+        <item>Press and hold the little green counter before the list is done.</item>
+        <item>Turn on Weather surprises on a rainy day.</item>
+        <item>Open the list with three picnic things on it, like strawberries, chips and lemonade.</item>
+        <item>Press and hold the little green counter once the list is done.</item>
+    </string-array>
+
+    <!-- My pantry (§6.13) -->
+    <string name="pantry_title">My pantry</string>
+    <string name="pantry_subtitle">things you keep at home · recipes leave them out</string>
+    <string name="pantry_add_label">Add to pantry:</string>
+    <string name="pantry_add_hint">flour, salt, spices…</string>
+    <string name="pantry_add_action">Add to pantry</string>
+    <string name="pantry_text_label">Pantry as text:</string>
+    <string name="pantry_text_hint">One thing per line</string>
+    <string name="pantry_empty">Nothing on the shelves yet. Write what you always keep at home, and recipes will leave it out.</string>
+    <string name="pantry_limit">Recipes check the first 200</string>
+    <string name="pantry_sticker">%1$s, in your pantry</string>
+    <string name="pantry_take_off">Take off the shelf</string>
+    <string name="pantry_change">Change sticker</string>
+    <string name="pantry_change_title">A sticker for %1$s</string>
+    <string name="pantry_suggest">Add %1$s to your pantry</string>
+    <string name="pantry_already">%1$s is already in your pantry</string>
+    <string name="pantry_took_off">%1$s is off your pantry shelf</string>
+    <string name="screens_undo">Undo</string>
+    <string name="screens_save_failed">Couldn’t save. Try again.</string>
+
+    <!-- Sticker album (§6.10, §4.25) and the filed trip book (§6.6, read-only) -->
+    <string name="album_title">Sticker album</string>
+    <string name="album_subtitle">★ %1$d of %2$d collected · %3$d holo</string>
+    <string name="album_subtitle_no_holo">★ %1$d of %2$d collected</string>
+    <string name="album_lcd_label">%1$d of %2$d stickers collected</string>
+    <string name="album_tab_groceries">Groceries</string>
+    <string name="album_tab_picnic">Picnic</string>
+    <string name="album_tab_seasonal">Seasonal</string>
+    <string name="album_drawn_for_you">Drawn for you</string>
+    <string name="album_picnic_sheet">Picnic sheet</string>
+    <string name="album_sakura_sheet">Sakura sheet</string>
+    <string name="album_pocket_empty">Not collected yet</string>
+    <string name="album_pocket">%1$s, collected, rarity %2$d of 3</string>
+    <string name="album_pocket_holo">%1$s, collected, holo, rarity %2$d of 3</string>
+    <string name="album_pocket_lift">Lift the sticker</string>
+    <string name="album_books_title">Trip sticker books</string>
+    <plurals name="album_books_jump">
+        <item quantity="one">%1$d trip sticker book</item>
+        <item quantity="other">%1$d trip sticker books</item>
+    </plurals>
+    <plurals name="album_book_count">
+        <item quantity="one">%1$d of %2$d sticker</item>
+        <item quantity="other">%1$d of %2$d stickers</item>
+    </plurals>
+    <string name="album_book_perfect">perfect</string>
+    <string name="album_book_receipt">receipt</string>
+    <string name="album_book_open">Open trip book</string>
+    <string name="album_perfect_title">Perfect weeks</string>
+    <string name="album_perfect_week">week %1$d of 4</string>
+    <string name="album_perfect_unlocked">sakura sheet unlocked</string>
+    <string name="album_perfect_stamp_done">Week %1$d: stamped</string>
+    <string name="album_perfect_stamp_not_yet">Week %1$d: not yet</string>
+    <string name="album_season_next">next! · %1$s %2$s</string>
+    <string name="album_season_locked">%1$s, not collected yet</string>
+    <string name="album_back_pocket">Back pocket</string>
+    <string name="album_back_pocket_sheet">sticker sheet 2 of 2</string>
+    <string name="album_empty_title">Nothing collected yet</string>
+    <string name="album_empty_body">Check something off to collect your first sticker.</string>
+    <plurals name="book_sheet_stickers_of">
+        <item quantity="one">%1$d of %2$d sticker</item>
+        <item quantity="other">%1$d of %2$d stickers</item>
+    </plurals>
+    <plurals name="book_sheet_aisles_of">
+        <item quantity="one">%1$d of %2$d aisle stamped</item>
+        <item quantity="other">%1$d of %2$d aisles stamped</item>
+    </plurals>
+    <string name="book_sheet_stamped">%1$s: stamped</string>
+    <string name="book_sheet_not_yet">%1$s: not yet</string>
+    <string name="book_sheet_stickers">Stickers</string>
+    <string name="book_sheet_receipt">Receipt</string>
+    <!-- The receipt slip (§13.2): TalkBack reads it as one sentence; a tap shows it full size. -->
+    <string name="book_receipt_spoken">Trip receipt: %1$s</string>
+    <plurals name="book_receipt_stickers">
+        <item quantity="one">%1$d sticker</item>
+        <item quantity="other">%1$d stickers</item>
+    </plurals>
+    <plurals name="book_receipt_baskets">
+        <item quantity="one">%1$d basket</item>
+        <item quantity="other">%1$d baskets</item>
+    </plurals>
+    <string name="book_receipt_shiny">%1$d shiny</string>
+    <string name="book_receipt_show">show it full size</string>
+    <string name="book_receipt_close">Close the receipt</string>
 </resources>

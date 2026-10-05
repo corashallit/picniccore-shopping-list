@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "currentListId": "done",
+  "lists": [{
+    "id": "done", "title": "Done list", "createdAt": 1759330000000,
+    "items": [
+      {"id": "x", "name": "Eggs", "aisleId": "dairy-eggs", "icon": "eggs", "checked": true, "addedAt": 1759330500000},
+      {"id": "y", "name": "Butter", "aisleId": "dairy-eggs", "icon": "butter", "checked": true, "addedAt": 1759330400000}
+    ]
+  }, {
+    "id": "empty", "title": "Empty", "createdAt": 1759330000000, "items": []
+  }],
+  "store": {"aislesText": "Produce\nDairy & eggs"}
+}

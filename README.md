@@ -1,6 +1,28 @@
-# Picnic List
+# Kirakira Basket
 
-A picniccore grocery list for Android, styled after early-90s magical-girl anime.
+A picniccore grocery list for Android, styled after early-90s magical-girl anime. (It was called "Picnic List" until the art pass; the repository, the applicationId `earth.cora.picnic` and the APK file names keep the old name.)
+
+## Screenshots
+
+<p align="center">
+  <a href="fastlane/metadata/android/en-US/images/featureGraphic.png"><img src="fastlane/metadata/android/en-US/images/featureGraphic.png" alt="Kirakira Basket: your grocery list, as a sticker book" width="100%"></a>
+</p>
+
+<p align="center">
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/01_list.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01_list.png" alt="Your list, sorted aisle by aisle" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/02_snap.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02_snap.png" alt="Write it, snap it, or say it out loud" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/03_recipe.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03_recipe.png" alt="Turn a recipe into a shopping list" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/04_pantry.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/04_pantry.png" alt="Recipes leave out what’s in your pantry" width="24%"></a>
+</p>
+
+<p align="center">
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/05_celebration.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/05_celebration.png" alt="Every finished list gets a celebration" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/06_album.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/06_album.png" alt="Collect 200+ stickers in your album" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/07_glow.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/07_glow.png" alt="Glow-in-the-dark night theme" width="24%"></a>
+  <a href="fastlane/metadata/android/en-US/images/phoneScreenshots/08_surprises.png"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/08_surprises.png" alt="18 little surprises hidden in the app" width="24%"></a>
+</p>
+
+The store images are drawn from the app's own screenshot tests, fonts and sticker art by [`design/store/make_store_images.py`](design/store/README.md), in the layout Google Play's publishing tools expect ([`fastlane/metadata/android/en-US`](fastlane/metadata/android/en-US)).
 
 ## What it does
 
@@ -12,7 +34,7 @@ A picniccore grocery list for Android, styled after early-90s magical-girl anime
 
 ## Status
 
-Early work in progress. The visual direction is being chosen from three candidates; see [`design/concepts`](design/concepts/README.md).
+Work in progress. The visual direction is chosen: direction C, the "Furoku Sticker Album". [docs/DESIGN_STICKER.md](docs/DESIGN_STICKER.md) is its build spec (design, acceptance checklist, work packages); [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) is the app's contract, amended for it. The earlier candidates are in [`design/concepts`](design/concepts/README.md).
 
 ## API keys
 

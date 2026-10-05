@@ -1,0 +1,64 @@
+{
+ "id": "resp_pantry_pancakes",
+ "object": "response",
+ "created_at": 1790867868,
+ "status": "completed",
+ "error": null,
+ "incomplete_details": null,
+ "max_output_tokens": 12000,
+ "model": "gpt-5.6-terra",
+ "output": [
+  {
+   "id": "msg_00b5d1627948c6e2016abe799d5ae887d2b3b76c4f705534a1",
+   "type": "message",
+   "status": "completed",
+   "content": [
+    {
+     "type": "output_text",
+     "annotations": [],
+     "text": "{\"items\": [{\"name\": \"All-purpose flour\", \"quantity\": \"2.5 kg\", \"note\": null, \"aisle_id\": \"aisle-2-baking-spices\", \"icon\": \"flour\", \"icon_fit\": \"exact\", \"skip_reason\": \"in_pantry\", \"named\": false, \"pantry_entry\": \"flour\"}, {\"name\": \"White sugar\", \"quantity\": \"2 kg\", \"note\": null, \"aisle_id\": \"aisle-2-baking-spices\", \"icon\": \"sugar\", \"icon_fit\": \"exact\", \"skip_reason\": \"in_pantry\", \"named\": false, \"pantry_entry\": \"sugar\"}, {\"name\": \"Baking powder\", \"quantity\": \"225 g\", \"note\": null, \"aisle_id\": \"aisle-2-baking-spices\", \"icon\": \"baking_soda\", \"icon_fit\": \"exact\", \"skip_reason\": \"in_pantry\", \"named\": false, \"pantry_entry\": \"baking powder\"}, {\"name\": \"Salt\", \"quantity\": \"1 kg\", \"note\": null, \"aisle_id\": \"aisle-2-baking-spices\", \"icon\": \"salt\", \"icon_fit\": \"exact\", \"skip_reason\": \"none\", \"named\": false, \"pantry_entry\": \"\"}, {\"name\": \"Milk\", \"quantity\": \"2 L\", \"note\": null, \"aisle_id\": \"dairy-eggs\", \"icon\": \"milk_carton\", \"icon_fit\": \"exact\", \"skip_reason\": \"none\", \"named\": false, \"pantry_entry\": \"\"}, {\"name\": \"Eggs\", \"quantity\": \"1 dozen\", \"note\": null, \"aisle_id\": \"dairy-eggs\", \"icon\": \"eggs\", \"icon_fit\": \"exact\", \"skip_reason\": \"none\", \"named\": false, \"pantry_entry\": \"\"}, {\"name\": \"Butter\", \"quantity\": \"1 lb\", \"note\": null, \"aisle_id\": \"dairy-eggs\", \"icon\": \"butter\", \"icon_fit\": \"exact\", \"skip_reason\": \"already_on_list\", \"named\": false, \"pantry_entry\": \"\"}, {\"name\": \"Maple syrup\", \"quantity\": \"12 fl oz\", \"note\": null, \"aisle_id\": \"aisle-1-breakfast-coffee-tea\", \"icon\": \"maple_syrup\", \"icon_fit\": \"exact\", \"skip_reason\": \"optional\", \"named\": false, \"pantry_entry\": \"\"}], \"message\": \"Pancakes for 12: milk and eggs to buy; flour, sugar and baking powder are in your pantry.\", \"lines\": [], \"recipe\": {\"title\": \"Pancakes from scratch\", \"recipes_compared\": 3, \"servings\": 12}}"
+    }
+   ],
+   "phase": "final_answer",
+   "role": "assistant"
+  }
+ ],
+ "reasoning": {
+  "context": "all_turns",
+  "effort": "low",
+  "mode": "standard",
+  "summary": null
+ },
+ "service_tier": "default",
+ "store": false,
+ "usage": {
+  "input_tokens": 6483,
+  "input_tokens_details": {
+   "cache_write_tokens": 6112,
+   "cached_tokens": 0
+  },
+  "output_tokens": 249,
+  "output_tokens_details": {
+   "reasoning_tokens": 0
+  },
+  "total_tokens": 6732
+ },
+ "tool_usage": {
+  "image_gen": {
+   "input_tokens": 0,
+   "input_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "output_tokens": 0,
+   "output_tokens_details": {
+    "image_tokens": 0,
+    "text_tokens": 0
+   },
+   "total_tokens": 0
+  },
+  "web_search": {
+   "num_requests": 0
+  }
+ }
+}

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Motion, Next card, celebration strings: WP6 (docs/DESIGN_STICKER.md §9, §10, §11, §15, §16). -->
+
+    <!-- The Next card (§10): "NEXT" + the next aisle's tab. -->
+    <string name="motion_next">NEXT</string>
+    <!-- TalkBack (§10, §15): the card is a button. -->
+    <string name="motion_next_spoken">Next: aisle %1$d, %2$s</string>
+    <string name="motion_next_spoken_store">Next: aisle %1$d, %2$s, store aisle %3$d</string>
+    <string name="motion_next_spoken_unsorted">Next: %1$s</string>
+    <string name="motion_next_dismiss">dismiss</string>
+
+    <!-- The aisle-done chain (§8.4): announced at the fold. -->
+    <string name="motion_aisle_done">%1$s done</string>
+
+    <!-- The celebration (§11, §16). -->
+    <string name="motion_list_complete">List complete!</string>
+    <string name="motion_tap_to_skip">tap to skip</string>
+    <string name="motion_perfect">PER-FECT!</string>
+    <string name="motion_bonus_sticker">bonus sticker!</string>
+    <plurals name="motion_banner">
+        <item quantity="one">%1$d sticker · %2$s</item>
+        <item quantity="other">%1$d stickers · %2$s</item>
+    </plurals>
+    <!-- §0.4 Q7: the summary closes by itself behind a washi-tape progress bar; a tap keeps it open. -->
+    <string name="motion_closing">Closing… tap to keep it</string>
+    <string name="motion_done">Done</string>
+    <!-- TalkBack (§11.3): the scene is one node. -->
+    <string name="motion_celebration">Celebration</string>
+    <string name="motion_celebration_close">close</string>
+    <plurals name="motion_list_complete_spoken">
+        <item quantity="one">List complete! %1$d sticker in %2$s. Perfect!</item>
+        <item quantity="other">List complete! %1$d stickers in %2$s. Perfect!</item>
+    </plurals>
+    <plurals name="motion_list_complete_spoken_no_time">
+        <item quantity="one">List complete! %1$d sticker. Perfect!</item>
+        <item quantity="other">List complete! %1$d stickers. Perfect!</item>
+    </plurals>
+    <plurals name="motion_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <plurals name="motion_hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
+</resources>
