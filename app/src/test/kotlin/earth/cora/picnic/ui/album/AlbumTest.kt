@@ -262,6 +262,39 @@ class AlbumTest {
         }
     }
 
+    /**
+     * The seasonal cards at large text (§0.4, §15: wrap, never cut): the sheet's name never breaks inside a word and the
+     * "next!" chip is never cut. At 1.3 the chip used to squeeze "Autumn sheet" into "Au / tu"; it now moves under the name.
+     */
+    @Test
+    fun seasonHeadersWrapNeverCut() {
+        var scale by mutableFloatStateOf(1f)
+        compose.setContent {
+            val base = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(base.density, scale)) {
+                PicnicTheme { AlbumScreen(AlbumSamples.state(AlbumSamples.full, AlbumTab.Seasonal), AlbumActions()) }
+            }
+        }
+        for (s in listOf(1f, 1.3f, 2f)) {
+            scale = s
+            compose.waitForIdle()
+            compose.onNodeWithTag(AlbumTags.LIST).performScrollToKey("season:thanksgiving")
+            compose.waitForIdle()
+            for (text in listOf("Autumn sheet", "Thanksgiving")) {
+                val node = compose.onNodeWithText(text, substring = true, useUnmergedTree = true).fetchSemanticsNode()
+                val results = mutableListOf<TextLayoutResult>()
+                node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+                val r = results.single()
+                assertFalse("\"$text\" is cut at $s", r.isCut())
+                val chars = r.layoutInput.text.text
+                for (line in 0 until r.lineCount - 1) {
+                    val end = r.getLineEnd(line)
+                    assertFalse("\"$text\" breaks inside a word at $s", chars[end - 1].isLetterOrDigit() && chars[end].isLetterOrDigit())
+                }
+            }
+        }
+    }
+
     /** In tiers (font scale 2.0) the keyboard still goes Groceries, Picnic, Seasonal, and Enter picks the focused tab. */
     @Test
     fun tieredTabsKeepTheirKeyboardOrder() {

@@ -112,6 +112,14 @@ fun paperFocusInk(root: PicnicColors, paper: Color?): Color = when {
 }
 
 /**
+ * A family's accent ink on the paper here (§2.4.1): the trace on light paper, the mid on dark paper (Glow's binder, page
+ * and backing), where the traces fall to 1.7-2.8 : 1 and the mids reach 5-10 : 1, as the stamp pictograms do (§4.13).
+ * For a decorative line glyph on a card and a focused field's underline.
+ */
+@Composable
+fun accentInk(family: StickerFamily): Color = if (PicnicTheme.colors.isDark) family.mid else family.trace
+
+/**
  * Runs [content] on [paper] (null: the binder, which re-roots a floating layer such as a menu or a sheet). Always
  * provides the paper and its focus-ring ink; provides the colours, the typography and the default text colour only
  * where they differ from the scope's, so in Day, Dusk and Golden only the paper, the focus ink and the family-pastel

@@ -434,7 +434,8 @@ private fun StickerCell(row: ReviewRow, clock: RevealClock?, onToggleKeep: (Int)
                 aisleIndex = row.aisleIndex,
                 modifier = Modifier
                     .graphicsLayer { scaleX = pop; scaleY = pop }
-                    .then(if (faded) Modifier.skippedSticker() else Modifier),
+                    // On Glow's navy page the faded sticker recedes into a flat lavender-grey cut-out (§4.17).
+                    .then(if (faded) Modifier.skippedSticker(recede = if (c.isDark) c.disabledFace else null) else Modifier),
             )
             if (row.canKeep) {
                 KeepSpot(

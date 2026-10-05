@@ -24,7 +24,8 @@ import org.robolectric.annotation.GraphicsMode
  * `album_tripbooks`, `album_early`, `album_full`, `album_holo_glint`, `album_face_blink`, `album_back_pocket`,
  * `album_empty`, and three states Appendix C does not name yet, `album_tripbook_open` (a filed book opened read-only at
  * its receipt, §6.6), `album_receipt_full` (that receipt full size, §13.2) and `album_pocket_lift` (§4.25); Day only:
- * `album_fs130`, `album_fs200`, `album_fs200_seasonal` (the tabs in two tiers, a front-tier tab selected).
+ * `album_fs130`, `album_fs200`, `album_fs200_seasonal` (the tabs in two tiers, a front-tier tab selected); Glow:
+ * `album_fs200_glow` (the tiers on the navy binder).
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -127,9 +128,10 @@ class AlbumGoldensTest(private val variant: ThemeVariant, @Suppress("unused") pr
         if (day) record("album_fs130", AlbumSamples.mockup, exact = true, fontScale = 1.3f)
     }
 
+    /** The tabs in tiers at 2.0 with the back-tier "Groceries" selected; in Glow too, on the navy binder. */
     @Test
     fun fontScale200() {
-        if (day) record("album_fs200", AlbumSamples.mockup, exact = true, fontScale = 2f)
+        record(if (day) "album_fs200" else "album_fs200_glow", AlbumSamples.mockup, exact = true, fontScale = 2f)
     }
 
     /** The tabs in tiers at 2.0 with a front-tier tab selected: "Seasonal" opens into the page, "Groceries" stands behind. */

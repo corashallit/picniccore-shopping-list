@@ -85,7 +85,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -93,6 +92,7 @@ import earth.cora.picnic.R
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.ui.common.MagicAppearBox
 import earth.cora.picnic.ui.common.highlighterPress
+import earth.cora.picnic.ui.theme.CHIP_LABEL_LINES
 import earth.cora.picnic.ui.theme.ChipFace
 import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.Families
@@ -112,6 +112,7 @@ import earth.cora.picnic.ui.theme.Stepped
 import earth.cora.picnic.ui.theme.StickerFamily
 import earth.cora.picnic.ui.theme.Twinkle
 import earth.cora.picnic.ui.theme.WashiTape
+import earth.cora.picnic.ui.theme.WholeLabel
 import earth.cora.picnic.ui.theme.drawArt
 import earth.cora.picnic.ui.theme.drawDashedCircle
 import earth.cora.picnic.ui.theme.drawGlint
@@ -349,9 +350,12 @@ private fun TabTiers(
     modifier: Modifier = Modifier,
 ) {
     val tabs = AlbumTab.entries
+    // Where a selected back tab opens into the page: the stretches of its foot that no front-tier face stands on (px
+    // from the body's left edge), worked out at layout and read when the body draws.
+    var openings by remember { mutableStateOf<List<List<IntRange>>>(emptyList()) }
     Layout(
         content = {
-            tabs.forEach { t -> TabBody(AlbumInk.family(t), t == selected) }
+            tabs.forEach { t -> TabBody(AlbumInk.family(t), t == selected, openings = openings.getOrNull(t.ordinal).orEmpty()) }
             tabs.forEach { t -> AlbumTabFace(labels.getValue(t), t, t == selected, fit, keys = keys) { onSelect(t) } }
         },
         modifier = modifier.selectableGroup(),
@@ -376,12 +380,29 @@ private fun TabTiers(
         }
         val front = tiers.last()
         // A back tab's body: from its face's foot (an unselected face stops TAB_JOIN above its target's bottom) to the
-        // page's edge, TAB_JOIN above the tiers' bottom. Selected, it stops there too: over the page's white edge it
-        // would run on under the front tabs, which stand on that edge.
+        // page's edge, TAB_JOIN above the tiers' bottom. Selected, it runs TAB_JOIN further, over the page's white edge,
+        // as the selected tab on a row does, but only where no front tab stands on that edge (between them and past
+        // them); under a front tab the edge stays white.
+        val opens = List(n) { k ->
+            if (k in front || tabs[k] != selected) return@List emptyList()
+            var free = listOf(0 until faces[k].width)
+            for (f in front) {
+                val l = x[f] - x[k]
+                val r = l + faces[f].width
+                free = free.flatMap { span ->
+                    listOfNotNull(
+                        (span.first until minOf(span.last + 1, l)).takeUnless { it.isEmpty() },
+                        (maxOf(span.first, r) until span.last + 1).takeUnless { it.isEmpty() },
+                    )
+                }
+            }
+            free
+        }
+        if (opens != openings) openings = opens
         val bodies = List(n) { k ->
             if (k in front) return@List null
             val from = y[k] + faces[k].height - join
-            val to = height - join
+            val to = height - if (tabs[k] == selected) 0 else join
             measurables[k].measure(Constraints.fixed(faces[k].width, (to - from).coerceAtLeast(0))) to from
         }
         layout(constraints.maxWidth, height) {
@@ -391,17 +412,30 @@ private fun TabTiers(
     }
 }
 
-/** A back-tier tab's body under the tier in front (see [TabTiers]): its colour between white kiss-cut sides, its hard shadow on the right. */
+/**
+ * A back-tier tab's body under the tier in front (see [TabTiers]): its colour between white kiss-cut sides, its hard
+ * shadow on the right. Selected ([on]), its last [TAB_JOIN] lies over the page's white edge and is drawn only in its
+ * [openings] (px from its left edge), where it opens into the page; no shadow falls there.
+ */
 @Composable
-private fun TabBody(family: StickerFamily, on: Boolean) {
+private fun TabBody(family: StickerFamily, on: Boolean, openings: List<IntRange> = emptyList()) {
     val white = PicnicTheme.colors.stickerWhite
     val shadows = PicnicTheme.shadows
     Spacer(
         Modifier.drawBehind {
             val border = TAB_BORDER.toPx()
-            drawRect(shadows.color, topLeft = Offset(shadows.hs.x.toPx(), 0f), size = size)
-            drawRect(white, size = size)
-            drawRect(if (on) family.mid else family.pastel, topLeft = Offset(border, 0f), size = Size(size.width - 2 * border, size.height))
+            val fill = if (on) family.mid else family.pastel
+            val foot = if (on) TAB_JOIN.roundToPx().toFloat() else 0f
+            val body = size.height - foot
+            fun piece(top: Float, bottom: Float) {
+                drawRect(white, topLeft = Offset(0f, top), size = Size(size.width, bottom - top))
+                drawRect(fill, topLeft = Offset(border, top), size = Size(size.width - 2 * border, bottom - top))
+            }
+            clipRect(bottom = body) {
+                drawRect(shadows.color, topLeft = Offset(shadows.hs.x.toPx(), 0f), size = Size(size.width, body))
+                piece(0f, body)
+            }
+            for (o in openings) clipRect(left = o.first.toFloat(), top = body, right = (o.last + 1).toFloat()) { piece(body, size.height) }
         },
     )
 }
@@ -1055,36 +1089,54 @@ internal fun SeasonCard(card: SeasonCardUi, nextLabel: String?, modifier: Modifi
     Box(modifier.fillMaxWidth().padding(top = 10.dp)) {
         PicnicSurface(Modifier.fillMaxWidth(), color = c.backing) {
             Column(Modifier.fillMaxWidth().padding(start = 14.dp, end = 12.dp, top = 16.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        card.sheet.name,
-                        style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint),
-                        modifier = Modifier.weight(1f, fill = false).semantics { heading() },
-                        maxLines = 2,
-                    )
-                    if (nextLabel != null) {
-                        ChipFace(fill = Families.lemon.mid, height = 30.dp, horizontal = 10.dp) {
-                            Text(nextLabel, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
+                SeasonHeader(card.sheet.name, nextLabel)
+                // Three across, each name on one line under its sticker in an 88 dp column; when a name is wider than
+                // that (large text), one sticker per row with its name beside it, wrapping, never cut (§0.4, §15).
+                val caption = PicnicTheme.type.caption
+                val measurer = rememberTextMeasurer()
+                val density = LocalDensity.current
+                val stacked = remember(card.sheet.stickers, caption, density) {
+                    val column = with(density) { SEASON_LABEL_WIDTH.roundToPx() }
+                    card.sheet.stickers.any { s -> measurer.measure(s.label, caption, maxLines = 1, softWrap = false).size.width > column }
+                }
+                if (stacked) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        card.sheet.stickers.forEach { s ->
+                            val desc = if (card.unlocked) s.label else stringResource(R.string.album_season_locked, s.label)
+                            Row(
+                                Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = desc },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Box(Modifier.alpha(if (card.unlocked) 1f else 0.55f)) { SheetStickerArt(s, 40.dp) }
+                                Text(
+                                    s.label,
+                                    style = caption.copy(color = c.ballpoint),
+                                    softWrap = true,
+                                    modifier = Modifier.weight(1f).alpha(if (card.unlocked) 1f else 0.7f).clearAndSetSemantics { },
+                                )
+                            }
                         }
                     }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    card.sheet.stickers.forEach { s ->
-                        val desc = if (card.unlocked) s.label else stringResource(R.string.album_season_locked, s.label)
-                        Column(
-                            Modifier.width(88.dp).semantics(mergeDescendants = true) { contentDescription = desc },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Box(Modifier.alpha(if (card.unlocked) 1f else 0.55f)) { SheetStickerArt(s, 40.dp) }
-                            Text(
-                                s.label,
-                                style = PicnicTheme.type.caption.copy(color = c.ballpoint),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.alpha(if (card.unlocked) 1f else 0.7f).clearAndSetSemantics { },
-                            )
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        card.sheet.stickers.forEach { s ->
+                            val desc = if (card.unlocked) s.label else stringResource(R.string.album_season_locked, s.label)
+                            Column(
+                                Modifier.width(SEASON_LABEL_WIDTH).semantics(mergeDescendants = true) { contentDescription = desc },
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Box(Modifier.alpha(if (card.unlocked) 1f else 0.55f)) { SheetStickerArt(s, 40.dp) }
+                                Text(
+                                    s.label,
+                                    style = caption.copy(color = c.ballpoint),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.alpha(if (card.unlocked) 1f else 0.7f).clearAndSetSemantics { },
+                                )
+                            }
                         }
                     }
                 }
@@ -1094,6 +1146,58 @@ internal fun SeasonCard(card: SeasonCardUi, nextLabel: String?, modifier: Modifi
         WashiTape(card.sheet.tape, Modifier.align(Alignment.TopEnd).offset(x = (-30).dp, y = (-10).dp), length = 92.dp, height = 18.dp, rotation = -3f)
     }
 }
+
+/**
+ * A seasonal card's sheet name and, for the upcoming sheet, the lemon "next! · Thanksgiving Oct 12" chip beside it. The
+ * name keeps the room the chip leaves; when a word of it would not fit there, or it would take more than two lines (large
+ * text), the chip moves under the name instead, so the name is never broken inside a word or cut (§0.4, §15). The chip's
+ * label wraps onto two lines when even the card's width is too narrow for it.
+ */
+@Composable
+private fun SeasonHeader(name: String, nextLabel: String?) {
+    val c = PicnicTheme.colors
+    val style = PicnicTheme.type.smallTitle.copy(color = c.ballpoint)
+    val measurer = rememberTextMeasurer()
+    Layout(
+        content = {
+            Text(name, style = style, modifier = Modifier.semantics { heading() })
+            if (nextLabel != null) {
+                ChipFace(fill = Families.lemon.mid, height = 30.dp, horizontal = 10.dp) {
+                    WholeLabel(nextLabel, PicnicTheme.type.label.copy(color = c.ballpoint), CHIP_LABEL_LINES)
+                }
+            }
+        },
+    ) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val chipMeasurable = measurables.getOrNull(1)
+        if (chipMeasurable == null) {
+            val title = measurables[0].measure(constraints.copy(minWidth = 0))
+            return@Layout layout(title.width, title.height) { title.place(0, 0) }
+        }
+        val gap = 8.dp.roundToPx()
+        val chip = chipMeasurable.measure(Constraints(maxWidth = width))
+        val room = width - chip.width - gap
+        val beside = room > 0 && measurables[0].minIntrinsicWidth(Constraints.Infinity) <= room &&
+            measurer.measure(name, style, constraints = Constraints(maxWidth = room)).lineCount <= 2
+        if (beside) {
+            val title = measurables[0].measure(Constraints(maxWidth = room))
+            val height = maxOf(title.height, chip.height)
+            layout(title.width + gap + chip.width, height) {
+                title.place(0, (height - title.height) / 2)
+                chip.place(title.width + gap, (height - chip.height) / 2)
+            }
+        } else {
+            val title = measurables[0].measure(Constraints(maxWidth = width))
+            layout(width, title.height + gap + chip.height) {
+                title.place(0, 0)
+                chip.place(0, title.height + gap)
+            }
+        }
+    }
+}
+
+/** A seasonal sticker's column when the three stand across the card (its name on one line under it). */
+private val SEASON_LABEL_WIDTH: Dp = 88.dp
 
 /** The back pocket's card (tests). */
 const val BACK_POCKET_TAG: String = "album_back_pocket"
