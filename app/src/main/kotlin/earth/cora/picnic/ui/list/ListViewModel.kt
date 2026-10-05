@@ -22,7 +22,11 @@ import earth.cora.picnic.core.model.editItemDetails
 import earth.cora.picnic.core.model.findItem
 import earth.cora.picnic.core.model.iconRef
 import earth.cora.picnic.core.model.list
-import earth.cora.picnic.core.model.moveItemToAisle
+import earth.cora.picnic.core.model.MoveUndo
+import earth.cora.picnic.core.model.aisles
+import earth.cora.picnic.core.model.displayName
+import earth.cora.picnic.core.model.moveItemToAisleWithUndo
+import earth.cora.picnic.core.model.undoMove
 import earth.cora.picnic.core.model.newList
 import earth.cora.picnic.core.model.normalizeName
 import earth.cora.picnic.core.model.renameList
@@ -169,6 +173,15 @@ class ListViewModel(
     /** The inputs of the last state built, so a return to the list can build it again on the current clock. */
     private var lastInputs: Inputs? = null
 
+    /** The next Edit sheet opens at "Move to aisle" (the add note's "Move"; read with [editingId] in [onStates]). */
+    private var moveFirst = false
+
+    /** The first move's fuller note went out this session (before the setting's write comes back). */
+    private var moveNoteGiven = false
+
+    /** The hold hint went out, or she held a row, this session (before the setting's write comes back). */
+    private var holdHintGiven = false
+
     init {
         engine.celebrationSource = {
             val s = seen
@@ -227,7 +240,15 @@ class ListViewModel(
             bookTurn = input.turn,
             perfectWeek = input.eggs.enabled && input.eggs.perfectWeek,
             hankoFor = { item -> input.eggs.hankoFor(item, catalog) },
-        ).copy(nextStopCard = input.settings.nextStopCard, celebration = input.settings.celebration)
+        ).let { built ->
+            built.copy(
+                nextStopCard = input.settings.nextStopCard,
+                celebration = input.settings.celebration,
+                // Her list shows items sorted into aisles and she has never been told she can hold one (§6.1).
+                holdHint = !input.settings.holdHintDone && !holdHintGiven && grouped.sections.any { it.kind == SectionKind.AISLE },
+                editing = built.editing?.copy(focusMove = moveFirst),
+            )
+        }
         val prev = seen
         seen = Seen(list.id, app, list, grouped)
         engine.listId = list.id
@@ -697,11 +718,18 @@ class ListViewModel(
         }
     }
 
+    /**
+     * A held row (or its TalkBack "Edit"): the Edit sheet. She knows how to hold a row now, so the hold hint (§6.1) is
+     * done for good.
+     */
     fun openEdit(itemId: String) {
+        moveFirst = false
         editingId.value = itemId
+        if (!holdHintGiven && !_surprises.value.holdHintDone) holdHintShown()
     }
 
     fun closeEdit() {
+        moveFirst = false
         editingId.value = null
     }
 
@@ -725,10 +753,60 @@ class ListViewModel(
         }
     }
 
-    /** "Move to aisle" (null = Unsorted): also teaches the app where this item lives (a learned correction). */
+    /**
+     * "Move to aisle" (null = Unsorted), however she gets there (the Edit sheet, the add note's "Move"): the item moves
+     * and a learned correction says where it goes from now on (core moveItemToAisle). Every move says so with Undo
+     * ([ListEvent.Moved], Cora 5 October): "Toothpaste goes in Produce from now on"; the first move to an aisle ever says
+     * a little more, once ([AppSettings.moveNoteShown]).
+     */
     fun moveToAisle(itemId: String, aisleId: String?) {
         val now = clock()
-        mutate { s -> s.listIdOf(itemId)?.let { s.moveItemToAisle(it, itemId, aisleId, now) } ?: s }
+        appScope.launch {
+            var undo: MoveUndo? = null
+            var after: AppState? = null
+            val ok = save {
+                after = store.update { s ->
+                    val listId = s.listIdOf(itemId) ?: return@update s
+                    val (moved, u) = s.moveItemToAisleWithUndo(listId, itemId, aisleId, now)
+                    undo = u
+                    moved
+                }
+            }
+            val u = undo ?: return@launch
+            val state = after ?: return@launch
+            if (!ok) return@launch
+            val name = state.findItem(itemId)?.name ?: return@launch
+            val aisleName = aisleId?.let { id -> state.store.aisles().firstOrNull { it.id == id }?.displayName() }
+            // The fuller note is about where the item goes from now on: only a move to an aisle earns it.
+            val first = aisleName != null && !moveNoteGiven && !_surprises.value.moveNoteShown
+            if (first) {
+                moveNoteGiven = true
+                runCatching { settings.markMoveNoteShown() }
+            }
+            _events.send(ListEvent.Moved(itemId, name, aisleName, first) { undoMove(u) })
+        }
+    }
+
+    /** A move's Undo: the old aisle and the previous correction come back (core undoMove). */
+    fun undoMove(undo: MoveUndo) {
+        val now = clock()
+        mutate { it.undoMove(undo, now) }
+    }
+
+    /**
+     * The add note's "Move" (§6.2): the Edit sheet for [itemId], opened at "Move to aisle". Unlike a held row it says
+     * nothing about holding, so the hold hint stays due.
+     */
+    fun openMove(itemId: String) {
+        moveFirst = true
+        editingId.value = itemId
+    }
+
+    /** The hold hint was shown (§6.1): it never comes back. */
+    fun holdHintShown() {
+        holdHintGiven = true
+        lastInputs?.let(::onStates)
+        appScope.launch { runCatching { settings.markHoldHintDone() } }
     }
 
     /** "Change icon": a learned icon override; the bespoke icon cached for the name is forgotten. */

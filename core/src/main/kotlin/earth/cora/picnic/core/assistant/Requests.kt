@@ -5,6 +5,7 @@ import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.llm.ResponsesModel
 import earth.cora.picnic.core.llm.WebSearchSpec
 import earth.cora.picnic.core.model.Aisle
+import earth.cora.picnic.core.model.Aisles
 import earth.cora.picnic.core.model.BasketKind
 import earth.cora.picnic.core.model.Correction
 import earth.cora.picnic.core.model.UNSORTED_WIRE_ID
@@ -212,8 +213,10 @@ internal object Prompts {
 
     /**
      * The per-request developer message (research/openai/examples/context_example.txt): aisles in
-     * walking order, learned corrections, and (for ingest) the names already on the list and the pantry
-     * ("In the pantry (she keeps these at home): …", "nothing yet" when empty, §6.2 rule 8).
+     * walking order, each with its "Also here" note when it has one ("- produce: Produce (also here: toothpaste)",
+     * Cora, 5 October; an aisle without one reads exactly as before), learned corrections, and (for ingest) the names
+     * already on the list and the pantry ("In the pantry (she keeps these at home): …", "nothing yet" when empty, §6.2
+     * rule 8). Ingest and recategorize (so AisleSync too) both send it.
      */
     fun contextBlock(
         aisles: List<Aisle>,
@@ -223,7 +226,11 @@ internal object Prompts {
         pantry: List<String>? = null,
     ): String = buildString {
         append("Store aisles in walking order (id: name):\n")
-        aisles.forEach { append("- ").append(it.id).append(": ").append(oneLine(it.name, 120)).append('\n') }
+        aisles.forEach { aisle ->
+            append("- ").append(aisle.id).append(": ").append(oneLine(aisle.name, 120))
+            aisle.note?.let { oneLine(it, Aisles.NOTE_MAX) }?.takeIf { it.isNotEmpty() }?.let { append(" (also here: ").append(it).append(')') }
+            append('\n')
+        }
         append("- ").append(UNSORTED_WIRE_ID).append(": (no matching aisle)\n")
         append("\nLearned corrections (item -> aisle id):\n")
         if (corrections.isEmpty()) append("- none\n")
@@ -249,7 +256,10 @@ internal object Prompts {
     fun itemsBlock(names: List<String>): String =
         "Items:\n" + names.mapIndexed { i, name -> "${wireId(i)}: ${oneLine(name, 120)}" }.joinToString("\n")
 
-    /** "Aisles:\n- produce: Produce\n…" */
+    /**
+     * "Aisles:\n- produce: Produce\n…", for the baskets call. Names only: a basket suits the aisle's main goods, and an
+     * "Also here" note lists exceptions, so a note about toothpaste never turns Produce's hamper into a tote.
+     */
     fun aislesBlock(aisles: List<Aisle>): String =
         "Aisles:\n" + aisles.joinToString("\n") { "- ${it.id}: ${oneLine(it.name, 120)}" }
 

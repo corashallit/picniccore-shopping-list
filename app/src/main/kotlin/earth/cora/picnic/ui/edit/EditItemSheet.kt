@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
@@ -29,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -277,24 +280,36 @@ internal fun EditDetails(
         }
 
         SectionDivider()
-        SubTitle(stringResource(R.string.edit_aisle))
-        Text(stringResource(R.string.edit_aisle_hint), style = t.caption.copy(color = c.inkSoft))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            AisleChip(
-                number = null,
-                name = stringResource(R.string.edit_everything_else),
-                look = AisleLooks.everythingElse,
-                selected = current == null,
-                onClick = { if (current != null) onMoveToAisle(null) },
-            )
-            state.aisles.forEach { aisle ->
+        // Opened from the add note's "Move" (§6.2), the sheet scrolls "Move to aisle" to its top once it is laid out (a
+        // rect running far below the heading brings its top edge, not its bottom, into place), so the chips stand clear of
+        // the note a move shows above the footer.
+        val moveSection = remember { BringIntoViewRequester() }
+        if (state.focusMove) {
+            LaunchedEffect(state.item.id) {
+                withFrameNanos { }
+                moveSection.bringIntoView(androidx.compose.ui.geometry.Rect(0f, 0f, 1f, MOVE_REACH))
+            }
+        }
+        Column(Modifier.bringIntoViewRequester(moveSection), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            SubTitle(stringResource(R.string.edit_aisle))
+            Text(stringResource(R.string.edit_aisle_hint), style = t.caption.copy(color = c.inkSoft))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 AisleChip(
-                    number = aisle.position,
-                    name = aisle.displayName(),
-                    look = AisleLooks.of(aisle.position, aisleStyles[aisle.id]),
-                    selected = aisle.id == current,
-                    onClick = { if (aisle.id != current) onMoveToAisle(aisle.id) },
+                    number = null,
+                    name = stringResource(R.string.edit_everything_else),
+                    look = AisleLooks.everythingElse,
+                    selected = current == null,
+                    onClick = { if (current != null) onMoveToAisle(null) },
                 )
+                state.aisles.forEach { aisle ->
+                    AisleChip(
+                        number = aisle.position,
+                        name = aisle.displayName(),
+                        look = AisleLooks.of(aisle.position, aisleStyles[aisle.id]),
+                        selected = aisle.id == current,
+                        onClick = { if (aisle.id != current) onMoveToAisle(aisle.id) },
+                    )
+                }
             }
         }
 
@@ -409,6 +424,9 @@ private const val LARGE_TEXT = 1.5f
 
 /** From this font scale Amount and Note stand one under the other (side by side, Note's hint would be cut at 1.3). */
 private const val FIELDS_STACK = 1.15f
+
+/** How far below "Move to aisle" the rect it brings into view runs (px): taller than any sheet, so its top leads. */
+private const val MOVE_REACH = 100_000f
 
 /** Stickers shown for an item with no category yet (it still shows the capsule): the first ones of the catalog. */
 internal const val MIN_GRID = 15

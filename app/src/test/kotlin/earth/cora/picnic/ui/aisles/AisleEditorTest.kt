@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -111,6 +112,35 @@ class AisleEditorTest {
 
     private fun waitFor(store: InMemoryStateStore, condition: (AppState) -> Boolean) =
         compose.waitUntil(5_000) { condition(store.now()) }
+
+    /**
+     * "Also here" (Cora, 5 October; §6.7): the label's field writes the note at the end of the aisle's line and nothing
+     * else changes (no id, no item); the label shows it on a quiet line and TalkBack hears it; with items on her lists a
+     * light note offers "Re-sort".
+     */
+    @Test
+    fun alsoHereNoteFromTheLabel() {
+        val store = launch()
+        val before = store.now()
+        compose.onNodeWithContentDescription("Edit Produce").performClick()
+        compose.onNodeWithContentDescription("Also here").performScrollTo().performTextReplacement("toothpaste, floss")
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithContentDescription("Also here").performImeAction()
+        repeat(20) { frame() }
+        compose.mainClock.advanceTimeBy(400)
+        compose.onNodeWithText("New items follow this note. Re-sort to use it on what is already on your list.", substring = true).assertExists()
+        compose.onNodeWithText("Re-sort", useUnmergedTree = true).assertExists()
+        compose.mainClock.autoAdvance = true
+        val after = store.now()
+        assertEquals("Produce (also: toothpaste, floss)", after.store.aislesText.lines().first())
+        assertEquals(before.store.aisles().map { it.id }, after.store.aisles().map { it.id })
+        assertEquals("no item moved", before.lists, after.lists)
+        compose.onNodeWithContentDescription("Done editing Produce").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("also here: toothpaste, floss", useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Produce, aisle 1, also here: toothpaste, floss").assertExists()
+        compose.onNodeWithContentDescription("Aisles as text:").assertTextContains("Produce (also: toothpaste, floss)", substring = true)
+    }
 
     @Test
     fun colourOverridePersists() {

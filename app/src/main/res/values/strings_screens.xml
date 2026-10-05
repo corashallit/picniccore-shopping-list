@@ -62,7 +62,7 @@
     <string name="aisles_store_label">Store:</string>
     <string name="aisles_store_hint">your store’s name</string>
     <string name="aisles_text_label">Aisles as text:</string>
-    <string name="aisles_text_hint">One aisle per line, in the order you walk through the store. Lines starting with # are notes.</string>
+    <string name="aisles_text_hint">One aisle per line, in the order you walk through the store. Add “(also: toothpaste, floss)” after an aisle for things this store keeps there. Lines starting with # are left out.</string>
     <string name="aisles_store_aisle">store aisle %1$d</string>
     <string name="aisles_store_aisle_field">Store aisle</string>
     <string name="aisles_label">%1$s, aisle %2$d</string>
@@ -70,6 +70,15 @@
     <string name="aisles_edit">Edit %1$s</string>
     <string name="aisles_edit_done">Done editing %1$s</string>
     <string name="aisles_name_field">Aisle name</string>
+    <!-- "Also here" (Cora, 5 October; §6.7, §4.26): what this store keeps in an aisle where you would not look for it. Only
+         My store shows it; the sorting reads it. -->
+    <string name="aisles_note_field">Also here</string>
+    <string name="aisles_note_placeholder">toothpaste, floss…</string>
+    <string name="aisles_note_hint">Things this store keeps in this aisle, up to %1$d characters.</string>
+    <string name="aisles_note_line">also here: %1$s</string>
+    <string name="aisles_label_note">%1$s, also here: %2$s</string>
+    <string name="aisles_note_saved">New items follow this note. Re-sort to use it on what is already on your list.</string>
+    <string name="aisles_note_resort">Re-sort</string>
     <string name="aisles_move_up">Move up</string>
     <string name="aisles_move_down">Move down</string>
     <string name="aisles_colour">Colour</string>

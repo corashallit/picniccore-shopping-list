@@ -92,6 +92,11 @@ data class ListUiState(
      * washi (§4.14) shows it on an empty list too.
      */
     val season: Season? = null,
+    /**
+     * The one-time hold hint is due (Cora, 5 October; §6.1): the list shows items sorted into aisles and the note
+     * "Hold an item to edit it or move it to another aisle" has never been shown (nor has she held a row).
+     */
+    val holdHint: Boolean = false,
 ) {
     val checked: Int get() = total - remaining
 
@@ -267,6 +272,8 @@ data class EditItemUi(
     val icon: IconRef = item.iconRef(),
     /** The icon is being decided or drawn. */
     val drawing: Boolean = false,
+    /** Opened from the add note's "Move" (§6.2): the sheet opens scrolled to "Move to aisle". */
+    val focusMove: Boolean = false,
 ) {
     /** The aisle the item is listed under (null = Unsorted; vanished ids count as Unsorted). */
     val currentAisleId: String? get() = item.aisleId?.takeIf { id -> aisles.any { it.id == id } }
@@ -298,6 +305,21 @@ sealed interface ListEvent {
 
     /** Pull to refresh finished (§6.1): what changed; nothing shows when nothing did. */
     data class Refreshed(val sorted: Int, val left: Int, val drawn: Int) : ListEvent
+
+    /**
+     * An item was moved to another aisle (Cora, 5 October; §6.3): "Toothpaste goes in Produce from now on" with Undo
+     * ([undo] puts the old aisle and the previous correction back). [aisleName] is the aisle's display name, null for
+     * Everything else ("Toothpaste moved to Everything else"). [firstNote]: the first move ever, which says a little more
+     * once. Each item's notes are a toast kind of their own ([itemId]), so moving one item twice merges into one note
+     * and another item's note waits its turn, each with its own Undo.
+     */
+    data class Moved(
+        val itemId: String,
+        val itemName: String,
+        val aisleName: String?,
+        val firstNote: Boolean,
+        val undo: () -> Unit,
+    ) : ListEvent
 
     data class Message(val text: String) : ListEvent
 }

@@ -178,6 +178,7 @@ import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.WashiPattern
 import earth.cora.picnic.ui.theme.holdOnFrameClock
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -211,6 +212,8 @@ class ListActions(
     val onCloseEdit: () -> Unit = {},
     val onSaveEdit: (name: String, quantity: String?, note: String?) -> Unit = { _, _, _ -> },
     val onMoveToAisle: (itemId: String, aisleId: String?) -> Unit = { _, _ -> },
+    /** The add note's "Move" (§6.2): the Edit sheet for the item, opened at "Move to aisle". */
+    val onOpenMove: (itemId: String) -> Unit = onOpenEdit,
     val onSetIcon: (itemId: String, key: String) -> Unit = { _, _ -> },
     val onRedrawIcon: (itemId: String) -> Unit = {},
     val onCloseLists: () -> Unit = {},
@@ -282,6 +285,12 @@ class ListScreenState(
 
     /** Her own fold and unfold taps (FoldFocusEffect). */
     val toggles = FoldToggles()
+
+    /**
+     * The Edit sheet's sticky notes (its pantry notes, and a move's note while the sheet is up). When the sheet closes, a
+     * move's note carries on over the list ([ToastHostState.handOver]), so its Undo is never lost with the sheet (§4.15).
+     */
+    val sheetToasts = ToastHostState()
 
     /** Her last tap that opened a folded strip: its tray scrolls into view once it is laid out (§6.1). */
     internal var openTap by mutableStateOf<OpenTap?>(null)
@@ -432,6 +441,7 @@ fun ListRoute(
     var showLists by rememberSaveable { mutableStateOf(false) }
     val addFlows = rememberAddFlows(addVm)
     val tears = remember(resources) { TearToasts(resources, vm::undoDeletes) }
+    val moves = remember(resources) { MoveToasts(resources) }
     SideEffect {
         vm.strings = ListStrings(
             addedToBook = { resources.getString(R.string.list_book_added_spoken, it) },
@@ -485,8 +495,28 @@ fun ListRoute(
                 is ListEvent.ListDeleted -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_list_deleted, event.title), kind = "list"))
                 is ListEvent.Refreshed -> refreshedToast(resources, event)?.let { toasts.show(it) }
                 is ListEvent.Message -> toasts.show(ToastMessage(event.text, kind = "save"))
+                // Over the Edit sheet while it is up (the list's notes are under it), and over the list once it has
+                // closed; a note still up when the sheet closes carries on over the list (ListScreenContent).
+                is ListEvent.Moved -> (if (vm.state.value.editing != null) screen.sheetToasts else toasts).show(moves.toast(event))
             }
         }
+    }
+    // The one-time hold hint (§6.1, Cora 5 October): the first time her list shows items sorted into aisles, at a quiet
+    // moment (no other note, nothing over the list, no check-off hop, Next card or celebration playing), through the
+    // notes' own channel, so it takes their place, timing, reduced motion and polite announcement, and the eggs keep
+    // clear of it as of any note. Shown once; a held row retires it (onOpenEdit).
+    val hint = stringResource(R.string.list_hint_hold)
+    val hintOk = stringResource(R.string.list_hint_hold_ok)
+    LaunchedEffect(state.holdHint) {
+        if (!state.holdHint) return@LaunchedEffect
+        snapshotFlow {
+            val p = vm.engine.current.value
+            toasts.current == null && toasts.queue.isEmpty() && state.editing == null && !showLists && !screen.menuOpen &&
+                !screen.newTripOpen && !screen.tripBookOpen && !addState.sheetOpen && p.nextCard == null && p.celebration == null &&
+                p.flights.isEmpty()
+        }.first { it }
+        toasts.show(ToastMessage(hint, kind = HINT_KIND, actionLabel = hintOk, undo = false, onAction = {}))
+        vm.holdHintShown()
     }
     AddEventsEffect(
         addFlows,
@@ -500,6 +530,8 @@ fun ListRoute(
             commit.added.firstOrNull()?.let { screen.reveal(it.id) }
             commit.newBook?.let { vm.addStartedNewBook(commit.listId, it) }
         },
+        // "Move" on a one-item note (§6.2): the Edit sheet at "Move to aisle", on the list the item went to.
+        onMove = { item -> vm.openMove(item.id) },
     )
     // The add flows send to the list on screen.
     LaunchedEffect(state.listId) {
@@ -512,7 +544,12 @@ fun ListRoute(
             onDelete = vm::delete,
             onOpenSection = vm::openSection,
             onFoldAll = vm::foldAll,
-            onOpenEdit = vm::openEdit,
+            // A held row: she knows now, so the hold hint goes if it is up (§6.1).
+            onOpenEdit = { id ->
+                vm.openEdit(id)
+                toasts.dismiss(HINT_KIND)
+            },
+            onOpenMove = vm::openMove,
             onStartList = addFlows::focusField,
             onNewTrip = vm::newTrip,
             onRefresh = vm::refresh,
@@ -588,6 +625,77 @@ private const val NUDGE_FLOOR: Long = 6000
 
 /** The refresh notes' toast kind. */
 internal const val SYNC_KIND: String = "sync"
+
+/** The one-time hold hint's toast kind (§6.1). */
+internal const val HINT_KIND: String = "hold-hint"
+
+/**
+ * A move's sticky notes (Cora, 5 October; §4.15, §6.3): "Toothpaste goes in Produce from now on" with Undo, which puts
+ * the old aisle and the previous correction back; the first move to an aisle ever says a little more, once. Each item's
+ * notes are a kind of their own: moving it again during the hold merges into one note that says where it goes now (the
+ * fuller words stay while they apply) and whose Undo takes all those moves back, newest first; another item's note waits
+ * its turn with its own Undo. The list and the Edit sheet share one instance, so a note handed from the sheet to the
+ * list still merges.
+ */
+internal class MoveToasts(private val resources: Resources) {
+    private val moves = HashMap<Long, List<ListEvent.Moved>>()
+
+    fun toast(e: ListEvent.Moved): ToastMessage {
+        val note = note(listOf(e), null)
+        moves[note.id] = listOf(e)
+        return note
+    }
+
+    private fun note(all: List<ListEvent.Moved>, id: Long?): ToastMessage {
+        val last = all.last()
+        val base = ToastMessage(
+            text = moveText(resources, last, first = all.any { it.firstNote }),
+            kind = kindOf(last.itemId),
+            actionLabel = resources.getString(R.string.list_undo),
+            onAction = { all.asReversed().forEach { it.undo() } },
+            merge = ::merge,
+        )
+        return if (id == null) base else base.copy(id = id)
+    }
+
+    private fun merge(current: ToastMessage, incoming: ToastMessage): ToastMessage {
+        val all = moves.remove(current.id).orEmpty() + moves.remove(incoming.id).orEmpty()
+        if (all.isEmpty()) return incoming.copy(id = current.id)
+        moves[current.id] = all
+        return note(all, current.id)
+    }
+
+    companion object {
+        /** Every move note's kind starts with this (the sheet hands these over to the list). */
+        const val KIND_PREFIX: String = "move:"
+
+        fun kindOf(itemId: String): String = KIND_PREFIX + itemId
+    }
+}
+
+/**
+ * A move's words (§16): "Toothpaste goes in Produce from now on"; [first] (the first move to an aisle ever) adds
+ * "Smart sorting puts other kinds of toothpaste there too."; a move to Everything else is "Toothpaste moved to Everything
+ * else" (nothing about from now on: no aisle is learned for it).
+ */
+internal fun moveText(resources: Resources, e: ListEvent.Moved, first: Boolean): String {
+    val aisle = e.aisleName ?: return resources.getString(R.string.list_toast_moved_unsorted, e.itemName)
+    return if (first) {
+        resources.getString(R.string.list_toast_moved_first, e.itemName, aisle, kindWord(e.itemName))
+    } else {
+        resources.getString(R.string.list_toast_moved, e.itemName, aisle)
+    }
+}
+
+/**
+ * The item's kind inside a sentence: the name before any variety after a comma ("Eggs, large" → "eggs"), its first letter
+ * in lower case unless its first word is written with capitals inside it ("McIntosh apples", "PC burgers" stay).
+ */
+internal fun kindWord(name: String): String {
+    val kind = name.substringBefore(',').trim().ifEmpty { name.trim() }
+    val firstWord = kind.substringBefore(' ')
+    return if (firstWord.drop(1).any { it.isUpperCase() }) kind else kind.replaceFirstChar { it.lowercase(java.util.Locale.ROOT) }
+}
 
 /**
  * The refresh's sticky note (§6.1), or null when nothing changed. One refresh says it all on one note: the stickers it
@@ -901,7 +1009,14 @@ private fun EggListScope.ListScreenContent(
                 onSetIcon = { key -> actions.onSetIcon(editing.item.id, key) },
                 onRedraw = { actions.onRedrawIcon(editing.item.id) },
                 onDelete = { actions.onDelete(editing.item.id) },
+                toasts = screen.sheetToasts,
             )
+        }
+        // The Edit sheet closed: a move's note still up (or waiting) carries on over the list with its full hold, so its
+        // Undo is never lost with the sheet (§4.15); the sheet's other notes go with it.
+        val sheetOpen = state.editing != null
+        LaunchedEffect(sheetOpen) {
+            if (!sheetOpen) screen.sheetToasts.handOver(toasts) { it.kind.startsWith(MoveToasts.KIND_PREFIX) }
         }
         if (showLists) {
             ListSwitcherSheet(

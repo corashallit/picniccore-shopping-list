@@ -126,4 +126,36 @@ class AddToastsTest {
         assertEquals(listOf(f.items[5]), both.alreadyThere)
         assertEquals(null, (both + one.copy(id = 3)).aisleTitle)
     }
+
+    /**
+     * "Move" on the add note (Cora, 5 October; §6.2, §4.15): a note that put one item in an aisle offers it as a second
+     * chip before Undo, and it hands that item over; no other note does (several items, Everything else, another list,
+     * as typed), and a merge that makes it several items takes it away.
+     */
+    @Test
+    fun oneSortedItemOffersMove() {
+        val toothpaste = f.items.single { it.id == "i-toothpaste" }
+        val moved = mutableListOf<earth.cora.picnic.core.model.GroceryItem>()
+        val notes = AddToasts(resources, undo = {}, move = { moved += it })
+        val one = AddCommit(1, f.LIST_ID, "Saturday shop", listOf(toothpaste), emptyList(), emptyList(), aisleTitle = "Household")
+        val note = notes.toast(one)
+        assertEquals("Added Toothpaste to Household ♡", note.text)
+        assertEquals("Move", note.secondaryLabel)
+        assertEquals("Undo", note.actionLabel)
+        note.onSecondary!!()
+        assertEquals(listOf(toothpaste), moved)
+
+        fun offers(c: AddCommit) = notes.toast(c).secondaryLabel != null
+        assertEquals(false, offers(one.copy(added = listOf(toothpaste, f.items[0]), aisleTitle = null)))
+        assertEquals(false, offers(one.copy(added = listOf(toothpaste.copy(aisleId = null)), aisleTitle = "")))
+        assertEquals(false, offers(one.copy(otherList = true)))
+        assertEquals(false, offers(one.copy(asTypedNoKey = true)))
+        assertEquals("no Move without a host that can open the sheet", null, AddToasts(resources, undo = {}).toast(one).secondaryLabel)
+
+        val host = ToastHostState()
+        host.show(notes.toast(one))
+        host.show(notes.toast(one.copy(id = 2, added = listOf(f.items[0]), aisleTitle = "Produce")))
+        assertEquals("Added 2 items to Saturday shop ♡", host.current!!.text)
+        assertEquals("two items: no single one to move", null, host.current!!.secondaryLabel)
+    }
 }

@@ -220,10 +220,16 @@ data class PantryEntry(
 data class Aisle(
     /** Stable slug of the normalized name, e.g. "aisle-2-baking-spices". Never starts with '_' and is never "unsorted". */
     val id: String,
-    /** The line as the user typed it (trimmed, bullet removed), e.g. "Aisle 2 - Baking & spices". */
+    /** The line as the user typed it (trimmed, bullet and "Also here" note removed), e.g. "Aisle 2 - Baking & spices". */
     val name: String,
     /** 1-based walking position. Drives the tab's number circle and the aisle colour rotation (D9). */
     val position: Int,
+    /**
+     * "Also here" (Cora, 5 October; §6.7): what this store also keeps in this aisle, "toothpaste, floss", from a trailing
+     * "(also: …)" on its line ([Aisles.parse]); null = none. Never part of [name] or [id], so editing it never moves an
+     * item. Shown only in My store, and sent to the model with the aisle so sorting follows it.
+     */
+    val note: String? = null,
 )
 
 /** Reserved section ids. Aisle slugs can never collide with these (they never start with '_'). */

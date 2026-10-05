@@ -88,6 +88,21 @@ class AddGoldensTest(private val variant: ThemeVariant, private val v: String) {
         }
     }
 
+    /** One item sorted into an aisle (Cora, 5 October; §6.2, §4.15): "Move" before "Undo" on the note. */
+    @Test fun toastAddMove() = record("toast_add_move_$v", settleMillis = 900, stage = true) {
+        val toasts = remember { ToastHostState() }
+        val resources = LocalResources.current
+        LaunchedEffect(Unit) {
+            val toothpaste = AddFixtures.items.single { it.id == "i-toothpaste" }
+            val commit = AddCommit(1, AddFixtures.LIST_ID, "Saturday shop", listOf(toothpaste), emptyList(), emptyList(), aisleTitle = "Household")
+            toasts.show(AddToasts(resources, undo = {}, move = {}).toast(commit))
+        }
+        BarStage(height = 300.dp) {
+            AddBar(AddBarUi(), onTextChange = {}, onSend = {}, onSnap = {}, onChoosePhoto = {}, onSpeak = {}, tape = WashiPattern.Thanksgiving)
+            ToastHost(toasts, bottomInset = 84.dp)
+        }
+    }
+
     // ---- the sheet's tabs (§4.16) ----
 
     @Test fun tabsWrite() = sheet("add_tabs_write_$v", base.copy(sheetOpen = true, mode = AddMode.WRITE))

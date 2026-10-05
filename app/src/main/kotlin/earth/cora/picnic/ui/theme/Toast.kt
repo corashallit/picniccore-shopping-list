@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -80,6 +81,13 @@ data class ToastMessage(
     val id: Long = ToastIds.next(),
     /** A higher reading floor than the toast's 4000 ms (the nudge holds max(6000, readHold), §6.1, §9). */
     val minHoldMs: Long = 0,
+    /**
+     * A second chip before the action (§4.15, Cora 5 October): an offer such as the add note's "Move" (§6.2), never an
+     * Undo. Tapping it runs [onSecondary] and the note leaves, as the action does.
+     */
+    val secondaryLabel: String? = null,
+    val onSecondary: (() -> Unit)? = null,
+    val secondaryGlyph: PicnicGlyph? = null,
 )
 
 internal object ToastIds {
@@ -89,8 +97,9 @@ internal object ToastIds {
 
 /** The toast's still hold (§4.15, §9): max(4000, readHold(words)), then Android's "Time to take action" setting. */
 fun toastHold(message: ToastMessage, timeouts: Timeouts): Long {
-    val hold = readHold(words(message.text + " " + (message.actionLabel ?: "")), maxOf(PicnicMotion.floorToast, message.minHoldMs))
-    return timeouts.recommended(hold, controls = message.actionLabel != null)
+    val chips = listOfNotNull(message.secondaryLabel, message.actionLabel).joinToString(" ")
+    val hold = readHold(words(message.text + " " + chips), maxOf(PicnicMotion.floorToast, message.minHoldMs))
+    return timeouts.recommended(hold, controls = message.actionLabel != null || message.secondaryLabel != null)
 }
 
 /** The toast queue (§4.15): one showing, at most 2 waiting. */
@@ -185,6 +194,21 @@ class ToastHostState {
         if (cur.kind == kind && !leaving) retiring = cur.id
     }
 
+    /**
+     * This host is going away (the Edit sheet closed): the toasts [keep] picks, the one on screen first and then the
+     * queued ones, move to [to] and hold their full hold there, so a move's Undo is never lost with the sheet (§4.15);
+     * the rest go with this host.
+     */
+    fun handOver(to: ToastHostState, keep: (ToastMessage) -> Boolean) {
+        val moving = listOfNotNull(current?.takeIf { !leaving && it.id != retiring && keep(it) }) + waiting.filter(keep)
+        waiting.clear()
+        current = null
+        leaving = false
+        retiring = null
+        restingTop = null
+        moving.forEach(to::show)
+    }
+
     private fun defaultMerge(cur: ToastMessage, incoming: ToastMessage): ToastMessage {
         val a = cur.onAction
         val b = incoming.onAction
@@ -258,6 +282,13 @@ fun ToastHost(state: ToastHostState, modifier: Modifier = Modifier, bottomInset:
                     state.leaving = true
                     state.finished(message.id)
                 },
+                secondaryLabel = message.secondaryLabel,
+                secondaryGlyph = message.secondaryGlyph,
+                onSecondary = {
+                    message.onSecondary?.invoke()
+                    state.leaving = true
+                    state.finished(message.id)
+                },
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(start = 14.dp, bottom = bottomInset + bottomGap)
@@ -314,9 +345,11 @@ private suspend fun holdUnlessPaused(millis: Long, paused: () -> Boolean): Boole
  * The sticky note itself (§4.15): a 220 dp lemon-pastel square note rotated −2° ([rotate]), a pink-gingham washi strip
  * (90 dp, +3°) on top, 3 dp white border, hs2; text Zen Maru 700 14 sp ballpoint (hearts drawn as vectors); the action
  * is a tiny white chip sticker in a 48 dp target, with the undo glyph only when it undoes something ([actionGlyph]: an
- * offer such as the nudge's "New trip" or the back pocket's "Look" is its label alone). Its host speaks it through
- * the Announcer (§15).
+ * offer such as the nudge's "New trip" or the back pocket's "Look" is its label alone). A [secondaryLabel] (the add
+ * note's "Move", §6.2) is a second chip of the same kind before it, the two at the note's right end on one line, one
+ * above the other when a large font leaves no room. Its host speaks it through the Announcer (§15).
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun StickyNote(
     message: String,
@@ -325,6 +358,9 @@ fun StickyNote(
     modifier: Modifier = Modifier,
     rotate: Boolean = true,
     actionGlyph: PicnicGlyph? = PicnicGlyph.Undo,
+    secondaryLabel: String? = null,
+    secondaryGlyph: PicnicGlyph? = null,
+    onSecondary: () -> Unit = {},
 ) {
     val c = PicnicTheme.colors
     val shape = PicnicTheme.shapes.toast
@@ -338,7 +374,7 @@ fun StickyNote(
                 .background(c.stickerWhite)
                 .padding(3.dp)
                 .background(c.toastNote)
-                .padding(start = 14.dp, end = 10.dp, top = 18.dp, bottom = if (actionLabel != null) 8.dp else 16.dp)
+                .padding(start = 14.dp, end = 10.dp, top = 18.dp, bottom = if (actionLabel != null || secondaryLabel != null) 8.dp else 16.dp)
                 .testTag(TOAST_BODY_TAG),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -352,24 +388,18 @@ fun StickyNote(
                     style = PicnicTheme.type.toast.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading),
                     spoken = message,
                 )
-                if (actionLabel != null) {
-                    // Pressed, the chip sticker drops onto its shadow in 2 steps like the kit's chips (never a ripple, §0.2,
-                    // §4.7); focused, it wears their 2 dp ring.
-                    val interaction = remember { MutableInteractionSource() }
-                    val pressed by interaction.collectIsPressedAsState()
-                    val focused by interaction.collectIsFocusedAsState()
-                    Box(
-                        Modifier
-                            .align(Alignment.End)
-                            .minimumInteractiveComponentSize()
-                            .clickable(interaction, indication = null, role = Role.Button, onClick = onAction),
-                        contentAlignment = Alignment.Center,
+                if (secondaryLabel != null) {
+                    // Two chips (the add note's "Move" and "Undo", §4.15): side by side at the right end, Undo last; they
+                    // stack, still right-aligned, only when a large font leaves no room for both on one line.
+                    FlowRow(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
                     ) {
-                        ChipFace(fill = c.stickerWhite, height = 32.dp, border = 0.dp, horizontal = 12.dp, press = rememberPressFraction(pressed), focused = focused) {
-                            actionGlyph?.let { Glyph(it, null, tint = c.ballpoint, size = 16.dp) }
-                            Text(actionLabel, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
-                        }
+                        NoteChip(secondaryLabel, secondaryGlyph, onSecondary)
+                        if (actionLabel != null) NoteChip(actionLabel, actionGlyph, onAction)
                     }
+                } else if (actionLabel != null) {
+                    NoteChip(actionLabel, actionGlyph, onAction, Modifier.align(Alignment.End))
                 }
             }
         }
@@ -380,6 +410,30 @@ fun StickyNote(
             rotation = 3f,
             alpha = 0.85f,
         )
+    }
+}
+
+/**
+ * One of the note's chips (§4.15): a tiny white chip sticker in a 48 dp target, its [glyph] (if any) and [label] in
+ * ballpoint. Pressed, it drops onto its shadow in 2 steps like the kit's chips (never a ripple, §0.2, §4.7); focused, it
+ * wears their 2 dp ring.
+ */
+@Composable
+private fun NoteChip(label: String, glyph: PicnicGlyph?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val c = PicnicTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val focused by interaction.collectIsFocusedAsState()
+    Box(
+        modifier
+            .minimumInteractiveComponentSize()
+            .clickable(interaction, indication = null, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        ChipFace(fill = c.stickerWhite, height = 32.dp, border = 0.dp, horizontal = 12.dp, press = rememberPressFraction(pressed), focused = focused) {
+            glyph?.let { Glyph(it, null, tint = c.ballpoint, size = 16.dp) }
+            Text(label, style = PicnicTheme.type.label.copy(color = c.ballpoint), maxLines = 1)
+        }
     }
 }
 

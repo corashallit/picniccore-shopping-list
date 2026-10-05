@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.AppState
+import earth.cora.picnic.core.model.setAisleNote
 import earth.cora.picnic.ui.common.PHONE_360
 import earth.cora.picnic.ui.common.SaturdayShop
 import earth.cora.picnic.ui.common.dayAndGlowScreens
@@ -90,6 +91,20 @@ class MyStoreGoldensTest(private val variant: ThemeVariant, @Suppress("unused") 
     @Test
     fun error() = record("mystore_error", MyStoreSamples.default, frozen = true, toast = "Couldn’t save. Try again.")
 
+    /**
+     * "Also here" (Cora, 5 October; §6.7): two labels carry a note on a quiet line under the name ("also here: toothpaste,
+     * floss"); the others read as before.
+     */
+    @Test
+    fun notes() = record("mystore_notes", MyStoreSamples.notes)
+
+    /** The open label's "Also here" field (the editor's last field), written and in focus, with its hint. */
+    @Test
+    fun editingNote() = record("mystore_editing_note", MyStoreSamples.notes.copy(editing = "produce"), before = {
+        onNodeWithTag(AislesTags.noteField()).performScrollTo()
+        focusWithoutTouch(onNodeWithContentDescription("Also here"))
+    })
+
     @Test
     fun fontScale130() {
         if (day) record("mystore_fs130", MyStoreSamples.longNames, exact = true, fontScale = 1.3f)
@@ -114,4 +129,10 @@ object MyStoreSamples {
     val default: AislesUiState = AislesViewModel.stateOf(app, IconCatalog.default.baskets)
 
     val longNames: AislesUiState = AislesViewModel.stateOf(SaturdayShop.defaultAisles(), IconCatalog.default.baskets)
+
+    /** The Appendix A store with two "Also here" notes (Cora, 5 October): Produce and Household. */
+    val notes: AislesUiState = AislesViewModel.stateOf(
+        app.setAisleNote("produce", "toothpaste, floss").setAisleNote("household", "birthday candles, paper cups"),
+        IconCatalog.default.baskets,
+    )
 }

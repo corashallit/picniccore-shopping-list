@@ -5,6 +5,7 @@ Sorting, recipes, photos and voice need your own OpenAI key (see What it needs).
 YOUR STORE, IN WALKING ORDER
 • Write down your store's aisles once, in the order you walk them.
 • New items are sorted into those aisles, so the list reads aisle by aisle.
+• Hold an item to move it to another aisle, and it goes there from then on. An aisle can also note what your store keeps there, like "also: toothpaste" on Produce, and the sorting follows it.
 • Each aisle folds into a little basket that fills up as you shop.
 • Check an item off and a GOT IT! stamp lands on it. Its sticker hops into the basket and a copy goes into the trip's sticker book.
 • Sizes are in metric (1 L, 2 kg, 454 g).

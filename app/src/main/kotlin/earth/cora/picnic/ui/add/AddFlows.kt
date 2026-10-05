@@ -24,9 +24,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import earth.cora.picnic.R
+import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.platform.AddSources
 import earth.cora.picnic.platform.rememberAddSources
+import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.ToastHostState
 import earth.cora.picnic.ui.theme.ToastMessage
 
@@ -159,11 +161,20 @@ fun AddEventsEffect(
     toasts: ToastHostState,
     onCommitted: (AddCommit) -> Unit = {},
     onUndone: (Long) -> Unit = {},
+    /**
+     * "Move" on a note that put one item in an aisle (§6.2, §4.15, Cora 5 October): the host opens the Edit sheet at
+     * "Move to aisle" for [GroceryItem]. Null: the notes offer no Move.
+     */
+    onMove: ((GroceryItem) -> Unit)? = null,
 ) {
     val resources = LocalResources.current
     val committed by rememberUpdatedState(onCommitted)
     val undone by rememberUpdatedState(onUndone)
-    val notes = remember(flows, resources) { AddToasts(resources, flows.vm::undo) }
+    val move by rememberUpdatedState(onMove)
+    val canMove = onMove != null
+    val notes = remember(flows, resources, canMove) {
+        AddToasts(resources, flows.vm::undo, move = if (canMove) ({ item -> move?.invoke(item) }) else null)
+    }
     LaunchedEffect(flows) {
         flows.vm.events.collect { event ->
             when (event) {
@@ -202,9 +213,15 @@ fun AddCommit.toast(resources: Resources, onUndo: () -> Unit): ToastMessage {
 /**
  * The add flows' sticky notes (§4.15). A second commit during a note's hold merges into it: the note then counts both
  * ("Added 3 items to Saturday shop ♡"), so it says everything its single Undo takes back, and that Undo undoes every
- * commit in it, newest first. [undo] is the ViewModel's Undo by commit id. Main thread only.
+ * commit in it, newest first. [undo] is the ViewModel's Undo by commit id. A note that put one item in an aisle
+ * ([AddCommit.movable]) also offers "Move" when [move] is given (§6.2, §4.15: the second chip, before Undo), which opens
+ * the Edit sheet at "Move to aisle" for that item. Main thread only.
  */
-class AddToasts(private val resources: Resources, private val undo: (Long) -> Unit) {
+class AddToasts(
+    private val resources: Resources,
+    private val undo: (Long) -> Unit,
+    private val move: ((GroceryItem) -> Unit)? = null,
+) {
     /** The commits behind each note still on screen or queued, by toast id (the last few only). */
     private val commits = object : LinkedHashMap<Long, List<AddCommit>>() {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, List<AddCommit>>?): Boolean = size > KEEP
@@ -221,12 +238,17 @@ class AddToasts(private val resources: Resources, private val undo: (Long) -> Un
         val merged = all.reduce(AddCommit::plus)
         val undoLabel = resources.getString(R.string.add_toast_undo)
         val ids = all.map { it.id }
+        val moving = merged.added.singleOrNull()?.takeIf { merged.movable }
+        val onMove = move
         val base = ToastMessage(
             text = merged.toastText(resources),
             kind = ADD_TOAST_KIND,
             actionLabel = if (merged.canUndo) undoLabel else null,
             onAction = if (merged.canUndo) ({ ids.asReversed().forEach(undo) }) else null,
             merge = ::merge,
+            secondaryLabel = if (moving != null && onMove != null) resources.getString(R.string.add_toast_move) else null,
+            onSecondary = if (moving != null && onMove != null) ({ onMove(moving) }) else null,
+            secondaryGlyph = if (moving != null && onMove != null) PicnicGlyph.Aisles else null,
         )
         return if (id == null) base else base.copy(id = id)
     }

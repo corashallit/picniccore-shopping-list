@@ -24,6 +24,7 @@ import earth.cora.picnic.core.model.displayName
 import earth.cora.picnic.core.model.moveAisle
 import earth.cora.picnic.core.model.renameAisle
 import earth.cora.picnic.core.model.setAisleBasket
+import earth.cora.picnic.core.model.setAisleNote
 import earth.cora.picnic.core.model.setAisleStyle
 import earth.cora.picnic.core.model.setStoreName
 import earth.cora.picnic.core.model.storeAisleNumber
@@ -52,7 +53,8 @@ import java.io.IOException
  * the sticker-sheet labels (drag to reorder through moveAisle; pencil → rename through renameAisle, store aisle number,
  * colour, pattern and basket kind), "Add aisle", "Aisles as text" (previewed live at 400 ms, committed on Done or blur
  * through commitAislesText's line diff) and "Re-sort my list" (AisleSync.resortAll). Every write runs in the app scope,
- * one at a time, in the order she made them, and a pending text edit is committed before any label change.
+ * one at a time, in the order she made them, and a pending text edit is committed before any label change. Each label
+ * carries its "Also here" note (Cora, 5 October), edited from the label (setAisleNote) or in the text.
  */
 
 /** One label of the sticker sheet (§4.26). [storeAisle] = the editor's number, else the one in the name. */
@@ -95,6 +97,12 @@ sealed interface AislesEvent {
      * which puts [before]'s store (aisles, colours, patterns, baskets, store numbers) and its items' aisles back.
      */
     data class Removed(val count: Int, val before: AppState) : AislesEvent
+
+    /**
+     * An "Also here" note changed while items are on her lists (Cora, 5 October; §6.7): new items follow it at once, the
+     * ones already there only on "Re-sort my list", so a light note offers it.
+     */
+    data object NoteSaved : AislesEvent
 }
 
 class AislesViewModel(
@@ -189,6 +197,19 @@ class AislesViewModel(
         val position = before.store.aisles().indexOfFirst { it.id == aisleId }
         if (position >= 0 && editing.value == aisleId) editing.value = after.store.aisles().getOrNull(position)?.id
     }
+
+    /**
+     * The label's "Also here" (Cora, 5 October; §6.7): setAisleNote, which changes only the note (no id, no item moves).
+     * With items on her lists, a light note offers "Re-sort" ([AislesEvent.NoteSaved]).
+     */
+    fun setNote(aisleId: String, note: String) = writeThen(
+        op = { it.setAisleNote(aisleId, note) },
+        then = { before, after ->
+            if (before.store.aislesText != after.store.aislesText && after.lists.any { it.items.isNotEmpty() }) {
+                _events.trySend(AislesEvent.NoteSaved)
+            }
+        },
+    )
 
     fun setFamily(aisleId: String, family: String) = restyle(aisleId) { it.copy(family = family) }
 
@@ -325,7 +346,7 @@ class AislesViewModel(
         val text = textDraft.value
         if (name == null && text == null) return
         var before: AppState? = null
-        store.update { s ->
+        val after = store.update { s ->
             before = s
             var next = s
             if (name != null) next = next.setStoreName(name)
@@ -338,6 +359,8 @@ class AislesViewModel(
         if (text != null) {
             val removed = old.aislesRemovedBy(text, baskets, clock())
             if (removed > 0) _events.send(AislesEvent.Removed(removed, old))
+            // "Also here" notes written in the text get the same light offer to re-sort as the label's field.
+            if (old.notes() != after.notes() && after.lists.any { it.items.isNotEmpty() }) _events.send(AislesEvent.NoteSaved)
         }
     }
 
@@ -426,6 +449,9 @@ internal fun AppState.withStoreAisle(aisleId: String, number: Int?, now: Long): 
 }
 
 private val DIGITS = Regex("\\d{1,3}")
+
+/** The store's "Also here" notes, by aisle name (what a commit compares to see whether a note changed). */
+private fun AppState.notes(): Set<Pair<String, String>> = store.aisles().mapNotNullTo(HashSet()) { a -> a.note?.let { a.name to it } }
 
 /**
  * How many of this state's aisles a commit of [text] removes (their lines went; renamed or moved lines are not removed),
