@@ -231,8 +231,8 @@ BASKETS = [
     Basket('crate', 'Wooden crate', 'Breakfast',
            back=[F(('rect', 7, 18, 50, 5, 1.6), 'cocoa', 'm')],
            # the label sits on the lower plank: on the upper one the closed lid's white border covered half of it
-           front=[F(('rect', 6, 22, 52, 11, 2.6), 'cocoa', 'p', det=['M12 27.8H26M32 29.8H48'], det_t='m', det_w=1.4),
-                  F(('rect', 6, 35, 52, 11, 2.6), 'cocoa', 'p', band=.3, det=['M12 38.6H20M44 41.4H52'], det_t='m', det_w=1.4),
+           front=[F(('rect', 6, 22, 52, 11, 2.6), 'cocoa', 'p', det=['M13.6 27.8H26M32 29.8H48'], det_t='m', det_w=1.4),
+                  F(('rect', 6, 35, 52, 11, 2.6), 'cocoa', 'p', band=.3, det=['M13.6 38.6H20.4M44 41.4H50'], det_t='m', det_w=1.4),
                   F(('rect', 3.6, 21, 7.2, 25, 2.2), 'cocoa', 'm', det=['M7.2 24.6h.1M7.2 42.4h.1'], det_w=1.8),
                   F(('rect', 53.2, 21, 7.2, 25, 2.2), 'cocoa', 'm', det=['M56.8 24.6h.1M56.8 42.4h.1'], det_w=1.8),
                   F(('rect', 24, 36.4, 16, 6.4, 2.2), 'peach', 'p', ol=1.5, cut=False),

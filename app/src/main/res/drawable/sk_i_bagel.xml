@@ -63,7 +63,7 @@
         android:fillColor="#FFFFFF"/>
   </group>
   <group android:name="gloss">
-    <path android:pathData="M12 35.7L11.3 34L11.2 33L11.3 32.1L12.1 30.3L13.6 28.5"
+    <path android:pathData="M12 35.7L11.4 34.3L11.2 32.5L11.8 30.8L13 29"
         android:strokeColor="#FFFFFF"
         android:strokeWidth="2.4"
         android:strokeLineCap="round"

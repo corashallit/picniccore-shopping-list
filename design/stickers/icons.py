@@ -222,7 +222,8 @@ add('sourdough', 'Sourdough boule', [
 
 # 15 sliced loaf (bag clip)
 SLICE = 'M9 22C9 17 12 14.6 16.4 15C18.6 12.4 25.4 12.4 27.6 15C32 14.6 35 17 35 22C35 25 33.4 26.4 32 27V38.8Q32 41.6 29.2 41.6H14.8Q12 41.6 12 38.8V27C10.6 26.4 9 25 9 22Z'
-CRUMB = 'M12.9 22.2C12.9 19.6 14.8 18.4 17.6 18.8C19.5 16.6 24.5 16.6 26.4 18.8C29.2 18.4 31.1 19.6 31.1 22.2C31.1 24.2 30 25.2 29.4 25.6V37.8Q29.4 39 28.2 39H15.8Q14.6 39 14.6 37.8V25.6C14 25.2 12.9 24.2 12.9 22.2Z'
+# the crumb sits 0.8u further in under the top crust, so the crust's gloss has room beside the white (white on white merges)
+CRUMB = 'M13.7 22.4C13.7 20.2 15.4 19.2 18 19.6C19.8 17.4 24.2 17.4 26 19.6C28.6 19.2 30.3 20.2 30.3 22.4C30.3 24.2 29.8 25.2 29.4 25.6V37.8Q29.4 39 28.2 39H15.8Q14.6 39 14.6 37.8V25.6C14.2 25.2 13.7 24.2 13.7 22.4Z'
 add('loaf', 'Sandwich loaf', [
     F(('path', SLICE), 'peach', 'm', tf='translate(5.6 -3.8)', band=.2),
     F(('path', SLICE), 'peach', 'm', tf='translate(2.8 -1.9)', band=.2),

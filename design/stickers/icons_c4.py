@@ -164,12 +164,13 @@ add('wine', 'Wine', [
 # baby formula: an open periwinkle tin heaped with powder, a pink scoop resting on top, a baby-bottle label
 add('baby_formula', 'Baby formula', [
     F(cyl(9.6, 38.4, 17.6, 42, 4.6), 'periwinkle', 'p', band=.18),
-    F(('rect', 13.6, 23.6, 20.8, 13.2), 'periwinkle', 'w', ol=0, cut=False, det=['M13.6 23.6H34.4', 'M13.6 36.8H34.4'], det_w=1.3),
+    # the label leaves the can's wall 3.6u each side: room for the wall's gloss clear of the white label
+    F(('rect', 14.2, 23.6, 19.6, 13.2), 'periwinkle', 'w', ol=0, cut=False, det=['M14.2 23.6H33.8', 'M14.2 36.8H33.8'], det_w=1.3),
     F(('path', 'M22.4 26.2C22.4 25 23.1 24.4 24 24.4C24.9 24.4 25.6 25 25.6 26.2Z'), 'sakura', 'm', ol=1.2, cut=False),
     F(('rect', 21.4, 26.2, 5.2, 1.8, .9), 'sakura', 'm', ol=1.2, cut=False),
     F(('path', 'M21.8 28H26.2V33.4Q26.2 34.6 25 34.6H23Q21.8 34.6 21.8 33.4Z'), 'sakura', 'p', ol=1.2, cut=False),
-    F(('path', heart_path(16.4, 30, 1.8)), 'sakura', 'm', ol=1.2, cut=False),
-    F(('path', heart_path(31.6, 30, 1.8)), 'sakura', 'm', ol=1.2, cut=False),
+    F(('path', heart_path(17, 30, 1.8)), 'sakura', 'm', ol=1.2, cut=False),
+    F(('path', heart_path(31, 30, 1.8)), 'sakura', 'm', ol=1.2, cut=False),
     F(('ellipse', 24, 17.6, 14.4, 4.6), 'periwinkle', 'w'),
     F(('path', 'M12.6 17.6C14.4 14.6 18.2 13 21.4 14C23.8 12 28.4 12.4 30.2 14.2C33 13.4 35.6 15.4 35.4 17.6C31.6 20.6 16.6 20.6 12.6 17.6Z'),
       'periwinkle', 'p', ol=1.4, cut=False, tex=['M16 16.4h.1M20.4 15.6h.1M25.6 15.2h.1M30.6 16.2h.1'], tex_t='w', tex_w=1.6),

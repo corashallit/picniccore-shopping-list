@@ -21,9 +21,9 @@ def face(cx, cy, fam, spread=5.2, s=1.0, blink=False):
 
 
 d('star', 'Star', [F(('path', star_path(24, 25.4, 18.4, 8.8)), 'lemon', 'm', band=.22, ol=2.2)],
-  gloss=[G('M16.8 21.6L19.5 21.2L20.8 20.6L21.4 19.8L22.8 17.4L23.6 16.7', 2.6), DOT(13.5, 22.1, 0.8)])
+  gloss=[G('M16.6 21.8Q21.6 21.4 23.4 16.8', 2.6), DOT(13.5, 22.1, 0.8)])
 d('star4', 'Sparkle', [F(('path', 'M24 5C25.6 18.6 29.4 22.4 43 24C29.4 25.6 25.6 29.4 24 43C22.4 29.4 18.6 25.6 5 24C18.6 22.4 22.4 18.6 24 5Z'), 'sakura', 'm', band=.2)],
-  gloss=[G('M19.7 22.3L23.3 18.9L23.7 18.7L24.6 18.7L25.5 19.5', 2.6), DOT(17.2, 24.2, 0.8)])
+  gloss=[G('M19.4 22.6Q21 20.4 23.4 19', 2.6), DOT(17.2, 24.2, 0.8)])
 d('heart', 'Heart', [F(('path', heart_path(24, 25, 17)), 'sakura', 'm', band=.22)],
   gloss=[G('M12 20.4Q12.6 15.4 17.6 14.4'), DOT(11.6, 24.6)])
 d('cloud', 'Cloud', [F(('path', 'M11.4 36C5.6 36 4.6 28 9.8 26.4C9 19.6 16.6 15.8 21.2 19.6C23.4 12.8 34 12.6 35.8 20.4C42.4 19.8 45 28.4 39.6 31.6C41.4 35 38.6 36 36.6 36Z'), 'ramune', 'w', band=.24, band_t='p')],
@@ -62,7 +62,7 @@ d('ant', 'Ant with strawberry', [
     F(('circle', 12.4, 32, 3.6), 'cocoa', 'm'),
     F(('ellipse', 19.4, 34.6, 4.2, 3.4), 'cocoa', 'm'),
     F(('ellipse', 27.4, 36, 5, 4), 'cocoa', 'm', band=.3),
-], gloss=[G('M22.5 15.7L21.7 12.5L21.8 12L22.2 11.5L23.2 11.2L26.5 11.4L28.8 11.3', 2.6), DOT(24.3, 18.9, 0.8)])
+], gloss=[G('M22.6 16.4Q22.2 12.2 27 11.4', 2.6), DOT(24.3, 18.9, 0.8)])   # one smooth arc (the traced run turned a right angle)
 # r10 (WP2) · the ant parade's other four ants (egg 17, 22 dp): ants always carry food, never stand on it (§4.27)
 d('antcrumb', 'Ant with a cookie', [
     F(('circle', 25.4, 14.6, 8.6), 'cocoa', 'p', band=.24, det=['M21.6 11.4h.1M28.4 12.6h.1M24.6 17.8h.1M29.4 18h.1'], det_t='tr', det_w=2.2),
@@ -83,7 +83,7 @@ d('sun', 'Sun', [
     F(('circle', 24, 24, 11.6), 'lemon', 'm', band=.22),
     *face(24, 23.4, 'lemon', 4.2, .9),
 ], gloss=[G('M16 20.9L17 19.2L18 17.9L19.2 16.9L20.6 16.1L22 15.7L23.5 15.5L25.2 15.5L26.9 15.9', 2.6), DOT(30, 17.8, 0.8)])
-d('glowstar', 'Glow star', [F(('path', star_path(24, 25.4, 18.4, 8.8)), '#7FD6A6', '#C9FFDE', ol=1.8)], gloss=[G('M16.4 21.5L18.9 21.1L20.4 20.5L21.3 19.6L22.8 16.9L23.7 16.2', 2.6), DOT(13, 21.9, 0.8)])
+d('glowstar', 'Glow star', [F(('path', star_path(24, 25.4, 18.4, 8.8)), '#7FD6A6', '#C9FFDE', ol=1.8)], gloss=[G('M16.6 21.8Q21.6 21.4 23.4 16.8', 2.6), DOT(13, 21.9, 0.8)])
 d('moon', 'Full moon', [
     F(('circle', 24, 24, 17), 'lemon', 'p', band=.22),
     F(('circle', 30.4, 19, 3.6), 'lemon', 'm', ol=1.4, cut=False),
@@ -109,7 +109,7 @@ d('sandwich', 'Sandwich', [
     F(('rect', 7.4, 36.6, 34.2, 5.6, 2.4), 'cocoa', 'p'),
     F(('path', 'M8.6 34.6L39.4 34.6L39.6 36.8Q38.6 38.6 36 37.8Q33.4 39.4 30.6 37.8Q28 39.4 25.4 37.8Q22.6 39.4 20 37.8Q17.2 39.4 14.6 37.8Q11.6 38.8 8.6 37Z'), 'melon', 'm', ol=1.6),
     F(('rect', 8.4, 32.4, 32, 3.4, 1.6), 'sakura', 'm', ol=1.4),
-], gloss=[G('M15.4 28.6L21.4 18.2', 2.4)])
+], gloss=[G('M16.1 28.9L21.4 20.4', 2.4)])   # parallel to the left crust, 1.4u in from its outline
 d('envelope', 'Envelope', [
     F(('rect', 6.6, 12.6, 34.8, 26, 4), 'strawberry', 'w', band=.22, band_t='p', det=['M8 15L24 27.6L40 15']),
     F(('path', heart_path(24, 27.2, 5.4)), 'strawberry', 'm', ol=1.6),
@@ -160,7 +160,7 @@ d('pumpkin', 'Pumpkin', [
     F(('ellipse', 15.4, 28.6, 9.6, 12), 'peach', 'm', band=.22),
     F(('ellipse', 32.6, 28.6, 9.6, 12), 'peach', 'm', band=.22),
     F(('ellipse', 24, 28.6, 9.6, 13), 'peach', 'm', band=.22),
-], gloss=[G('M17.8 25.2L18.4 23.5L19.1 22L20 20.7L21.2 19.7L22.4 19L23.6 18.7L24.8 18.7L26.2 19.2', 2.6), DOT(17.4, 28.8, 0.8), G('M36.1 28.1L35.8 24.7L36 23.9L36.6 23.3L37.3 23.1L38.1 23.3L38.6 23.7', 2.2)])
+], gloss=[G('M17.8 25.2Q19 19.6 24.8 18.7', 2.6), DOT(17.4, 28.8, 0.8), G('M36.1 28.4Q35.8 25.6 36.6 23.8', 2.2)])
 d('mapleleaf', 'Maple leaf', [
     F(('path', 'M24 5.6L27.2 12.4L31.6 10.4L30.4 19.4L37 13.6L38.6 17.6L43 17L40.4 23.6L42.6 25.4L33.4 32.4L34.4 35.4L25.4 33.8V42H22.6V33.8L13.6 35.4L14.6 32.4L5.4 25.4L7.6 23.6L5 17L9.4 17.6L11 13.6L17.6 19.4L16.4 10.4L20.8 12.4Z'), 'strawberry', 'm', band=.2),
 ], gloss=[G('M14.8 21.8L18 24.6', 2.2)])

@@ -24,6 +24,8 @@ A0, A1 = 200, 290
 MARGIN = 1.0          # the gloss stroke's distance from its host's colour-trace
 INNER = .5            # ... and from every part painted over the host (labels, icons, seeds, detail lines, parts in front)
 DOT_GAP = 1.0         # the dot's distance from any stroke
+WHITE_GAP = .7        # extra room from a white part with no outline painted over the host (a label, a crumb): white
+                      # beside white reads as one shape, so the gloss keeps about 1u off it
 NECK_K = .55          # necks and rays narrower than 2 x NECK_K x the host's inscribed radius get no gloss
 TURN_MAX = 50         # degrees of turn within TURN_LEN: a sharper turn splits the run
 TURN_LEN = 1.2
@@ -316,6 +318,8 @@ def forbidden(pp, i, tex=True, soft=True):
     tex='spots' keeps out of the texture's short marks only (its long stripes may be crossed); soft=False leaves out
     detail lines in a non-trace colour."""
     geos = [(q.paint if soft else q.firm) for q in pp[i + 1:]]
+    geos += [q.fill.buffer(WHITE_GAP) for q in pp[i + 1:]
+             if q.p.kind == 'fill' and not q.p.ol and q.fill is not None and not q.fill.is_empty and is_white(q.p)]
     geos.append(pp[i].det_firm)
     if soft:
         geos.append(pp[i].soft)
