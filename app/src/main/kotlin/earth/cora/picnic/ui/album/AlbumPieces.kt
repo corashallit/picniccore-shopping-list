@@ -56,6 +56,9 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInParent
@@ -159,7 +162,7 @@ object AlbumFaces {
  * Tabs and the vinyl page.
  * ------------------------------------------------------------------------------------------------ */
 
-/** How the album's tabs fit the width: as roomy index tabs, or tighter ones (which scroll sideways if still too wide). */
+/** How the album's tabs fit the width: as roomy index tabs, or tighter ones (on one row, or in tiers when even those are too wide). */
 internal enum class TabFit { Roomy, Compact }
 
 /** A tab's side padding inside its face for [fit]. */
@@ -168,14 +171,24 @@ private fun tabPadding(fit: TabFit, selected: Boolean): Dp = when (fit) {
     TabFit.Compact -> if (selected) 10.dp else 9.dp
 }
 
+/** A tab label's width as the selected tab sets it (DynaPuff, [on]) and as the others do (Zen Maru, [off]). */
+private class LabelWidths(val on: Dp, val off: Dp)
+
 /**
  * The index tabs (§6.10): Groceries · Picnic · Seasonal on sakura, lemon and peach; each a Role.Tab, standing on the
  * vinyl page's top edge. The selected tab reaches [TAB_JOIN] down over the page's white edge, so it opens into the page
- * as a binder tab does; the row reports itself that much shorter, and the album draws it above the page. They stay on
- * one row (§15): when the three no longer fit at their roomy padding (large text) the padding tightens, and when even
- * that is too wide (font scale 1.3 and up on a 360 dp phone) the row scrolls sideways, keeping the selected tab in view.
- * The scrolling row reaches [bleed] past its own width on each side (the screen gutter), so a tab slides off the
- * screen's edge rather than being cut short of it over the binder.
+ * as a binder tab does; the row reports itself that much shorter, and the album draws it above the page. When the three
+ * no longer fit on one row at their roomy padding (large text) the padding tightens. When even that is too wide with
+ * any one of the three selected (font scale 2.0 on a 360 dp phone), the tabs wrap, never cut (§0.4, §15): they stand
+ * in tiers like a set of staggered dividers, the front tier on the page's edge holding as many tabs from the end as fit
+ * ("Picnic", "Seasonal") and the tier behind it the rest ("Groceries"), left-aligned like the row. A tab in a back tier
+ * runs on down behind the front tier to the page, so it never floats and shows between the front tabs; selected, its
+ * face and body are the mid colour and its face is taller. The tiers are worked out from each tab's widest
+ * face (selected or not), so picking another tab never moves a tab to another tier, and the row never turns into tiers
+ * and back as she switches. Keyboard order and TalkBack go Groceries, Picnic, Seasonal in either layout.
+ * The one-row layout reaches [bleed] past its own width on each side (the screen gutter) and scrolls sideways as a
+ * last resort, keeping the selected tab in view, so a tab would slide off the screen's edge rather than be cut short
+ * of it over the binder.
  *
  * [shown] false keeps the row's room and its place in the keyboard's order only: the album's own row stands in, unseen
  * and silent, while the pinned copy above the page is the one she sees and taps (and TalkBack reads). [keys] false
@@ -217,58 +230,179 @@ internal fun AlbumTabs(
             },
     ) {
         val density = LocalDensity.current
-        val labelWidths = remember(labels, selected, density, type) {
+        val labelWidths = remember(labels, density, type) {
             AlbumTab.entries.associateWith { tab ->
-                val style = if (tab == selected) type.smallTitle else type.label
-                with(density) { measurer.measure(labels.getValue(tab), style, maxLines = 1).size.width.toDp() }
+                fun width(style: TextStyle) = with(density) { measurer.measure(labels.getValue(tab), style, maxLines = 1).size.width.toDp() }
+                LabelWidths(on = width(type.smallTitle), off = width(type.label))
             }
         }
         val room = maxWidth - bleed * 2 - TABS_START - TABS_END
-        fun needed(fit: TabFit): Dp = AlbumTab.entries.fold(TAB_GAP * (AlbumTab.entries.size - 1)) { sum, tab ->
-            sum + labelWidths.getValue(tab) + tabPadding(fit, tab == selected) * 2 + TAB_BORDER * 2 + 2.dp
+        fun face(tab: AlbumTab, fit: TabFit, on: Boolean): Dp {
+            val w = labelWidths.getValue(tab)
+            return (if (on) w.on else w.off) + tabPadding(fit, on) * 2 + TAB_BORDER * 2 + 2.dp
         }
-        val fit = if (needed(TabFit.Roomy) <= room) TabFit.Roomy else TabFit.Compact
-        val viewport = constraints.maxWidth
-        val span = spans[selected]
-        var settled by remember { mutableStateOf(false) }
-        LaunchedEffect(selected, span, viewport) {
-            if (span == null) return@LaunchedEffect
-            // In view within the page's width where it can be (past the gutter), the screen's edge where it cannot.
-            val start = with(density) { (bleed + TABS_START).roundToPx() }
-            val end = with(density) { (bleed + TABS_END).roundToPx() }
-            val target = when {
-                span.first - start < scroll.value -> span.first - start
-                span.last + end > scroll.value + viewport -> span.last + end - viewport
-                else -> null
-            }?.coerceIn(0, scroll.maxValue.coerceAtLeast(0))
-            if (target != null && target != scroll.value) {
-                // Where she left it the first time (and under reduced motion) it is simply there; after a tap it slides.
-                if (!settled || reduced) scroll.scrollTo(target) else scroll.animateScrollTo(target)
-            }
-            settled = true
+        fun needed(fit: TabFit, chosen: AlbumTab = selected): Dp = AlbumTab.entries.fold(TAB_GAP * (AlbumTab.entries.size - 1)) { sum, tab ->
+            sum + face(tab, fit, tab == chosen)
         }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(scroll)
-                .padding(start = bleed + TABS_START, end = bleed + TABS_END)
-                .selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(TAB_GAP),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            AlbumTab.entries.forEach { t ->
-                AlbumTabFace(
-                    labels.getValue(t), t, t == selected, fit,
-                    keys = keys,
-                    modifier = Modifier
-                        .onPlaced { c ->
-                            val x = c.positionInParent().x.toInt()
-                            spans[t] = x..(x + c.size.width)
-                        },
-                ) { onSelect(t) }
+        if (AlbumTab.entries.all { needed(TabFit.Compact, it) <= room }) {
+            val fit = if (needed(TabFit.Roomy) <= room) TabFit.Roomy else TabFit.Compact
+            val viewport = constraints.maxWidth
+            val span = spans[selected]
+            var settled by remember { mutableStateOf(false) }
+            LaunchedEffect(selected, span, viewport) {
+                if (span == null) return@LaunchedEffect
+                // In view within the page's width where it can be (past the gutter), the screen's edge where it cannot.
+                val start = with(density) { (bleed + TABS_START).roundToPx() }
+                val end = with(density) { (bleed + TABS_END).roundToPx() }
+                val target = when {
+                    span.first - start < scroll.value -> span.first - start
+                    span.last + end > scroll.value + viewport -> span.last + end - viewport
+                    else -> null
+                }?.coerceIn(0, scroll.maxValue.coerceAtLeast(0))
+                if (target != null && target != scroll.value) {
+                    // Where she left it the first time (and under reduced motion) it is simply there; after a tap it slides.
+                    if (!settled || reduced) scroll.scrollTo(target) else scroll.animateScrollTo(target)
+                }
+                settled = true
             }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scroll)
+                    .padding(start = bleed + TABS_START, end = bleed + TABS_END)
+                    .selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(TAB_GAP),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                AlbumTab.entries.forEach { t ->
+                    AlbumTabFace(
+                        labels.getValue(t), t, t == selected, fit,
+                        keys = keys,
+                        modifier = Modifier
+                            .onPlaced { c ->
+                                val x = c.positionInParent().x.toInt()
+                                spans[t] = x..(x + c.size.width)
+                            },
+                    ) { onSelect(t) }
+                }
+            }
+        } else {
+            // Tiers from each tab's widest face, so the selection never moves a tab; roomy while that takes no more tiers.
+            fun tiersFor(fit: TabFit) = tabTiers(AlbumTab.entries.map { maxOf(face(it, fit, true), face(it, fit, false)) }, room, TAB_GAP)
+            val roomy = tiersFor(TabFit.Roomy)
+            val compact = tiersFor(TabFit.Compact)
+            val fit = if (roomy.size <= compact.size) TabFit.Roomy else TabFit.Compact
+            TabTiers(
+                selected = selected,
+                labels = labels,
+                fit = fit,
+                tiers = if (fit == TabFit.Roomy) roomy else compact,
+                keys = keys,
+                onSelect = onSelect,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = bleed + TABS_START, end = bleed + TABS_END),
+            )
         }
     }
+}
+
+/**
+ * The tabs' tiers, back to front, as runs of indices into [widths]: the front tier (the page's edge) takes as many tabs
+ * from the end as fit in [room], the tier behind it as many of the ones before, and so on, so the tiers keep the tabs'
+ * order read top to bottom and the front tier, on which the others stand, is the fullest. A tab wider than [room] has a
+ * tier to itself.
+ */
+internal fun tabTiers(widths: List<Dp>, room: Dp, gap: Dp): List<IntRange> {
+    val tiers = ArrayDeque<IntRange>()
+    var end = widths.size
+    while (end > 0) {
+        var start = end - 1
+        var used = widths[start]
+        while (start > 0 && used + gap + widths[start - 1] <= room) {
+            start--
+            used += gap + widths[start]
+        }
+        tiers.addFirst(start until end)
+        end = start
+    }
+    return tiers.toList()
+}
+
+/**
+ * The tabs in [tiers] (back to front, from [tabTiers]): each tier's tabs left to right and bottom-aligned on the tier
+ * in front of it, the front tier on the page's edge. Behind the tabs, each back-tier tab's body runs from under its face
+ * down to the page's edge, in its colour (mid when selected) between its white kiss-cut sides with its
+ * hard shadow on the right, so the tier in front stands over it and it shows between those tabs. The faces are placed
+ * in the tabs' order, so keyboard focus goes Groceries, Picnic, Seasonal; TalkBack reads them top to bottom and left to
+ * right, which is the same order.
+ */
+@Composable
+private fun TabTiers(
+    selected: AlbumTab,
+    labels: Map<AlbumTab, String>,
+    fit: TabFit,
+    tiers: List<IntRange>,
+    keys: Boolean,
+    onSelect: (AlbumTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tabs = AlbumTab.entries
+    Layout(
+        content = {
+            tabs.forEach { t -> TabBody(AlbumInk.family(t), t == selected) }
+            tabs.forEach { t -> AlbumTabFace(labels.getValue(t), t, t == selected, fit, keys = keys) { onSelect(t) } }
+        },
+        modifier = modifier.selectableGroup(),
+    ) { measurables, constraints ->
+        val n = tabs.size
+        val faces = List(n) { measurables[n + it].measure(Constraints()) }
+        val gap = TAB_GAP.roundToPx()
+        val join = TAB_JOIN.roundToPx()
+        val rowHeights = tiers.map { tier -> tier.maxOf { faces[it].height } }
+        val height = rowHeights.sum()
+        val x = IntArray(n)
+        val y = IntArray(n)
+        var top = 0
+        tiers.forEachIndexed { i, tier ->
+            var left = 0
+            for (k in tier) {
+                x[k] = left
+                y[k] = top + rowHeights[i] - faces[k].height
+                left += faces[k].width + gap
+            }
+            top += rowHeights[i]
+        }
+        val front = tiers.last()
+        // A back tab's body: from its face's foot (an unselected face stops TAB_JOIN above its target's bottom) to the
+        // page's edge, TAB_JOIN above the tiers' bottom. Selected, it stops there too: over the page's white edge it
+        // would run on under the front tabs, which stand on that edge.
+        val bodies = List(n) { k ->
+            if (k in front) return@List null
+            val from = y[k] + faces[k].height - join
+            val to = height - join
+            measurables[k].measure(Constraints.fixed(faces[k].width, (to - from).coerceAtLeast(0))) to from
+        }
+        layout(constraints.maxWidth, height) {
+            bodies.forEachIndexed { k, body -> body?.let { (p, from) -> p.place(x[k], from) } }
+            for (k in 0 until n) faces[k].place(x[k], y[k])
+        }
+    }
+}
+
+/** A back-tier tab's body under the tier in front (see [TabTiers]): its colour between white kiss-cut sides, its hard shadow on the right. */
+@Composable
+private fun TabBody(family: StickerFamily, on: Boolean) {
+    val white = PicnicTheme.colors.stickerWhite
+    val shadows = PicnicTheme.shadows
+    Spacer(
+        Modifier.drawBehind {
+            val border = TAB_BORDER.toPx()
+            drawRect(shadows.color, topLeft = Offset(shadows.hs.x.toPx(), 0f), size = size)
+            drawRect(white, size = size)
+            drawRect(if (on) family.mid else family.pastel, topLeft = Offset(border, 0f), size = Size(size.width - 2 * border, size.height))
+        },
+    )
 }
 
 /**
