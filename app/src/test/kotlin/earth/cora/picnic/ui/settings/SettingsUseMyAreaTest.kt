@@ -7,7 +7,12 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.calendar.Place
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import earth.cora.picnic.platform.AreaLookup
@@ -136,6 +141,37 @@ class SettingsUseMyAreaTest {
         compose.onNodeWithText("Open Android settings").performClick()
         assertEquals(1, opened)
         assertEquals(0, requests)
+    }
+
+    /** Sent to Android settings from "Use my area" and allowed there: the switch is on when she comes back. */
+    @Test
+    fun allowedInAndroidSettingsTurnsTheSwitchOn() {
+        var allowed = false
+        val permission = object : LocationPermission {
+            override fun granted() = allowed
+            override fun blocked() = !allowed
+            override fun request(onResult: (Boolean) -> Unit) = onResult(false)
+        }
+        val owner = object : LifecycleOwner {
+            val registry = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
+            override val lifecycle: Lifecycle get() = registry
+        }
+        val actions = SettingsActions(
+            onSurpriseChange = { s, on -> calls += "${s.key}:$on" },
+            onAreaRefresh = { calls += "refresh" },
+        )
+        compose.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                PicnicTheme { SettingsScreen(SettingsSamples.ok, actions, location = permission) }
+            }
+        }
+        compose.onNodeWithText("Use my area", substring = true).performScrollTo().performClick()
+        compose.onNodeWithText("Open Android settings").performClick()
+        compose.runOnIdle { owner.registry.currentState = Lifecycle.State.STARTED }
+        allowed = true
+        compose.runOnIdle { owner.registry.currentState = Lifecycle.State.RESUMED }
+        compose.waitForIdle()
+        assertEquals(listOf("${Surprise.UseMyArea.key}:true", "refresh"), calls)
     }
 
     /**

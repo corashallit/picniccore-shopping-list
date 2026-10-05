@@ -1,5 +1,6 @@
 package earth.cora.picnic.ui.aisles
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -50,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
@@ -178,16 +180,14 @@ fun AislesRoute(vm: AislesViewModel, onBack: () -> Unit) {
             }
         }
     }
+    val focus = LocalFocusManager.current
     val actions = remember(vm) {
+        // Done and Back leave, unless the text she typed removes aisles: that commits here and she stays, so the toast
+        // with Undo shows (the keyboard closes so she sees it and the labels); the next Done or Back leaves.
+        val leave = { if (vm.leave()) onBack() else focus.clearFocus() }
         AislesActions(
-            onBack = {
-                vm.leave()
-                onBack()
-            },
-            onDone = {
-                vm.leave()
-                onBack()
-            },
+            onBack = leave,
+            onDone = leave,
             onStoreName = vm::setStoreName,
             onCommitStoreName = vm::commitStoreName,
             onText = vm::setText,
@@ -204,6 +204,8 @@ fun AislesRoute(vm: AislesViewModel, onBack: () -> Unit) {
             onResort = vm::resort,
         )
     }
+    // The system's Back goes the same way while the text has unsaved edits (else it would leave without committing them).
+    BackHandler(enabled = state.dirty) { actions.onBack() }
     AislesScreen(state, actions, toasts = toasts)
 }
 

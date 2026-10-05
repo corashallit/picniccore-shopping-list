@@ -9,14 +9,18 @@ import kotlin.math.roundToLong
  * wherever they appear ("3 lb bag" -> "1.36 kg bag", "12 oz" -> "340 g", "2-lb bag" -> "907 g bag",
  * "1 gal" -> "3.79 L"). Cup, tbsp and tsp survive only as a recipe amount after the "·" ("2.5 kg bag · 2 cups");
  * before it they become mL (1 cup = 250 mL, 1 tbsp = 15 mL, 1 tsp = 5 mL). A pinch stays a pinch. Everything
- * that is already metric, a count or a word is kept as written. Owner: WP3 (MetricNormaliserTest).
+ * that is already metric, a count or a word is kept as written. The same amount on both sides of the "·" is said once
+ * ("3 · 3" -> "3"). Owner: WP3 (MetricNormaliserTest).
  * Applied to quantities from the model (OpenAiGroceryAssistant) and typed text (OfflineParser).
  */
 fun normalizeMetric(quantity: String): String {
     val dot = quantity.indexOf('·')
     if (dot < 0) return Metric.convert(quantity, keepCooking = false)
-    return Metric.convert(quantity.substring(0, dot), keepCooking = false) + "·" +
-        Metric.convert(quantity.substring(dot + 1), keepCooking = true)
+    val pickUp = Metric.convert(quantity.substring(0, dot), keepCooking = false)
+    val uses = Metric.convert(quantity.substring(dot + 1), keepCooking = true)
+    // The same on both sides ("3 · 3" for bananas) says it once.
+    if (pickUp.isNotBlank() && pickUp.trim().equals(uses.trim(), ignoreCase = true)) return pickUp.trim()
+    return "$pickUp·$uses"
 }
 
 internal object Metric {

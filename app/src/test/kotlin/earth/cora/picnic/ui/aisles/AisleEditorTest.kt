@@ -78,11 +78,14 @@ class AisleEditorTest {
 
     private lateinit var vm: AislesViewModel
 
+    /** Times the screen asked to leave (Done or Back). */
+    private var backs = 0
+
     private fun launch(state: AppState = Samples.shoppingState, assistant: FakeAssistant = FakeAssistant()): InMemoryStateStore {
         val store = InMemoryStateStore(state)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         vm = AislesViewModel(store, AisleSync(store, assistant, baskets) { Samples.NOW }, baskets, scope, { Samples.NOW })
-        compose.setContent { PicnicTheme { AislesRoute(vm, onBack = {}) } }
+        compose.setContent { PicnicTheme { AislesRoute(vm, onBack = { backs++ }) } }
         compose.waitForIdle()
         return store
     }
@@ -352,7 +355,10 @@ class AisleEditorTest {
         assertNull(s.findItem("i-bagels")?.aisleId)
     }
 
-    /** One select-all and delete in "Aisles as text" says what it removed, and Undo brings every aisle and its items back. */
+    /**
+     * One select-all and delete in "Aisles as text", then Done: the screen stays to say what it removed (leaving would
+     * take the toast with it), Undo brings every aisle and its items back, and the next Done leaves.
+     */
     @Test
     fun removedAislesComeBackWithUndo() {
         val store = launch()
@@ -361,6 +367,7 @@ class AisleEditorTest {
         compose.onNodeWithContentDescription("Aisles as text:").performScrollTo().performTextReplacement("")
         compose.onNodeWithText("Done").performClick()
         waitFor(store) { it.store.aisles().isEmpty() }
+        assertEquals("Done stays while the removal toasts", 0, backs)
         assertNull(store.now().findItem("i-lemons")?.aisleId)
         compose.mainClock.autoAdvance = false
         repeat(20) { frame() }
@@ -374,6 +381,9 @@ class AisleEditorTest {
         assertEquals("colours, patterns and store numbers", before.store.aisleStyles, after.store.aisleStyles)
         assertTrue("baskets", before.store.aisleBaskets.all { (id, kind) -> after.store.aisleBaskets[id] == kind })
         assertEquals(before.findItem("i-lemons")?.aisleId, after.findItem("i-lemons")?.aisleId)
+        compose.onNodeWithText("Done").performClick()
+        compose.waitForIdle()
+        assertEquals("the next Done leaves", 1, backs)
     }
 
     /** "Aisles as text" also commits when the field loses focus (§6.7), not only on Done. */

@@ -114,6 +114,12 @@ class AislesViewModel(
     private val writes = Mutex()
     private val _events = Channel<AislesEvent>(Channel.BUFFERED)
 
+    /** The saved state the screen shows (for [pendingRemovals]). Main thread. */
+    private var saved: AppState? = null
+
+    /** The draft a Done or Back already stayed for (its removals toasted): the next one leaves. Main thread. */
+    private var stayedFor: String? = null
+
     val events: Flow<AislesEvent> = _events.receiveAsFlow()
 
     @OptIn(FlowPreview::class)
@@ -142,6 +148,7 @@ class AislesViewModel(
 
     fun setText(text: String) {
         textDraft.value = text
+        stayedFor = null
     }
 
     /** Done or the text field lost focus: the line diff (an edited line keeps its items, a removed one's go to Everything else). */
@@ -246,6 +253,7 @@ class AislesViewModel(
      */
     fun undoRemoved(before: AppState) {
         textDraft.value = null
+        stayedFor = null
         editing.value = null
         appScope.launch {
             writes.withLock {
@@ -259,10 +267,24 @@ class AislesViewModel(
         }
     }
 
-    /** Done or Back: commits the store name and the text, closes the label being edited. */
-    fun leave() {
+    /**
+     * Done or Back: commits the store name and the text, closes the label being edited, and says whether she can leave
+     * now. A text that removes aisles is committed here and she stays, once: the "Removed n aisles" toast and its Undo
+     * show on this screen (gone with it, nothing would say what went). The next Done or Back leaves.
+     */
+    fun leave(): Boolean {
+        val text = textDraft.value
+        val stay = text != null && text != stayedFor && pendingRemovals() > 0
+        if (stay) stayedFor = text
         editing.value = null
-        if (nameDraft.value != null || textDraft.value != null) write { it }
+        if (nameDraft.value != null || text != null) write { it }
+        return !stay
+    }
+
+    /** How many aisles committing the "Aisles as text" draft now would remove (0 with no draft). */
+    fun pendingRemovals(): Int {
+        val text = textDraft.value ?: return 0
+        return saved?.aislesRemovedBy(text, baskets, clock()) ?: 0
     }
 
     /* ---------------- internals ---------------- */
@@ -319,8 +341,10 @@ class AislesViewModel(
         }
     }
 
-    private fun build(s: AppState, draft: String?, preview: String?, u: Ui): AislesUiState =
-        stateOf(s, baskets, draft, preview, u.name, u.editing, u.syncing, u.report)
+    private fun build(s: AppState, draft: String?, preview: String?, u: Ui): AislesUiState {
+        saved = s
+        return stateOf(s, baskets, draft, preview, u.name, u.editing, u.syncing, u.report)
+    }
 
     companion object {
         /** The labels preview the text 400 ms after she stops typing (§6.7). */

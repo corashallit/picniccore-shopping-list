@@ -155,18 +155,39 @@ class AddViewModel(
 
     /**
      * The pantry changed while a review is open: a worked-out row the pantry now covers is switched off and reads "in
-     * your pantry", as the answer would have marked it (§4.17; she can switch it back on). Rows she named are never
-     * skipped for the pantry, and rows already skipped (a pantry row she switched on by hand included) stay as they are.
+     * your pantry", as the answer would have marked it (§4.17; she can switch it back on). An "in your pantry" row whose
+     * entry she took off the shelves (she ran out) is switched back on and reads like any worked-out row, unless
+     * another entry still covers it. Rows she named are never skipped for the pantry; a pantry row she switched on by
+     * hand, and rows skipped for another reason, stay as they are.
      */
     private fun recheckPantry(pantry: List<String>) {
         _state.update { s ->
             val review = s.review?.takeIf { !s.committing } ?: return@update s
             var changed = false
             val rows = review.rows.map { row ->
-                if (row.item.named || row.item.skipReason != SkipReason.NONE) return@map row
-                val entry = PantryMatch.coveringEntry(pantry, row.item.name) ?: return@map row
-                changed = true
-                row.copy(item = row.item.copy(skipReason = SkipReason.IN_PANTRY, pantryEntry = entry), keep = false)
+                val item = row.item
+                if (item.named) return@map row
+                when (item.skipReason) {
+                    SkipReason.NONE -> {
+                        val entry = PantryMatch.coveringEntry(pantry, item.name) ?: return@map row
+                        changed = true
+                        row.copy(item = item.copy(skipReason = SkipReason.IN_PANTRY, pantryEntry = entry), keep = false)
+                    }
+                    SkipReason.IN_PANTRY -> {
+                        // Switched on by hand, no entry named (the answer's own judgement, "spices" for cinnamon), or the
+                        // entry still on the shelves: as it is.
+                        val was = item.pantryEntry?.takeIf { it.isNotBlank() }
+                        if (row.keep || was == null || pantry.any { PantryMatch.covers(it, was) }) return@map row
+                        changed = true
+                        val entry = PantryMatch.coveringEntry(pantry, item.name)
+                        if (entry != null) {
+                            row.copy(item = item.copy(pantryEntry = entry))
+                        } else {
+                            row.copy(item = item.copy(skipReason = SkipReason.NONE, pantryEntry = null), keep = true)
+                        }
+                    }
+                    else -> row
+                }
             }
             if (changed) s.copy(review = review.copy(rows = rows)) else s
         }

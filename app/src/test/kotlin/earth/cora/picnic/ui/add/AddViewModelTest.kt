@@ -164,6 +164,14 @@ class AddViewModelTest {
         assertEquals("nothing was committed", f.stateWithPantry, r.store.current())
         // The request carried the pantry.
         assertEquals(listOf("Flour", "Sugar", "Salt", "Baking powder"), r.assistant.ingested.single().second.pantry)
+
+        // "Edit my pantry": she ran out, takes Flour off the shelves and comes back. The row is no longer "in your
+        // pantry": it is on, like any worked-out row.
+        r.store.update { st -> st.copy(pantry = st.pantry.filterNot { it.name == "Flour" }) }
+        advanceUntilIdle()
+        val back = r.vm.state.value.review!!.rows.single { it.item.name == "All-purpose flour" }
+        assertTrue("switched back on", back.keep)
+        assertEquals(SkipReason.NONE, back.item.skipReason)
     }
 
     // ---- rules 1 and 2 ----

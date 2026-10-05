@@ -133,6 +133,8 @@ class SpeakFlowTest {
         h.vm.micDenied()
         compose.waitForIdle()
         compose.onNodeWithText("Speak needs the microphone. You can allow it in the phone’s settings.").assertExists()
+        // No "Record a voice note" pill: asking again would be refused at once (Android may not even show its prompt).
+        compose.onNode(hasText("Record a voice note") and hasClickAction()).assertDoesNotExist()
         compose.onNode(hasText("Open phone settings") and hasClickAction()).performClick()
         compose.waitForIdle()
         val started = shadowOf(compose.activity).nextStartedActivity

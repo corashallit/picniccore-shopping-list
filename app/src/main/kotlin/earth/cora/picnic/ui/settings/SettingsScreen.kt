@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.SystemClock
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -134,9 +135,11 @@ interface LocationPermission {
 
 /**
  * The phone's coarse-location permission through the activity-result API. A request that comes back denied while
- * Android would no longer explain it (shouldShowRequestPermissionRationale false) means Android stopped asking: that is
- * remembered on this phone (never backed up), so the rationale offers "Open Android settings" instead of a prompt that
- * would fail at once.
+ * Android would no longer explain it (shouldShowRequestPermissionRationale false) means Android stopped asking, but only
+ * when it could have explained it before the request (a second "Don't allow") or the answer came back too fast for any
+ * prompt to have been shown: a first prompt she only dismissed (Back, a tap outside) leaves the rationale off too, and
+ * Android would still ask. Stopped is remembered on this phone (never backed up), so the rationale offers "Open Android
+ * settings" instead of a prompt that would fail at once.
  */
 @Composable
 fun rememberCoarseLocationPermission(): LocationPermission {
@@ -155,9 +158,13 @@ fun rememberCoarseLocationPermission(): LocationPermission {
             override fun blocked() = !context.hasCoarseLocation() && prefs.getBoolean(KEY_BLOCKED, false)
 
             override fun request(onResult: (Boolean) -> Unit) {
+                fun explains() = activity != null &&
+                    ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_COARSE_LOCATION)
+                val explainedBefore = explains()
+                val askedAt = SystemClock.elapsedRealtime()
                 pending = { ok ->
-                    val stopped = !ok && activity != null &&
-                        !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_COARSE_LOCATION)
+                    val noPrompt = SystemClock.elapsedRealtime() - askedAt < NO_PROMPT_MILLIS
+                    val stopped = !ok && activity != null && !explains() && (explainedBefore || noPrompt)
                     prefs.edit().putBoolean(KEY_BLOCKED, stopped).apply()
                     onResult(ok)
                 }
@@ -179,6 +186,9 @@ fun rememberCoarseLocationPermission(): LocationPermission {
 
 private const val LOCATION_PREFS = "location_permission"
 private const val KEY_BLOCKED = "coarse_blocked"
+
+/** A denial faster than this came without a prompt (no one reads and answers Android's dialog in half a second). */
+private const val NO_PROMPT_MILLIS = 500L
 
 private fun Context.hasCoarseLocation(): Boolean =
     ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -238,6 +248,8 @@ fun SettingsScreen(
 ) {
     val resources = LocalResources.current
     var showRationale by rememberSaveable { mutableStateOf(initialRationale) }
+    // She went to Android settings from "Use my area": allowed there, the switch is on when she comes back.
+    var areaAfterSettings by rememberSaveable { mutableStateOf(false) }
     var confirmRemove by rememberSaveable { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
 
@@ -245,10 +257,16 @@ fun SettingsScreen(
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     var granted by remember { mutableStateOf(location.granted()) }
     val onAreaRefresh by rememberUpdatedState(actions.onAreaRefresh)
+    val onSurpriseChange by rememberUpdatedState(actions.onSurpriseChange)
     val noFix by rememberUpdatedState(state.settings.useMyArea && state.area == AreaLookup.NoFix)
     LaunchedEffect(lifecycle) {
         if (lifecycle == Lifecycle.State.RESUMED) {
             val now = location.granted()
+            // Back from Android settings, where she went to allow location for "Use my area": it was for this.
+            if (areaAfterSettings) {
+                areaAfterSettings = false
+                if (now) onSurpriseChange(Surprise.UseMyArea, true)
+            }
             // The permission changed, or the last look found no fix (location services may be back on): look again.
             if (now != granted || (now && noFix)) {
                 granted = now
@@ -307,6 +325,7 @@ fun SettingsScreen(
                             onClick = {
                                 showRationale = false
                                 if (blocked) {
+                                    areaAfterSettings = true
                                     location.openSettings()
                                 } else {
                                     location.request { ok ->

@@ -51,6 +51,13 @@ class MetricNormaliserTest {
         assertEquals("2.5 mL", normalizeMetric("½ tsp"))
         assertEquals("454 g · 227 g", normalizeMetric("1 lb · 8 oz"), "every other unit is converted after the dot too")
     }
+
+    @Test
+    fun theSameAmountTwiceIsSaidOnce() {
+        assertEquals("3", normalizeMetric("3 · 3"), "bananas: pick up 3, the recipe uses 3")
+        assertEquals("1 pack", normalizeMetric("1 Pack · 1 pack").lowercase())
+        assertEquals("1 dozen · 1", normalizeMetric("1 dozen · 1"), "a dozen for one egg still says something")
+    }
 }
 
 /** The pantry ops (§6.13; checklist 319). */

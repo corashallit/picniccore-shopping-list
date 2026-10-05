@@ -321,8 +321,20 @@ internal fun StickerTray(
                         .border(2.dp, family.trace, androidx.compose.foundation.shape.CircleShape),
                     contentAlignment = Alignment.Center,
                 ) { Glyph(PicnicGlyph.Sparkle, null, tint = family.trace, size = 14.dp) }
-                Text(title, style = t.smallTitle.copy(fontSize = 17.sp, lineHeight = 22.sp, color = c.ballpoint), modifier = Modifier.weight(1f))
-                Text(count, style = t.label.copy(color = c.ballpoint), maxLines = 1)
+                val titleStyle = t.smallTitle.copy(fontSize = 17.sp, lineHeight = 22.sp, color = c.ballpoint)
+                if (count.isNotEmpty() && androidx.compose.ui.platform.LocalDensity.current.fontScale >= 1.5f) {
+                    // Large text: a count in its own column would squeeze the title onto a line per word ("Popped / into /
+                    // stickers"), so it follows the title instead: "Popped into / stickers · 5 kept". The break never
+                    // falls before the "·".
+                    val words = buildAnnotatedString {
+                        append(title)
+                        withStyle(t.label.copy(color = c.ballpoint).toSpanStyle()) { append("\u00A0· ${count.replace(' ', '\u00A0')}") }
+                    }
+                    Text(words, style = titleStyle, modifier = Modifier.weight(1f))
+                } else {
+                    Text(title, style = titleStyle, modifier = Modifier.weight(1f))
+                    if (count.isNotEmpty()) Text(count, style = t.label.copy(color = c.ballpoint), maxLines = 1)
+                }
             }
             // Only the stickers that have popped take a place: the tray fills as they land.
             val shownRows = rows.filter { clock?.rowShown(it.key) ?: true }

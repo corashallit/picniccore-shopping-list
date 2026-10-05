@@ -646,9 +646,10 @@ private fun ErrorBlock(failed: AddPhase.Failed, actions: AddActions) {
             if (failed.needsSettings) {
                 PicnicButton(stringResource(R.string.add_open_settings), onClick = actions.onOpenSettings, style = PicnicButtonStyle.Secondary, glyph = PicnicGlyph.Settings)
             }
-            // The microphone was turned off: the words say where to allow it, and this takes her there.
+            // The microphone was turned off: the words say where to allow it, and this takes her there (the way on, so
+            // the main pill; there is no Record footer then).
             if (failed.problem == AddProblem.MIC_DENIED) {
-                PicnicButton(stringResource(R.string.add_open_phone_settings), onClick = actions.onOpenAppSettings, style = PicnicButtonStyle.Secondary, glyph = PicnicGlyph.Settings)
+                PicnicButton(stringResource(R.string.add_open_phone_settings), onClick = actions.onOpenAppSettings, glyph = PicnicGlyph.Settings)
             }
         }
     }
@@ -719,8 +720,9 @@ private fun footerFor(state: AddUiState, reveals: Reveals): FooterKind? {
         }
         AddMode.SPEAK -> when (val phase = state.phase) {
             AddPhase.Idle -> FooterKind.Record
-            // A key problem: "Open Settings" is the way on; recording again would only be refused.
-            is AddPhase.Failed -> if (phase.needsSettings) null else FooterKind.Record
+            // A key problem ("Open Settings") or the microphone turned off ("Open phone settings"): that is the way on;
+            // recording again would only be refused (Android may not even ask again).
+            is AddPhase.Failed -> if (phase.needsSettings || phase.problem == AddProblem.MIC_DENIED) null else FooterKind.Record
             else -> null
         }
     }
