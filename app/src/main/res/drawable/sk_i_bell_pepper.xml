@@ -39,12 +39,12 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M21.44 19.55C19.84 25.34 20.17 34.93 22.6 42.6"
+    <path android:pathData="M21.8 18.4C19.8 24 20 34.4 22.6 42.6"
         android:strokeColor="#C3264F"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M30.56 19.55C32.16 25.34 31.83 34.93 29.4 42.6"
+    <path android:pathData="M30.2 18.4C32.2 24 32 34.4 29.4 42.6"
         android:strokeColor="#C3264F"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"

@@ -83,7 +83,7 @@
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M35.79 29.64Q36.09 29.91 36.4 30.4Q37.64 32.36 38.73 30.83"
+    <path android:pathData="M34.41 29.57Q35.35 28.75 36.4 30.4Q37.45 32.05 38.39 31.22"
         android:strokeColor="#FFDA4A"
         android:strokeWidth="1.5"
         android:strokeLineCap="round"

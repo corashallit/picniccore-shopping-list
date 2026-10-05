@@ -31,12 +31,12 @@
         android:strokeLineJoin="round"/>
     <path android:pathData="M12.9 21.6L39.1 21.6L39.1 38L12.9 38Z"
         android:fillColor="#FFFFFF"/>
-    <path android:pathData="M12.9 21.6L27.9 21.6M31.6 21.6L39.1 21.6"
+    <path android:pathData="M12.9 21.6L39.1 21.6"
         android:strokeColor="#3E4BB0"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
-    <path android:pathData="M12.9 38L23.7 38M29.3 38L39.1 38"
+    <path android:pathData="M12.9 38L39.1 38"
         android:strokeColor="#3E4BB0"
         android:strokeWidth="1.4"
         android:strokeLineCap="round"

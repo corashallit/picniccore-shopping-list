@@ -208,9 +208,11 @@ def inset_lines(icon):
             jobs.append(('line', p.w))
         for what, w in jobs:
             col = colour_of_line(p)
-            if col not in cache:
-                cache[col] = visible_traces(pp, unlike=col)
-            traces = cache[col]
+            # only the traces drawn before the line (its own part's included) can carry its cap; a part drawn after it
+            # covers it, and the line simply runs on under that part (cutting it short there left a gap beside it)
+            if (col, i) not in cache:
+                cache[(col, i)] = visible_traces(pp[:i + 1], unlike=col)
+            traces = cache[(col, i)]
             # an end may run into a trace of its own colour (a T-junction) but never past the outline's outer edge
             inside = prep(art.buffer(max(0.0, 1.0 - w / 2 - .1)))
             # what the parts drawn after this one paint over hides the line there: those stretches stay as they are

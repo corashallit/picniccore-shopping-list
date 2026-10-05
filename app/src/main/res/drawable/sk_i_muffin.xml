@@ -29,6 +29,11 @@
         android:strokeWidth="2"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
+    <path android:pathData="M19.6 19.8L19.7 19.8M32.6 17L32.7 17"
+        android:strokeColor="#CB9C73"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
     <path android:pathData="M24.3 21.2C24.3 21.57 24.2 21.93 24.02 22.25C23.83 22.57 23.57 22.83 23.25 23.02C22.93 23.2 22.57 23.3 22.2 23.3C21.83 23.3 21.47 23.2 21.15 23.02C20.83 22.83 20.57 22.57 20.38 22.25C20.2 21.93 20.1 21.57 20.1 21.2C20.1 20.83 20.2 20.47 20.38 20.15C20.57 19.83 20.83 19.57 21.15 19.38C21.47 19.2 21.83 19.1 22.2 19.1C22.57 19.1 22.93 19.2 23.25 19.38C23.57 19.57 23.83 19.83 24.02 20.15C24.2 20.47 24.3 20.83 24.3 21.2Z"
         android:fillColor="#9AA8F5"
         android:strokeColor="#3E4BB0"

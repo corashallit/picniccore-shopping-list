@@ -719,6 +719,8 @@ def autogloss(icon, report=None):
         info['r9'] = clean(pp, old_main, (mi, d['host'], d['ol']), tex='spots' if icon.key in STRIPES_OK else True, soft_ok='along') if d else 'host'
         if not info['r9'] and _hook(_stroke_pts(old_main)[0], legacy=True):
             info['r9'] = 'a hook'
+        if not info['r9']:          # and as validate.py sees it (its own host, its own gaps)
+            info['r9'] = clean(pp, old_main, trace_gap=.35, gap=.15, tex='spots', soft_ok='along')
         if not info['r9']:
             pts = _stroke_pts(old_main)[0]
             out.append(old_main)
@@ -821,7 +823,7 @@ def autogloss(icon, report=None):
         if hh is None and si.get('printed'):
             hh = (pi, pp[pi].fill, parts[pi].ol or 0)
         pts = _stroke_pts(g)[0]
-        if hh is not None and not clean(pp, g, hh, tex='spots', soft_ok='along') and not _hook(pts, legacy=True) and not _wiggly(pts) and all(LineString(pl).distance(LineString(pts)) >= 2.4 for pl in lines):
+        if hh is not None and not clean(pp, g, hh, tex='spots', soft_ok='along') and not clean(pp, g, trace_gap=.35, gap=.15, tex='spots', soft_ok='along') and not _hook(pts, legacy=True) and not _wiggly(pts) and all(LineString(pl).distance(LineString(pts)) >= 2.4 for pl in lines):
             out.append(g)
             info['subs'].append(si)
             lines.append(pts)
