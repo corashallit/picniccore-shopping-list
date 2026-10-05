@@ -198,6 +198,8 @@ fun PicnicText(
     overflow: TextOverflow = TextOverflow.Clip,
     /** The laid-out text (a caller that hides it from TalkBack can still report clipping, §15). */
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
+    /** What TalkBack reads, when the shown [text] carries layout-only characters (no-break spaces) the words do not. */
+    spoken: String? = null,
 ) {
     val annotated = remember(text) {
         buildAnnotatedString {
@@ -206,7 +208,7 @@ fun PicnicText(
             }
         }
     }
-    val spoken = remember(text) { spokenWithoutGlyphs(text) }
+    val read = remember(text, spoken) { spokenWithoutGlyphs(spoken ?: text) }
     val inline = remember(style.fontSize) {
         INLINE_GLYPHS.associate { ch ->
             ch.toString() to InlineTextContent(Placeholder(1.05.em, 1.em, PlaceholderVerticalAlign.TextCenter)) {
@@ -223,7 +225,7 @@ fun PicnicText(
         overflow = overflow,
         onTextLayout = onTextLayout ?: {},
         inlineContent = inline,
-        modifier = modifier.clearAndSetSemantics { this.text = AnnotatedString(spoken) },
+        modifier = modifier.clearAndSetSemantics { this.text = AnnotatedString(read) },
     )
 }
 

@@ -591,7 +591,7 @@ TalkBack: "Strawberries, 1 litre basket" + state ("not checked" / "got it"); cus
 
 ### 4.15 Sticky-note toast
 
-- A 220 dp lemon-pastel square note rotated −2°, a pink-gingham washi strip (90 dp, +3°) on top, 3 dp white border, hs2; text Zen Maru 700 14 sp ballpoint; the action is a tiny white chip sticker with an undo glyph ("Undo"), 48 dp target.
+- A 220 dp lemon-pastel square note rotated −2°, a pink-gingham washi strip (90 dp, +3°) on top, 3 dp white border, hs2; text Zen Maru 700 14 sp ballpoint, on balanced lines (never a one-word last line), where a " · " never starts a line: the dot stays at the end of the line before ("Rain on the way · / bring the tote!"); the action is a tiny white chip sticker with an undo glyph ("Undo"), 48 dp target.
 - Position: bottom-left, 14 dp from the left, 20 dp above the add bar (above the FAB when collapsed; above the IME when it is open).
 - Motion: drops in 220 ms `cubic-bezier(.3, 1.3, .5, 1)` from −30 dp at −9°, overshoots +4 dp at −1°, settles at −2°; stays still for its **hold**; lifts off upward (260 ms). A swipe dismisses it.
 - **Hold**: max(4000 ms, readHold(words)), then passed through Android's "Time to take action" setting: `AccessibilityManager.getRecommendedTimeoutMillis(hold, FLAG_CONTENT_TEXT | FLAG_CONTENT_CONTROLS)` for a toast with an action, `FLAG_CONTENT_TEXT` alone otherwise (§9).

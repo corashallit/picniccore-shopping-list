@@ -342,8 +342,14 @@ fun StickyNote(
                 .testTag(TOAST_BODY_TAG),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Balanced lines (§4.6, the balanced Heading strategy): never a one-word last line.
-            PicnicText(message, style = PicnicTheme.type.toast.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading))
+            // Balanced lines (§4.6, the balanced Heading strategy): never a one-word last line. A " · " never starts a
+            // line: a no-break space glues the dot to the word before it ("Rain on the way · / bring the tote!"), as
+            // the add flows' steps do; TalkBack reads the message as written.
+            PicnicText(
+                message.replace(" · ", "\u00A0· "),
+                style = PicnicTheme.type.toast.copy(lineBreak = androidx.compose.ui.text.style.LineBreak.Heading),
+                spoken = message,
+            )
             if (actionLabel != null) {
                 // Pressed, the chip sticker drops onto its shadow in 2 steps like the kit's chips (never a ripple, §0.2,
                 // §4.7); focused, it wears their 2 dp ring.
