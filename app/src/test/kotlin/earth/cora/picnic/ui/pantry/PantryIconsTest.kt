@@ -128,4 +128,28 @@ class PantryIconsTest {
         assertEquals(2, decider.calls.size)
         assertEquals(IconRef("spice_jar"), store.icon("Furikake"))
     }
+
+    /**
+     * The catch-up (§0.4, 5 October): a commit made offline leaves its unknown entries on the capsule (the decider fails
+     * at once, nothing waits); when the connection is back, PantryIcons.decidePending gives them their stickers in one call.
+     */
+    @Test
+    fun theCatchUpDecidesWhatACommitMadeOfflineLeft() = runTest {
+        var online = false
+        val decider = CountingDecider { items ->
+            if (!online) throw LlmError.Offline()
+            items.associate { it.id to IconDecision(icon = "spice_jar", category = "pantry") }
+        }
+        val (vm, store) = setup(token = "test-token", decider = decider)
+        add(vm, "furikake, za'atar")
+        assertNull(store.icon("Furikake"))
+        online = true
+        PantryIcons.decidePending(store, decider, catalog)
+        assertEquals(2, decider.calls.size)
+        assertEquals(2, decider.calls.last().size)
+        assertEquals(IconRef("spice_jar"), store.icon("Furikake"))
+        // Nothing left: no call.
+        PantryIcons.decidePending(store, decider, catalog)
+        assertEquals(2, decider.calls.size)
+    }
 }

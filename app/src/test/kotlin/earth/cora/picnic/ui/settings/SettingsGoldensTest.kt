@@ -97,6 +97,12 @@ object SettingsSamples {
         test = ConnectionTestUi.Failed(earth.cora.picnic.core.llm.LlmError.Unauthorized(401, missingScopes = listOf("api.responses.write")).friendlyMessage),
     )
 
+    /** Saved while offline (§0.4, 5 October): "Saved." and the neutral line, checked once back online. */
+    val uncheckedOffline = ok.copy(test = ConnectionTestUi.Unchecked(offline = true))
+
+    /** Saved, but OpenAI could not be reached to check it (a broken network, a timeout). */
+    val uncheckedUnreachable = ok.copy(test = ConnectionTestUi.Unchecked(offline = false))
+
     val surprisesOff = ok.copy(
         test = ConnectionTestUi.Idle,
         settings = Surprise.entries.fold(ok.settings) { s, surprise -> s.with(surprise, false) },

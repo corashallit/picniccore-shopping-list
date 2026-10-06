@@ -12,6 +12,7 @@ import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconRef
 import earth.cora.picnic.core.store.TripFiling
 import earth.cora.picnic.core.model.ItemSource
+import earth.cora.picnic.platform.CaptureKind
 
 /*
  * UI state of the add flows (docs/DESIGN_STICKER.md §6.2, §4.16–§4.21; ARCHITECTURE §10.3). Owner: WP7.
@@ -51,7 +52,8 @@ sealed interface AddPhase {
     /**
      * Something went wrong (rule 6). [message] is core's friendly text for an AI error; otherwise [problem] names the
      * app's own copy (strings_add.xml). [retryable] offers "Try again", [canUsePlainLines] "Add as plain lines",
-     * [needsSettings] "Open Settings".
+     * [needsSettings] "Open Settings". [offline]: the request never reached OpenAI (no network, or no connection; rule 2b),
+     * so the Write tab keeps its "As typed" footer.
      */
     data class Failed(
         val problem: AddProblem,
@@ -59,16 +61,26 @@ sealed interface AddPhase {
         val retryable: Boolean = false,
         val canUsePlainLines: Boolean = false,
         val needsSettings: Boolean = false,
+        val offline: Boolean = false,
     ) : AddPhase
 
     /** Anything is running that Cancel can stop. */
     val busy: Boolean get() = this is Recording || this is Transcribing || this is Thinking
 }
 
-/** The app's own failure copy (rule 6, §6.12); AI errors carry core's friendly message instead. */
-enum class AddProblem { AI, PHOTO_UNREADABLE, CAMERA_UNAVAILABLE, MIC_UNAVAILABLE, MIC_DENIED, TOO_SHORT, NOTHING_HEARD, SAVE_FAILED }
+/**
+ * The app's own failure copy (rule 6, §6.12); AI errors carry core's friendly message instead. KEPT_PHOTO and KEPT_VOICE
+ * are a kept capture shown again after the app restarted (§0.4, 5 October), when the first failure's words are gone.
+ */
+enum class AddProblem {
+    AI, PHOTO_UNREADABLE, CAMERA_UNAVAILABLE, MIC_UNAVAILABLE, MIC_DENIED, TOO_SHORT, NOTHING_HEARD, SAVE_FAILED,
+    KEPT_PHOTO, KEPT_VOICE,
+}
 
-/** The photo being read (§4.19): a small decoded copy for the polaroid (the capture file itself is deleted after reading). */
+/**
+ * The photo being read (§4.19): a small decoded copy for the polaroid (the capture file itself is deleted after reading;
+ * a photo that could not be sent is kept by the CaptureKeeper until it is).
+ */
 @Immutable
 data class SnapPhoto(val thumb: ImageBitmap?, val takenAt: Long)
 
@@ -93,6 +105,11 @@ data class AddUiState(
     val review: AddReview? = null,
     /** "Stick all" was tapped; the sheet closes once the items are saved. */
     val committing: Boolean = false,
+    /**
+     * The photo (Snap) or voice note (Speak) on show could not be sent and is kept on the phone (§0.4, 5 October): the
+     * error offers "Delete photo" / "Delete voice note" beside Try again.
+     */
+    val kept: CaptureKind? = null,
 ) {
     /** The rows that "Stick all n on my list" adds. */
     val keptCount: Int get() = review?.kept ?: 0
@@ -223,6 +240,11 @@ data class AddCommit(
     /** Rule 2: no key, so the text went on as typed ("Added as typed · add your OpenAI key to sort it"). */
     val asTypedNoKey: Boolean = false,
     /**
+     * Rule 2b (§0.4, 5 October): offline with a key, so the text went on as typed and its sorting waits for the
+     * connection (the catch-up does it): "Added as typed · sorting waits until you’re back online".
+     */
+    val asTypedOffline: Boolean = false,
+    /**
      * The add came from the docked bar's own Send (a quick add, or the no-key add) rather than a review in the sheet: the
      * field keeps its focus and the keyboard, so she can write the next thing straight away.
      */
@@ -245,7 +267,7 @@ data class AddCommit(
      * "Move" (§6.2, §4.15; Cora, 5 October). Not for an add to a list off screen, an add as typed, or Everything else.
      */
     val movable: Boolean
-        get() = added.size == 1 && !otherList && !asTypedNoKey && added.single().aisleId != null && !aisleTitle.isNullOrBlank()
+        get() = added.size == 1 && !otherList && !asTypedNoKey && !asTypedOffline && added.single().aisleId != null && !aisleTitle.isNullOrBlank()
 
     /** True when nothing changed (no new, revived or already-there rows). */
     val empty: Boolean get() = added.isEmpty() && revived.isEmpty() && alreadyThere.isEmpty()
@@ -275,6 +297,12 @@ sealed interface AddEvent {
 
     /** Background aisle placement of typed items failed (they stay in Everything else). */
     data class SortFailed(val friendlyMessage: String, val leftUnsorted: Int) : AddEvent
+
+    /**
+     * Background aisle placement of typed items never reached OpenAI (the connection went while it was asked): they wait
+     * in Everything else for the catch-up, and the note says so (§0.4, 5 October).
+     */
+    data class SortWaits(val leftUnsorted: Int) : AddEvent
 
     /** The field should take focus and open the keyboard (the FAB was tapped, "Start my list"). */
     data object FocusField : AddEvent

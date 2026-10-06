@@ -38,7 +38,10 @@ import earth.cora.picnic.core.store.Album
 import earth.cora.picnic.core.store.AlbumStore
 import earth.cora.picnic.core.store.StateStore
 import earth.cora.picnic.core.store.TripFiling
+import earth.cora.picnic.icons.DrawFailure
 import earth.cora.picnic.icons.IconRepository
+import earth.cora.picnic.platform.CatchUpNotes
+import earth.cora.picnic.platform.NetworkStatus
 import earth.cora.picnic.platform.Announcer
 import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.platform.DefaultTimeouts
@@ -67,6 +70,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -105,6 +109,10 @@ class ListViewModel(
     /** The choreography engine; one per List destination. */
     val engine: MotionChoreographer = MotionChoreographer(),
     private val zone: ZoneId = TORONTO,
+    /** Whether the phone has a network (§0.4, 5 October): an offline refresh says what waits; the Edit sheet's drawing. */
+    private val network: NetworkStatus = NetworkStatus.AlwaysOnline,
+    /** What the catch-up sorted when the connection came back: shown as the refresh's note, once. */
+    private val catchUp: CatchUpNotes = CatchUpNotes.None,
 ) : ViewModel() {
     /** The app's constructor: the engine speaks and plays cues through the app's services. */
     constructor(
@@ -121,12 +129,17 @@ class ListViewModel(
         timeouts: Timeouts,
         surprises: SurpriseEngine,
         aisleSync: AisleSync?,
+        network: NetworkStatus = NetworkStatus.AlwaysOnline,
+        catchUp: CatchUpNotes = CatchUpNotes.None,
     ) : this(
         store, album, icons, settings, catalog, clock, newId, appScope, feedback, announcer, surprises, aisleSync,
-        MotionChoreographer(feedback, announcer, timeouts),
+        MotionChoreographer(feedback, announcer, timeouts), network = network, catchUp = catchUp,
     )
 
     private val editingId = MutableStateFlow<String?>(null)
+
+    /** The last drawing she asked for that did not work (the Edit sheet says so); cleared by a new try or another item. */
+    private val drawFailure = MutableStateFlow<DrawFailure?>(null)
     private val bookTurn = MutableStateFlow(0)
     private val _events = Channel<ListEvent>(Channel.BUFFERED)
 
@@ -194,7 +207,19 @@ class ListViewModel(
             combine(store.states, icons.busy, settings.settings, editingId, surprises.state) { s, busy, set, editing, eggs ->
                 Inputs(s, busy, set, editing, eggs)
             }.combine(bookTurn) { inputs, turn -> inputs.copy(turn = turn) }
+                .combine(network.online) { inputs, online -> inputs.copy(online = online) }
+                .combine(drawFailure) { inputs, failure -> inputs.copy(drawFailure = failure) }
                 .collect { onStates(it) }
+        }
+        // A drawing she asked for that did not work: the Edit sheet says so (§0.4, 5 October). Opening or closing the
+        // sheet, or a new try, clears it.
+        viewModelScope.launch { icons.drawFailures.collect { drawFailure.value = it } }
+        // The catch-up sorted what waited for the connection: the refresh's note says so, once (§0.4, 5 October).
+        viewModelScope.launch {
+            catchUp.note.filterNotNull().collect { note ->
+                _events.send(ListEvent.Refreshed(note.sorted, note.left, 0))
+                catchUp.shown(note.id)
+            }
         }
     }
 
@@ -205,6 +230,8 @@ class ListViewModel(
         val editing: String?,
         val eggs: SurpriseState,
         val turn: Int = 0,
+        val online: Boolean = true,
+        val drawFailure: DrawFailure? = null,
     )
 
     private class Seen(val listId: String, val state: AppState, val list: GroceryList, val grouped: GroupedList)
@@ -246,7 +273,14 @@ class ListViewModel(
                 celebration = input.settings.celebration,
                 // Her list shows items sorted into aisles and she has never been told she can hold one (§6.1).
                 holdHint = !input.settings.holdHintDone && !holdHintGiven && grouped.sections.any { it.kind == SectionKind.AISLE },
-                editing = built.editing?.copy(focusMove = moveFirst),
+                online = input.online,
+                editing = built.editing?.let { e ->
+                    e.copy(
+                        focusMove = moveFirst,
+                        offline = !input.online,
+                        drawFailed = input.drawFailure?.takeIf { it.key == normalizeName(e.item.name) && !e.drawing },
+                    )
+                },
             )
         }
         val prev = seen
@@ -641,6 +675,16 @@ class ListViewModel(
      */
     fun refresh() {
         appScope.launch {
+            // Offline with a key: nothing can be sorted or drawn now; the note says it waits (the catch-up does it).
+            if (!network.online.value) {
+                val hasKey = try {
+                    settings.current().hasToken
+                } catch (e: IOException) {
+                    false
+                }
+                if (hasKey) _events.send(ListEvent.RefreshWaits)
+                return@launch
+            }
             val s = try {
                 store.current()
             } catch (e: IOException) {
@@ -724,12 +768,14 @@ class ListViewModel(
      */
     fun openEdit(itemId: String) {
         moveFirst = false
+        drawFailure.value = null
         editingId.value = itemId
         if (!holdHintGiven && !_surprises.value.holdHintDone) holdHintShown()
     }
 
     fun closeEdit() {
         moveFirst = false
+        drawFailure.value = null
         editingId.value = null
     }
 
@@ -799,6 +845,7 @@ class ListViewModel(
      */
     fun openMove(itemId: String) {
         moveFirst = true
+        drawFailure.value = null
         editingId.value = itemId
     }
 
@@ -823,6 +870,7 @@ class ListViewModel(
 
     /** "Draw a new icon": a forced live drawing that replaces any bespoke icon for this name. */
     fun redrawIcon(itemId: String) {
+        drawFailure.value = null
         appScope.launch {
             val name = store.current().findItem(itemId)?.name ?: return@launch
             icons.redraw(name)
@@ -892,7 +940,7 @@ class ListViewModel(
                 ListViewModel(
                     c.store, c.album, c.icons, c.settings, c.catalog, c.clock, c::newId, c.appScope,
                     feedback = c.feedback, announcer = c.announcer, timeouts = c.timeouts, surprises = c.surprises,
-                    aisleSync = c.aisleSync,
+                    aisleSync = c.aisleSync, network = c.network, catchUp = c.catchUp,
                 )
             }
         }

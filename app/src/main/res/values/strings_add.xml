@@ -129,6 +129,12 @@
     <string name="add_problem_too_short">That was too short to hear. Try again.</string>
     <string name="add_problem_nothing">Didn’t catch that. Try again a little closer to the mic.</string>
     <string name="add_problem_save">Couldn’t save. Try again.</string>
+    <!-- A photo or voice note that could not be sent, shown again after the app restarted (§0.4, 5 October): it is kept
+         on the phone until it is sent, replaced or deleted, and for 7 days at most (PRIVACY.md). -->
+    <string name="add_problem_kept_photo">This photo hasn’t been sent yet. Try again, or take a new one.</string>
+    <string name="add_problem_kept_voice">This voice note hasn’t been sent yet. Try again, or record a new one.</string>
+    <string name="add_kept_delete_photo">Delete photo</string>
+    <string name="add_kept_delete_voice">Delete voice note</string>
 
     <!-- Toasts after a commit (§4.15, §16) -->
     <string name="add_toast_added_one">Added %1$s to %2$s\u00A0♡</string>
@@ -147,6 +153,10 @@
         <item quantity="other">%1$d items are back on your list</item>
     </plurals>
     <string name="add_toast_as_typed">Added as typed · add your OpenAI key to sort it</string>
+    <!-- Rule 2b (§0.4, 5 October): offline with a key. The catch-up sorts these items when the connection is back. -->
+    <string name="add_toast_as_typed_offline">Added as typed · sorting waits until you’re back online</string>
+    <!-- Typed items whose background sort never reached OpenAI (the connection went meanwhile): the catch-up sorts them. -->
+    <string name="add_toast_sort_waits">Sorting waits until you’re back online</string>
     <string name="add_toast_shiny">★ shiny!</string>
     <string name="add_toast_nothing">Nothing to add</string>
     <string name="add_toast_undo">Undo</string>

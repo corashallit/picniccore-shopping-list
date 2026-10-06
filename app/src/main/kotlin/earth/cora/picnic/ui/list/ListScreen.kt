@@ -389,13 +389,14 @@ class ListScreenState(
 
     /**
      * The re-sync (§6.1, item 119), however she asks for it (the pull, the overflow menu's Refresh, the list's custom
-     * action): the cue, the re-sync itself, the sun's one spin and "SYNC" on the LCD for 1500 ms.
+     * action): the cue, the re-sync itself, the sun's one spin and "SYNC" on the LCD for 1500 ms. Offline nothing
+     * syncs, so the LCD keeps its word; the toast says what waits (§6.1).
      */
-    fun refresh(actions: ListActions) {
+    fun refresh(actions: ListActions, online: Boolean = true) {
         actions.onCue(Cue.PULL_REFRESH)
         actions.onRefresh()
         sunSpin++
-        syncing = true
+        syncing = online
     }
 
     companion object {
@@ -494,6 +495,7 @@ fun ListRoute(
                 )
                 is ListEvent.ListDeleted -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_list_deleted, event.title), kind = "list"))
                 is ListEvent.Refreshed -> refreshedToast(resources, event)?.let { toasts.show(it) }
+                ListEvent.RefreshWaits -> toasts.show(ToastMessage(resources.getString(R.string.list_toast_refresh_offline), kind = SYNC_KIND))
                 is ListEvent.Message -> toasts.show(ToastMessage(event.text, kind = "save"))
                 // Over the Edit sheet while it is up (the list's notes are under it), and over the list once it has
                 // closed; a note still up when the sheet closes carries on over the list (ListScreenContent).
@@ -1576,7 +1578,8 @@ private fun AisleList(
     val pullPx = with(density) { PULL_MAX.toPx() }
     val triggerPx = with(density) { PULL_TRIGGER.toPx() }
     val pullBack = remember { Animatable(0f) }
-    val refresh: () -> Unit = { screen.refresh(act) }
+    val online by rememberUpdatedState(state.online)
+    val refresh: () -> Unit = { screen.refresh(act, online) }
     val connection = remember(screen, pullPx, triggerPx, reduced) {
         object : NestedScrollConnection, PullGate {
             private var raw = 0f
@@ -2046,7 +2049,7 @@ private fun ListMenu(state: ListUiState, actions: ListActions, screen: ListScree
             disabledState = stringResource(R.string.list_menu_no_trip),
         ),
         MenuItem(stringResource(R.string.list_menu_switch_list), PicnicGlyph.Lists, actions.onOpenLists),
-        MenuItem(stringResource(R.string.list_menu_refresh), PicnicGlyph.Refresh, onClick = { screen.refresh(actions) }),
+        MenuItem(stringResource(R.string.list_menu_refresh), PicnicGlyph.Refresh, onClick = { screen.refresh(actions, state.online) }),
         MenuItem(stringResource(R.string.menu_my_store), PicnicGlyph.Aisles, actions.onOpenAisles),
         MenuItem(stringResource(R.string.menu_my_pantry), PicnicGlyph.Jar, actions.onOpenPantry),
         MenuItem(stringResource(R.string.menu_album), PicnicGlyph.Album, actions.onOpenAlbum),

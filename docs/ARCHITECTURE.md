@@ -480,7 +480,8 @@ fun interface TokenSource { suspend fun token(): String? }
 ### 7.2 `OpenAiClient` (core-internal behaviour; the app only constructs it)
 
 ```kotlin
-class OpenAiClient(config: ConfigSource, token: TokenSource) {
+class OpenAiClient(config: ConfigSource, token: TokenSource, retryPolicy: RetryPolicy = RetryPolicy.DEFAULT,
+                   log: LlmLog = LlmLog.Default, isOnline: () -> Boolean = { true }) {   // isOnline: 5 October, offline
     suspend fun responses(body: JsonObject, timeout: Duration = LlmTimeouts.INGEST): ApiResult
     suspend fun transcription(model: TranscriptionModel, audio: ByteArray, fileName: String,
                               keywords: List<String>, timeout: Duration = LlmTimeouts.TRANSCRIBE): ApiResult
@@ -495,6 +496,7 @@ class ImageResult(val bytes: ByteArray, val requestId: String?, val latencyMs: L
 
 - **Endpoints:** all are relative to `baseUrl`, and auth is `Authorization: Bearer <token>`. The app always uses api.openai.com, with the user's OpenAI key as the bearer token.
 - **Not configured:** a missing or blank token, or a base URL that fails `normalizeBaseUrl`, throws `LlmError.NotConfigured` without sending a request.
+- **Offline** (DESIGN_STICKER §0.4, 5 October): `isOnline` (the app passes its `NetworkStatus`; the CLI and tests leave it true) is read before every call, after the key checks; false throws `LlmError.Offline` ("You’re offline right now. Try again once you’re back online.", retryable) with no request and no wait, so every caller (ingest, transcribe, recategorize, the IconDecider, drawings, the key test) fails at once in airplane mode.
 - **Implementation:** OkHttp 5 stays an implementation detail of core (`implementation`, not `api`). Calls go through `enqueue` inside `suspendCancellableCoroutine`, and `invokeOnCancellation { call.cancel() }` cancels them. The per-call timeout is the OkHttp call timeout; connect timeout `LlmTimeouts.CONNECT`. Large JSON encode/decode runs on `Dispatchers.Default`. `http.newCall` runs on `Dispatchers.IO`, because the first call builds the lazy `OkHttpClient` (platform TLS, system CA store) and callers are often on the main thread.
 - **Logging:** never log the token, the `Authorization` header or request bodies. Log the method, path, status, `x-request-id` and latency.
 - **Retries:** up to 2 extra attempts on 429 rate limits (**not** `insufficient_quota` or the spend/usage-limit codes) and on 500/502/503/504. Back off 1 s, then 2 s, with up to 0.5 s of jitter. Honour `Retry-After` up to 20 s. **`imageEdit` is never retried automatically:** a drawing is slow and billed, and its caller (the app's icon queue, §8.3) retries it at most once itself.
@@ -512,7 +514,7 @@ class ImageResult(val bytes: ByteArray, val requestId: String?, val latencyMs: L
   - 429 with type `insufficient_quota` or a spend/usage-limit code (`credit_balance_exhausted`, `organization_spend_limit_exceeded`, `project_spend_limit_exceeded`, `organization_usage_limit_exceeded`) → `QuotaExceeded`: "The OpenAI account behind this key is out of credit or over its monthly budget." Any other 429, or 503 after retries → `RateLimited`.
   - 404 `model_not_found`, and the 403 `model_not_found` OpenAI sends when the key's project has an allowed-models list without the model ("Project … does not have access to model …") → `BadResponse(code = "model_not_found")`: "This OpenAI key can't use one of the AI models the app needs. Check which models its project allows." (there is no model setting to point at). Other 4xx, including any other 404 → `BadResponse(code)`.
   - Any 5xx after retries → `Network`.
-  - IOException → `Network` (including `UnknownServiceException` for cleartext). `SocketTimeoutException` or an exceeded call timeout → `Timeout`.
+  - A transport failure **before the call got a connection** (DNS, refused, a connect timeout, a failed TLS handshake, also when the call timeout ran out while connecting) → `Network(beforeConnect = true)`: "Couldn't reach OpenAI. Check your connection?", never "That took too long". An OkHttp `EventListener` marks each attempt's `connectionAcquired` (a `ConnectionMark` request tag), so no exception text is parsed. A **connected** call whose call timeout or socket timeout runs out → `Timeout`; any other IOException → `Network` (including `UnknownServiceException` for cleartext). `LlmError.unreached` (Offline, or Network before a connection: nothing reached OpenAI) and `LlmError.transport` (Offline, Network, Timeout) name the two groups the app acts on.
   - `image_generation_user_error` with `moderation_blocked` → `Refusal`; other image user errors → `BadResponse`; neither is retried.
 
 ### 7.3 `GroceryAssistant` operations
@@ -688,7 +690,10 @@ commit / rename ──► store.update{...} ──► icons.submit(items)       
 Decide batcher (single coroutine): debounce 300 ms, ≤ 40 keys per call
     iconDecider.decide(NamedItem(key, name)…) → store.update{applyIconDecisions(key -> decision.resolve(catalog))}
     busy -= keys; resolved APPROXIMATE keys continue to the draw rule above
-    LlmError → busy -= keys (items stay PENDING; resumePending() retries next start or when a token is added)
+    LlmError → busy -= keys (items stay PENDING; resumePending() retries next start, when a token is added, or at the catch-up)
+Offline (online() false, NetworkStatus; 5 October): no decide call is queued (PENDING items wait), no drawing is queued and no
+    daily slot is used: an APPROXIMATE name joins index.drawLater; resumePending() (cold start, refresh, the catch-up)
+    submits every waiting name an item still wants (APPROXIMATE, no custom icon) and drops the others
 Draw workers (2 coroutines on a Channel = max 2 concurrent), live stickers v4 (art pass, DESIGN_STICKER §18.3 step 5):
     brief = the decider's "none" (look + two families), else LiveIconDrawer.brief asks once more for this name
     sheet = SheetComposer: the approximate key and the two closest same-category library stickers, art only, on a
@@ -696,7 +701,12 @@ Draw workers (2 coroutines on a Channel = max 2 concurrent), live stickers v4 (a
     LiveIconDrawer.draw → assistant.drawIcon(IconDrawRequest(name, sheet, mask, subject, families))
       RateLimited / Network / Timeout → wait 3 s, retry ONCE (imageEdit itself never retries: at most 2 requests per drawing)
       Refusal (moderation) → blocked += key (never auto-draw this name again)
-      other → give up silently (the item keeps its APPROXIMATE catalog icon)
+      Offline / Network / Timeout after the retry → an item's drawing joins drawLater; the day's slot is refunded only
+      when no attempt reached OpenAI (DrawOutcome.Failed.reached false: Offline, or Network before a connection), since
+      a connected attempt may have been billed
+      other (quota, bad answer) → give up (the item keeps its APPROXIMATE catalog icon; the slot stays used)
+      a forced redraw ("Draw a new icon") that fails → IconRepository.drawFailures (DrawFailure: offline, refused or other),
+      which the Edit sheet shows
     LiveStickerProcessor (IconPostProcessorV4, < 100 ms on Dispatchers.Default): cut the 4th cell, snap every pixel to
       the two families + white + lemon pastel, remove specks, size and base on the library grid, 4u white die-cut,
       cut path, procedural gloss, 2u trace
@@ -715,7 +725,7 @@ Rows read `busy` and show `IconCatalog.displayRef(item, busy = normalizeName(ite
 - **Art pass (live icons v4, replaces; consumers: AppIconRepository, LiveIconDrawer, BespokeIconCache).** Output is 208 px plus a `.cut` file. A redraw, and the start-up sweep (files older than 10 min that nothing points at), delete a replaced file only when **no list, pantry entry or `album.json`** references it (`AlbumStore.referencedCustomIconIds()`): filed books keep their stickers; if the album can't be read, nothing is deleted. **Legacy icons** (drawn before v4: 192 px, no `.cut`) render as they are and are redrawn in v4 in the background from `resumePending()`, oldest first, under the daily cap, only with a key set and drawing on.
 - **Daily cap:** 40 automatic drawings per day protects against runaway cost. A redraw ignores the cap.
 - **Settings toggle:** "Draw new icons with AI", on by default, with the cost note "Drawing a new icon takes about 10 s and costs about 1.5¢ (US)." It gates step 3 only; step 2 (≈ US$0.0002 per batch) always runs when a token is set.
-- **Offline:** nothing is re-queued for drawing automatically later. The item shows its catalog icon, and the user can choose "Draw a new icon".
+- **Offline** (5 October): nothing is drawn or decided automatically while `NetworkStatus` says offline, and no daily slot is used. A name whose automatic drawing waits for a connection (asked offline, or failed on the way: Offline, Network or Timeout; the slot is refunded only when no attempt reached OpenAI) is kept in `index.json`'s `drawLater` (at most 200 names, oldest dropped first) and submitted again by `resumePending()` at the cold start, a refresh and the catch-up (§10.5), under the cap; it leaves the set once drawn, refused, given up on (quota, bad answer) or no longer wanted. Meanwhile the item shows its catalog icon, and "Draw a new icon" in the Edit sheet rests offline.
 
 ### 8.5 Display rule (core `IconCatalog.displayRef(item, busy)`, implemented)
 
@@ -802,12 +812,15 @@ fun maskToken(token: String): String              // "sk-…a1b2"
   | `aisleSync` | |
   | `icons`, `stickerArt` | `AppIconRepository` (with the album and `onIconReplaced = AppStickerArt::evict`), `AppStickerArt(filesDir/icons/custom)`; art pass: `stickerArt` replaced `iconImages` / `AssetIconImages` |
   | `photos` | `PhotoPreparer` |
+  | **5 October:** `network` | `AndroidNetworkStatus.create(app)` (`NetworkStatus`, §10.5): `online` and `arrivals`; read by `OpenAiClient` (`isOnline`), `AppIconRepository`, the add flows, the list's refresh, Settings and `catchUp` |
+  | **5 October:** `catchUp` | `CatchUp` (§10.5): resumes `icons`, runs `aisleSync.sortPending()`, `PantryIcons.decidePending` and `surprises.onBackOnline()`; its note reaches `ListViewModel` (`CatchUpNotes`) |
+  | **5 October:** `keptCaptures` | `FileCaptureKeeper(noBackupFilesDir/kept)` (`CaptureKeeper`): photos and voice notes whose request failed, for `AddViewModel` |
   | `newVoiceRecorder()` | |
   | `ready: StateFlow<Boolean>` | True once `startOnce()` has parsed the icon catalog (≈110 KB JSON) off the main thread |
   | **Art pass:** `album` | `JsonFileAlbumStore(filesDir/album.json)` (WP3), kept in step with the state by `TripFiling.launchAlbumSync` (`startOnce`) |
   | **Art pass:** `feedback`, `announcer`, `timeouts` | WP10's services: `AndroidFeedback.create(app, settings.settings, appScope)` (sounds and haptics, each gated by its switch; built in `startOnce` before the first resume so its window tracker sees the activity), `AndroidAnnouncer` (polite, de-duplicated within 1 s), `AndroidTimeouts` ("Time to take action", "Touch & hold delay"). Tests use `FakeFeedback`, `FakeAnnouncer`, `FakeTimeouts`; previews the no-ops (`NoOpFeedback`, `NoOpAnnouncer`, `DefaultTimeouts`). |
   | **Art pass:** `places`, `surprises`, `themeVariants` | `PlaceSource` (Toronto until "Use my area" lands), `SurpriseEngine` (phase 0: `NoOpSurpriseEngine`), `ThemeVariantSource(settings, clock, SunClock, places)` |
-  | `startOnce()` | Once per process (an `AtomicBoolean`; MainActivity calls it on every `onCreate`), in `appScope`: build `feedback` → warm the catalog → `ready = true` → `TripFiling.launchAlbumSync(appScope, store, album, catalog, clock)` (art pass) → `icons.resumePending()` → `Captures.sweepStale`. It also starts the token watcher: each "no token → token" change (`onTokenAdded`) runs `icons.resumePending()` and `aisleSync.sortItems(...)` for TYPED items still needing an aisle, so items added before a token existed catch up without a cold start. |
+  | `startOnce()` | Once per process (an `AtomicBoolean`; MainActivity calls it on every `onCreate`), in `appScope`: build `feedback` → warm the catalog → `ready = true` → `TripFiling.launchAlbumSync(appScope, store, album, catalog, clock)` (art pass) → `catchUp.start()` (5 October: `icons.resumePending()` always, then, online with a key, the rest of the catch-up; then one after each arrival of a connection) → `Captures.sweepStale` → `keptCaptures.sweep()` (kept captures older than 7 days). It also starts the token watcher: each "no token → token" change (`onTokenAdded`) runs `icons.resumePending()` and `aisleSync.sortItems(...)` for TYPED items still needing an aisle, so items added before a token existed catch up without a cold start. |
 - **ViewModels take their dependencies individually**, never the container. Their factories read the container:
 
   ```kotlin
@@ -920,8 +933,8 @@ The ingest context is taken when the request is sent (`state.ingestContext(listI
 |---|---|---|---|
 | **Write, AI** (text, list, recipe URL) | `submitText` → `Thinking` → `assistant.ingest(Text(text), ctx)` → `Preview` (keep toggles; shows `message`, `skipped` and **Sources** chips opened with `LocalUriHandler`) → `commit` | AI_TEXT | `Failed(canUsePlainLines=true)` → `usePlainLines()` = `OfflineParser.parse(text, catalog, ctx)` → Preview → commit as TYPED |
 | **Write, as typed** | `addTyped` → `OfflineParser.parse(text, catalog, ctx)` → commit at once (no preview) | TYPED | none needed (no network) |
-| **Snap** (camera / picker) | `TakePicture` into a FileProvider Uri (`Captures.newCaptureUri`, pending Uri kept in `rememberSaveable`) or `PickVisualMedia(ImageOnly)` → `onPhoto(uri)` → `photos.jpegBytes(uri)` (IO) → `Thinking` → `ingest(Image(bytes), ctx)` → Preview → commit. Delete the capture file afterwards. | PHOTO | `Failed(retryable)`; no plain-lines option (nothing to parse) |
-| **Speak** | Request `RECORD_AUDIO` at runtime → `AudioRecorder.start()` (`VoiceRecorder`: m4a, mono 16 kHz 32 kbps, max 5 min). Poll `level()` about 10×/s for the waveform. `stop()` (also on `ON_STOP`) → bytes → `Transcribing` → `assistant.transcribe(AudioClip(bytes), keywords)` → show the transcript (editable) → `Thinking` → `ingest(Transcript(text), ctx)` → Preview → commit | VOICE | Empty transcript → "Didn't catch that". Transcribe failure → retry with the bytes kept in memory. Ingest failure → plain lines from the transcript. |
+| **Snap** (camera / picker) | `TakePicture` into a FileProvider Uri (`Captures.newCaptureUri`, pending Uri kept in `rememberSaveable`) or `PickVisualMedia(ImageOnly)` → `onPhoto(uri)` → `photos.jpegBytes(uri)` (IO) → `Thinking` → `ingest(Image(bytes), ctx)` → Preview → commit. Delete the capture file afterwards. | PHOTO | `Failed(retryable)`; no plain-lines option (nothing to parse). The JPEG is kept (`CaptureKeeper`) until sent, replaced or deleted (§10.5) |
+| **Speak** | Request `RECORD_AUDIO` at runtime → `AudioRecorder.start()` (`VoiceRecorder`: m4a, mono 16 kHz 32 kbps, max 5 min). Poll `level()` about 10×/s for the waveform. `stop()` (also on `ON_STOP`) → bytes → `Transcribing` → `assistant.transcribe(AudioClip(bytes), keywords)` → show the transcript (editable) → `Thinking` → `ingest(Transcript(text), ctx)` → Preview → commit | VOICE | Empty transcript → "Didn't catch that". Transcribe failure → retry with the bytes, kept (`CaptureKeeper`, §10.5). Ingest failure → plain lines from the transcript; the recording and its words are kept for Try again. |
 
 **Preview layout.** Proposed items are grouped by aisle in section containers (`AisleSectionTitle` + `AisleSectionRow`s). The commit row (**Add N items**, **Start over**) is a footer pinned under the scrolling preview, behind a dashed edge, so the main action never needs a scroll. A skipped row fades and leaves its box empty; it is never struck through (§11.4).
 
@@ -935,11 +948,26 @@ The ingest context is taken when the request is sent (`state.ingestContext(listI
 
 `NotConfigured` gives `Failed(needsSettings = true)`, which offers **Open Settings**.
 
+**Offline** (5 October, DESIGN_STICKER §6.2 rule 2b): `AddViewModel(online = { network.online.value })`. The bar's Send with a key and no network commits the OfflineParser rows at once (`AddCommit.asTypedOffline`: "Added as typed · sorting waits until you’re back online"); so does a bar Send whose ingest fails `LlmError.unreached`. The sheet's Write Send, Snap and Speak check `online` before each request and fail with `LlmError.Offline` (`Failed(offline = true)`: Write keeps its "As typed" footer). A typed commit made offline skips `sortItems` (the catch-up sorts it) and says so in its one note; a background `sortItems` that never reached OpenAI sends `AddEvent.SortWaits`, not `SortFailed`. Either one while `online` is still true calls `requestCatchUp` (`CatchUp.request`, §10.5). An as-typed commit keeps its text in its `UndoRecord` (`draft`), and Undo puts it back in the field when the field is empty.
+
 **Aisle edit:**
 
 1. Save runs `store.update { setStoreName(name).setAislesText(text, baskets::guess) }`. The heuristic baskets show immediately, and items in vanished aisles render as Unsorted.
 2. `appScope.launch { aisleSync.sync() }` runs `assignBasketsOrGuess` → `setAisleBaskets`, then `itemsNeedingAisle` → `recategorize` → `applyAisleAssignments`.
 3. The returned `AisleSyncReport` drives a snackbar, e.g. "Sorted 6 items · 2 left in Unsorted" or the error's friendly message.
+
+### 10.5 Offline and the catch-up (5 October)
+
+DESIGN_STICKER §0.4 (Cora, 5 October). Four pieces, all app-side except core's `LlmError.Offline` and `AisleSync.sortPending`:
+
+- **`NetworkStatus`** (`platform/NetworkStatus.kt`, needs `ACCESS_NETWORK_STATE`, a normal permission). `AndroidNetworkStatus` registers ConnectivityManager's default-network callback once per process and starts from the active network's capabilities. `online` is false only when there is **no** default network that offers `NET_CAPABILITY_INTERNET` (airplane mode, no signal); a network that exists but is not `VALIDATED` (a captive portal, or validation blocked) stays online and is tried, since validation is unreliable on some networks. `arrivals` counts each time a usable connection arrives: offline → online, another default network, or the same one newly validated (never the first report at registration). If the callback cannot be registered the app assumes online. Tests use `FakeNetworkStatus`; previews `NetworkStatus.AlwaysOnline`.
+- **The Offline error** (§7.2): `OpenAiClient(isOnline = { network.online.value })` fails every call at once offline, and a call that never connected is `Network(beforeConnect = true)`, never `Timeout`.
+- **`CatchUp`** (`platform/CatchUp.kt`): `start()` runs once at the cold start (`icons.resumePending()` always; online with a key also the sorting, the pantry stickers) and then after every arrival, debounced 3 s. Each run, online only: `surprises.onBackOnline()` (the forecast if due or failed; it needs no key), then with a key `icons.resumePending()`, `aisleSync.sortPending()` (every list's `itemsNeedingAisle()`, one recategorize call, manual placements and corrections exactly as `sortItems`; names the model already answered in this process are not asked again until the aisles change) and `PantryIcons.decidePending`. Runs take turns on one `Mutex` (never two at once), arrivals during a run fold into one more run after it (`conflate`), and runs after arrivals are at least 60 s apart. **Retries:** a phone can look online and still not reach OpenAI, and then no arrival comes; so `request()` (from `AddViewModel` when an unreached commit or `SortWaits` happens while `online`) and any run whose `sortPending` fails with a `transport` error schedule retries 1, 5 and 15 min later (`RETRY_BACKOFF_MS`), single-flight, through the same lock and 60 s gap, without the forecast; they stop as soon as a sort gets an answer (unless a `request()` came in while it sorted), when offline (the arrival takes over) or without a key, and after the third until the next arrival, cold start or `request()`. `sortPending` counts items as answered only once their answer is saved (a failed save leaves them eligible). When it sorted something, `note` holds a `CatchUpNote` until the list shows it as the refresh's note (`ListEvent.Refreshed`) and calls `shown`. `ListViewModel.refresh()` offline with a key asks nothing and sends `ListEvent.RefreshWaits` ("Sorting and new stickers wait until you’re back online"); `ListUiState.online` tells the screen, whose `refresh` then leaves the LCD alone (no SYNC).
+- **The draw-later queue** (§8.3, §8.4): `BespokeIconCache.drawLater` in `index.json`, filled offline and by drawings that fail on the way (their slot refunded only when nothing reached OpenAI), drained by `resumePending()` under the daily cap.
+
+**Kept captures** (`platform/KeptCaptures.kt`): `CaptureKeeper` keeps one photo (`photo-<keptAt>.jpg`, the prepared JPEG) and one voice note (`voice-<keptAt>.m4a`) in `noBackupFilesDir/kept` (never backed up), written atomically when a request fails with "Try again" offered. `AddViewModel` keeps the file names (and a voice note's words, when it was written down) in its `SavedStateHandle` with the draft, and falls back to `latest()` on a fresh start, so a kept capture survives closing the sheet, process death and a cold start. Opening Snap or Speak again (the bar's camera or cassette via `AddFlows.snapFromBar` / `speakFromBar`, the sheet's tab) shows it (`AddUiState.kept`) with its failure, or `AddProblem.KEPT_PHOTO` / `KEPT_VOICE` after a restart, Try again and "Delete photo" / "Delete voice note" (`discardKept`). It is deleted once its request succeeds, a new photo or recording replaces it, plain lines from it are stuck on the list, or she deletes it; `startOnce` and each `restoreKept` sweep any older than 7 days, and `read`, `latest` and `isKept` ignore an older or missing file, so a restored pointer to one is let go and `showKept` turns an expired one down at once. When the bytes of a kept capture can't be read after all, the bar's `snapFromBar` / `speakFromBar` pass the camera or recorder as `showKept`'s fallback, so the tap still opens them. Writes and deletes go through one ordered queue, so a delete asked during a write still ends deleted.
+
+**Other screens.** Settings (`SettingsViewModel(network = …)`): a key test offline makes no request and shows `ConnectionTestUi.Unchecked(offline = true)`; a `transport` failure while online is `Unchecked(offline = false)`; both keep "Saved." with no error styling and a neutral line, and an unchecked key is tested again by itself when a connection arrives while Settings is open. The Edit sheet (`EditItemUi.offline`, `drawFailed`): "Draw a new sticker" rests offline with its reason; a failed redraw (`IconRepository.drawFailures`) is said in the sheet until she tries again or the sheet closes. Weather (`WeatherService`): a failed ask keeps the old forecast and is retried after 15 min (`weather_failed_at`), or at once by the catch-up (`check(retryFailed = true)`).
 
 ---
 
@@ -1102,18 +1130,20 @@ itemsIndexed(items, key = { _, r -> r.id }) { i, r ->
 | Where | Error | User sees |
 |---|---|---|
 | ingest (text / transcript) | any `LlmError` | `Failed` with `friendlyMessage`, **Try again** if `retryable`, and **Add as plain lines** |
-| ingest (photo) | any `LlmError` | `Failed` with **Try again** |
+| ingest (photo) | any `LlmError` | `Failed` with **Try again**; the photo is kept until sent, replaced or deleted (§10.5) |
+| any AI call | `Offline` (no network, 5 October) | "You’re offline right now. Try again once you’re back online." at once, no request; the add bar's Send adds as typed instead (§10.4) |
 | any AI call | `NotConfigured` | "Add your OpenAI key in Settings first." and **Open Settings** |
 | any AI call | `Unauthorized` | "OpenAI didn't accept this key. Check it in Settings, or paste a new one." (or, with `missingScopes`, "This OpenAI key is missing a permission the app needs (…)") and **Open Settings** |
 | any AI call | `BadResponse(model_not_found)` (404, or 403 from a project's allowed-models list) | "This OpenAI key can't use one of the AI models the app needs. Check which models its project allows." |
 | any AI call | `QuotaExceeded` (credits, or the project's hard spend limit) | "The OpenAI account behind this key is out of credit or over its monthly budget." |
 | transcribe | empty text | "Didn't catch that. Try again a little closer to the mic." |
-| transcribe | `LlmError` | `Failed` with **Try again** (the recording is kept in memory while the sheet is open) |
+| transcribe | `LlmError` | `Failed` with **Try again** (the recording is kept on the phone until sent, replaced or deleted, §10.5) |
 | photo decode | `IOException` / `IllegalStateException` | "Couldn't open that photo." |
 | aisle sync / sortItems | `report.error` | snackbar: friendly message plus "N items left in Unsorted" (sortItems: silent unless the user is on the list) |
-| IconDecider (step 2) | any | nothing; items keep the fallback icon and stay PENDING until the next process start or a key is added |
-| icon drawing (step 3) | any | nothing (a background enhancement); a refusal blocks the name |
-| Test connection | any | inline: ✓ and latency, or the friendly message |
+| IconDecider (step 2) | any | nothing; items keep the fallback icon and stay PENDING until the next process start, a key is added or the catch-up |
+| icon drawing (step 3) | any | nothing (a background enhancement); a refusal blocks the name; Offline / Network / Timeout wait in `drawLater`, with the slot refunded only when no attempt reached OpenAI; a redraw she asked for says so in the Edit sheet |
+| Test connection | `Offline`, `Network`, `Timeout` | "Saved." stays; a neutral "Not checked yet: …" line ("Test it again once you’re back online"), tested again by itself when a connection arrives while Settings is open |
+| Test connection | any other | inline: ✓ and latency, or the friendly message |
 | settings write | `IOException` (DataStore) | inline notice "Couldn't save. Try again." |
 | token read | `KeystoreUnavailableException` | that call gets `NotConfigured`; the token is kept (§9) |
 | `StateStore.update` | `IOException` | snackbar "Couldn't save. Try again." |
@@ -1161,7 +1191,7 @@ The workflow is `.github/workflows/android.yml`. Copy it verbatim from `research
 
 ## 16. Privacy and Play compliance
 
-- **Permissions:** `INTERNET` and `RECORD_AUDIO` (runtime, foreground only). **Art pass (A6):** plus `ACCESS_COARSE_LOCATION`, requested only when she turns on "Use my area" (after the rationale in DESIGN_STICKER §0.4); never fine or background location (`ManifestPermissionsTest`, owners WP8 · WP9). There is **no `CAMERA` permission**, because the system camera intent is used. `<uses-feature>` marks camera and microphone as `required="false"`. The photo picker needs no permission. The `<queries>` entry for `IMAGE_CAPTURE` is present. Verified in the merged manifest: INTERNET, RECORD_AUDIO and androidx's `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` only.
+- **Permissions:** `INTERNET` and `RECORD_AUDIO` (runtime, foreground only). **5 October:** plus `ACCESS_NETWORK_STATE` (a normal permission, granted at install, no prompt) for `NetworkStatus` (§10.5). **Art pass (A6):** plus `ACCESS_COARSE_LOCATION`, requested only when she turns on "Use my area" (after the rationale in DESIGN_STICKER §0.4); never fine or background location (`ManifestPermissionsTest`, owners WP8 · WP9). There is **no `CAMERA` permission**, because the system camera intent is used. `<uses-feature>` marks camera and microphone as `required="false"`. The photo picker needs no permission. The `<queries>` entry for `IMAGE_CAPTURE` is present. Verified in the merged manifest: INTERNET, RECORD_AUDIO and androidx's `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` only.
 - **Data sent off the device:** text, photos and audio go directly to OpenAI only when the user asks; item names go there in the background, including for "Add as typed": to the fast model for aisle placement and icon decisions, and to the image model for bespoke icons (when "Draw new icons with AI" is on). The Settings help text says the same. Requests use `store: false`. Nothing else leaves the device, and there are no analytics.
 - **Backups:** only `state.json` is backed up. **Art pass:** `state.json` and `album.json`.
 - **Art pass:** the pantry is stored on the phone and sent to OpenAI with each AI request (never without a key); the opt-in weather feed and the approximate area are as in §9. PRIVACY.md says so (WP8 · WP10).

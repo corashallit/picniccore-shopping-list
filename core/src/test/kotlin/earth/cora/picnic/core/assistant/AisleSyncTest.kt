@@ -29,14 +29,16 @@ class AisleSyncTest {
     private class FakeAssistant(
         val placements: Map<String, String?> = emptyMap(),
         val baskets: Map<String, BasketKind> = emptyMap(),
-        val recategorizeError: LlmError? = null,
+        var recategorizeError: LlmError? = null,
         val basketsError: LlmError? = null,
     ) : GroceryAssistant {
         val recategorized = mutableListOf<List<NamedItem>>()
+        val correctionsSent = mutableListOf<List<Correction>>()
 
         override suspend fun recategorize(items: List<NamedItem>, aisles: List<Aisle>, corrections: List<Correction>): Map<String, String?> {
             recategorizeError?.let { throw it }
             recategorized += items
+            correctionsSent += corrections
             return items.associate { it.id to placements[it.name] }
         }
 
@@ -109,6 +111,72 @@ class AisleSyncTest {
         assertEquals(AisleSyncReport(false, 0, 0, null), AisleSync(store, assistant, catalog.baskets).sortItems(emptyList()))
     }
 
+    /**
+     * Catch-up (§0.4, 5 October): every list's items still needing an aisle are sorted in one call, with the learned
+     * corrections sent along exactly as sortItems sends them; items she placed by hand (in an aisle, or deliberately in
+     * Everything else) and items with an aisle are never asked about. No baskets.
+     */
+    @Test
+    fun sortPendingSortsEveryListAndKeepsHerPlacements() = runTest {
+        val correction = Correction(name = "lemons", aisleId = "produce", at = 5)
+        val start = state(item("a", "Lemons"), item("c", "Glitter", manual = true), item("d", "Bread", "bakery", manual = true)).let { s ->
+            s.copy(
+                lists = s.lists + GroceryList("l2", "Big shop", 0, listOf(item("b", "Croissant", "gone"), item("e", "Peas", "frozen"))),
+                corrections = listOf(correction),
+            )
+        }
+        val store = InMemoryStateStore(start)
+        val assistant = FakeAssistant(placements = mapOf("Lemons" to "produce", "Croissant" to "bakery"))
+        val report = AisleSync(store, assistant, catalog.baskets).sortPending()
+        assertEquals(2, report.recategorized)
+        assertEquals(0, report.leftUnsorted)
+        assertNull(report.error)
+        assertEquals(listOf("a", "b"), assistant.recategorized.single().map { it.id }, "one call, both lists")
+        assertEquals(listOf(correction), assistant.correctionsSent.single(), "learned corrections go along")
+        val s = store.current()
+        assertEquals("produce", s.findItem("a")!!.aisleId)
+        assertEquals("bakery", s.findItem("b")!!.aisleId)
+        assertNull(s.findItem("c")!!.aisleId, "her Everything else stays")
+        assertEquals("bakery", s.findItem("d")!!.aisleId)
+        assertEquals(start.store.aisleBaskets, s.store.aisleBaskets, "no baskets")
+    }
+
+    /** Offline nothing moves and the error is reported; the next catch-up asks again and places them. */
+    @Test
+    fun sortPendingOfflineMovesNothingAndTheNextOneSorts() = runTest {
+        val store = InMemoryStateStore(state(item("a", "Lemons"), item("b", "Croissant")))
+        val assistant = FakeAssistant(placements = mapOf("Lemons" to "produce", "Croissant" to "bakery"), recategorizeError = LlmError.Offline())
+        val sync = AisleSync(store, assistant, catalog.baskets)
+        val offline = sync.sortPending()
+        assertIs<LlmError.Offline>(offline.error)
+        assertEquals(0, offline.recategorized)
+        assertEquals(2, offline.leftUnsorted)
+        assertNull(store.current().findItem("a")!!.aisleId)
+
+        assistant.recategorizeError = null
+        val online = sync.sortPending()
+        assertEquals(2, online.recategorized)
+        assertEquals("produce", store.current().findItem("a")!!.aisleId)
+    }
+
+    /**
+     * What the model already answered (an item it left in Everything else) is not sent again at the next catch-up of the
+     * same process, so a connection that comes and goes never repeats the call; a change of aisles asks again.
+     */
+    @Test
+    fun sortPendingDoesNotRepeatWhatTheModelAnswered() = runTest {
+        val store = InMemoryStateStore(state(item("f", "Batteries")))
+        val assistant = FakeAssistant(placements = emptyMap())
+        val sync = AisleSync(store, assistant, catalog.baskets)
+        assertEquals(1, sync.sortPending().leftUnsorted)
+        assertEquals(AisleSyncReport(false, 0, 0, null), sync.sortPending())
+        assertEquals(1, assistant.recategorized.size, "asked once")
+        sync.sync()
+        assertEquals(2, assistant.recategorized.size, "the aisles changed: asked again")
+        sync.sortItems(listOf("f"))
+        assertEquals(3, assistant.recategorized.size, "a refresh she asks for always asks")
+    }
+
     @Test
     fun resortAll() = runTest {
         val start = state(
@@ -152,5 +220,26 @@ class AisleSyncTest {
         val report = AisleSync(failing, FakeAssistant(placements = mapOf("Lemons" to "produce")), catalog.baskets).sortItems(listOf("a"))
         assertIs<IOException>(report.saveError)
         assertEquals(1, report.leftUnsorted)
+    }
+
+    /** An answer that could not be saved does not count as answered: the next catch-up asks again and places the item. */
+    @Test
+    fun sortPendingWhoseSaveFailedAsksAgain() = runTest {
+        val inner = InMemoryStateStore(state(item("a", "Lemons")))
+        var full = true
+        val flaky = object : StateStore by inner {
+            override suspend fun update(transform: (AppState) -> AppState): AppState =
+                if (full) throw IOException("disk full") else inner.update(transform)
+        }
+        val assistant = FakeAssistant(placements = mapOf("Lemons" to "produce"))
+        val sync = AisleSync(flaky, assistant, catalog.baskets)
+        assertIs<IOException>(sync.sortPending().saveError)
+        assertNull(inner.current().findItem("a")!!.aisleId)
+
+        full = false
+        val again = sync.sortPending()
+        assertEquals(2, assistant.recategorized.size, "asked again")
+        assertEquals(1, again.recategorized)
+        assertEquals("produce", inner.current().findItem("a")!!.aisleId)
     }
 }

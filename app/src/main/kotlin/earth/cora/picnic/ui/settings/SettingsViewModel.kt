@@ -10,10 +10,12 @@ import earth.cora.picnic.core.assistant.GroceryAssistant
 import earth.cora.picnic.core.calendar.Place
 import earth.cora.picnic.core.calendar.PlaceSource
 import earth.cora.picnic.core.llm.LlmError
+import earth.cora.picnic.core.llm.transport
 import earth.cora.picnic.core.model.currentList
 import earth.cora.picnic.platform.AreaLookup
 import earth.cora.picnic.platform.AreaPlaceSource
 import earth.cora.picnic.platform.EcSites
+import earth.cora.picnic.platform.NetworkStatus
 import earth.cora.picnic.platform.PicnicLog
 import earth.cora.picnic.settings.AppSettings
 import earth.cora.picnic.settings.SettingsRepository
@@ -71,6 +73,13 @@ sealed interface ConnectionTestUi {
     data object Running : ConnectionTestUi
     data class Ok(val latencyMs: Long) : ConnectionTestUi
     data class Failed(val message: String) : ConnectionTestUi
+
+    /**
+     * The key is saved but could not be checked (§0.4, 5 October): [offline] (the phone has no network; it is checked
+     * again by itself when the connection comes back while Settings is open), else OpenAI could not be reached or took
+     * too long. A neutral line, never an error: nothing says the key is wrong.
+     */
+    data class Unchecked(val offline: Boolean) : ConnectionTestUi
 }
 
 class SettingsViewModel(
@@ -78,6 +87,8 @@ class SettingsViewModel(
     private val assistant: GroceryAssistant,
     private val places: PlaceSource = PlaceSource.Toronto,
     listTitle: Flow<String> = flowOf(""),
+    /** Whether the phone has a network: offline the key is saved and left unchecked, then checked once it is back. */
+    private val network: NetworkStatus = NetworkStatus.AlwaysOnline,
 ) : ViewModel() {
     private data class Inputs(
         val token: String = "",
@@ -106,6 +117,12 @@ class SettingsViewModel(
                     inputs.update { it.copy(area = AreaLookup.Off) }
                     forgetArea()
                 }
+            }
+        }
+        // A key left unchecked for want of a connection is checked by itself once one arrives (§0.4, 5 October).
+        viewModelScope.launch {
+            combine(network.online, network.arrivals) { online, _ -> online }.collect { online ->
+                if (online && inputs.value.test is ConnectionTestUi.Unchecked && settings.current().hasToken) runTest()
             }
         }
     }
@@ -212,11 +229,17 @@ class SettingsViewModel(
     private fun runTest() {
         testJob?.cancel()
         testJob = viewModelScope.launch {
+            // Offline the key stays saved and unchecked: no request, no error on a key that may be fine.
+            if (!network.online.value) {
+                inputs.update { it.copy(test = ConnectionTestUi.Unchecked(offline = true)) }
+                return@launch
+            }
             inputs.update { it.copy(test = ConnectionTestUi.Running) }
             val result = try {
                 ConnectionTestUi.Ok(assistant.testConnection().meta.latencyMs)
             } catch (e: LlmError) {
-                ConnectionTestUi.Failed(e.friendlyMessage)
+                // A connection problem says nothing about the key: "Saved." stays, with a neutral line.
+                if (e.transport) ConnectionTestUi.Unchecked(offline = e is LlmError.Offline) else ConnectionTestUi.Failed(e.friendlyMessage)
             }
             inputs.update { it.copy(test = result) }
         }
@@ -240,7 +263,7 @@ class SettingsViewModel(
     companion object {
         fun factory(c: AppContainer): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                SettingsViewModel(c.settings, c.assistant, c.places, c.store.states.map { it.currentList().title })
+                SettingsViewModel(c.settings, c.assistant, c.places, c.store.states.map { it.currentList().title }, c.network)
             }
         }
     }

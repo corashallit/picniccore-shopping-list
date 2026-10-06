@@ -14,7 +14,8 @@ import org.junit.runner.RunWith
 /**
  * Checklist 316 (docs/DESIGN_STICKER.md §0.4 Q6): the merged manifest asks for approximate location only. No
  * ACCESS_FINE_LOCATION, no ACCESS_BACKGROUND_LOCATION; and nothing else location-, camera- or tracking-related
- * slipped in (PRIVACY.md lists the permissions).
+ * slipped in (PRIVACY.md lists the permissions). ACCESS_NETWORK_STATE (§0.4, 5 October: the offline experience) is a
+ * normal permission: no prompt.
  */
 @RunWith(AndroidJUnit4::class)
 class ManifestPermissionsTest {
@@ -35,7 +36,12 @@ class ManifestPermissionsTest {
     fun thePermissionsPrivacyMdLists() {
         val ours = requested().filterNot { it.endsWith(".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION") }.toSet()
         assertEquals(
-            setOf(Manifest.permission.INTERNET, Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_COARSE_LOCATION),
+            setOf(
+                Manifest.permission.INTERNET,
+                Manifest.permission.ACCESS_NETWORK_STATE,
+                Manifest.permission.RECORD_AUDIO,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ),
             ours,
         )
     }

@@ -26,6 +26,12 @@ internal data class IconIndex(
     /** Local date (ISO yyyy-MM-dd) that [drawnToday] counts for. */
     val day: String? = null,
     val drawnToday: Int = 0,
+    /**
+     * Names whose automatic drawing waits for a connection (offline, or the drawing failed on the way: unreachable, a
+     * network error, a timeout). resumePending and the catch-up submit them again, under the daily cap; a name leaves the
+     * set once it is drawn, refused, given up on, or no item wants it any more.
+     */
+    val drawLater: List<String> = emptyList(),
 )
 
 /**
@@ -66,9 +72,22 @@ class BespokeIconCache(
         return allowed
     }
 
-    /** Gives one count back (the drawing never reached the API, e.g. no style reference). */
+    /** Gives one count back (the drawing never reached the API, e.g. no style reference, or it failed on the way). */
     suspend fun refundDaily(day: String) {
         mutate { if (it.day == day && it.drawnToday > 0) it.copy(drawnToday = it.drawnToday - 1) else it }
+    }
+
+    /** The names waiting for a connection to be drawn (oldest first). */
+    suspend fun drawLater(): List<String> = locked { it.drawLater }
+
+    /** [key]'s automatic drawing waits for a connection (kept across restarts). */
+    suspend fun markDrawLater(key: String) {
+        mutate { if (key in it.drawLater) it else it.copy(drawLater = (it.drawLater + key).takeLast(MAX_DRAW_LATER)) }
+    }
+
+    /** [key] no longer waits: drawn, refused, given up on, or nothing wants it. */
+    suspend fun clearDrawLater(key: String) {
+        mutate { if (key in it.drawLater) it.copy(drawLater = it.drawLater - key) else it }
     }
 
     /**
@@ -201,6 +220,9 @@ class BespokeIconCache(
 
     companion object {
         private const val MAX_BLOCKED = 500
+
+        /** At most this many names wait for a connection (the oldest go first). */
+        private const val MAX_DRAW_LATER = 200
         private val JSON = Json {
             ignoreUnknownKeys = true
             encodeDefaults = true

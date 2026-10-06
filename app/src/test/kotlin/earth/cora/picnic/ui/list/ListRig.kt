@@ -133,6 +133,8 @@ class ListRig(
      * the note a test is about.
      */
     firstTime: Boolean = false,
+    /** Whether the phone is online (§0.4, 5 October): the list's refresh and the add flows read it. */
+    val network: earth.cora.picnic.platform.FakeNetworkStatus = earth.cora.picnic.platform.FakeNetworkStatus(),
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     val store = InMemoryStateStore(initial)
@@ -166,6 +168,7 @@ class ListRig(
         surprises = surprises,
         aisleSync = aisleSync,
         engine = engine,
+        network = network,
     )
     val addVm = AddViewModel(
         store = store,
@@ -187,6 +190,7 @@ class ListRig(
         announcer = announcer,
         words = ApplicationProvider.getApplicationContext<Context>()::getString,
         album = this.album,
+        online = network.isOnline,
     )
 
     /** The eggs as the app shows them on [now]'s day (Appendix A: Thanksgiving's sheet, the pumpkin tape and pictogram). */

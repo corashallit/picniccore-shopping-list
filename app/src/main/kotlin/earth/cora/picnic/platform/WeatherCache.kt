@@ -23,15 +23,18 @@ import java.time.ZoneId
 /*
  * The weather eggs' cache (docs/DESIGN_STICKER.md §12.4; eggs 11 and 16): the DataStore keys `weather_fetched_at`,
  * `weather_cache` (the last parsed day, rain today, snow seen), `rain_toast_day` and `first_snow_date`, in their own
- * small DataStore ("weather"), device-local and never backed up. [WeatherService] decides when to ask the forecast:
- * only with Weather surprises on, at most every 3 h when the list opens, the cache surviving restarts, silent offline.
- * Owner: WP9 (WeatherCacheTest).
+ * small DataStore ("weather"), device-local and never backed up, plus `weather_failed_at` (a failed ask, retried after
+ * 15 minutes; §0.4, 5 October). [WeatherService] decides when to ask the forecast: only with Weather surprises on, at
+ * most every 3 h after an answer when the list opens, 15 minutes after a failed ask (or at once when the connection comes
+ * back), the cache surviving restarts, silent offline. Owner: WP9 (WeatherCacheTest).
  */
 
 /** What is cached. */
 data class WeatherMemo(
-    /** When the forecast was last asked for (epoch ms), whether or not it answered. */
+    /** When the forecast last answered (epoch ms; before 5 October: when it was last asked for, answered or not). */
     val fetchedAt: Long? = null,
+    /** When the last ask failed (epoch ms; offline, unreachable or unreadable), null after an answer: retried 15 min later. */
+    val failedAt: Long? = null,
     /** The last forecast read: its day, rain today, snow. */
     val day: LocalDate? = null,
     val rain: Boolean = false,
@@ -68,6 +71,7 @@ class DataStoreWeatherCache(private val store: DataStore<Preferences>) : Weather
         val cache = p[CACHE]?.split('|')
         WeatherMemo(
             fetchedAt = p[FETCHED_AT],
+            failedAt = p[FAILED_AT],
             day = cache?.getOrNull(0)?.let(::date),
             rain = cache?.getOrNull(1) == "rain",
             snow = cache?.getOrNull(2) == "snow",
@@ -83,6 +87,7 @@ class DataStoreWeatherCache(private val store: DataStore<Preferences>) : Weather
         try {
             store.edit { p ->
                 memo.fetchedAt?.let { p[FETCHED_AT] = it } ?: p.remove(FETCHED_AT)
+                memo.failedAt?.let { p[FAILED_AT] = it } ?: p.remove(FAILED_AT)
                 val day = memo.day
                 if (day == null) p.remove(CACHE) else p[CACHE] = "$day|${if (memo.rain) "rain" else "dry"}|${if (memo.snow) "snow" else "none"}|${memo.city.orEmpty()}"
                 memo.rainToastDay?.let { p[RAIN_TOAST_DAY] = it.toString() } ?: p.remove(RAIN_TOAST_DAY)
@@ -97,6 +102,7 @@ class DataStoreWeatherCache(private val store: DataStore<Preferences>) : Weather
 
     companion object {
         val FETCHED_AT = longPreferencesKey("weather_fetched_at")
+        val FAILED_AT = longPreferencesKey("weather_failed_at")
         val CACHE = stringPreferencesKey("weather_cache")
         val RAIN_TOAST_DAY = stringPreferencesKey("rain_toast_day")
         val FIRST_SNOW_DATE = stringPreferencesKey("first_snow_date")
@@ -112,9 +118,11 @@ data class EggWeather(val rain: Boolean, val firstSnowDate: LocalDate?, val rain
 
 /**
  * When to ask the forecast (§12.4): [check] runs when the list opens; with Weather surprises off it requests nothing
- * and returns no weather; with it on it asks [source] when the last ask is 3 h old or more, or was for another forecast
- * city than [city] names now ("Use my area" turned on or off, or her area moved to another city, §0.4 Q6), keeps the
- * answer (an unanswered ask keeps the old one), and keeps the first-snow date of this season.
+ * and returns no weather; with it on it asks [source] when the last answer is 3 h old or more, or was for another
+ * forecast city than [city] names now ("Use my area" turned on or off, or her area moved to another city, §0.4 Q6), keeps
+ * the answer, and keeps the first-snow date of this season. An unanswered ask (offline, unreachable) keeps the old
+ * forecast and is asked again [RETRY_MS] later, not 3 h later; with `retryFailed` (the catch-up when the connection
+ * comes back, §0.4 5 October) at once.
  */
 class WeatherService(
     private val source: WeatherSource,
@@ -131,20 +139,27 @@ class WeatherService(
     var requests: Int = 0
         private set
 
-    suspend fun check(weatherOn: Boolean): EggWeather? = mutex.withLock {
+    suspend fun check(weatherOn: Boolean, retryFailed: Boolean = false): EggWeather? = mutex.withLock {
         try {
             val now = clock()
             val today = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
             var memo = cache.read()
             if (!weatherOn) return@withLock null
             val here = city()
-            val stale = memo.fetchedAt == null || now - memo.fetchedAt!! !in 0 until REFETCH_MS || memo.city != here
-            if (stale) {
+            val failedAt = memo.failedAt
+            val due = when {
+                memo.city != here -> true
+                // The last ask failed: again 15 minutes later (the old forecast meanwhile), or at once after the catch-up.
+                failedAt != null -> retryFailed || now - failedAt !in 0 until RETRY_MS
+                else -> memo.fetchedAt == null || now - memo.fetchedAt!! !in 0 until REFETCH_MS
+            }
+            if (due) {
                 requests++
                 val answer: WeatherToday? = source.today()
                 memo = if (answer != null) {
                     memo.copy(
                         fetchedAt = now,
+                        failedAt = null,
                         day = answer.date,
                         rain = answer.rain,
                         snow = answer.snow,
@@ -153,9 +168,9 @@ class WeatherService(
                     )
                 } else if (memo.city != here) {
                     // No answer for the new city: the old city's rain is not hers.
-                    memo.copy(fetchedAt = now, day = null, rain = false, snow = false, city = here)
+                    memo.copy(failedAt = now, day = null, rain = false, snow = false, city = here)
                 } else {
-                    memo.copy(fetchedAt = now)
+                    memo.copy(failedAt = now)
                 }
                 cache.write(memo)
             }
@@ -190,7 +205,10 @@ class WeatherService(
     suspend fun firstSnowDate(): LocalDate? = mutex.withLock { cache.read().firstSnowDate }
 
     companion object {
-        /** The forecast is asked at most every 3 h (§12.4). */
+        /** The forecast is asked at most every 3 h after an answer (§12.4). */
         const val REFETCH_MS: Long = 3L * 60 * 60 * 1000
+
+        /** A failed ask is tried again this much later (§0.4, 5 October). */
+        const val RETRY_MS: Long = 15L * 60 * 1000
     }
 }

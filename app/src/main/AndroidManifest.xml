@@ -3,6 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Whether the phone has a network at all (platform/NetworkStatus.kt, docs/DESIGN_STICKER.md §0.4, 5 October): a
+         normal permission, granted at install, never a prompt. Offline, AI requests fail at once and catch up later. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- "Use my area" (docs/DESIGN_STICKER.md §0.4 Q6): approximate location only, asked when the switch is turned on.
          Never ACCESS_FINE_LOCATION, never ACCESS_BACKGROUND_LOCATION (ManifestPermissionsTest). -->

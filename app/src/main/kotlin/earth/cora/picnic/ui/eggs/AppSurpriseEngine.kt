@@ -649,8 +649,15 @@ class AppSurpriseEngine(
         }
     }
 
-    /** Egg 16 and first snow (§12.4): the forecast, only with Weather surprises on. */
-    private fun checkWeather() {
+    override fun onBackOnline() {
+        if (eggsOn) checkWeather(retryFailed = true)
+    }
+
+    /**
+     * Egg 16 and first snow (§12.4): the forecast, only with Weather surprises on. [retryFailed] (the catch-up) asks again
+     * at once after a failed ask, without waiting out its 15 minutes.
+     */
+    private fun checkWeather(retryFailed: Boolean = false) {
         val service = weather ?: return
         val on = forceEggs || appSettings?.weather == true
         if (!on) {
@@ -658,7 +665,7 @@ class AppSurpriseEngine(
             return
         }
         scope.launch {
-            val w = service.check(weatherOn = true) ?: return@launch
+            val w = service.check(weatherOn = true, retryFailed = retryFailed) ?: return@launch
             weatherRain = w.rain
             firstSnow = w.firstSnowDate
             derive()

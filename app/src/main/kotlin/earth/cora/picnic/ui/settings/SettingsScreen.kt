@@ -415,6 +415,9 @@ fun SettingsScreen(
     }
 }
 
+/** The neutral "not checked" line under Test connection (§0.4, 5 October; tests). */
+const val SETTINGS_UNCHECKED_TAG: String = "settings_unchecked"
+
 /** The confirm sheet's "Remove key" (SettingsScreenTest). */
 const val REMOVE_KEY_CONFIRM_TAG: String = "settings_remove_key_confirm"
 
@@ -480,6 +483,14 @@ private fun KeyCard(state: SettingsUiState, actions: SettingsActions, onRemove: 
                 glyph = PicnicGlyph.Sparkle,
             )
             if (state.test is ConnectionTestUi.Ok) OkLcd()
+        }
+        // Saved but not checked for want of a connection (§0.4, 5 October): a quiet line, never the hanko error.
+        (state.test as? ConnectionTestUi.Unchecked)?.let { unchecked ->
+            Text(
+                stringResource(if (unchecked.offline) R.string.settings_test_offline else R.string.settings_test_unreachable),
+                style = t.body.copy(color = c.inkSoft),
+                modifier = Modifier.testTag(SETTINGS_UNCHECKED_TAG).semantics { liveRegion = LiveRegionMode.Polite },
+            )
         }
         Text(stringResource(R.string.settings_key_storage), style = t.caption.copy(color = c.inkSoft))
     }
