@@ -1,9 +1,11 @@
 package earth.cora.picnic.platform
 
 import earth.cora.picnic.core.assistant.AisleSyncReport
+import earth.cora.picnic.core.llm.transport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * usable connection arrives (NetworkStatus.arrivals, debounced) and at a cold start, this does what waited: the icon
  * cascade resumes (PENDING items, names waiting to be drawn), every item still needing an aisle is sorted
  * (AisleSync.sortPending), the pantry's unknown stickers are decided, and a forecast that is due or failed is asked for.
+ * A phone can look online and still not reach OpenAI (a captive portal, a dead router): then no arrival comes, so a
+ * sort that could not get through asks for a few retries of its own ([CatchUp.request], 1, 5 and 15 minutes later).
  */
 
 /** What a catch-up sorted, for the list's note ("Sorted 2 items · 1 left in Everything else"); shown once. */
@@ -50,6 +54,11 @@ interface CatchUpNotes {
  * after it, and runs after arrivals are at least [minGapMs] apart (a connection that flaps waits, never piles up calls).
  * Without a key nothing is sorted, decided or drawn ([hasKey]); the forecast does not need one ([weather] checks its own
  * switch).
+ *
+ * Retries: when sorting could not get through while the phone looked online (the add sheet's [request], or a run whose
+ * sort failed on the way), the catch-up runs again [RETRY_BACKOFF_MS] later (1 min, then 5, then 15), through the same
+ * lock and the same gap, until the items are sorted; after the third it stops until the next arrival, cold start or
+ * [request]. The retries leave the forecast alone (it has its own 15-minute retry).
  */
 class CatchUp(
     private val network: NetworkStatus,
@@ -75,6 +84,12 @@ class CatchUp(
     @Volatile
     private var lastRunAt: Long? = null
     private var ids = 0L
+
+    /** Items still need an aisle and the last try could not get through (cleared when a sort gets an answer). */
+    @Volatile
+    private var sortOwed = false
+    private val retryLock = Any()
+    private var retries: Job? = null
 
     /** Runs that did their work (tests). */
     @Volatile
@@ -102,16 +117,46 @@ class CatchUp(
     }
 
     /**
+     * Something was added while the phone looked online but its sorting could not reach OpenAI (AddViewModel): the
+     * catch-up tries again 1, 5 and 15 minutes later until it is sorted (see the class comment). A request while the
+     * retries are already waiting changes nothing.
+     */
+    fun request() {
+        sortOwed = true
+        retryLater()
+    }
+
+    private fun retryLater() {
+        synchronized(retryLock) {
+            if (retries?.isActive == true) return
+            retries = scope.launch {
+                for (wait in RETRY_BACKOFF_MS) {
+                    delay(wait)
+                    val since = lastRunAt?.let { clock() - it }
+                    if (since != null && since in 0 until minGapMs) delay(minGapMs - since)
+                    if (!sortOwed) return@launch
+                    // Offline or no key: nothing to retry now (the next arrival or cold start does it).
+                    if (!run(coldStart = false, retry = true)) return@launch
+                    if (!sortOwed) return@launch
+                }
+            }
+        }
+    }
+
+    /**
      * One catch-up, after any other that is going on; false when it did nothing (the phone is offline, or there is no
      * key). At a cold start the icon cascade resumes whatever the network (it asks nothing offline) and the forecast is
-     * left to the list opening (it checks it then).
+     * left to the list opening (it checks it then). A [retry] leaves the forecast alone too.
      */
-    suspend fun run(coldStart: Boolean): Boolean = running.withLock {
+    suspend fun run(coldStart: Boolean, retry: Boolean = false): Boolean = running.withLock {
         if (coldStart) resumeStickers()
         if (!network.online.value) return@withLock false
         lastRunAt = clock()
-        if (!coldStart) safely("weather") { weather() }
-        if (!hasKeySafely()) return@withLock false
+        if (!coldStart && !retry) safely("weather") { weather() }
+        if (!hasKeySafely()) {
+            sortOwed = false
+            return@withLock false
+        }
         runs++
         if (!coldStart) resumeStickers()
         val report = try {
@@ -125,6 +170,10 @@ class CatchUp(
         if (report != null && report.recategorized > 0) {
             _note.value = CatchUpNote(++ids, report.recategorized, report.leftUnsorted)
         }
+        // Sorting could not get through (the phone looked online): try again in a while. Any answer, or an error a
+        // retry can't fix (the key, the quota), ends the retries.
+        sortOwed = report?.error?.transport == true
+        if (sortOwed) retryLater()
         safely("pantry stickers") { pantryStickers() }
         true
     }
@@ -153,5 +202,8 @@ class CatchUp(
 
         /** Catch-ups are at least this far apart. */
         const val MIN_GAP_MS: Long = 60_000
+
+        /** After a sort that could not get through: the waits before each retry (then none until something new). */
+        val RETRY_BACKOFF_MS: List<Long> = listOf(60_000, 5 * 60_000, 15 * 60_000)
     }
 }

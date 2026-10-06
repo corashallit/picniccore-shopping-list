@@ -100,6 +100,40 @@ class AddOfflineTest {
         note.onAction!!()
         advanceUntilIdle()
         assertEquals("Undo takes them back", before, r.store.current().list(f.LIST_ID)!!.items.map { it.id })
+        assertEquals("and what she typed is back in the field", "paper towels, lip balm", r.vm.state.value.text)
+    }
+
+    /** Undo of an as-typed add puts the text back only into an empty field: something typed since stays. */
+    @Test
+    fun undoOfAnAsTypedAddNeverOverwritesNewTyping() = runTest {
+        val r = addRig(testAppScope(), f.state, FakeAssistant(), online = { false })
+        val events = events(r.vm)
+        r.vm.setText("https://example.com/pancakes")
+        r.vm.send()
+        advanceUntilIdle()
+        val commit = commits(events).single()
+        assertEquals("", r.vm.state.value.text)
+        r.vm.setText("lip")
+        r.vm.undo(commit.id)
+        advanceUntilIdle()
+        assertTrue(events.any { it is AddEvent.Undone })
+        assertEquals("lip", r.vm.state.value.text)
+    }
+
+    /** An add that goes through the AI (no draft kept) changes nothing in the field on Undo. */
+    @Test
+    fun undoOfAnAiAddLeavesTheFieldAlone() = runTest {
+        val assistant = FakeAssistant(ingest = { _, _ -> answer(f.proposed("Paper towels", "paper_bag", null)) })
+        val r = addRig(testAppScope(), f.state, assistant)
+        val events = events(r.vm)
+        r.vm.setText("paper towels")
+        r.vm.send()
+        advanceUntilIdle()
+        val commit = commits(events).single()
+        r.vm.undo(commit.id)
+        advanceUntilIdle()
+        assertTrue(events.any { it is AddEvent.Undone })
+        assertEquals("", r.vm.state.value.text)
     }
 
     @Test
@@ -118,7 +152,8 @@ class AddOfflineTest {
     @Test
     fun aRequestThatNeverReachedOpenAiAddsAsTypedToo() = runTest {
         val assistant = FakeAssistant(ingest = { _, _ -> throw LlmError.Network(IOException("connect timed out"), beforeConnect = true) })
-        val r = addRig(testAppScope(), f.state, assistant)
+        var requested = 0
+        val r = addRig(testAppScope(), f.state, assistant, requestCatchUp = { requested++ })
         val events = events(r.vm)
         r.vm.setText("paper towels")
         r.vm.send()
@@ -129,6 +164,18 @@ class AddOfflineTest {
         assertEquals("Paper towels", commit.added.single().name)
         assertTrue("no error state", r.vm.state.value.phase !is AddPhase.Failed)
         assertFalse(r.vm.state.value.sheetOpen)
+        assertEquals("the phone looked online: no arrival will come, so the catch-up is asked to try again", 1, requested)
+    }
+
+    /** Offline (the phone knows it) the arrival of the connection starts the catch-up: nothing is asked for. */
+    @Test
+    fun offlineTheArrivalSortsSoNoRetryIsAskedFor() = runTest {
+        var requested = 0
+        val r = addRig(testAppScope(), f.state, FakeAssistant(), online = { false }, requestCatchUp = { requested++ })
+        r.vm.setText("paper towels")
+        r.vm.send()
+        advanceUntilIdle()
+        assertEquals(0, requested)
     }
 
     @Test
@@ -199,6 +246,20 @@ class AddOfflineTest {
         assertFalse(commits(events).single().asTypedOffline)
         assertEquals(1, events.filterIsInstance<AddEvent.SortWaits>().size)
         assertTrue(events.none { it is AddEvent.SortFailed })
+    }
+
+    /** "Sorting waits" while the phone looks online: the catch-up is asked to try again (CatchUp.request). */
+    @Test
+    fun aSortThatWaitsWhileOnlineAsksTheCatchUp() = runTest {
+        var requested = 0
+        val assistant = FakeAssistant(recategorize = { _, _ -> throw LlmError.Network(IOException("unreachable"), beforeConnect = true) })
+        val r = addRig(testAppScope(), f.state, assistant, requestCatchUp = { requested++ })
+        val events = events(r.vm)
+        r.vm.setText("lip balm")
+        r.vm.addAsTyped()
+        advanceUntilIdle()
+        assertEquals(1, events.filterIsInstance<AddEvent.SortWaits>().size)
+        assertEquals(1, requested)
     }
 
     @Test
@@ -350,6 +411,78 @@ class AddOfflineTest {
         assertEquals(AddPhase.Preview, r.vm.state.value.phase)
         assertFalse(r.vm.hasKept(AddMode.SPEAK))
         assertTrue(dir.listFiles()!!.none { it.name.startsWith("voice-") })
+    }
+
+    /** The bar's camera with a kept photo whose file is gone: the camera opens all the same (the tap is never lost). */
+    @Test
+    fun aKeptPhotoWhoseFileIsGoneFallsBackToTheCamera() = runTest {
+        val dir = tmp.newFolder()
+        val r = addRig(testAppScope(), f.state, FakeAssistant(), online = { false }, keeper = keeper(dir))
+        r.vm.onPhoto(Uri.parse("content://test/photo.jpg"))
+        advanceUntilIdle()
+        r.vm.closeSheet()
+        dir.listFiles()!!.forEach { it.delete() }
+
+        var camera = 0
+        assertTrue(r.vm.showKept(AddMode.SNAP, fallback = { camera++ }))
+        advanceUntilIdle()
+        assertEquals("the camera opens instead", 1, camera)
+        val s = r.vm.state.value
+        assertFalse("the sheet is as it was", s.sheetOpen)
+        assertNull(s.kept)
+        assertNull(s.photo)
+        assertFalse(r.vm.hasKept(AddMode.SNAP))
+        assertFalse("nothing kept any more: the bar goes straight to the camera", r.vm.showKept(AddMode.SNAP))
+    }
+
+    /** A pointer saved before process death whose file is gone is let go: nothing is offered. */
+    @Test
+    fun aSavedPointerWhoseFileIsGoneIsLetGo() = runTest {
+        val dir = tmp.newFolder()
+        val saved = SavedStateHandle()
+        val first = addRig(testAppScope(), f.state, FakeAssistant(), online = { false }, keeper = keeper(dir), savedState = saved)
+        first.vm.onPhoto(Uri.parse("content://test/photo.jpg"))
+        advanceUntilIdle()
+        assertNotNull(saved.get<String>("add.kept.photo"))
+        dir.listFiles()!!.forEach { it.delete() }
+
+        val restored = SavedStateHandle(saved.keys().associateWith { saved.get<Any?>(it) })
+        val again = addRig(testAppScope(), f.state, FakeAssistant(), keeper = keeper(dir), savedState = restored)
+        advanceUntilIdle()
+        assertFalse(again.vm.hasKept(AddMode.SNAP))
+        assertNull("the pointer goes", restored.get<String>("add.kept.photo"))
+    }
+
+    /** A capture older than 7 days is never offered, even before a sweep: not by its pointer, nor on a fresh start. */
+    @Test
+    fun aKeptPhotoOlderThanSevenDaysIsNeverOffered() = runTest {
+        val dir = tmp.newFolder()
+        var now = f.NOW
+        val saved = SavedStateHandle()
+        val first = addRig(testAppScope(), f.state, FakeAssistant(), online = { false }, keeper = keeper(dir) { now }, savedState = saved, now = { now })
+        first.vm.onPhoto(Uri.parse("content://test/photo.jpg"))
+        advanceUntilIdle()
+        assertTrue(first.vm.hasKept(AddMode.SNAP))
+
+        // The same ViewModel, a week and a moment later (the process lived on): the bar goes to the camera.
+        now += 7 * 24 * 60 * 60 * 1000L + 1
+        assertFalse("too old: the camera opens", first.vm.showKept(AddMode.SNAP))
+        assertFalse(first.vm.hasKept(AddMode.SNAP))
+
+        // A file the sweep has not reached yet is not read or offered either.
+        val old = keeper(dir) { f.NOW }
+        val kept = old.keep(CaptureKind.PHOTO, byteArrayOf(5))!!
+        val late = keeper(dir) { now }
+        assertFalse(late.isKept(kept))
+        assertNull(late.read(kept))
+        assertNull(late.latest(CaptureKind.PHOTO))
+
+        // Its pointer after process death: let go, and the restore sweeps the file.
+        saved["add.kept.photo"] = kept.name
+        val again = addRig(testAppScope(), f.state, FakeAssistant(), keeper = keeper(dir) { now }, savedState = saved, now = { now })
+        advanceUntilIdle()
+        assertFalse(again.vm.hasKept(AddMode.SNAP))
+        assertTrue("swept at the restore", dir.listFiles()!!.none { it.name.startsWith("photo-") })
     }
 
     @Test

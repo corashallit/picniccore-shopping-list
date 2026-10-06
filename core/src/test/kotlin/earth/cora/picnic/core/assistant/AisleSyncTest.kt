@@ -221,4 +221,25 @@ class AisleSyncTest {
         assertIs<IOException>(report.saveError)
         assertEquals(1, report.leftUnsorted)
     }
+
+    /** An answer that could not be saved does not count as answered: the next catch-up asks again and places the item. */
+    @Test
+    fun sortPendingWhoseSaveFailedAsksAgain() = runTest {
+        val inner = InMemoryStateStore(state(item("a", "Lemons")))
+        var full = true
+        val flaky = object : StateStore by inner {
+            override suspend fun update(transform: (AppState) -> AppState): AppState =
+                if (full) throw IOException("disk full") else inner.update(transform)
+        }
+        val assistant = FakeAssistant(placements = mapOf("Lemons" to "produce"))
+        val sync = AisleSync(flaky, assistant, catalog.baskets)
+        assertIs<IOException>(sync.sortPending().saveError)
+        assertNull(inner.current().findItem("a")!!.aisleId)
+
+        full = false
+        val again = sync.sortPending()
+        assertEquals(2, assistant.recategorized.size, "asked again")
+        assertEquals(1, again.recategorized)
+        assertEquals("produce", inner.current().findItem("a")!!.aisleId)
+    }
 }

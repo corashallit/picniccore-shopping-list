@@ -170,7 +170,7 @@
     <string name="settings_test_ok">Connected</string>
     <!-- The key is saved but could not be checked (§0.4, 5 October): neutral, never an error on a key that may be fine.
          Offline it is checked again by itself once the connection returns while Settings is open. -->
-    <string name="settings_test_offline">Not checked yet: you’re offline. It’s checked as soon as you’re back online.</string>
+    <string name="settings_test_offline">Not checked yet: you’re offline. Test it again once you’re back online.</string>
     <string name="settings_test_unreachable">Not checked yet: couldn’t reach OpenAI. Test the connection again later.</string>
     <string name="settings_stickers">Stickers</string>
     <string name="settings_draw_icons">Draw new stickers with AI</string>

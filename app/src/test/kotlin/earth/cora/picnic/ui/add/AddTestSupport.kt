@@ -88,6 +88,8 @@ fun addRig(
     online: () -> Boolean = { true },
     /** Where failed photos and voice notes are kept (none by default). */
     keeper: earth.cora.picnic.platform.CaptureKeeper = earth.cora.picnic.platform.CaptureKeeper.None,
+    /** CatchUp.request: sorting could not get through while the phone looked online. */
+    requestCatchUp: () -> Unit = {},
 ): AddRig {
     val store = InMemoryStateStore(state)
     val icons = RecordingIconRepository()
@@ -117,6 +119,7 @@ fun addRig(
         words = context::getString,
         online = online,
         keeper = keeper,
+        requestCatchUp = requestCatchUp,
     )
     vm.showList(AddFixtures.LIST_ID)
     return AddRig(vm, store, assistant, icons, photos, recorder, surprises, feedback, announcer)

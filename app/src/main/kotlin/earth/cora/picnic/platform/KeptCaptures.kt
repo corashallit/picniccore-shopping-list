@@ -37,10 +37,13 @@ interface CaptureKeeper {
     /** Keeps [bytes] as the [kind]'s capture, replacing the one kept before. Null when it could not be written. */
     suspend fun keep(kind: CaptureKind, bytes: ByteArray): KeptCapture?
 
-    /** The bytes of [kept]; null once it is gone (sent, deleted, swept). */
+    /** The bytes of [kept]; null once it is gone (sent, deleted, swept) or older than [MAX_AGE_MS]. */
     suspend fun read(kept: KeptCapture): ByteArray?
 
-    /** The [kind]'s kept capture, if there is one (a fresh start finds it again). */
+    /** Whether [kept] (a saved pointer) is still on the phone and no older than [MAX_AGE_MS]. */
+    suspend fun isKept(kept: KeptCapture): Boolean
+
+    /** The [kind]'s kept capture, if there is one no older than [MAX_AGE_MS] (a fresh start finds it again). */
     suspend fun latest(kind: CaptureKind): KeptCapture?
 
     /** Deletes the [kind]'s kept capture: sent, replaced or thrown away. */
@@ -53,6 +56,7 @@ interface CaptureKeeper {
     object None : CaptureKeeper {
         override suspend fun keep(kind: CaptureKind, bytes: ByteArray): KeptCapture? = null
         override suspend fun read(kept: KeptCapture): ByteArray? = null
+        override suspend fun isKept(kept: KeptCapture): Boolean = false
         override suspend fun latest(kind: CaptureKind): KeptCapture? = null
         override suspend fun discard(kind: CaptureKind) = Unit
         override suspend fun sweep(maxAgeMs: Long) = Unit
@@ -66,7 +70,8 @@ interface CaptureKeeper {
 
 /**
  * [CaptureKeeper] on files in [dir] (`photo-<keptAt>.jpg`, `voice-<keptAt>.m4a`), written atomically (tmp + rename).
- * Main-safe; a failed read or write is logged and answers null (the flows then work as before, in memory only).
+ * Main-safe; a failed read or write is logged and answers null (the flows then work as before, in memory only). A file
+ * older than [CaptureKeeper.MAX_AGE_MS] is never read or offered, swept or not (a process can outlive a week).
  */
 class FileCaptureKeeper(
     private val dir: File,
@@ -97,7 +102,7 @@ class FileCaptureKeeper(
 
     override suspend fun read(kept: KeptCapture): ByteArray? = locked {
         val file = File(dir, kept.name)
-        if (!safeName(kept.kind, kept.name) || !file.isFile) return@locked null
+        if (!fresh(kept.kind, kept.name) || !file.isFile) return@locked null
         try {
             file.readBytes()
         } catch (e: IOException) {
@@ -106,8 +111,11 @@ class FileCaptureKeeper(
         }
     }
 
+    override suspend fun isKept(kept: KeptCapture): Boolean = locked { fresh(kept.kind, kept.name) && File(dir, kept.name).isFile }
+
     override suspend fun latest(kind: CaptureKind): KeptCapture? = locked {
-        files(kind).mapNotNull { f -> keptAt(kind, f.name)?.let { KeptCapture(kind, f.name, it) } }.maxByOrNull { it.keptAt }
+        files(kind).filter { fresh(kind, it.name) }.mapNotNull { f -> keptAt(kind, f.name)?.let { KeptCapture(kind, f.name, it) } }
+            .maxByOrNull { it.keptAt }
     }
 
     override suspend fun discard(kind: CaptureKind) {
@@ -129,6 +137,12 @@ class FileCaptureKeeper(
         dir.listFiles()?.filter { it.isFile && safeName(kind, it.name) }.orEmpty()
 
     private fun safeName(kind: CaptureKind, name: String): Boolean = keptAt(kind, name) != null
+
+    /** A name the keeper writes, kept no more than [CaptureKeeper.MAX_AGE_MS] ago. */
+    private fun fresh(kind: CaptureKind, name: String): Boolean {
+        val at = keptAt(kind, name) ?: return false
+        return clock() - at <= CaptureKeeper.MAX_AGE_MS
+    }
 
     private fun keptAt(kind: CaptureKind, name: String): Long? = keptCaptureOf(kind, name)?.keptAt
 

@@ -146,7 +146,6 @@ class AisleSync(
         } catch (e: LlmError) {
             return AisleSyncReport(false, 0, needing.size, e)
         }
-        needing.mapTo(settled) { it.id }
         // Only ids we asked about; anything the assistant skipped stays Unsorted.
         var placed = 0
         return try {
@@ -155,6 +154,9 @@ class AisleSync(
                 placed = applied.values.count { it != null }
                 s.applyAisleAssignments(applied, clock())
             }
+            // Answered and saved: the catch-up does not ask about these again. An answer that could not be saved leaves
+            // them eligible.
+            needing.mapTo(settled) { it.id }
             AisleSyncReport(false, placed, needing.size - placed, null)
         } catch (e: IOException) {
             AisleSyncReport(false, 0, needing.size, null, e)

@@ -67,7 +67,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * The offline states' goldens (docs/DESIGN_STICKER.md §0.4, 5 October; Appendix C, items 350, 351, 353, 356–358), Day and Glow at
  * w360dp-h760dp-xxhdpi: the add bar's offline note `toast_add_offline`, the offline refresh's note
- * `list_refresh_offline` (over the real list, the LCD reading SYNC), Settings' neutral line `settings_unchecked_offline`,
+ * `list_refresh_offline` (over the real list, the LCD keeping its word: nothing syncs offline), Settings' neutral line `settings_unchecked_offline`,
  * the Edit sheet's `edit_draw_offline` and `edit_draw_failed`, the Write tab's offline error with its "As typed" footer
  * `add_write_offline`, and a photo kept after an offline Snap `add_snap_kept`.
  * Record: ./gradlew :app:recordRoborazziDebug --tests '*OfflineGoldensTest*'.

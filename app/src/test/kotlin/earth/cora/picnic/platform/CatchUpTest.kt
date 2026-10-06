@@ -3,6 +3,7 @@ package earth.cora.picnic.platform
 import earth.cora.picnic.core.assistant.AisleSync
 import earth.cora.picnic.core.assistant.AisleSyncReport
 import earth.cora.picnic.core.catalog.IconCatalog
+import earth.cora.picnic.core.llm.LlmError
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.GroceryList
@@ -57,6 +58,8 @@ class CatchUpTest {
         val store: InMemoryStateStore,
         val assistant: FakeAssistant,
         val counts: MutableMap<String, Int>,
+        /** When each sort started (the test clock). */
+        val sortTimes: List<Long>,
     )
 
     private fun TestScope.rig(
@@ -64,21 +67,26 @@ class CatchUpTest {
         hasKey: Boolean = true,
         sortGate: CompletableDeferred<Unit>? = null,
         active: IntArray = IntArray(2),
+        /** [0]: the sort's request never reaches OpenAI (a captive portal: the phone still looks online). */
+        unreachable: BooleanArray = booleanArrayOf(false),
     ): Rig {
         val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler)).also { scopes += it }
         val store = InMemoryStateStore(start)
         val assistant = FakeAssistant(recategorize = { items, _ ->
+            if (unreachable[0]) throw LlmError.Network(null, beforeConnect = true)
             items.associate { it.id to when (it.name) { "Lemons" -> "produce"; "Croissants" -> "bakery"; else -> null } }
         })
         val sync = AisleSync(store, assistant, IconCatalog.default.baskets) { 0L }
         val network = FakeNetworkStatus(online)
         val counts = mutableMapOf("resume" to 0, "sort" to 0, "pantry" to 0, "weather" to 0)
+        val sortTimes = mutableListOf<Long>()
         val catchUp = CatchUp(
             network = network,
             hasKey = { hasKey },
             resumeStickers = { counts["resume"] = counts.getValue("resume") + 1 },
             sortPending = {
                 counts["sort"] = counts.getValue("sort") + 1
+                sortTimes += testScheduler.currentTime
                 active[0]++
                 active[1] = maxOf(active[1], active[0])
                 try {
@@ -93,7 +101,7 @@ class CatchUpTest {
             scope = scope,
             clock = { testScheduler.currentTime },
         )
-        return Rig(catchUp, network, store, assistant, counts)
+        return Rig(catchUp, network, store, assistant, counts, sortTimes)
     }
 
     @Test
@@ -189,6 +197,58 @@ class CatchUpTest {
         advanceUntilIdle()
         assertEquals(2, r.counts["sort"])
         assertTrue(testScheduler.currentTime - first >= CatchUp.MIN_GAP_MS)
+    }
+
+    /**
+     * The phone looked online but an add's sorting never reached OpenAI (the add sheet's [CatchUp.request]): no arrival
+     * comes, and the catch-up sorts it a minute later all the same.
+     */
+    @Test
+    fun aRequestSortsWhatWaitedWithNoArrival() = runTest {
+        val r = rig()
+        r.catchUp.start()
+        advanceUntilIdle()
+        r.catchUp.note.value?.let { r.catchUp.shown(it.id) }
+        assertEquals(1, r.counts["sort"])
+        // An as-typed add whose sort could not get through.
+        r.store.update { s -> s.copy(lists = s.lists.map { if (it.id == "l") it.copy(items = it.items + item("d", "Croissants")) else it }) }
+        r.catchUp.request()
+        advanceTimeBy(CatchUp.RETRY_BACKOFF_MS[0] - 100)
+        runCurrent()
+        assertEquals("not yet", 1, r.counts["sort"])
+        advanceUntilIdle()
+        assertEquals(2, r.counts["sort"])
+        assertEquals("bakery", r.store.current().findItem("d")!!.aisleId)
+        assertEquals(1, r.catchUp.note.value!!.sorted)
+        assertEquals("a retry leaves the forecast alone", 0, r.counts["weather"])
+    }
+
+    /**
+     * Sorting that keeps failing on the way while the phone looks online is tried again 1, 5 and 15 minutes later, then
+     * no more until something new (here an arrival); a request while the retries wait adds nothing.
+     */
+    @Test
+    fun retriesBackOffThenStopUntilTheNextArrival() = runTest {
+        val unreachable = booleanArrayOf(true)
+        val r = rig(unreachable = unreachable)
+        r.catchUp.start()
+        runCurrent()
+        assertEquals(1, r.counts["sort"])
+        r.catchUp.request()
+        r.catchUp.request()
+        advanceUntilIdle()
+        assertEquals(listOf(0L, 60_000L, 360_000L, 1_260_000L), r.sortTimes)
+        advanceTimeBy(24 * 60 * 60 * 1000L)
+        runCurrent()
+        assertEquals("then it stops", 4, r.counts["sort"])
+        assertNull(r.catchUp.note.value)
+
+        unreachable[0] = false
+        r.network.switchNetwork()
+        advanceUntilIdle()
+        assertEquals(5, r.counts["sort"])
+        assertEquals("produce", r.store.current().findItem("a")!!.aisleId)
+        assertEquals(2, r.catchUp.note.value!!.sorted)
     }
 
     @Test

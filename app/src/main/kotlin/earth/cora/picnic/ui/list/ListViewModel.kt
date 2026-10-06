@@ -273,6 +273,7 @@ class ListViewModel(
                 celebration = input.settings.celebration,
                 // Her list shows items sorted into aisles and she has never been told she can hold one (§6.1).
                 holdHint = !input.settings.holdHintDone && !holdHintGiven && grouped.sections.any { it.kind == SectionKind.AISLE },
+                online = input.online,
                 editing = built.editing?.let { e ->
                     e.copy(
                         focusMove = moveFirst,

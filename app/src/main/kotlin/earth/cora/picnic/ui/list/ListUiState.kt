@@ -97,6 +97,11 @@ data class ListUiState(
      * "Hold an item to edit it or move it to another aisle" has never been shown (nor has she held a row).
      */
     val holdHint: Boolean = false,
+    /**
+     * The phone has a network (§6.1). Offline, a refresh sorts and draws nothing: the LCD keeps its word (no SYNC) and
+     * a toast says what waits.
+     */
+    val online: Boolean = true,
 ) {
     val checked: Int get() = total - remaining
 

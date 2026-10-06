@@ -1,6 +1,7 @@
 package earth.cora.picnic.core.assistant
 
 import earth.cora.picnic.core.llm.LlmError
+import earth.cora.picnic.core.llm.unreached
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlin.time.Duration
@@ -58,8 +59,12 @@ sealed interface DrawOutcome {
     /** Image moderation refused the item: never draw this name automatically again. */
     data object Refused : DrawOutcome
 
-    /** Gave up (after the one retry for a rate limit, a network error or a timeout). */
-    class Failed(val error: LlmError) : DrawOutcome
+    /**
+     * Gave up (after the one retry for a rate limit, a network error or a timeout). [reached]: some attempt got to
+     * OpenAI (anything but [LlmError.Offline] or a failure to connect), so it may have been billed; only a drawing that
+     * never reached it gives its daily slot back (docs/DESIGN_STICKER.md §6.13).
+     */
+    class Failed(val error: LlmError, val reached: Boolean = !error.unreached) : DrawOutcome
 }
 
 /**
@@ -100,6 +105,7 @@ class LiveIconDrawer(
     /** One drawing with at most one retry (see the class comment). */
     suspend fun draw(request: IconDrawRequest): DrawOutcome {
         var retried = false
+        var reached = false
         while (true) {
             try {
                 return DrawOutcome.Drawn(assistant.drawIcon(request))
@@ -108,8 +114,9 @@ class LiveIconDrawer(
             } catch (e: LlmError.Refusal) {
                 return DrawOutcome.Refused
             } catch (e: LlmError) {
+                reached = reached || !e.unreached
                 val transient = e is LlmError.RateLimited || e is LlmError.Network || e is LlmError.Timeout
-                if (!transient || retried) return DrawOutcome.Failed(e)
+                if (!transient || retried) return DrawOutcome.Failed(e, reached)
                 retried = true
                 sleep(retryDelay)
             }

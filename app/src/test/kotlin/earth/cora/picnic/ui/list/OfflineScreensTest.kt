@@ -59,6 +59,7 @@ import earth.cora.picnic.ui.theme.ToastHost
 import earth.cora.picnic.ui.theme.ToastHostState
 import earth.cora.picnic.ui.theme.ToastMessage
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -99,6 +100,34 @@ class OfflineScreensTest {
         compose.onNodeWithText("Sorting and new stickers wait until you’re back online").assertIsDisplayed()
         assertEquals("no sticker work offline", 0, rig.icons.resumed)
         assertTrue("no sorting offline", rig.assistant.recategorized.isEmpty())
+    }
+
+    /** Offline a refresh syncs nothing, so the LCD keeps its word (no SYNC); the cue and the sun's spin still answer her. */
+    @Test
+    fun anOfflineRefreshLeavesTheLcdAlone() {
+        var refreshed = 0
+        val screen = ListScreenState()
+        var state by mutableStateOf(ListFixture.ui().copy(online = false))
+        compose.setContent { PicnicTheme { Box(Modifier.fillMaxSize()) { ListScreen(state, ListActions(onRefresh = { refreshed++ }), screen = screen) } } }
+        compose.onNodeWithContentDescription("More options").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Refresh").performClick()
+        compose.waitForIdle()
+        assertEquals("the refresh is asked for (the list says what waits)", 1, refreshed)
+        assertEquals("the sun spins once", 1, screen.sunSpin)
+        assertFalse("no SYNC on the LCD offline", screen.syncing)
+
+        // Back online, the same Refresh shows SYNC as before.
+        state = ListFixture.ui()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("More options").performClick()
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithText("Refresh").performClick()
+        compose.frames(2)
+        assertEquals(2, refreshed)
+        assertTrue("SYNC online", screen.syncing)
+        compose.mainClock.autoAdvance = true
     }
 
     @Test
@@ -169,7 +198,7 @@ class OfflineScreensTest {
         compose.setContent { PicnicTheme { SettingsScreen(SettingsSamples.uncheckedOffline, SettingsActions()) } }
         compose.onNodeWithText("Saved. Paste a new key here to replace it.").assertIsDisplayed()
         compose.onNodeWithTag(SETTINGS_UNCHECKED_TAG).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Not checked yet: you’re offline. It’s checked as soon as you’re back online.").assertIsDisplayed()
+        compose.onNodeWithText("Not checked yet: you’re offline. Test it again once you’re back online.").assertIsDisplayed()
         assertTrue("no hanko error", compose.onAllNodes(hasText(LlmOffline)).fetchSemanticsNodes().isEmpty())
     }
 

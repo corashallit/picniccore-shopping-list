@@ -7,6 +7,7 @@ import earth.cora.picnic.core.model.Correction
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -92,9 +93,30 @@ class LiveIconDrawerTest {
         val sleeps = mutableListOf<Duration>()
         val assistant = FakeAssistant(ArrayDeque(listOf({ throw LlmError.Offline() })))
         val outcome = LiveIconDrawer(assistant, FakeDecider { emptyMap() }, sleep = { sleeps += it }).draw(request)
-        assertIs<LlmError.Offline>(assertIs<DrawOutcome.Failed>(outcome).error)
+        val failed = assertIs<DrawOutcome.Failed>(outcome)
+        assertIs<LlmError.Offline>(failed.error)
+        assertFalse(failed.reached, "nothing reached OpenAI")
         assertEquals(1, assistant.requests.size)
         assertTrue(sleeps.isEmpty())
+    }
+
+    /**
+     * [DrawOutcome.Failed.reached] says whether any attempt got to OpenAI (so the daily slot stays used, §6.13): two
+     * failures to connect never did; a connected timeout did, even when the retry then can't connect.
+     */
+    @Test
+    fun aFailureSaysWhetherAnyAttemptReachedOpenAi() = runTest {
+        fun drawer(vararg errors: LlmError) =
+            LiveIconDrawer(FakeAssistant(ArrayDeque(errors.map<LlmError, () -> DrawnIcon> { e -> { throw e } })), FakeDecider { emptyMap() }, sleep = {})
+        val connectFailure = { LlmError.Network(null, beforeConnect = true) }
+
+        val neverConnected = assertIs<DrawOutcome.Failed>(drawer(connectFailure(), connectFailure()).draw(request))
+        assertFalse(neverConnected.reached)
+        val timedOutThenUnreachable = assertIs<DrawOutcome.Failed>(drawer(LlmError.Timeout(), connectFailure()).draw(request))
+        assertTrue(timedOutThenUnreachable.reached, "the first attempt was connected")
+        val connectedTwice = assertIs<DrawOutcome.Failed>(drawer(LlmError.Network(null), LlmError.Timeout()).draw(request))
+        assertTrue(connectedTwice.reached)
+        assertTrue(assertIs<DrawOutcome.Failed>(drawer(LlmError.BadResponse("nope")).draw(request)).reached)
     }
 
     @Test

@@ -560,10 +560,10 @@ class AppIconRepositoryTest {
         assertTrue("drawn: it no longer waits", h.cache.drawLater().isEmpty())
     }
 
-    /** A drawing that fails on the way (offline, a network error, a timeout) gives its slot back and waits for the connection. */
+    /** A drawing that never reached OpenAI (offline, couldn't connect) gives its slot back and waits for the connection. */
     @Test
-    fun aDrawingThatFailsOnTheWayGivesItsSlotBackAndWaits() = runTest {
-        for (error in listOf<LlmError>(LlmError.Offline(), LlmError.Network(null), LlmError.Timeout())) {
+    fun anUnreachedDrawingGivesItsSlotBackAndWaits() = runTest {
+        for (error in listOf<LlmError>(LlmError.Offline(), LlmError.Network(null, beforeConnect = true))) {
             val root = tmp.newFolder()
             val a = item("1", "Gochujang", IconFit.APPROXIMATE)
             var fail = true
@@ -578,6 +578,42 @@ class AppIconRepositoryTest {
             h.repo.resumePending()
             settle()
             assertNotNull("${error::class.simpleName}: drawn with the refunded slot", h.item("1").customIconId)
+            assertTrue(h.cache.drawLater().isEmpty())
+        }
+    }
+
+    /**
+     * A drawing that reached OpenAI and then failed (a connected timeout or network error) may have been billed: it keeps
+     * its slot. It still waits, and its resubmit goes through the cap like any drawing: not again today (cap 1), the
+     * next day it is drawn.
+     */
+    @Test
+    fun aConnectedFailureKeepsItsSlotAndTheResubmitStaysUnderTheCap() = runTest {
+        for (error in listOf<LlmError>(LlmError.Timeout(), LlmError.Network(null))) {
+            val root = tmp.newFolder()
+            val a = item("1", "Gochujang", IconFit.APPROXIMATE)
+            var fail = true
+            val h = harness(state(a), tuning = IconQueueTuning(dailyCap = 1), root = root, draw = { r -> if (fail) throw error else drawnOk(r) })
+            h.repo.submit(listOf(a))
+            settle()
+            assertEquals("${error::class.simpleName}: tried twice", 2, h.assistant.drawn.size)
+            assertEquals("${error::class.simpleName}: it waits", listOf("gochujang"), h.cache.drawLater())
+            val today = Instant.ofEpochMilli(BASE_TIME + testScheduler.currentTime).atZone(ZoneId.systemDefault()).toLocalDate().toString()
+            assertFalse("${error::class.simpleName}: the slot stays used", h.cache.tryConsumeDaily(today, cap = 1))
+
+            // Back online the same day: the resubmit asks the cap, which is spent, so nothing is sent.
+            fail = false
+            h.repo.resumePending()
+            settle()
+            assertEquals("${error::class.simpleName}: no drawing over the cap", 2, h.assistant.drawn.size)
+            assertNull(h.item("1").customIconId)
+            assertEquals(listOf("gochujang"), h.cache.drawLater())
+
+            // The next day the waiting drawing is made.
+            testScheduler.advanceTimeBy(java.util.concurrent.TimeUnit.DAYS.toMillis(1))
+            h.repo.resumePending()
+            settle()
+            assertNotNull("${error::class.simpleName}: drawn the next day", h.item("1").customIconId)
             assertTrue(h.cache.drawLater().isEmpty())
         }
     }

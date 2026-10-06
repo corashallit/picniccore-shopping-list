@@ -80,15 +80,18 @@ class AddFlows internal constructor(
 
     /**
      * The bar's camera button: a photo that could not be sent comes back first (the sheet on Snap, with Try again and
-     * "Take a photo" for a new one, §0.4 5 October); otherwise the camera.
+     * "Take a photo" for a new one, §0.4 5 October); otherwise the camera, also when the kept file turns out to be gone.
      */
     fun snapFromBar() {
-        if (!vm.showKept(AddMode.SNAP)) takePhoto()
+        if (!vm.showKept(AddMode.SNAP, fallback = ::takePhoto)) takePhoto()
     }
 
-    /** The bar's cassette button: a voice note that could not be sent comes back first; otherwise the microphone. */
+    /**
+     * The bar's cassette button: a voice note that could not be sent comes back first; otherwise the microphone, also
+     * when the kept file turns out to be gone.
+     */
     fun speakFromBar() {
-        if (!vm.showKept(AddMode.SPEAK)) recordVoice()
+        if (!vm.showKept(AddMode.SPEAK, fallback = ::recordVoice)) recordVoice()
     }
 
     /** Focuses the bar's field and opens the keyboard (the FAB, "Start my list"). */

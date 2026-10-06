@@ -101,6 +101,7 @@ class ListOfflineTest {
             // One item in Everything else, so an online refresh would sort it.
             s.copy(lists = s.lists.map { l -> l.copy(items = l.items.map { if (it.id == "milk") it.copy(aisleId = null) else it }) })
         })
+        assertFalse("the screen knows: no SYNC on the LCD", r.vm.loaded().online)
         r.vm.refresh()
         advanceUntilIdle()
         assertEquals(listOf<ListEvent>(ListEvent.RefreshWaits), r.events)
@@ -113,6 +114,7 @@ class ListOfflineTest {
         advanceUntilIdle()
         assertEquals(1, r.icons.resumed)
         assertEquals(1, r.assistant.recategorized.size)
+        assertTrue(r.vm.state.value.online)
     }
 
     @Test

@@ -578,10 +578,11 @@ class AppIconRepository internal constructor(
                 PicnicLog.w("icon drawing gave up", outcome.error)
                 when {
                     job.forced -> reportFailure(job, outcome.error)
-                    // It failed on the way (offline, unreachable, a network error, too slow): the day's slot comes back,
-                    // and an item's drawing waits for the connection. A quota or a bad answer keeps the slot, as before.
+                    // It failed on the way (offline, unreachable, a network error, too slow): an item's drawing waits
+                    // for the connection. The day's slot comes back only when no attempt reached OpenAI (a connected
+                    // try may have been billed). A quota or a bad answer keeps the slot and waits for nothing.
                     outcome.error.transport -> {
-                        cache.refundDaily(job.day)
+                        if (!outcome.reached) cache.refundDaily(job.day)
                         if (job.replaces == null) cache.markDrawLater(job.key)
                     }
                     job.replaces == null -> cache.clearDrawLater(job.key)

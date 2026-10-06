@@ -143,6 +143,11 @@ class AddViewModel(
     private val online: () -> Boolean = { true },
     /** Where a photo or voice note that could not be sent is kept (FileCaptureKeeper on the phone). */
     private val keeper: CaptureKeeper = CaptureKeeper.None,
+    /**
+     * Typed rows could not be sorted although the phone looked online (the request never reached OpenAI): the catch-up
+     * tries again in a while (CatchUp.request), since no arrival of a connection will come to start it.
+     */
+    private val requestCatchUp: () -> Unit = {},
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         AddUiState(
@@ -354,12 +359,18 @@ class AddViewModel(
     /**
      * Snap or Speak opened again (the bar's camera or cassette, the sheet's tab): the kept photo or voice note shows with
      * what went wrong and "Try again"; the footer still takes a new photo or records a new note. False when there is none
-     * (or the sheet is busy with something else), so the caller goes on to the camera or the microphone.
+     * (or it is older than 7 days, or the sheet is busy with something else), so the caller goes on to the camera or the
+     * microphone. When its file turns out to be gone, [fallback] (the bar's camera or microphone) runs instead, so the tap
+     * still does what it says; without one the tab shows its own start.
      */
-    fun showKept(mode: AddMode): Boolean {
+    fun showKept(mode: AddMode, fallback: (() -> Unit)? = null): Boolean {
         val s = _state.value
         if (s.phase.busy || s.committing || s.review != null) return false
         val kept = keptFor(mode) ?: return false
+        if (clock() - kept.keptAt > CaptureKeeper.MAX_AGE_MS) {
+            forgetKept(kept.kind)
+            return false
+        }
         if (s.kept == kept.kind && s.phase is AddPhase.Failed && s.mode == mode && s.sheetOpen) return true
         work?.cancel()
         retryAction = null
@@ -383,9 +394,15 @@ class AddViewModel(
         work = viewModelScope.launch {
             val bytes = keeper.read(kept)
             if (bytes == null) {
-                // Swept or deleted meanwhile: nothing to show (the footer still takes a new one).
+                // Swept or deleted meanwhile: nothing to show. From the bar the camera or the microphone opens as if
+                // nothing had been kept (the sheet as it was); otherwise the tab shows its start.
                 forgetKept(kept.kind)
-                _state.update { if (it.kept == kept.kind) it.copy(kept = null, photo = null, transcript = null, phase = it.restingPhase()) else it }
+                _state.update {
+                    if (it.kept != kept.kind) return@update it
+                    val reset = it.copy(kept = null, photo = null, transcript = null, phase = it.restingPhase())
+                    if (fallback != null) reset.copy(sheetOpen = s.sheetOpen, mode = s.mode) else reset
+                }
+                fallback?.invoke()
                 return@launch
             }
             retryAction = retryFor(kept.kind, bytes)
@@ -486,11 +503,21 @@ class AddViewModel(
         if (keeperQueue.trySend { keeper.discard(kind) }.isFailure) appScope.launch { keeper.discard(kind) }
     }
 
-    /** A fresh ViewModel: the kept captures' pointers (else what the keeper still holds), shown if the sheet was on them. */
+    /**
+     * A fresh ViewModel: the kept captures' pointers (else what the keeper still holds), shown if the sheet was on them.
+     * Captures older than 7 days are swept first, and a pointer whose file is gone or too old is let go.
+     */
     private suspend fun restoreKept() {
+        keeper.sweep()
         for (kind in CaptureKind.entries) {
             val generation = keptGeneration[kind.ordinal]
-            val kept = savedState.get<String>(keyFor(kind))?.let { keptCaptureOf(kind, it) } ?: keeper.latest(kind)
+            val pointer = savedState.get<String>(keyFor(kind))?.let { keptCaptureOf(kind, it) }
+            val valid = pointer?.takeIf { keeper.isKept(it) }
+            if (pointer != null && valid == null && keptGeneration[kind.ordinal] == generation) {
+                savedState[keyFor(kind)] = null
+                if (kind == CaptureKind.VOICE) savedState[KEY_KEPT_TRANSCRIPT] = null
+            }
+            val kept = valid ?: keeper.latest(kind)
             if (kept == null || keptGeneration[kind.ordinal] != generation || keptFor(kind.mode) != null) continue
             when (kind) {
                 CaptureKind.PHOTO -> keptPhoto = kept
@@ -882,6 +909,8 @@ class AddViewModel(
                     }
                     next
                 }
+                // An as-typed commit cleared what she typed: Undo puts it back in the field (unless she typed anew).
+                record.draft?.let { draft -> _state.update { if (it.text.isBlank()) it.copy(text = draft) else it } }
                 _events.send(AddEvent.Undone(commitId))
             } catch (e: IOException) {
                 _events.send(AddEvent.SaveFailed)
@@ -1036,7 +1065,7 @@ class AddViewModel(
             val listId = targetListId()
             val ctx = store.current().ingestContext(listId).copy(existingNames = emptyList())
             val items = OfflineParser.parse(text, catalog, ctx)
-            commitItems(listId, listOf(ItemSource.TYPED to items), noKey = noKey, clearsText = true, fromBar = fromBar, offline = offline)
+            commitItems(listId, listOf(ItemSource.TYPED to items), noKey = noKey, clearsText = true, fromBar = fromBar, offline = offline, draft = text)
         }
     }
 
@@ -1046,7 +1075,8 @@ class AddViewModel(
      * the new rows (eggs 3, 9, 17), the icon cascade, and typed rows without an aisle are placed in the background (a
      * network call with a key). The add flows are free again as soon as the rows are saved: the sort never holds them.
      * Offline ([offline], or the phone has no network now) that sort waits for the connection (the catch-up does it) and
-     * the toast says so: one note, never a second "couldn't sort" one. Returns whether the rows were saved.
+     * the toast says so: one note, never a second "couldn't sort" one. [draft]: the text an as-typed commit cleared, which
+     * its Undo puts back in the field. Returns whether the rows were saved.
      */
     private suspend fun commitItems(
         listId: String,
@@ -1055,6 +1085,7 @@ class AddViewModel(
         clearsText: Boolean,
         fromBar: Boolean = false,
         offline: Boolean = false,
+        draft: String? = null,
     ): Boolean {
         val now = clock()
         val items = batches.flatMap { (source, proposed) -> proposed.map { it.toGroceryItem(newId(), now, source) } }
@@ -1093,7 +1124,7 @@ class AddViewModel(
         } catch (e: IOException) {
             retryAction = {
                 _state.update { it.copy(committing = true) }
-                appScope.launch { commitItems(listId, batches, noKey, clearsText, fromBar, offline) }
+                appScope.launch { commitItems(listId, batches, noKey, clearsText, fromBar, offline, draft) }
             }
             _state.update { it.copy(committing = false, phase = AddPhase.Failed(AddProblem.SAVE_FAILED, retryable = true)) }
             _events.send(AddEvent.SaveFailed)
@@ -1108,7 +1139,7 @@ class AddViewModel(
         val commitId = ids.incrementAndGet()
         if (added.isNotEmpty() || revived.isNotEmpty()) {
             synchronized(undoRecords) {
-                undoRecords[commitId] = UndoRecord(listId, added.map { it.id }, revivedBefore)
+                undoRecords[commitId] = UndoRecord(listId, added.map { it.id }, revivedBefore, draft.takeIf { clearsText })
                 while (undoRecords.size > MAX_UNDO) undoRecords.remove(undoRecords.keys.first())
             }
         }
@@ -1116,8 +1147,10 @@ class AddViewModel(
             after.store.aisles().firstOrNull { it.id == item.aisleId }?.displayName().orEmpty()
         }
         val unsorted = added.filter { it.source == ItemSource.TYPED && it.aisleId == null }.map { it.id }
-        // Rule 2b: typed rows that need sorting, with a key and no network: the sort waits for the catch-up.
+        // Rule 2b: typed rows that need sorting, with a key and no network: the sort waits for the catch-up. When the
+        // phone looks online (the request never got through all the same) no arrival will start it, so it is asked for.
         val sortWaits = !noKey && unsorted.isNotEmpty() && (offline || !online())
+        if (sortWaits && online()) requestCatchUp()
         val commit = AddCommit(
             id = commitId,
             listId = listId,
@@ -1149,8 +1182,12 @@ class AddViewModel(
             when {
                 // No key means "AI is off": typed items simply stay in Everything else, no need to nag.
                 error == null || error is LlmError.NotConfigured -> Unit
-                // It never reached OpenAI (the connection went meanwhile): the catch-up sorts them; the note says so.
-                error.unreached -> _events.send(AddEvent.SortWaits(report.leftUnsorted))
+                // It never reached OpenAI: the catch-up sorts them (after the next arrival, or in a while when the phone
+                // still looks online); the note says so.
+                error.unreached -> {
+                    if (online()) requestCatchUp()
+                    _events.send(AddEvent.SortWaits(report.leftUnsorted))
+                }
                 else -> _events.send(AddEvent.SortFailed(error.friendlyMessage, report.leftUnsorted))
             }
         }
@@ -1236,8 +1273,16 @@ class AddViewModel(
     /** What survives process death. */
     private data class Saved(val listId: String, val mode: AddMode, val text: String, val sheetOpen: Boolean)
 
-    /** What one commit's Undo takes back: the new rows, and the revived rows as they were (with their indices). */
-    private class UndoRecord(val listId: String, val added: List<String>, val revived: List<IndexedValue<GroceryItem>>)
+    /**
+     * What one commit's Undo takes back: the new rows, and the revived rows as they were (with their indices); [draft],
+     * the text an as-typed commit cleared, goes back in the field.
+     */
+    private class UndoRecord(
+        val listId: String,
+        val added: List<String>,
+        val revived: List<IndexedValue<GroceryItem>>,
+        val draft: String? = null,
+    )
 
     companion object {
         private const val LEVEL_POLL_MS = 100L
@@ -1277,6 +1322,7 @@ class AddViewModel(
                     album = c.album,
                     online = { c.network.online.value },
                     keeper = c.keptCaptures,
+                    requestCatchUp = { c.catchUp.request() },
                 )
             }
         }
