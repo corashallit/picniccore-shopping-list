@@ -69,6 +69,8 @@ class CatchUpTest {
         active: IntArray = IntArray(2),
         /** [0]: the sort's request never reaches OpenAI (a captive portal: the phone still looks online). */
         unreachable: BooleanArray = booleanArrayOf(false),
+        /** [0]: runs once right after a sort read and wrote the store, before the run ends. */
+        afterSort: Array<(suspend () -> Unit)?> = arrayOfNulls(1),
     ): Rig {
         val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler)).also { scopes += it }
         val store = InMemoryStateStore(start)
@@ -91,7 +93,12 @@ class CatchUpTest {
                 active[1] = maxOf(active[1], active[0])
                 try {
                     sortGate?.await()
-                    sync.sortPending()
+                    sync.sortPending().also {
+                        afterSort[0]?.let { hook ->
+                            afterSort[0] = null
+                            hook()
+                        }
+                    }
                 } finally {
                     active[0]--
                 }
@@ -249,6 +256,21 @@ class CatchUpTest {
         assertEquals(5, r.counts["sort"])
         assertEquals("produce", r.store.current().findItem("a")!!.aisleId)
         assertEquals(2, r.catchUp.note.value!!.sorted)
+    }
+
+    /** A request that comes while a run sorts (its item newer than what that run read) is still sorted a minute later. */
+    @Test
+    fun aRequestDuringARunIsNotLost() = runTest {
+        val afterSort = arrayOfNulls<suspend () -> Unit>(1)
+        val r = rig(afterSort = afterSort)
+        afterSort[0] = {
+            r.store.update { s -> s.copy(lists = s.lists.map { if (it.id == "l") it.copy(items = it.items + item("d", "Croissants")) else it }) }
+            r.catchUp.request()
+        }
+        r.catchUp.start()
+        advanceUntilIdle()
+        assertEquals(listOf(0L, 60_000L), r.sortTimes)
+        assertEquals("bakery", r.store.current().findItem("d")!!.aisleId)
     }
 
     @Test

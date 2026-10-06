@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /*
  * Catch-up when the connection comes back (docs/DESIGN_STICKER.md §0.4, 5 October; docs/ARCHITECTURE.md §10.1). What
@@ -88,6 +89,9 @@ class CatchUp(
     /** Items still need an aisle and the last try could not get through (cleared when a sort gets an answer). */
     @Volatile
     private var sortOwed = false
+
+    /** Counts [request]s: one that comes while a run sorts keeps the sort owed (its items may be newer than the run's). */
+    private val requests = AtomicLong()
     private val retryLock = Any()
     private var retries: Job? = null
 
@@ -122,6 +126,7 @@ class CatchUp(
      * retries are already waiting changes nothing.
      */
     fun request() {
+        requests.incrementAndGet()
         sortOwed = true
         retryLater()
     }
@@ -159,6 +164,7 @@ class CatchUp(
         }
         runs++
         if (!coldStart) resumeStickers()
+        val asked = requests.get()
         val report = try {
             sortPending()
         } catch (e: CancellationException) {
@@ -171,8 +177,8 @@ class CatchUp(
             _note.value = CatchUpNote(++ids, report.recategorized, report.leftUnsorted)
         }
         // Sorting could not get through (the phone looked online): try again in a while. Any answer, or an error a
-        // retry can't fix (the key, the quota), ends the retries.
-        sortOwed = report?.error?.transport == true
+        // retry can't fix (the key, the quota), ends the retries, unless a request came in while it sorted.
+        sortOwed = report?.error?.transport == true || requests.get() != asked
         if (sortOwed) retryLater()
         safely("pantry stickers") { pantryStickers() }
         true

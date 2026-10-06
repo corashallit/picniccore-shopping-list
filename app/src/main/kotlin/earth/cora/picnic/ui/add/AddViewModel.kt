@@ -397,12 +397,15 @@ class AddViewModel(
                 // Swept or deleted meanwhile: nothing to show. From the bar the camera or the microphone opens as if
                 // nothing had been kept (the sheet as it was); otherwise the tab shows its start.
                 forgetKept(kept.kind)
+                var stillShown = false
                 _state.update {
-                    if (it.kept != kept.kind) return@update it
+                    stillShown = it.kept == kept.kind
+                    if (!stillShown) return@update it
                     val reset = it.copy(kept = null, photo = null, transcript = null, phase = it.restingPhase())
                     if (fallback != null) reset.copy(sheetOpen = s.sheetOpen, mode = s.mode) else reset
                 }
-                fallback?.invoke()
+                // Only while the sheet was still on it (she may have moved on meanwhile).
+                if (stillShown) fallback?.invoke()
                 return@launch
             }
             retryAction = retryFor(kept.kind, bytes)
