@@ -62,7 +62,7 @@ sealed interface DrawOutcome {
     /**
      * Gave up (after the one retry for a rate limit, a network error or a timeout). [reached]: some attempt got to
      * OpenAI (anything but [LlmError.Offline] or a failure to connect), so it may have been billed; only a drawing that
-     * never reached it gives its daily slot back (docs/DESIGN_STICKER.md §6.13).
+     * never reached it gives its daily slot back (docs/ARCHITECTURE.md §8.3, §8.4).
      */
     class Failed(val error: LlmError, val reached: Boolean = !error.unreached) : DrawOutcome
 }
