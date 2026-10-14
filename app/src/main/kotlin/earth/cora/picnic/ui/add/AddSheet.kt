@@ -65,7 +65,7 @@ import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.LetterSetSheet
-import earth.cora.picnic.ui.theme.keptWhileLeaving
+import earth.cora.picnic.ui.theme.SheetFor
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicButton
@@ -184,20 +184,21 @@ val LocalAppBarHeight = compositionLocalOf<Dp?> { null }
  * The stateless sheet: [LetterSetSheet] (visible while [AddUiState.sheetOpen]) with the tabs, the content and the footer.
  * A tall sheet stops under the app bar ([LocalAppBarHeight]), so the list's title, LCD and More stay visible behind the
  * scrim (§4.16). Sliding away it keeps showing what it showed last (the card she just stuck, say), never the empty
- * Write tab the ViewModel has already gone back to.
+ * Write tab the ViewModel has already gone back to; then it goes, with its reveals ([SheetFor]).
  */
 @Composable
 fun AddSheet(state: AddUiState, actions: AddActions, modifier: Modifier = Modifier) {
-    val shown = keptWhileLeaving(state.sheetOpen, state)
-    val reveals = rememberReveals(shown, actions)
-    LetterSetSheet(
-        visible = state.sheetOpen,
-        onDismissRequest = actions.onClose,
-        modifier = modifier,
-        footer = footerFor(shown, reveals)?.let { footer -> { AddFooter(footer, shown, actions) } },
-        topClearance = LocalAppBarHeight.current ?: PicnicTheme.dimens.appBar,
-    ) {
-        AddSheetContent(shown, actions, reveals)
+    SheetFor(state.takeIf { it.sheetOpen }) { shown, open ->
+        val reveals = rememberReveals(shown, actions)
+        LetterSetSheet(
+            visible = open,
+            onDismissRequest = actions.onClose,
+            modifier = modifier,
+            footer = footerFor(shown, reveals)?.let { footer -> { AddFooter(footer, shown, actions) } },
+            topClearance = LocalAppBarHeight.current ?: PicnicTheme.dimens.appBar,
+        ) {
+            AddSheetContent(shown, actions, reveals)
+        }
     }
 }
 

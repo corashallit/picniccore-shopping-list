@@ -203,4 +203,34 @@ class AddSheetMotionTest {
         assertEquals("committed once", 1, h.commits.size)
         assertEquals("the Write tab is reset behind it", false, h.vm.state.value.sheetOpen)
     }
+
+    /**
+     * §4.16: closed in the middle of the answer's reveal (Back while its rows fan out), the sheet slides away as she saw it
+     * and then goes, its reveal with it: nothing of it plays on unseen behind the list (it never finishes a reveal for a
+     * review the ViewModel has already cleared, nor keeps the review and its photo after it has gone).
+     */
+    @Test
+    fun aClosedSheetLeavesWithItsReveal() {
+        val review = f.review(9, f.pancakes(), ItemSource.AI_TEXT, PANCAKES, revealed = false)
+        val answered = AddUiState(
+            listId = f.LIST_ID, sheetOpen = true, mode = AddMode.WRITE, text = PANCAKES, sentText = PANCAKES,
+            phase = AddPhase.Preview, review = review,
+        )
+        val revealed = mutableListOf<Long>()
+        var state by mutableStateOf(answered)
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            PicnicTheme(ThemeVariant.Day) {
+                SheetStage { AddSheet(state, AddActions(onRevealed = { revealed += it })) }
+            }
+        }
+        frames(6)
+        assertTrue("the reveal is still playing", revealed.isEmpty())
+        // Closed: the ViewModel has already gone back to a cleared Write tab.
+        compose.runOnIdle { state = AddUiState(listId = f.LIST_ID) }
+        val total = RevealPlan.thinking(review.steps.size, displayOrder(review), reduced = false).total
+        frames(((total + 1000) / 16).toInt())
+        assertTrue("the sheet has gone", compose.onAllNodes(androidx.compose.ui.test.hasTestTag(LETTERSET_TAG)).fetchSemanticsNodes().isEmpty())
+        assertEquals("its reveal went with it, never finished unseen", emptyList<Long>(), revealed)
+    }
 }
