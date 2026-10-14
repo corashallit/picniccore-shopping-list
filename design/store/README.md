@@ -96,7 +96,7 @@ just those frames. The poster is the composed frame at `--poster-at` (default `c
 `scene:beat`). `--frames` defaults to `$PICNIC_VIDEO_FRAMES`.
 
 Two tables at the top of the script hold every choice, so a recut is an edit there. `SCENES` cuts each segment by
-its marks (`'typing_start-1.5s'`, `'rows_landed+1.8s'`, `'end'`). Each scene can leave out `skip` spans, play
+its marks (`'typing_start-1.8s'`, `'rows_landed+1.6s'`, `'end'`). Each scene can leave out `skip` spans, play
 `speed` spans faster or slower, `hold` on its last frame, choose how it comes in (`enter`), and show a `loupe`; it
 times the captions to marks and gives the scene a backdrop colour, washi tape and decoration stickers in the
 screenshots' layout. `TITLE` lays out the title card (the wordmark, the tagline on a pad patch, the trip's sticker
@@ -104,9 +104,9 @@ book from the feature graphic and a few stickers) and when each piece pops in.
 
 **Pacing.** People read slower than one tends to guess, so the cut leaves room: every caption stays up at least
 3.1 s, and the rests before and after a beat, the title card (3.2 s) and the closing card's hold (1.9 s) are
-generous. The app's own motion always plays at 1x, and so does the typing; only a wait (the answer coming back) or a
-stretch where nothing moves (the celebration's turning rays) plays faster, never above 1.6x. A factor under 1
-stretches a still lead-in, so a caption is read before its beat plays.
+generous. The app's own motion always plays at 1x, and so do the typing and the celebration. Dead air is left out
+with a skip; only a wait (the capsule turning while the answer comes back) plays faster, never above 1.6x. A factor
+under 1 stretches a still lead-in, so a caption is read before its beat plays.
 
 **Motion.** Captions pop in with a small overshoot and shrink away; stickers pop in one after another and settle
 from a few degrees off; the backdrop crossfades between scenes. The title card is already there on the first frame
@@ -114,15 +114,16 @@ from a few degrees off; the backdrop crossfades between scenes. The title card i
 nothing is left in its way. Between two clips the screen either crossfades (`fade`, 0.3 s, for nearly alike
 screens) or wipes (`wipe`, 0.35 s: the next screen comes in from the top down behind an 80 px soft edge, eased in
 and out), which keeps two busy screens from making a muddy double exposure; a skip names its transition as a third
-item, `('stuck', 'rows_landed', 'wipe')`, and a scene its `enter`. Before a skip, the screen rests on the last frame
-while the next one comes in, so a beat just before the jump plays out whole.
+item, `('card_scroll+2.5s', 'stuck-0.75s', 'wipe')`, and a scene its `enter`. Before a skip, the screen rests on the
+last frame while the next one comes in, so a beat just before the jump plays out whole.
 
-**Loupe.** While someone types, the add field is small at video size, so `loupe=[('typing_start-0.2s',
+**Loupe.** While someone types, the add field is small at video size, so `loupe=[('typing_start-0.4s',
 'sent+0.4s', 'add_field')]` floats a white die-cut sticker card with the house's hard periwinkle shadow just above
-the field, showing it live at 1.7x the phone screen's scale. The region is cut from the full-size recorded frame,
-so its text stays crisp; the card pops in and out like a sticker. A region is a name from `segment.json`'s
-`regions` or a box of the screen; for a recording that names none, the script falls back to its own box for the add
-field.
+the field, showing it live at 1.7x the phone screen's scale. The recipe scene uses a second one on the card's
+first "in your pantry" row (`pantry_row_1`), so the viewer sees what the caption means. The region is cut from the
+full-size recorded frame, so its text stays crisp; the card pops in and out like a sticker. A region is a name from
+`segment.json`'s `regions` or a box of the screen; for a recording that names none, the script falls back to its own
+box for the add field.
 
 **Taps.** Each tap shows as a soft disc with a ring under the finger: it presses in just before the tap and spreads
 and fades after it. In Glow the ring is the night theme's soft lavender (`#C9CFF5`) over a fainter disc, so it reads

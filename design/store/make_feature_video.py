@@ -15,9 +15,10 @@ and a few stickers, exactly as make_store_images.py lays out a screenshot; the t
 later edit to the cut, the wording or the timing is an edit to those two tables.
 
 Each output frame is the scene's backdrop, the phone with the screen resampled into it, the decoration stickers and
-the caption, and while someone types, a loupe: a sticker card showing the field enlarged. Everything but the screen
-and the loupe is the same from one frame to the next while nothing moves, so it is drawn once and kept; a frame at
-rest costs one screen resample. Frames stream to ffmpeg (libx264) as raw RGB.
+the caption, and at a few beats a loupe: a sticker card showing part of the screen enlarged (the field while someone
+types, a row of the recipe card). Everything but the screen and the loupe is the same from one frame to the next
+while nothing moves, so it is drawn once and kept; a frame at rest costs one screen resample. Frames stream to
+ffmpeg (libx264) as raw RGB.
 
 The output is deterministic: no randomness and no timestamps, so the same frames (and the same Pillow, cairosvg,
 numpy and ffmpeg versions) always give the same video. Requirements: design/store/requirements.txt and ffmpeg.
@@ -103,7 +104,8 @@ TAP_STYLE = {                    # by the recording's theme: disc colour and opa
     'glow': (store.WHITE, 0.22, '#C9CFF5', 0.9),     # Glow's inkSoft: the day ring would vanish on the navy page
 }
 # The loupe: a white die-cut sticker card with the house's hard periwinkle shadow, floating over the phone just above
-# the region it shows (the add field), with that region live and enlarged in it. It pops like a sticker.
+# the region it shows (the add field, a row of the recipe card), with that region live and enlarged in it. It pops
+# like a sticker.
 LOUPE_SCALE = 1.7      # x the phone screen's own scale (about 1.1 recorded px a frame px, so the text stays crisp)
 LOUPE_BORDER = 16      # px of white die-cut round the region
 LOUPE_RADIUS = 30      # the card's corners (the region's are LOUPE_RADIUS - LOUPE_BORDER)
@@ -162,44 +164,41 @@ TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the
 #   fam, dusk, tape    backdrop family (dusk: the deeper night-theme ground), washi pattern, as in SHOTS
 #   decor              (drawable or 'sparkle:<family>', size px, side 'L' / 'R', centre y, angle), as in SHOTS
 # Pacing: a caption stays up at least MIN_CAPTION; rests before and after a beat are about 1.25x what reads at a
-# glance. The skips marked "first recorder" hide app glitches of the first recording (the tray's one-frame fold, the
-# sheet's empty Write tab on its way out); drop them once a recording plays those smoothly.
+# glance. The app's motion plays at 1x: dead air is left out with a skip, a still lead-in may be stretched so its
+# caption is read before the beat, and only the wait for an answer (the capsule turning in the send button) goes
+# faster. Celebrate starts after the list's scroll to Household, where the sticker book folds to its strip in 2 frames.
 # ---------------------------------------------------------------------------------------------------------------------
 SCENES = [
-    dict(segment='write', cut_in='typing_start-1.5s', cut_out='rows_landed+1.8s',
+    dict(segment='write', cut_in='typing_start-1.8s', cut_out='rows_landed+1.6s',
          speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
-         skip=[('stuck', 'rows_landed', 'wipe')],                       # first recorder: the sheet's way out
-         loupe=[('typing_start-0.2s', 'sent+0.4s', 'add_field')],
+         loupe=[('typing_start-0.4s', 'sent+0.4s', 'add_field')],
          captions=[(['Write your list', 'any old way'], 'start'),
                    (['Your list, sorted', 'aisle by aisle'], 'card_shown+0.2s')],
          fam='mint', tape='sakura',
          decor=[('sk_i_strawberry', 176, 'L', 1520, 8), ('sk_d_bee', 132, 'R', 1250, -10),
                 ('sk_d_ladybug', 112, 'R', 1760, 12)]),
-    dict(segment='recipe', cut_in='typing_start-1.0s', cut_out='rows_landed+1.8s',
+    dict(segment='recipe', cut_in='typing_start-1.3s', cut_out='rows_landed+1.6s',
          speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
-         skip=[('card_scroll+2.5s', 'stuck-0.75s'), ('stuck', 'rows_landed', 'wipe')],
-         loupe=[('typing_start-0.2s', 'sent+0.4s', 'add_field')],
+         loupe=[('typing_start-0.4s', 'sent+0.4s', 'add_field'),
+                ('card_scroll+2.4s', 'stuck-0.35s', 'pantry_row_1')],
          captions=[(['Turn a recipe into', 'a shopping list'], 'start'),
-                   (['Recipes leave out', 'what’s in your pantry'], 'card_scroll+1s')],
+                   (['Recipes leave out', 'what’s in your pantry'], 'card_scroll+1.2s')],
          fam='lemon', tape='gingham',
          decor=[('sk_i_eggs', 168, 'L', 1520, 8), ('sk_i_flour', 150, 'R', 1250, -8),
                 ('sk_i_maple_syrup', 124, 'R', 1760, 10)]),
-    dict(segment='shop', enter='wipe', cut_in='start', cut_out='next_card+1.9s',
-         speed=[('start', 'first_tick-0.4s', 0.5)],
-         skip=[('next_card-0.23s', 'next_card+0.03s')],                 # first recorder: the tray's fold
+    dict(segment='shop', enter='wipe', cut_in='start', cut_out='next_card+2.1s',
+         speed=[('start', 'first_tick-1.4s', 0.5)],
          captions=[(['Check it off and', 'its sticker hops in'], 'start')],
          fam='ramune', tape='dots',
          decor=[('sk_i_banana', 160, 'L', 1520, 8), ('sk_i_croissant', 140, 'R', 1250, -8),
                 ('sk_d_heart', 104, 'R', 1760, 10)]),
     dict(segment='glow', enter='wipe', cut_in='start', cut_out='second_tick+1.4s',
-         speed=[('start', 'first_tick-0.5s', 0.5)],
          captions=[(['Glow-in-the-dark', 'night theme'], 'start')],
          fam='periwinkle', dusk=True, tape='dots',
          decor=[('sk_d_kira', 150, 'L', 1520, 8), ('sk_d_glowstar', 120, 'R', 1250, -8),
                 ('sk_d_glowstar', 92, 'R', 1760, 14)]),
-    dict(segment='celebrate', enter='wipe', cut_in='start', cut_out='banner+2.5s',
-         speed=[('celebration+3.1s', 'perfect-0.1s', 1.5), ('perfect+0.5s', 'banner-0.1s', 1.5)],
-         skip=[('celebration-0.3s', 'celebration')],                    # first recorder: the tray's fold
+    dict(segment='celebrate', enter='wipe', cut_in='last_tick-1.0s', cut_out='banner+2.8s',
+         speed=[('last_tick-1.0s', 'last_tick-0.3s', 0.5)],
          captions=[(['Every finished list', 'gets a celebration'], 'start')],
          fam='sakura', tape='sakura',
          decor=[('sk_i_lemonade', 150, 'L', 1520, 8), ('sparkle:lemon', 112, 'R', 1250, -8),
