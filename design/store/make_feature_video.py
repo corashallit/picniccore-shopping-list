@@ -7,15 +7,17 @@
     python3 design/store/make_feature_video.py --frames /tmp/kk-frames --preview --out /tmp/kk.mp4 \\
         --sheet /tmp/kk_sheet.png --every 15 --stills /tmp/kk_stills      # a quick half-size pass, for review
 
-The recorder writes one folder per segment (write, recipe, shop, celebrate, album, glow): 00000.png, 00001.png, ...
+The recorder writes one folder per segment (write, recipe, shop, glow, celebrate, album): 00000.png, 00001.png, ...
 (1080 x 2280, the whole phone screen at 30 fps of app time) and segment.json, which names the frames where the
-beats happen ("sent", "rows_landed", ...). SCENES below cuts each segment by those marks and gives it a caption,
-a backdrop, a washi tape and a few stickers, exactly as make_store_images.py lays out a screenshot; the title card
-at each end is TITLE. A later edit to the cut, the wording or the timing is an edit to those two tables.
+beats happen ("sent", "rows_landed", ...), where a finger tapped or dragged, and the screen regions worth a closer
+look ("add_field"). SCENES below cuts each segment by those marks and gives it a caption, a backdrop, a washi tape
+and a few stickers, exactly as make_store_images.py lays out a screenshot; the title card at each end is TITLE. A
+later edit to the cut, the wording or the timing is an edit to those two tables.
 
 Each output frame is the scene's backdrop, the phone with the screen resampled into it, the decoration stickers and
-the caption. Everything but the screen is the same from one frame to the next while nothing moves, so it is drawn
-once and kept; a frame at rest costs one screen resample. Frames stream to ffmpeg (libx264) as raw RGB.
+the caption, and while someone types, a loupe: a sticker card showing the field enlarged. Everything but the screen
+and the loupe is the same from one frame to the next while nothing moves, so it is drawn once and kept; a frame at
+rest costs one screen resample. Frames stream to ffmpeg (libx264) as raw RGB.
 
 The output is deterministic: no randomness and no timestamps, so the same frames (and the same Pillow, cairosvg,
 numpy and ffmpeg versions) always give the same video. Requirements: design/store/requirements.txt and ffmpeg.
@@ -40,7 +42,7 @@ try:
     import numpy as np
 except ImportError:  # pragma: no cover
     sys.exit('make_feature_video.py needs numpy: pip install -r design/store/requirements.txt')
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import make_store_images as store  # noqa: E402  (the screenshots' backdrop, phone, lettering and stickers)
@@ -50,10 +52,11 @@ OUT_DIR = REPO / 'design/store/video'
 W, H = store.W, store.H                     # 1080 x 1920, as the phone screenshots
 SEG_W, SEG_H = 1080, 2280                   # a recorded frame: the whole phone screen
 FPS = 30
-CRF = 22                                    # x264 quality: no visible loss or banding, well under MAX_BYTES
-MAX_BYTES = 10_000_000
-LENGTH = (30.0, 60.0)                       # the whole video, in seconds
-MIN_CAPTION = 2.5                           # every caption stays up at least this long, in seconds
+CRF = 22                                    # x264 quality: no visible loss or banding, under MAX_BYTES
+MAX_BYTES = 12_000_000
+LENGTH = (30.0, 75.0)                       # the whole video, in seconds
+MIN_CAPTION = 3.1                           # every caption stays up at least this long, in seconds
+SPEED = (0.5, 1.6)                          # a speed span's factor (see SCENES)
 
 # The phone sits exactly where a screenshot puts it (make_store_images.screenshot)
 PHONE_X = round((W - (store.SCREEN_W + 2 * store.BEZEL)) / 2 - (store.DIECUT + 6))
@@ -61,11 +64,20 @@ PHONE_Y = store.PHONE_TOP - (store.DIECUT + 6)
 SCREEN_X = PHONE_X + store.DIECUT + 6 + store.BEZEL
 SCREEN_Y = PHONE_Y + store.DIECUT + 6 + store.BEZEL
 SCREEN_BOX = (SCREEN_X, SCREEN_Y, SCREEN_X + store.SCREEN_W, SCREEN_Y + store.SCREEN_H)
+SCREEN_K = store.SCREEN_W / SEG_W           # a recorded pixel on the frame
+# the phone's art (die-cut, side buttons and shadow) at rest on the frame
+PHONE_BOX = (PHONE_X + 6, PHONE_Y + 6, PHONE_X + 2 * (store.DIECUT + 6) + store.SCREEN_W + 2 * store.BEZEL
+             + store.PHONE_SHADOW[0], PHONE_Y + 2 * (store.DIECUT + 6) + store.SCREEN_H + 2 * store.BEZEL
+             + store.PHONE_SHADOW[1])
 
 # ---------------------------------------------------------------------------------------------------------------------
-# Motion (seconds). Calm and cute: things pop in with a small overshoot, settle, and leave quickly.
+# Motion (seconds). Calm and cute: things pop in with a small overshoot, settle, and leave quickly. The app's own
+# motion always plays at 1x; the reading time around it is generous (people read slower than one guesses).
 # ---------------------------------------------------------------------------------------------------------------------
-XFADE = 0.3            # the screen crossfades between clips (and between scenes)
+XFADE = 0.3            # a crossfade, between two nearly alike screens
+WIPE = 0.35            # a wipe, between two busy ones: the next screen comes in from the top down behind a soft edge
+WIPE_FEATHER = 80      # px of the frame: the wipe's soft edge
+TRANSITIONS = {'fade': XFADE, 'wipe': WIPE}
 GROUND_FADE = 0.4      # the backdrop crossfades between scenes
 CAPTION_IN = 0.4       # a caption pops in: scale 0.7 -> 1.06 -> 1
 CAPTION_OUT = 0.16     # and shrinks and fades
@@ -81,83 +93,122 @@ RISE = 0.6             # the phone rises in from below (ease-out)...
 DROP = 0.5             # ...and drops away at the end (ease-in)
 PHONE_TRAVEL = 1650    # px below its place: wholly off the frame
 CAPTION_ON_RISE = 0.25  # the first caption pops this long after the phone starts rising
-# A tap the recorder logged ("taps" in segment.json) shows as a soft white disc with a ballpoint ring under the
-# finger: it presses in for TAP_PRESS before the tap and spreads and fades for TAP_LIFT after it.
+# A tap the recorder logged ("taps" in segment.json) shows as a soft disc with a ring under the finger: it presses in
+# for TAP_PRESS before the tap and spreads and fades for TAP_LIFT after it. A drag presses in the same way, follows
+# the finger along its path (the recorder's smoothstep) and lifts where the finger left the screen.
 TAP_RADIUS, TAP_RING = 44, 6     # px of the recorded screen
 TAP_PRESS, TAP_LIFT = 0.12, 0.36
+TAP_STYLE = {                    # by the recording's theme: disc colour and opacity, ring colour and opacity
+    'day': (store.WHITE, 0.5, store.BALLPOINT_SOFT, 0.85),
+    'glow': (store.WHITE, 0.22, '#C9CFF5', 0.9),     # Glow's inkSoft: the day ring would vanish on the navy page
+}
+# The loupe: a white die-cut sticker card with the house's hard periwinkle shadow, floating over the phone just above
+# the region it shows (the add field), with that region live and enlarged in it. It pops like a sticker.
+LOUPE_SCALE = 1.7      # x the phone screen's own scale (about 1.1 recorded px a frame px, so the text stays crisp)
+LOUPE_BORDER = 16      # px of white die-cut round the region
+LOUPE_RADIUS = 30      # the card's corners (the region's are LOUPE_RADIUS - LOUPE_BORDER)
+LOUPE_SHADOW = (8, 11)  # the hard shadow's offset
+LOUPE_GAP = 40         # px between the card (with its shadow) and the region it shows, above it
+LOUPE_TURN = 3.0       # degrees off at the start of its pop (smaller than a sticker's: it is a big card)
+# For recordings that name no regions (the first recorder): the add field, in recorded px
+FALLBACK_REGIONS = {'add_field': (22, 2104, 540, 2252)}
+POSTER_AT = 'celebrate:banner+0.6s'   # the poster: the composed frame at this beat (scene:beat)
 
 # ---------------------------------------------------------------------------------------------------------------------
 # The title card, at the start and again at the end. The wordmark and tagline, the trip's real sticker book taped
-# onto the blanket (as on the feature graphic) and a few stickers, each popping in at `at` seconds into the card.
-# Items: (what, size px, centre x, centre y, turn in degrees, at). `what` is 'wordmark', 'tagline', 'book', a
-# drawable or 'sparkle:<family>'. The card holds until TITLE_CLEAR, then clears as the phone rises; at the end it
+# onto the blanket (as on the feature graphic) and a few stickers. Items: (what, size px, centre x, centre y, turn in
+# degrees, at). `what` is 'wordmark', 'tagline', 'book', a drawable or 'sparkle:<family>'. The wordmark and the
+# tagline are centred by their white face (the stroke, the patch), so their hard shadows don't pull them off the
+# middle; the rest by their art. Each item pops in `at` seconds into the card, except the TITLE_AT_REST items, which
+# are on the very first frame (so a player showing frame 0 shows the name). The card holds until TITLE_CLEAR, then
+# clears from the bottom up, one item a frame; the phone rises once nothing is left in its way. At the end the card
 # comes back once the phone has dropped away and holds for TITLE_END_HOLD.
 # ---------------------------------------------------------------------------------------------------------------------
 TITLE = dict(fam='mint', tape='sakura', items=[
-    ('wordmark', 104, 520, 640, 0, 0.15),
-    ('tagline', 42, 540, 810, 0, 0.40),
-    ('book', 880, 540, 1270, 2, 0.62),
-    ('sparkle:lemon', 74, 968, 584, 0, 0.88),
-    ('sk_d_star', 50, 1000, 650, 8, 1.00),
-    ('sk_i_strawberry', 170, 250, 1610, 10, 1.12),
-    ('sk_i_lemonade', 140, 840, 1600, -12, 1.24),
-    ('sk_d_bee', 120, 196, 466, -10, 1.36),
+    ('wordmark', 104, 540, 640, 0, 0.0),
+    ('tagline', 42, 540, 810, 0, 0.25),
+    ('book', 880, 540, 1270, 2, 0.45),
+    ('sparkle:lemon', 64, 994, 556, 0, 0.70),       # the twinkle pair, at the wordmark's top right, clear of the 't'
+    ('sk_d_star', 44, 1032, 622, 8, 0.82),
+    ('sk_i_strawberry', 170, 250, 1610, 10, 0.94),
+    ('sk_i_lemonade', 140, 840, 1600, -12, 1.06),
+    ('sk_d_bee', 120, 196, 466, -10, 1.18),
 ])
-TITLE_CLEAR = 2.5      # seconds: the card starts clearing, and the phone rises
+TITLE_AT_REST = ('wordmark', 'tagline')
+TITLE_CLEAR = 3.2      # seconds: the card starts clearing
 TITLE_RETURN = 0.3     # after the phone starts dropping, before the card comes back
-TITLE_END_HOLD = 1.5
+TITLE_END_HOLD = 1.9
+TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the tagline's art
 
 # ---------------------------------------------------------------------------------------------------------------------
 # The scenes, in order. A scene whose segment was not recorded is left out.
 #   segment            the folder under --frames
 #   cut_in, cut_out    the first and last frame shown: 'start', 'end', a mark from segment.json, either with an offset
 #                      in seconds ('sent+1.5s', 'end-0.5s'), or a frame number
-#   skip               optional spans to leave out, [(from, to)]: 'from' is the last frame before the jump, 'to' the
-#                      first after it; the screen rests on 'from' while it crossfades to 'to'
-#   speed              optional spans to play faster (or slower), [(from, to, factor)], e.g. typing at 2x
+#   enter              how the scene comes in over the one before: 'fade' (the default) or 'wipe'
+#   skip               optional spans to leave out, [(from, to)] or [(from, to, 'wipe')]: 'from' is the last frame
+#                      before the jump, 'to' the first after it; the screen rests on 'from' while 'to' comes in, by a
+#                      crossfade (the default, for nearly alike screens) or a wipe (two busy screens would make a
+#                      muddy double exposure)
+#   speed              optional spans to play at another speed, [(from, to, factor)]: faster only where the app waits
+#                      or nothing moves, and never above 1.6x; never over the typing (typing_start to typing_end, or
+#                      to sent), so the app's own motion plays at 1x; a factor under 1 stretches a still lead-in
 #   hold               optional seconds to rest on the last frame
+#   loupe              optional [(from, to, region)]: from 'from' to 'to' a loupe shows `region` (a name from
+#                      segment.json's "regions", such as 'add_field', or a rect (x0, y0, x1, y1) of the recorded
+#                      screen) live and enlarged, on a card just above it
 #   captions           [(two lines, beat)]: the first is up from the scene's start ('start'); each next one takes
 #                      over when its beat plays
 #   fam, dusk, tape    backdrop family (dusk: the deeper night-theme ground), washi pattern, as in SHOTS
 #   decor              (drawable or 'sparkle:<family>', size px, side 'L' / 'R', centre y, angle), as in SHOTS
+# Pacing: a caption stays up at least MIN_CAPTION; rests before and after a beat are about 1.25x what reads at a
+# glance. The skips marked "first recorder" hide app glitches of the first recording (the tray's one-frame fold, the
+# sheet's empty Write tab on its way out); drop them once a recording plays those smoothly.
 # ---------------------------------------------------------------------------------------------------------------------
 SCENES = [
-    dict(segment='write', cut_in='typing_start-0.6s', cut_out='end', speed=[('typing_start', 'card_shown-0.2s', 2)],
-         skip=[('stuck', 'rows_landed')],
+    dict(segment='write', cut_in='typing_start-1.5s', cut_out='rows_landed+1.8s',
+         speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
+         skip=[('stuck', 'rows_landed', 'wipe')],                       # first recorder: the sheet's way out
+         loupe=[('typing_start-0.2s', 'sent+0.4s', 'add_field')],
          captions=[(['Write your list', 'any old way'], 'start'),
-                   (['Your list, sorted', 'aisle by aisle'], 'card_shown+0.6s')],
+                   (['Your list, sorted', 'aisle by aisle'], 'card_shown+0.2s')],
          fam='mint', tape='sakura',
          decor=[('sk_i_strawberry', 176, 'L', 1520, 8), ('sk_d_bee', 132, 'R', 1250, -10),
                 ('sk_d_ladybug', 112, 'R', 1760, 12)]),
-    dict(segment='recipe', cut_in='typing_start-0.4s', cut_out='rows_landed+1.8s',
-         speed=[('typing_start', 'card_shown-0.2s', 2)],
-         skip=[('card_scroll+2s', 'stuck-0.6s'), ('stuck', 'rows_landed')],
+    dict(segment='recipe', cut_in='typing_start-1.0s', cut_out='rows_landed+1.8s',
+         speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
+         skip=[('card_scroll+2.5s', 'stuck-0.75s'), ('stuck', 'rows_landed', 'wipe')],
+         loupe=[('typing_start-0.2s', 'sent+0.4s', 'add_field')],
          captions=[(['Turn a recipe into', 'a shopping list'], 'start'),
-                   (['Recipes leave out', 'what\u2019s in your pantry'], 'card_scroll+1s')],
+                   (['Recipes leave out', 'what’s in your pantry'], 'card_scroll+1s')],
          fam='lemon', tape='gingham',
          decor=[('sk_i_eggs', 168, 'L', 1520, 8), ('sk_i_flour', 150, 'R', 1250, -8),
                 ('sk_i_maple_syrup', 124, 'R', 1760, 10)]),
-    dict(segment='shop', cut_in='first_tick-0.8s', cut_out='next_card+2s',
+    dict(segment='shop', enter='wipe', cut_in='start', cut_out='next_card+1.9s',
+         speed=[('start', 'first_tick-0.4s', 0.5)],
+         skip=[('next_card-0.23s', 'next_card+0.03s')],                 # first recorder: the tray's fold
          captions=[(['Check it off and', 'its sticker hops in'], 'start')],
          fam='ramune', tape='dots',
          decor=[('sk_i_banana', 160, 'L', 1520, 8), ('sk_i_croissant', 140, 'R', 1250, -8),
                 ('sk_d_heart', 104, 'R', 1760, 10)]),
-    dict(segment='celebrate', cut_in='last_tick-0.6s', cut_out='banner+1.6s',
-         speed=[('last_tick+0.4s', 'celebration', 2)],
-         captions=[(['Every finished list', 'gets a celebration'], 'start')],
-         fam='sakura', tape='sakura',
-         decor=[('sk_i_lemonade', 150, 'L', 1520, 8), ('sparkle:lemon', 112, 'R', 1250, -8),
-                ('sk_d_star', 104, 'R', 1760, 10)]),
-    dict(segment='album', cut_in='scroll_start-0.8s', cut_out='end',
-         captions=[(['Collect 200+ stickers', 'in your album'], 'start')],
-         fam='grape', tape='gingham',
-         decor=[('sk_d_ribbon', 160, 'L', 1520, 8), ('sk_d_flower', 128, 'R', 1250, -8),
-                ('sk_d_heart', 104, 'R', 1760, 10)]),
-    dict(segment='glow', cut_in='first_tick-0.8s', cut_out='end',
+    dict(segment='glow', enter='wipe', cut_in='start', cut_out='second_tick+1.4s',
+         speed=[('start', 'first_tick-0.5s', 0.5)],
          captions=[(['Glow-in-the-dark', 'night theme'], 'start')],
          fam='periwinkle', dusk=True, tape='dots',
          decor=[('sk_d_kira', 150, 'L', 1520, 8), ('sk_d_glowstar', 120, 'R', 1250, -8),
                 ('sk_d_glowstar', 92, 'R', 1760, 14)]),
+    dict(segment='celebrate', enter='wipe', cut_in='start', cut_out='banner+2.5s',
+         speed=[('celebration+3.1s', 'perfect-0.1s', 1.5), ('perfect+0.5s', 'banner-0.1s', 1.5)],
+         skip=[('celebration-0.3s', 'celebration')],                    # first recorder: the tray's fold
+         captions=[(['Every finished list', 'gets a celebration'], 'start')],
+         fam='sakura', tape='sakura',
+         decor=[('sk_i_lemonade', 150, 'L', 1520, 8), ('sparkle:lemon', 112, 'R', 1250, -8),
+                ('sk_d_star', 104, 'R', 1760, 10)]),
+    dict(segment='album', enter='wipe', cut_in='start', cut_out='end',
+         captions=[(['Collect 200+ stickers', 'in your album'], 'start')],
+         fam='grape', tape='gingham',
+         decor=[('sk_d_ribbon', 160, 'L', 1520, 8), ('sk_d_flower', 128, 'R', 1250, -8),
+                ('sk_d_heart', 104, 'R', 1760, 10)]),
 ]
 
 
@@ -188,6 +239,10 @@ def ease_in_back(p, c=1.70158):
     return (c + 1) * p ** 3 - c * p ** 2
 
 
+def smoothstep(p):
+    return p * p * (3 - 2 * p)
+
+
 def overshoot(p, start, peak, at=0.55):
     """A pop's scale: from `start` up to `peak` (ease-out) by `at`, then back to exactly 1 (ease-in-out), so both
     joins are smooth."""
@@ -198,19 +253,19 @@ def overshoot(p, start, peak, at=0.55):
     return peak + (1 - peak) * ease_in_out_sine((p - at) / (1 - at))
 
 
-# Each style: (in seconds, out seconds, in curve, out curve); a curve maps progress p (0..1] and the item's turn
-# offset to (scale, extra turn in degrees, opacity).
+# Each style: (in seconds, out seconds, in curve, out curve, peak scale); a curve maps progress p (0..1] and the
+# item's turn offset to (scale, extra turn in degrees, opacity).
 STYLES = {
     'lettering': (CAPTION_IN, CAPTION_OUT,
                   lambda p, d: (overshoot(p, 0.7, 1.06), 0.0, ease_out_cubic(min(1.0, p / 0.35))),
-                  lambda p, d: (1 - 0.2 * p * p, 0.0, 1 - p * p)),
+                  lambda p, d: (1 - 0.2 * p * p, 0.0, 1 - p * p), 1.06),
     'sticker': (STICKER_IN, STICKER_OUT,
                 lambda p, d: (overshoot(p, 0.45, 1.1, 0.5), d * (1 - ease_out_back(p)),
                               ease_out_cubic(min(1.0, p / 0.3))),
-                lambda p, d: (1 - 0.6 * ease_in_back(p), 0.0, 1 - ease_in_cubic(p))),
+                lambda p, d: (1 - 0.6 * ease_in_back(p), 0.0, 1 - ease_in_cubic(p)), 1.1),
     'book': (BOOK_IN, BOOK_OUT,
              lambda p, d: (overshoot(p, 0.9, 1.03), d * (1 - ease_out_back(p)), ease_out_cubic(min(1.0, p / 0.4))),
-             lambda p, d: (1 - 0.25 * ease_in_back(p), 0.0, 1 - ease_in_cubic(p))),
+             lambda p, d: (1 - 0.25 * ease_in_back(p), 0.0, 1 - ease_in_cubic(p)), 1.03),
 }
 
 
@@ -220,7 +275,7 @@ class Showing:
     def __init__(self, sid, layer, style, n_in, n_out, turn=0.0):
         self.sid, self.layer, self.style, self.turn = sid, layer, style, turn
         self.n_in, self.n_out = n_in, n_out
-        t_in, t_out, self.curve_in, self.curve_out = STYLES[style]
+        t_in, t_out, self.curve_in, self.curve_out, _ = STYLES[style]
         self.len_in, self.len_out = max(1, frames(t_in)), max(1, frames(t_out))
 
     def at(self, n):
@@ -237,10 +292,34 @@ class Showing:
     def settled(self):
         return self.n_in + self.len_in
 
+    def gone(self):
+        """The first frame it no longer shows."""
+        return self.n_out + self.len_out
+
+
+def turned_box(box, scale, turn, cx, cy):
+    """The bounding box of `box` scaled by `scale` and turned by `turn` degrees about (cx, cy)."""
+    rad = math.radians(turn)
+    cos, sin = math.cos(rad), math.sin(rad)
+    xs, ys = [], []
+    for x in (box[0], box[2]):
+        for y in (box[1], box[3]):
+            dx, dy = (x - cx) * scale, (y - cy) * scale
+            xs.append(cx + cos * dx + sin * dy)
+            ys.append(cy - sin * dx + cos * dy)
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def boxes_meet(a, b, gap=0):
+    return a[0] < b[2] + gap and b[0] < a[2] + gap and a[1] < b[3] + gap and b[1] < a[3] + gap
+
 
 # ---------------------------------------------------------------------------------------------------------------------
 # Segments: the recorder's frames, checked against the contract
 # ---------------------------------------------------------------------------------------------------------------------
+Tap = namedtuple('Tap', 'frame x y kind to_x to_y until')
+
+
 class Segment:
     def __init__(self, folder):
         self.folder = folder
@@ -256,7 +335,7 @@ class Segment:
             raise bad(f'recorded at {meta.get("fps")} fps, not {FPS}')
         if (meta.get('width'), meta.get('height')) != (SEG_W, SEG_H):
             raise bad(f'{meta.get("width")} x {meta.get("height")}, not {SEG_W} x {SEG_H}')
-        if meta.get('theme') not in ('day', 'glow'):
+        if meta.get('theme') not in TAP_STYLE:
             raise bad(f'theme {meta.get("theme")!r} is neither day nor glow')
         self.theme = meta['theme']
         self.count = meta.get('frames')
@@ -279,27 +358,73 @@ class Segment:
             if m.get('name') in self.marks:
                 raise bad(f'mark {m["name"]!r} appears twice')
             self.marks[m['name']] = m['frame']
+        on_screen = lambda x, y: (isinstance(x, (int, float)) and isinstance(y, (int, float))  # noqa: E731
+                                  and 0 <= x < SEG_W and 0 <= y < SEG_H)
         self.taps = []
         for t in meta.get('taps', []):
-            f, x, y = t.get('frame'), t.get('x'), t.get('y')
+            f, x, y, kind = t.get('frame'), t.get('x'), t.get('y'), t.get('kind', 'tap')   # no kind: a tap
             if not isinstance(f, int) or not 0 <= f < self.count:
                 raise bad(f'a tap at frame {f!r} is outside 0..{self.count - 1}')
-            if not (isinstance(x, (int, float)) and isinstance(y, (int, float)) and 0 <= x < SEG_W and 0 <= y < SEG_H):
+            if not on_screen(x, y):
                 raise bad(f'the tap at frame {f} is off the screen: ({x!r}, {y!r})')
-            self.taps.append((f, x, y))
+            if kind == 'tap':
+                self.taps.append(Tap(f, x, y, kind, x, y, f))
+            elif kind == 'drag':
+                to_x, to_y, until = t.get('to_x'), t.get('to_y'), t.get('until')
+                if not on_screen(to_x, to_y):
+                    raise bad(f'the drag at frame {f} ends off the screen: ({to_x!r}, {to_y!r})')
+                if not isinstance(until, int) or not f < until < self.count:
+                    raise bad(f'the drag at frame {f} lifts at {until!r}, not after it and inside the segment')
+                self.taps.append(Tap(f, x, y, kind, to_x, to_y, until))
+            else:
+                raise bad(f'the tap at frame {f} is a {kind!r}, neither a tap nor a drag')
+        self.regions = {}
+        for name, rect in (meta.get('regions') or {}).items():
+            self.regions[name] = self._rect(rect, f'region {name!r}')
+        self._noted = set()
 
-    def taps_at(self, idx):
-        """[(x, y, scale, opacity)] of the tap rings showing on frame idx."""
+    def _rect(self, rect, what):
+        if not (isinstance(rect, (list, tuple)) and len(rect) == 4 and all(isinstance(v, (int, float)) for v in rect)):
+            raise SystemExit(f'segment {self.name}: {what} is not (x0, y0, x1, y1): {rect!r}')
+        x0, y0, x1, y1 = rect
+        if not (0 <= x0 < x1 <= SEG_W and 0 <= y0 < y1 <= SEG_H):
+            raise SystemExit(f'segment {self.name}: {what} {tuple(rect)} is not a box on the screen')
+        return tuple(rect)
+
+    def region(self, spec, what):
+        """The rect a loupe's region names: a name from segment.json's regions (or, for a recording that names
+        none, FALLBACK_REGIONS), or a rect."""
+        if not isinstance(spec, str):
+            return self._rect(spec, what)
+        if spec in self.regions:
+            return self.regions[spec]
+        if not self.regions and spec in FALLBACK_REGIONS:
+            if spec not in self._noted:
+                print(f'note: segment {self.name} names no regions; {spec!r} is the fallback {FALLBACK_REGIONS[spec]}')
+                self._noted.add(spec)
+            return FALLBACK_REGIONS[spec]
+        raise SystemExit(f'segment {self.name}: {what} {spec!r} is not a region the recording names '
+                         f'(it has {", ".join(sorted(self.regions)) or "none"})')
+
+    def rings_at(self, idx, head, tail):
+        """[(x, y, scale, opacity)] of the tap rings showing at frame idx of a stretch of the segment played from
+        `head` to `tail` without a jump: a press that would start before `head`, or a finger that comes down after
+        `tail`, never shows (it would pop up mid-press, or press on a screen that does not answer)."""
         out = []
         press, lift = frames(TAP_PRESS), frames(TAP_LIFT)
-        for f, x, y in self.taps:
-            rel = idx - f
+        for t in self.taps:
+            if t.frame - press < head or t.frame > tail:
+                continue
+            rel = idx - t.frame
             if -press <= rel < 0:
                 p = (rel + press + 1) / (press + 1)
-                out.append((x, y, 0.6 + 0.4 * ease_out_cubic(p), ease_out_cubic(p)))
-            elif 0 <= rel < lift:
-                p = (rel + 1) / (lift + 1)
-                out.append((x, y, 1 + 0.35 * ease_out_cubic(p), 1 - ease_in_out_sine(p)))
+                out.append((t.x, t.y, 0.6 + 0.4 * ease_out_cubic(p), ease_out_cubic(p)))
+            elif t.kind == 'drag' and 0 <= rel <= t.until - t.frame:
+                s = smoothstep(rel / (t.until - t.frame))
+                out.append((t.x + (t.to_x - t.x) * s, t.y + (t.to_y - t.y) * s, 1.0, 1.0))
+            elif 0 <= idx - t.until - (t.kind == 'drag') < lift:
+                p = (idx - t.until - (t.kind == 'drag') + 1) / (lift + 1)
+                out.append((t.to_x, t.to_y, 1 + 0.35 * ease_out_cubic(p), 1 - ease_in_out_sine(p)))
         return out
 
     BEAT = re.compile(r'^([a-z_][a-z0-9_]*)(?:([+-])(\d+(?:\.\d+)?)s)?$')
@@ -328,6 +453,13 @@ class Segment:
             raise SystemExit(f'scene {self.name}: {what} {spec!r} is frame {n}, outside 0..{self.count - 1}')
         return n
 
+    def typing(self):
+        """(first, last) frame of the typing, or None when the recording marks none."""
+        if 'typing_start' not in self.marks:
+            return None
+        end = self.marks.get('typing_end', self.marks.get('sent'))
+        return None if end is None else (self.marks['typing_start'], end)
+
 
 def load_segments(root):
     if not root.is_dir():
@@ -343,22 +475,135 @@ def load_segments(root):
 
 
 # ---------------------------------------------------------------------------------------------------------------------
+# Placing the title card and the loupe (shared by the plan's checks and the renderer)
+# ---------------------------------------------------------------------------------------------------------------------
+_title_art = {}
+
+
+def title_image(item):
+    what, size, _, _, angle, _ = item
+    if what == 'wordmark':
+        return store.wordmark(size)
+    if what == 'tagline':
+        return store.pad_patch(store.FEATURE_TAGLINE, size)
+    if what == 'book':
+        # the trip's sticker book, taped down at two corners (as on the feature graphic)
+        book = store.book_strip(size, angle=angle)
+        scale = size / store.FG_BOOK_W
+        tape = store.washi(TITLE['tape'], round(78 * scale), dp=1.7 * scale, angle=44)
+        m = tape.width
+        canvas = Image.new('RGBA', (book.width + 2 * m, book.height + 2 * m), (0, 0, 0, 0))
+        canvas.alpha_composite(book, (m, m))
+        x0, y0, x1, y1 = book.getbbox()
+        for cx, cy in (store.FG_TAPE_TL, store.FG_TAPE_BR):
+            px = m + (x0 + cx * scale if cx >= 0 else x1 + cx * scale)
+            py = m + (y0 + cy * scale if cy >= 0 else y1 + cy * scale)
+            store.place_centred(canvas, tape, px, py)
+        return canvas.crop(canvas.getbbox())
+    return store.decor_image((what, size, None, None, angle))
+
+
+def title_art(item):
+    """(RGBA image, x, y) of a title item at rest on the full-size frame."""
+    if item not in _title_art:
+        img = title_image(item)
+        if item[0] in TITLE_AT_REST:
+            # the white face: the stroke round the letters, or the patch, without the hard shadow
+            a = np.asarray(img)
+            ys, xs = np.nonzero((a[..., 3] >= 235) & (a[..., :3].min(axis=2) >= 235))
+            x0, y0, x1, y1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
+        else:
+            x0, y0, x1, y1 = img.getbbox()
+        _title_art[item] = (img, round(item[2] - (x0 + x1) / 2), round(item[3] - (y0 + y1) / 2))
+    return _title_art[item]
+
+
+def title_box(item):
+    img, x, y = title_art(item)
+    x0, y0, x1, y1 = img.getbbox()
+    return x + x0, y + y0, x + x1, y + y1
+
+
+def check_title():
+    """The card stays on the frame, and no sticker on it comes near the wordmark's or the tagline's art."""
+    items = TITLE['items']
+    for item in items:
+        x0, y0, x1, y1 = title_box(item)
+        if x0 < 0 or x1 > W or y0 < 0 or y1 > H:
+            raise SystemExit(f'title {item[0]} runs off the frame')
+    lettering = [it for it in items if it[0] in TITLE_AT_REST]
+    for item in items:
+        if item[0] in TITLE_AT_REST or item[0] == 'book':
+            continue
+        img, x, y = title_art(item)
+        grown = img.getchannel('A').filter(ImageFilter.MaxFilter(2 * TITLE_CLEARANCE + 1))
+        g = np.asarray(grown) > 16
+        for word in lettering:
+            wimg, wx, wy = title_art(word)
+            w = np.asarray(wimg.getchannel('A')) > 16
+            ox0, oy0 = max(x, wx), max(y, wy)
+            ox1, oy1 = min(x + g.shape[1], wx + w.shape[1]), min(y + g.shape[0], wy + w.shape[0])
+            if ox0 < ox1 and oy0 < oy1 and (g[oy0 - y:oy1 - y, ox0 - x:ox1 - x]
+                                            & w[oy0 - wy:oy1 - wy, ox0 - wx:ox1 - wx]).any():
+                raise SystemExit(f'title {item[0]} comes within {TITLE_CLEARANCE} px of the {word[0]}')
+
+
+def region_on_frame(rect):
+    """A recorded-screen rect on the full-size frame, with the phone at rest."""
+    return (SCREEN_X + rect[0] * SCREEN_K, SCREEN_Y + rect[1] * SCREEN_K,
+            SCREEN_X + rect[2] * SCREEN_K, SCREEN_Y + rect[3] * SCREEN_K)
+
+
+Loupe = namedtuple('Loupe', 'seg rect scale crop_w crop_h x y w h')
+
+
+def loupe_layout(seg, rect, scale):
+    """Where a loupe sits: its card (with the shadow) is centred on the screen just above the region it shows."""
+    s = scale * SCREEN_K
+    cw, ch = round((rect[2] - rect[0]) * s), round((rect[3] - rect[1]) * s)
+    w = cw + 2 * LOUPE_BORDER + LOUPE_SHADOW[0]
+    h = ch + 2 * LOUPE_BORDER + LOUPE_SHADOW[1]
+    top = region_on_frame(rect)[1]
+    x = round((SCREEN_BOX[0] + SCREEN_BOX[2]) / 2 - (w - LOUPE_SHADOW[0]) / 2)
+    y = math.floor(top - LOUPE_GAP - h)
+    return Loupe(seg, rect, s, cw, ch, x, y, w, h)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
 # The plan: what every output frame shows
 # ---------------------------------------------------------------------------------------------------------------------
-class Clip(namedtuple('Clip', 'seg a b speed hold start')):
-    """Segment frames a..b played at `speed`, then `hold` frames resting on b, from output frame `start`."""
+class Clip(namedtuple('Clip', 'seg a b speed hold start head tail join')):
+    """Segment frames a..b played at `speed`, then `hold` frames resting on b, from output frame `start`. head..tail is
+    the stretch of the segment it belongs to (played through without a jump); `join` is how it comes in over the
+    clip before ('fade' or 'wipe'), or None where it follows on directly."""
 
     def length(self):
         return math.ceil((self.b - self.a + 1) / self.speed) + self.hold
 
+    def end(self):
+        return self.start + self.length()
+
     def frame(self, n):
         return min(self.a + math.floor((n - self.start) * self.speed + 1e-9), self.b)
+
+    def ring_frame(self, n):
+        """The frame the tap rings follow: the screen's, and while it rests on b, one more each output frame (so a
+        ring lifts as it would have instead of freezing)."""
+        rest = self.end() - self.hold
+        return self.frame(n) if n < rest else self.b + n - rest + 1
 
     def output(self, f):
         return self.start + math.floor((f - self.a) / self.speed + 1e-9)
 
 
-FrameState = namedtuple('FrameState', 'ground under phone over screen')
+FrameState = namedtuple('FrameState', 'ground under phone over screen loupes')
+Layer = namedtuple('Layer', 'seg idx ring head tail')     # ring: the frame the rings follow, or None for none
+Screen = namedtuple('Screen', 'layers blend w')            # blend: None, 'fade' or 'wipe'; w: the second's share
+
+
+def transition(join):
+    """The frames a transition ('fade' or 'wipe') takes."""
+    return frames(TRANSITIONS[join])
 
 
 class Plan:
@@ -370,51 +615,76 @@ class Plan:
                 print(f'note: no {sc["segment"]!r} segment recorded; leaving that scene out')
         self.sprites = {}          # sprite id -> what to draw (resolved by the renderer)
         self.showings = []
+        self.loupes = {}           # loupe sprite id -> Loupe
         self.events = []           # (frame, label) worth a still
-        xf = frames(XFADE)
         title_items = TITLE['items']
+        check_title()
 
-        # opening: the title card pops in, holds, clears as the phone rises
+        # opening: the wordmark and tagline are there from the first frame, the rest pops in; the card clears from
+        # the bottom up, one item a frame, and the phone rises once nothing is left in its way
         n_clear = frames(TITLE_CLEAR)
-        self.n_rise = n_clear + 2
-        self.n_land = self.n_rise + frames(RISE)
-        top_first = sorted(range(len(title_items)), key=lambda j: title_items[j][3])
+        bottom_first = sorted(range(len(title_items)), key=lambda j: -title_items[j][3])
+        opening = []
         for j, item in enumerate(title_items):
             sid = ('title', j)
             self.sprites[sid] = ('title', item)
-            # the card clears from the top down, one item a frame, so the caption's place is clear first
-            self.showings.append(Showing(sid, 'under', self._title_style(item), frames(item[5]),
-                                         n_clear + top_first.index(j), self._title_turn(item, j)))
-        self.events += [(frames(title_items[0][5]) + 5, 'title_pop'), (n_clear - 1, 'title'),
+            style = self._title_style(item)
+            n_in = -max(1, frames(STYLES[style][0])) if item[0] in TITLE_AT_REST else frames(item[5])
+            sh = Showing(sid, 'under', style, n_in, n_clear + bottom_first.index(j), self._title_turn(item, j))
+            self.showings.append(sh)
+            opening.append((sh, title_box(item)))
+        self.n_rise = self._rise_after(opening, n_clear)
+        self.n_land = self.n_rise + frames(RISE)
+        self.events += [(0, 'title_first'), (frames(title_items[2][5]) + 5, 'title_pop'), (n_clear - 1, 'title'),
+                        (n_clear + 4, 'title_clearing'), (self.n_rise + 3, 'rise_early'),
                         (self.n_rise + frames(RISE) // 2, 'rise')]
 
         # the scenes' clips, end to end: across a skip or a scene change the next clip overlaps the one before by
-        # the crossfade; where only the speed changes it follows on directly
+        # its transition; where only the speed changes it follows on directly
         self.clips, scene_clips = [], []
         n = self.n_land
-        for sc in self.scenes:
+        for i, sc in enumerate(self.scenes):
             seg = segs[sc['segment']]
             a, b = seg.beat(sc['cut_in'], 'cut_in'), seg.beat(sc['cut_out'], 'cut_out')
-            if b - a < 2 * xf:
+            enter = sc.get('enter', 'fade')
+            if i == 0 and 'enter' in sc:
+                raise SystemExit(f'scene {seg.name}: the first scene comes in with the phone, so it has no enter')
+            for how in [enter] + [spec[2] for spec in sc.get('skip', []) if len(spec) == 3]:
+                if how not in TRANSITIONS:
+                    raise SystemExit(f'scene {seg.name}: {how!r} is not a transition ({", ".join(TRANSITIONS)})')
+            if b - a < 2 * transition(enter):
                 raise SystemExit(f'scene {seg.name}: cut_in {sc["cut_in"]!r} is not well before cut_out')
-            pieces, lo = [], a
-            for s0, s1 in sc.get('skip', []):
+            pieces, lo, join = [], a, enter          # (from, to, how it comes in)
+            for spec in sc.get('skip', []):
+                if len(spec) not in (2, 3):
+                    raise SystemExit(f'scene {seg.name}: a skip is (from, to) or (from, to, transition): {spec!r}')
+                s0, s1 = spec[:2]
+                how = spec[2] if len(spec) == 3 else 'fade'
+                t = transition(how)
                 f0, f1 = seg.beat(s0, 'skip'), seg.beat(s1, 'skip')
-                if not lo + xf < f0 < f1 < b - xf:
+                if not lo + t < f0 < f1 < b - t:
                     raise SystemExit(f'scene {seg.name}: skip {s0!r}..{s1!r} is not inside the cut, in order')
-                pieces.append((lo, f0))
-                lo = f1
-            pieces.append((lo, b))
+                pieces.append((lo, f0, join))
+                lo, join = f1, how
+            pieces.append((lo, b, join))
+            typing = seg.typing()
             fast = []
             for s0, s1, factor in sc.get('speed', []):
                 f0, f1 = seg.beat(s0, 'speed'), seg.beat(s1, 'speed')
-                if not (0.25 <= factor <= 4 and f0 < f1 and any(p0 <= f0 and f1 <= p1 for p0, p1 in pieces)
+                if not SPEED[0] <= factor <= SPEED[1]:
+                    raise SystemExit(f'scene {seg.name}: speed {s0!r}..{s1!r} x{factor} is outside {SPEED[0]}x to '
+                                     f'{SPEED[1]}x (the app’s own motion plays at 1x; only a wait or a still '
+                                     'stretch goes faster)')
+                if not (f0 < f1 and any(p0 <= f0 and f1 <= p1 for p0, p1, _ in pieces)
                         and all(f0 > g1 for _, g1, _ in fast)):
                     raise SystemExit(f'scene {seg.name}: speed {s0!r}..{s1!r} x{factor} is not inside one piece '
-                                     'of the cut, in order, at 0.25x to 4x')
+                                     'of the cut, in order')
+                if typing and factor != 1 and f0 <= typing[1] and typing[0] <= f1:
+                    raise SystemExit(f'scene {seg.name}: speed {s0!r}..{s1!r} x{factor} runs over the typing '
+                                     f'(frames {typing[0]}..{typing[1]}), which plays at 1x')
                 fast.append((f0, f1, factor))
             mine = []
-            for k, (p0, p1) in enumerate(pieces):
+            for k, (p0, p1, join) in enumerate(pieces):
                 runs, lo = [], p0          # the piece in runs of one speed: (from, to, speed)
                 for f0, f1, factor in fast:
                     if p0 <= f0 and f1 <= p1:
@@ -425,25 +695,31 @@ class Plan:
                 if lo <= p1:
                     runs.append((lo, p1, 1))
                 for r, (f0, f1, factor) in enumerate(runs):
-                    if mine and r == 0 or not mine and self.clips:
-                        n -= xf            # crossfades in from the clip before
+                    how = None
+                    if r == 0 and (mine or self.clips):
+                        how = join
+                        n -= transition(how)        # comes in over the clip before
                     hold = 0
                     if r == len(runs) - 1:
                         # the scene's last clip rests for its `hold`; a clip before a skip rests on its last frame
-                        # while the next piece crossfades in, so a beat just before the jump plays out whole
-                        hold = frames(sc.get('hold', 0)) if k == len(pieces) - 1 else xf
-                    clip = Clip(seg.name, f0, f1, factor, hold, n)
+                        # while the next piece comes in, so a beat just before the jump plays out whole
+                        hold = frames(sc.get('hold', 0)) if k == len(pieces) - 1 else transition(pieces[k + 1][2])
+                    clip = Clip(seg.name, f0, f1, factor, hold, n, p0, p1, how)
                     mine.append(clip)
                     n += clip.length()
             self.clips += mine
             scene_clips.append(mine)
         last = self.clips[-1]
-        self.n_drop = last.start + last.length()
-        if any(c.start + c.length() > after.start for c, after in zip(self.clips, self.clips[2:])):
-            raise SystemExit('a clip is shorter than its crossfades: move the cuts, skips or speed changes apart')
+        self.n_drop = last.end()
+        if any(c.end() > after.start for c, after in zip(self.clips, self.clips[2:])):
+            raise SystemExit('a clip is shorter than its transitions: move the cuts, skips or speed changes apart')
+        for c in self.clips:
+            if c.join:
+                mid = c.start + transition(c.join) // 2
+                self.events.append((mid, f'{c.seg}_{c.join}'))
 
-        # scene changes: halfway through the crossfade from one scene's last clip to the next one's first
-        changes = [clips[0].start + xf // 2 for clips in scene_clips[1:]]
+        # scene changes: halfway through the transition from one scene's last clip to the next one's first
+        changes = [clips[0].start + transition(clips[0].join) // 2 for clips in scene_clips[1:]]
         starts = [self.n_rise] + changes
         ends = changes + [self.n_drop]
 
@@ -466,6 +742,7 @@ class Plan:
                     if not starts[i] < at < ends[i]:
                         raise SystemExit(f'scene {seg.name}: caption beat {beat!r} falls outside the scene')
                 caps.append((lines, at, seg.name))
+        self.captions = []
         for c, (lines, at, name) in enumerate(caps):
             out = caps[c + 1][1] - frames(CAPTION_OUT) if c + 1 < len(caps) else self.n_drop
             if out - at < frames(MIN_CAPTION):
@@ -475,6 +752,7 @@ class Plan:
             self.sprites[sid] = ('caption', lines)
             sh = Showing(sid, 'over', 'lettering', at, out)
             self.showings.append(sh)
+            self.captions.append((lines, at, out))
             self.events += [(at + 4, f'{name}_caption{c}_pop'),
                             (min(out - 1, at + frames(1.0)), f'{name}_caption{c}')]
 
@@ -492,13 +770,46 @@ class Plan:
             self.events += [(b - frames(0.12), f'change{i + 1}_early'), (b, f'change{i + 1}'),
                             (b + frames(0.25), f'change{i + 1}_late')]
 
+        # loupes: up while their scene's screen plays one clip at a time, never during a transition
+        for i, sc in enumerate(self.scenes):
+            seg = segs[sc['segment']]
+            for j, spec in enumerate(sc.get('loupe', [])):
+                if len(spec) != 3:
+                    raise SystemExit(f'scene {seg.name}: a loupe is (from, to, region): {spec!r}')
+                b0, b1, region = spec
+                lp = loupe_layout(seg.name, seg.region(region, 'loupe region'), LOUPE_SCALE)
+                self._check_loupe(lp, seg.name)
+                n_in = self._output_frame(scene_clips[i], seg.beat(b0, 'loupe'), seg.name, b0)
+                n_out = self._output_frame(scene_clips[i], seg.beat(b1, 'loupe'), seg.name, b1)
+                sid = ('loupe', i, j)
+                sh = Showing(sid, 'loupe', 'sticker', n_in, n_out, LOUPE_TURN)
+                if not (max(starts[i], self.n_land) <= n_in < n_out and sh.gone() <= ends[i]):
+                    raise SystemExit(f'scene {seg.name}: loupe {b0!r}..{b1!r} is not inside the scene, in order, '
+                                     'with the phone at rest')
+                for m in range(n_in, sh.gone()):
+                    if self.screen(m).blend:
+                        raise SystemExit(f'scene {seg.name}: loupe {b0!r}..{b1!r} is up during a transition')
+                self.loupes[sid] = lp
+                self.showings.append(sh)
+                self.events += [(n_in + 4, f'{seg.name}_loupe_pop'), (sh.settled() + frames(1.0), f'{seg.name}_loupe'),
+                                (n_out + 3, f'{seg.name}_loupe_out')]
+
+        # taps worth a still: each press as it lands, and a drag halfway
+        for c in self.clips:
+            for t in self.segs[c.seg].taps:
+                if c.a <= t.frame <= c.b and t.frame - frames(TAP_PRESS) >= c.head:
+                    self.events.append((c.output(t.frame), f'{c.seg}_{t.kind}'))
+                    mid = (t.frame + t.until) // 2
+                    if t.kind == 'drag' and c.a <= mid <= c.b:
+                        self.events.append((c.output(mid), f'{c.seg}_drag_mid'))
+
         # ending: the phone drops away, the card comes back and holds
         n_back = self.n_drop + frames(TITLE_RETURN)
         settle = 0
         for j, item in enumerate(title_items):
             sid = ('title', j)
-            sh = Showing(sid, 'under', self._title_style(item), n_back + frames(item[5]) - frames(title_items[0][5]),
-                         10 ** 9, self._title_turn(item, j))
+            sh = Showing(sid, 'under', self._title_style(item), n_back + frames(item[5]), 10 ** 9,
+                         self._title_turn(item, j))
             self.showings.append(sh)
             settle = max(settle, sh.settled())
         self.total = settle + frames(TITLE_END_HOLD)
@@ -518,6 +829,7 @@ class Plan:
             fades.insert(0, (self.n_rise + frames(RISE) // 2, title_ground, grounds[0]))
         self.fades = [(b - gf // 2, gf, ga, gb) for b, ga, gb in fades if ga != gb]
 
+        self.scene_clips = scene_clips
         self.length = self.total / FPS
         if not LENGTH[0] <= self.length <= LENGTH[1]:
             raise SystemExit(f'the video runs {self.length:.1f} s; keep it within {LENGTH[0]:.0f} to {LENGTH[1]:.0f} s '
@@ -533,11 +845,57 @@ class Plan:
         return -3.0 if item[0] == 'book' else STICKER_TURN * (1 if j % 2 == 0 else -1)
 
     @staticmethod
+    def _rise_after(opening, n_clear):
+        """The first frame the phone can start rising so that its top edge never passes over a title item that is
+        still showing."""
+        rise = frames(RISE)
+        for n_rise in range(n_clear + 1, n_clear + 10 * FPS):
+            clear = True
+            for k in range(rise):
+                top = PHONE_BOX[1] + Plan._rise_offset(k)
+                for sh, box in opening:
+                    if (box[0] < PHONE_BOX[2] and box[2] > PHONE_BOX[0] and top < box[3]
+                            and sh.at(n_rise + k) is not None):
+                        clear = False
+            if clear:
+                return n_rise
+        raise SystemExit('the title card never clears out of the phone’s way')
+
+    @staticmethod
+    def _rise_offset(k):
+        """px below its place, k frames into the rise."""
+        p = (k + 1) / (frames(RISE) + 1)
+        return round(PHONE_TRAVEL * (1 - ease_out_cubic(p)))
+
+    @staticmethod
+    def _check_loupe(lp, name):
+        field = region_on_frame(lp.rect)
+        # at rest and at the top of its pop (overshot and still turned a little), with its shadow
+        peak = STYLES['sticker'][4]
+        cx, cy = lp.x + lp.w / 2, lp.y + lp.h / 2          # the pop turns and scales the card about its middle
+        for scale, turn in ((1.0, 0.0), (peak, LOUPE_TURN)):
+            box = turned_box((lp.x, lp.y, lp.x + lp.w, lp.y + lp.h), scale, turn, cx, cy)
+            if box[0] < 0 or box[1] < 0 or box[2] > W or box[3] > H:
+                raise SystemExit(f'scene {name}: the loupe runs off the frame')
+            if boxes_meet(box, field):
+                raise SystemExit(f'scene {name}: the loupe covers the region it shows')
+
+    @staticmethod
     def _output_frame(clips, f, name, beat):
         for c in clips:
             if c.a <= f <= c.b:
                 return c.output(f)
         raise SystemExit(f'scene {name}: beat {beat!r} falls in a skipped span or outside the cut')
+
+    def poster_frame(self, spec):
+        """The output frame a 'scene:beat' names."""
+        name, _, beat = spec.partition(':')
+        for sc, clips in zip(self.scenes, self.scene_clips):
+            if sc['segment'] == name and beat:
+                seg = self.segs[name]
+                return self._output_frame(clips, seg.beat(beat, 'poster'), name, beat)
+        raise SystemExit(f'--poster-at {spec!r} is not scene:beat for a scene in the cut '
+                         f'({", ".join(sc["segment"] for sc in self.scenes)})')
 
     def ground(self, n):
         key = self.ground_track[0][1]
@@ -555,35 +913,36 @@ class Plan:
         if n < self.n_rise or n >= self.n_drop + frames(DROP):
             return None
         if n < self.n_land:
-            p = (n - self.n_rise + 1) / (self.n_land - self.n_rise + 1)
-            return round(PHONE_TRAVEL * (1 - ease_out_cubic(p)))
+            return self._rise_offset(n - self.n_rise)
         if n < self.n_drop:
             return 0
         p = (n - self.n_drop + 1) / (frames(DROP) + 1)
         return round(PHONE_TRAVEL * ease_in_cubic(p))
 
     def screen(self, n):
-        """[(segment, frame, weight)] for output frame n: one clip, or two while they crossfade."""
-        xf = frames(XFADE)
+        """The Screen for output frame n: one clip, or two while the second comes in over the first."""
         first, last = self.clips[0], self.clips[-1]
         if n < first.start:
-            return ((first.seg, first.a, 1.0),)
-        live = [(c, c.frame(n)) for c in self.clips if c.start <= n < c.start + c.length()]
+            return Screen((Layer(first.seg, first.a, None, first.head, first.tail),), None, 0.0)
+        live = [c for c in self.clips if c.start <= n < c.end()]
         if not live:
-            return ((last.seg, last.b, 1.0),)
+            return Screen((Layer(last.seg, last.b, None, last.head, last.tail),), None, 0.0)
+        layers = tuple(Layer(c.seg, c.frame(n), c.ring_frame(n) if n >= self.n_land else None, c.head, c.tail)
+                       for c in live)
         if len(live) == 1:
-            return ((live[0][0].seg, live[0][1], 1.0),)
-        (ca, fa), (cb, fb) = live
-        w = round(ease_in_out_sine((n - cb.start + 1) / (xf + 1)), 5)
-        return ((ca.seg, fa, 1 - w), (cb.seg, fb, w))
+            return Screen(layers, None, 0.0)
+        cb = live[1]
+        w = round(ease_in_out_sine((n - cb.start + 1) / (transition(cb.join) + 1)), 5)
+        return Screen(layers, cb.join, w)
 
     def state(self, n):
-        under, over = [], []
+        under, over, loupes = [], [], []
         for sh in self.showings:
             s = sh.at(n)
             if s is not None:
-                (under if sh.layer == 'under' else over).append((sh.sid,) + tuple(round(v, 5) for v in s))
-        return FrameState(self.ground(n), tuple(under), self.phone(n), tuple(over), self.screen(n))
+                {'under': under, 'over': over, 'loupe': loupes}[sh.layer].append(
+                    (sh.sid,) + tuple(round(v, 5) for v in s))
+        return FrameState(self.ground(n), tuple(under), self.phone(n), tuple(over), self.screen(n), tuple(loupes))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -720,27 +1079,26 @@ def ground_image(key):
     return canvas
 
 
-def title_image(item):
-    what, size, _, _, angle, _ = item
-    if what == 'wordmark':
-        return store.wordmark(size)
-    if what == 'tagline':
-        return store.pad_patch(store.FEATURE_TAGLINE, size)
-    if what == 'book':
-        # the trip's sticker book, taped down at two corners (as on the feature graphic)
-        book = store.book_strip(size, angle=angle)
-        scale = size / store.FG_BOOK_W
-        tape = store.washi(TITLE['tape'], round(78 * scale), dp=1.7 * scale, angle=44)
-        m = tape.width
-        canvas = Image.new('RGBA', (book.width + 2 * m, book.height + 2 * m), (0, 0, 0, 0))
-        canvas.alpha_composite(book, (m, m))
-        x0, y0, x1, y1 = book.getbbox()
-        for cx, cy in (store.FG_TAPE_TL, store.FG_TAPE_BR):
-            px = m + (x0 + cx * scale if cx >= 0 else x1 + cx * scale)
-            py = m + (y0 + cy * scale if cy >= 0 else y1 + cy * scale)
-            store.place_centred(canvas, tape, px, py)
-        return canvas.crop(canvas.getbbox())
-    return store.decor_image((what, size, None, None, angle))
+def draw_rings(scr, rings, k, ox, oy, theme):
+    """Tap rings onto an image of the screen (float32 in 0..255), in place: a recorded point (x, y) is at
+    (ox + x k, oy + y k) on it."""
+    disc_c, disc_a, ring_c, ring_a = TAP_STYLE[theme]
+    disc_c = np.array(store.rgb(disc_c), np.float32)
+    ring_c = np.array(store.rgb(ring_c), np.float32)
+    for x, y, scale, alpha in rings:
+        cx, cy = ox + x * k, oy + y * k
+        r, rw = TAP_RADIUS * k * scale, TAP_RING * k * scale
+        x0, y0 = max(0, math.floor(cx - r - 2)), max(0, math.floor(cy - r - 2))
+        x1, y1 = min(scr.shape[1], math.ceil(cx + r + 2)), min(scr.shape[0], math.ceil(cy + r + 2))
+        if x0 >= x1 or y0 >= y1:
+            continue
+        yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
+        d = np.sqrt((xx + 0.5 - cx) ** 2 + (yy + 0.5 - cy) ** 2)
+        disc = (np.clip(r - d + 0.5, 0, 1) * (disc_a * alpha))[..., None]
+        edge = (np.clip(rw / 2 - np.abs(d - (r - rw / 2)) + 0.5, 0, 1) * (ring_a * alpha))[..., None]
+        region = scr[y0:y1, x0:x1]
+        region += (disc_c - region) * disc
+        region += (ring_c - region) * edge
 
 
 class Renderer:
@@ -755,6 +1113,7 @@ class Renderer:
         self.sprites = {}
         for sid, (kind, spec) in plan.sprites.items():
             self.sprites[sid] = self._sprite(kind, spec)
+        self.cards = {sid: self._card(lp) for sid, lp in plan.loupes.items()}
         self._bases = OrderedDict()
         self._screens = OrderedDict()
 
@@ -775,13 +1134,21 @@ class Renderer:
             if ax0 < 0 or ax1 > W or ay0 < 0 or ay1 > H:
                 raise SystemExit(f'decor {spec[0]} runs off the frame')
             return sp
-        img = title_image(spec)
-        x0, y0, x1, y1 = img.getbbox()
-        sp = Sprite(img, round(spec[2] - (x0 + x1) / 2), round(spec[3] - (y0 + y1) / 2), self.f)
-        ax0, ay0, ax1, ay1 = sp.box
-        if ax0 < 0 or ax1 > W or ay0 < 0 or ay1 > H:
-            raise SystemExit(f'title {spec[0]} runs off the frame')
-        return sp
+        img, x, y = title_art(spec)
+        return Sprite(img, x, y, self.f)
+
+    @staticmethod
+    def _card(lp):
+        """The loupe's card without its content: (RGBA card, mask of the window the region shows through)."""
+        size = (lp.w, lp.h)
+        face = (0, 0, lp.w - LOUPE_SHADOW[0], lp.h - LOUPE_SHADOW[1])
+        card = Image.new('RGBA', size, (0, 0, 0, 0))
+        m = store.rr_mask(size, face, LOUPE_RADIUS)
+        card.paste(Image.new('RGBA', size, store.rgb(store.STICKER_SHADOW)), (0, 0), store.shift(m, *LOUPE_SHADOW))
+        card.paste(Image.new('RGBA', size, store.rgb(store.WHITE)), (0, 0), m)
+        b = LOUPE_BORDER
+        window = store.rr_mask((lp.crop_w, lp.crop_h), (0, 0, lp.crop_w, lp.crop_h), LOUPE_RADIUS - b)
+        return card, window
 
     # one frame -------------------------------------------------------------------------------------------------------
     def base(self, st):
@@ -819,6 +1186,7 @@ class Renderer:
         return out
 
     def screen_image(self, seg, idx):
+        """(the recorded frame as RGB, and resampled into the phone's screen as a uint8 array)."""
         path = self.plan.segs[seg].paths[idx]
         data = path.read_bytes()
         key = hashlib.blake2b(data, digest_size=16).digest()
@@ -831,35 +1199,40 @@ class Renderer:
             bg = Image.new('RGBA', im.size, (255, 255, 255, 255))
             bg.alpha_composite(im.convert('RGBA'))
             im = bg.convert('RGB')
-        im = im.resize((self.phone.sw, self.phone.sh), Image.LANCZOS)
-        arr = np.asarray(im)
+        arr = np.asarray(im.resize((self.phone.sw, self.phone.sh), Image.LANCZOS))
         if self.phone.margin:
             m = self.phone.margin
             arr = np.pad(arr, ((m, m), (m, m), (0, 0)), mode='edge')
-        self._screens[key] = arr
+        self._screens[key] = (im, arr)
         if len(self._screens) > 6:
             self._screens.popitem(last=False)
-        return arr
+        return im, arr
 
-    def draw_taps(self, scr, taps):
-        """Tap rings onto a screen image (float32 in 0..255, the phone's screen size plus its margin), in place."""
-        k = self.phone.sw / SEG_W
-        m = self.phone.margin
-        ring = np.array(store.rgb(store.BALLPOINT_SOFT), np.float32)
-        for x, y, scale, alpha in taps:
-            cx, cy = m + x * k, m + y * k
-            r, rw = TAP_RADIUS * k * scale, TAP_RING * k * scale
-            x0, y0 = max(0, math.floor(cx - r - 2)), max(0, math.floor(cy - r - 2))
-            x1, y1 = min(scr.shape[1], math.ceil(cx + r + 2)), min(scr.shape[0], math.ceil(cy + r + 2))
-            if x0 >= x1 or y0 >= y1:
-                continue
-            yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
-            d = np.sqrt((xx + 0.5 - cx) ** 2 + (yy + 0.5 - cy) ** 2)
-            disc = (np.clip(r - d + 0.5, 0, 1) * (0.5 * alpha))[..., None]
-            edge = (np.clip(rw / 2 - np.abs(d - (r - rw / 2)) + 0.5, 0, 1) * (0.85 * alpha))[..., None]
-            region = scr[y0:y1, x0:x1]
-            region += (255 - region) * disc
-            region += (ring - region) * edge
+    def loupe(self, img, sid, scale, turn, opacity, layer):
+        """Draw a loupe onto the finished frame `img` (uint8), in place: the region cut from the full-size recorded
+        frame (so its text stays crisp), with the tap rings, in its card."""
+        lp = self.plan.loupes[sid]
+        seg = self.plan.segs[layer.seg]
+        full, _ = self.screen_image(layer.seg, layer.idx)
+        crop = full.resize((lp.crop_w, lp.crop_h), Image.LANCZOS, box=lp.rect)
+        if layer.ring is not None:
+            rings = seg.rings_at(layer.ring, layer.head, layer.tail)
+            if rings:
+                arr = np.asarray(crop, np.float32).copy()
+                draw_rings(arr, rings, lp.scale, -lp.rect[0] * lp.scale, -lp.rect[1] * lp.scale, seg.theme)
+                crop = Image.fromarray(np.rint(arr).clip(0, 255).astype(np.uint8))
+        card, window = self.cards[sid]
+        card = card.copy()
+        card.paste(crop, (LOUPE_BORDER, LOUPE_BORDER), window)
+        sp = Sprite(card, lp.x, lp.y, self.f)
+        arr, x, y = sp.patch(scale, turn)
+        if opacity < 1:
+            arr = arr * opacity
+        ph, pw = arr.shape[:2]
+        x0, y0, x1, y1 = max(x, 0), max(y, 0), min(x + pw, self.ow), min(y + ph, self.oh)
+        region = img[y0:y1, x0:x1].astype(np.float32) / 255
+        over(region, arr[y0 - y:y1 - y, x0 - x:x1 - x], 0, 0)
+        img[y0:y1, x0:x1] = np.rint(region * 255).clip(0, 255).astype(np.uint8)
 
     def frame(self, n):
         st = self.plan.state(n)
@@ -868,19 +1241,36 @@ class Renderer:
             return img
         (x0, y0, x1, y1), under, k, (ox, oy) = screen
         parts = []
-        for seg, idx, w in st.screen:
-            part = self.screen_image(seg, idx)
-            taps = self.plan.segs[seg].taps_at(idx)
-            if taps:
+        m = self.phone.margin
+        for layer in st.screen.layers:
+            _, part = self.screen_image(layer.seg, layer.idx)
+            seg = self.plan.segs[layer.seg]
+            rings = seg.rings_at(layer.ring, layer.head, layer.tail) if layer.ring is not None else []
+            if rings or len(st.screen.layers) > 1:
                 part = part.astype(np.float32)
-                self.draw_taps(part, taps)
-            parts.append(part if w == 1 else part * np.float32(w))
-        scr = parts[0] if len(parts) == 1 else parts[0] + parts[1]
+            if rings:
+                draw_rings(part, rings, self.phone.sw / SEG_W, m, m, seg.theme)
+            parts.append(part)
+        if st.screen.blend == 'fade':
+            scr = parts[0] + (parts[1] - parts[0]) * np.float32(st.screen.w)
+        elif st.screen.blend == 'wipe':
+            # the next screen comes in from the top behind a soft edge, which sweeps from above the screen to
+            # below it
+            feather = WIPE_FEATHER * self.f
+            edge = -feather / 2 + st.screen.w * (self.phone.sh + feather)
+            y = np.arange(parts[0].shape[0], dtype=np.float32) - m + 0.5
+            t = np.clip((edge - y) / feather + 0.5, 0, 1)
+            t = (t * t * (3 - 2 * t))[:, None, None]
+            scr = parts[0] + (parts[1] - parts[0]) * t
+        else:
+            scr = parts[0]
         val = k * scr[oy:oy + (y1 - y0), ox:ox + (x1 - x0)]
         val += under
         np.clip(val, 0, 255, out=val)
         img = img.copy()
         img[y0:y1, x0:x1] = val.astype(np.uint8)
+        for sid, s, t, o in st.loupes:
+            self.loupe(img, sid, s, t, o, st.screen.layers[0])
         return img
 
 
@@ -925,6 +1315,10 @@ def contact_sheet(thumbs, out, cols=10):
     sheet.save(out)
 
 
+def show(path):
+    return path.relative_to(REPO) if path.is_relative_to(REPO) else path
+
+
 def main():
     global _renderer
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
@@ -934,9 +1328,12 @@ def main():
                                              'with --preview, a file in the temp folder)')
     ap.add_argument('--poster', type=Path, help=f'the poster still (default: next to the default video; '
                                                 'with --preview or --out, none unless given)')
+    ap.add_argument('--poster-at', default=POSTER_AT, help=f'the poster’s beat, scene:beat (default {POSTER_AT})')
     ap.add_argument('--sheet', type=Path, help='also write a contact sheet of every Nth frame here')
     ap.add_argument('--every', type=int, default=15, help='N for --sheet (default 15: two a second)')
-    ap.add_argument('--stills', type=Path, help='also write a PNG at every caption change and scene change here')
+    ap.add_argument('--stills', type=Path, help='also write a PNG at every caption change, scene change, transition, '
+                                                'tap and loupe here')
+    ap.add_argument('--no-video', action='store_true', help='render only the stills, sheet and poster frames')
     ap.add_argument('--preview', action='store_true', help='half size, for a quick look')
     ap.add_argument('--crf', type=int, default=CRF, help=f'x264 quality (default {CRF})')
     ap.add_argument('--jobs', type=int, default=min(4, os.cpu_count() or 1), help='worker processes')
@@ -944,67 +1341,80 @@ def main():
     args = ap.parse_args()
     if args.frames is None:
         raise SystemExit('give --frames DIR (or set PICNIC_VIDEO_FRAMES)')
-    if not args.ffmpeg:
+    if not args.ffmpeg and not args.no_video:
         raise SystemExit('ffmpeg not found (apt: ffmpeg, brew: ffmpeg); or give --ffmpeg')
     out = args.out or (Path(tempfile.gettempdir()) / 'kirakira_feature_preview.mp4' if args.preview
                        else OUT_DIR / 'feature.mp4')
-    poster = args.poster or (OUT_DIR / 'poster.png' if not (args.preview or args.out) else None)
+    poster = args.poster or (OUT_DIR / 'poster.png' if not (args.preview or args.out or args.no_video) else None)
     f = 0.5 if args.preview else 1.0
 
     t0 = time.time()
     plan = Plan(load_segments(args.frames))
+    n_poster = plan.poster_frame(args.poster_at)
+    plan.events = sorted(plan.events + [(n_poster, 'poster')])
     print(f'{len(plan.scenes)} scenes, {plan.total} frames ({plan.length:.1f} s); building the layers')
+    for lines, at, end in plan.captions:
+        print(f'  {at / FPS:5.2f}-{end / FPS:5.2f} s ({(end - at) / FPS:.2f} s)  {" / ".join(lines)}')
     _renderer = Renderer(plan, f)
     t1 = time.time()
     print(f'layers ready in {t1 - t0:.1f} s; rendering')
 
     ow, oh = _renderer.ow, _renderer.oh
-    out.parent.mkdir(parents=True, exist_ok=True)
-    enc = subprocess.Popen(ffmpeg_command(args.ffmpeg, out, ow, oh, args.crf), stdin=subprocess.PIPE)
     still_at = {}
     for n, label in plan.events:
         still_at.setdefault(n, []).append(label)
     if args.stills:
         args.stills.mkdir(parents=True, exist_ok=True)
-    thumbs, last = [], None
+    wanted = range(plan.total)
+    if args.no_video:
+        wanted = sorted(set(still_at if args.stills else ()) | {n_poster}
+                        | (set(range(0, plan.total, args.every)) if args.sheet else set()))
+    enc = None
+    if not args.no_video:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        enc = subprocess.Popen(ffmpeg_command(args.ffmpeg, out, ow, oh, args.crf), stdin=subprocess.PIPE)
+    thumbs, poster_im = [], None
     if args.jobs > 1 and 'fork' in multiprocessing.get_all_start_methods():
         pool = multiprocessing.get_context('fork').Pool(args.jobs)
-        frames_iter = pool.imap(_render, range(plan.total), chunksize=4)
+        frames_iter = pool.imap(_render, wanted, chunksize=4)
     else:
-        pool, frames_iter = None, map(_render, range(plan.total))
+        pool, frames_iter = None, map(_render, wanted)
     try:
-        for n, buf in enumerate(frames_iter):
-            enc.stdin.write(buf)
+        for n, buf in zip(wanted, frames_iter):
+            if enc:
+                enc.stdin.write(buf)
             want_still = args.stills and n in still_at
-            if want_still or (args.sheet and n % args.every == 0) or n == plan.total - 1:
+            if want_still or (args.sheet and n % args.every == 0) or n == n_poster:
                 im = Image.frombytes('RGB', (ow, oh), buf)
                 if want_still:
                     im.save(args.stills / f'{n:04d}_{"+".join(still_at[n])}.png')
                 if args.sheet and n % args.every == 0:
                     thumbs.append((n, im))
-                last = im
-            if n % 150 == 0:
+                if n == n_poster:
+                    poster_im = im
+            if enc and n % 150 == 0:
                 print(f'  {n / FPS:5.1f} s')
     finally:
         if pool:
             pool.close()
             pool.join()
-        enc.stdin.close()
-    if enc.wait() != 0:
-        raise SystemExit('ffmpeg failed')
+        if enc:
+            enc.stdin.close()
     t2 = time.time()
-    size = out.stat().st_size
-    print(f'wrote {out.relative_to(REPO) if out.is_relative_to(REPO) else out}: {plan.length:.1f} s, '
-          f'{ow} x {oh}, {size / 1e6:.2f} MB')
-    print(f'render {t2 - t1:.1f} s for {plan.total} frames ({(t2 - t1) / plan.total * 1000:.0f} ms a frame, '
+    if enc:
+        if enc.wait() != 0:
+            raise SystemExit('ffmpeg failed')
+        size = out.stat().st_size
+        print(f'wrote {show(out)}: {plan.length:.1f} s, {ow} x {oh}, {size / 1e6:.2f} MB')
+    print(f'render {t2 - t1:.1f} s for {len(wanted)} frames ({(t2 - t1) / len(wanted) * 1000:.0f} ms a frame, '
           f'{args.jobs} jobs); total {t2 - t0:.1f} s')
     if poster:
-        store.save_png(last, poster, 'RGB')
-        print('wrote', poster.relative_to(REPO) if poster.is_relative_to(REPO) else poster)
+        store.save_png(poster_im, poster, 'RGB')
+        print(f'wrote {show(poster)} (frame {n_poster}, {n_poster / FPS:.2f} s, {args.poster_at})')
     if args.sheet:
         contact_sheet(thumbs, args.sheet)
         print('wrote', args.sheet)
-    if size > MAX_BYTES:
+    if enc and size > MAX_BYTES:
         raise SystemExit(f'{out} is {size / 1e6:.2f} MB, over the {MAX_BYTES / 1e6:.0f} MB budget: raise --crf')
 
 
