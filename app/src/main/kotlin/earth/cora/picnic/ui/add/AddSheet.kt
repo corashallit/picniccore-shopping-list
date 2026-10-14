@@ -65,6 +65,7 @@ import earth.cora.picnic.ui.a11y.focusRingIndication
 import earth.cora.picnic.ui.theme.Families
 import earth.cora.picnic.ui.theme.Glyph
 import earth.cora.picnic.ui.theme.LetterSetSheet
+import earth.cora.picnic.ui.theme.keptWhileLeaving
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.PicnicButton
@@ -187,9 +188,7 @@ val LocalAppBarHeight = compositionLocalOf<Dp?> { null }
  */
 @Composable
 fun AddSheet(state: AddUiState, actions: AddActions, modifier: Modifier = Modifier) {
-    val last = remember { arrayOfNulls<AddUiState>(1) }
-    if (state.sheetOpen) last[0] = state
-    val shown = if (state.sheetOpen) state else last[0] ?: state
+    val shown = keptWhileLeaving(state.sheetOpen, state)
     val reveals = rememberReveals(shown, actions)
     LetterSetSheet(
         visible = state.sheetOpen,

@@ -76,6 +76,7 @@ import earth.cora.picnic.ui.theme.LcdChip
 import earth.cora.picnic.ui.theme.LcdMode
 import earth.cora.picnic.ui.theme.LcdState
 import earth.cora.picnic.ui.theme.LetterSetSheet
+import earth.cora.picnic.ui.theme.keptWhileLeaving
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.MenuItem
 import earth.cora.picnic.ui.theme.PicnicButton
@@ -312,8 +313,8 @@ fun SettingsScreen(
         },
         overlay = {
             // Android stopped showing its prompt: the way on is the app's page in Android settings (the resume check above
-            // picks up the permission when she comes back).
-            val blocked = showRationale && location.blocked()
+            // picks up the permission when she comes back). Answered, the sheet slides away with the button she pressed.
+            val blocked = keptWhileLeaving(showRationale, showRationale && location.blocked())
             LetterSetSheet(
                 visible = showRationale,
                 onDismissRequest = { showRationale = false },

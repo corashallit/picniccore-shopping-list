@@ -89,6 +89,7 @@ import earth.cora.picnic.ui.theme.FixedMotionScale
 import earth.cora.picnic.ui.theme.OnPaper
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LetterSetSheet
+import earth.cora.picnic.ui.theme.keptWhileLeaving
 import earth.cora.picnic.ui.theme.LocalIconCatalog
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.MenuItem
@@ -186,6 +187,8 @@ fun PantryScreen(
     val t = PicnicTheme.type
     var popCard by rememberSaveable { mutableStateOf(initialPopCard) }
     var changing by rememberSaveable { mutableStateOf<String?>(null) }
+    // The sticker she picked in the sheet now leaving (null: none yet since it opened).
+    var picked by remember { mutableStateOf<String?>(null) }
 
     SecondaryScreen(
         title = stringResource(R.string.pantry_title),
@@ -197,16 +200,21 @@ fun PantryScreen(
         overlay = {
             val sticker = state.stickers.firstOrNull { it.key == changing }
             val catalog = LocalIconCatalog.current
-            LetterSetSheet(visible = sticker != null, onDismissRequest = { changing = null }) {
-                if (sticker != null) {
-                    Text(stringResource(R.string.pantry_change_title, sticker.name), style = t.cardTitle.copy(color = c.ink))
+            // Closed, the sheet slides away as she saw it (§4.16), with her pick ringed, while the shelf takes the new
+            // sticker behind it.
+            val open = sticker != null
+            val shown = keptWhileLeaving(open, sticker)
+            LetterSetSheet(visible = open, onDismissRequest = { changing = null }) {
+                if (shown != null) {
+                    Text(stringResource(R.string.pantry_change_title, shown.name), style = t.cardTitle.copy(color = c.ink))
                     Spacer(Modifier.height(12.dp))
-                    val keys = remember(sticker.icon.key) { catalogChoices(sticker.icon.key.takeIf { it in catalog }, catalog) }
+                    val keys = remember(shown.icon.key) { catalogChoices(shown.icon.key.takeIf { it in catalog }, catalog) }
                     StickerPicker(
                         keys,
-                        selected = sticker.icon.key,
+                        selected = if (open) shown.icon.key else picked ?: shown.icon.key,
                         onPick = { key ->
-                            actions.onChangeSticker(sticker.key, key)
+                            picked = key
+                            actions.onChangeSticker(shown.key, key)
                             changing = null
                         },
                         modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
@@ -230,6 +238,7 @@ fun PantryScreen(
                     },
                     onChange = { key ->
                         popCard = null
+                        picked = null
                         changing = key
                     },
                     onAppeared = actions.onAppeared,

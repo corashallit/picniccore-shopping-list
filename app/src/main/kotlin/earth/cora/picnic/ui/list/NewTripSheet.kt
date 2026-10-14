@@ -31,6 +31,7 @@ import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicButtonStyle
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.StickerBook
+import earth.cora.picnic.ui.theme.keptWhileLeaving
 import kotlin.math.roundToInt
 
 /*
@@ -70,6 +71,8 @@ fun NewTripSheet(
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
+    // Answered, it slides away with the book it was closing (§4.16), not the fresh page the list has already turned to.
+    val closing = keptWhileLeaving(visible, book)
     Box(modifier.fillMaxSize()) {
         LetterSetSheet(visible = visible, onDismissRequest = onDismiss, modifier = Modifier.testTag(NewTripTags.SHEET)) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -78,7 +81,7 @@ fun NewTripSheet(
                     style = t.cardTitle.copy(color = c.ink),
                     modifier = Modifier.fillMaxWidth().semantics { heading() },
                 )
-                if (book != null) {
+                if (closing != null) {
                     // The closing book drawn small (§6.5): the very book on the list (laid out at the list's width, with
                     // its pages and its stickers where she saw them), scaled down to fit, still and read-only.
                     val clock = remember { MotionClock() }
@@ -88,7 +91,7 @@ fun NewTripSheet(
                         // Its date tag keeps its own size, so the date is never drawn under 13 sp (§2.7).
                         androidx.compose.runtime.CompositionLocalProvider(earth.cora.picnic.ui.theme.LocalBookDrawnScale provides scale) {
                             StickerBook(
-                                book, BookPresentation.Identity, clock, width = listBook,
+                                closing, BookPresentation.Identity, clock, width = listBook,
                                 modifier = Modifier.drawnSmall(scale).testTag(NewTripTags.BOOK),
                                 readOnly = true,
                             )

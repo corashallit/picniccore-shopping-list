@@ -173,6 +173,7 @@ import earth.cora.picnic.ui.theme.PicnicButton
 import earth.cora.picnic.ui.theme.PicnicGlyph
 import earth.cora.picnic.ui.theme.PicnicMotion
 import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.SheetFor
 import earth.cora.picnic.ui.theme.ToastHostState
 import earth.cora.picnic.ui.theme.ToastMessage
 import earth.cora.picnic.ui.theme.TrayMetrics
@@ -1012,7 +1013,8 @@ private fun EggListScope.ListScreenContent(
         }
         PeekLayer(state, screen, dockHeight)
         if (screen.menuOpen) ListMenu(state, actions, screen)
-        state.editing?.let { editing ->
+        // The Edit sheet and the list switcher slide away as she saw them (§4.16), then leave.
+        SheetFor(state.editing) { editing, open ->
             EditItemSheet(
                 state = editing,
                 onSave = actions.onSaveEdit,
@@ -1022,6 +1024,7 @@ private fun EggListScope.ListScreenContent(
                 onRedraw = { actions.onRedrawIcon(editing.item.id) },
                 onDelete = { actions.onDelete(editing.item.id) },
                 toasts = screen.sheetToasts,
+                visible = open,
             )
         }
         // The Edit sheet closed: a move's note still up (or waiting) carries on over the list with its full hold, so its
@@ -1030,14 +1033,15 @@ private fun EggListScope.ListScreenContent(
         LaunchedEffect(sheetOpen) {
             if (!sheetOpen) screen.sheetToasts.handOver(toasts) { it.kind.startsWith(MoveToasts.KIND_PREFIX) }
         }
-        if (showLists) {
+        SheetFor(state.lists.takeIf { showLists }) { lists, open ->
             ListSwitcherSheet(
-                lists = state.lists,
+                lists = lists,
                 onDismiss = actions.onCloseLists,
                 onSwitch = actions.onSwitchList,
                 onNew = actions.onNewList,
                 onRename = actions.onRenameList,
                 onDelete = actions.onDeleteList,
+                visible = open,
             )
         }
         NewTripSheet(

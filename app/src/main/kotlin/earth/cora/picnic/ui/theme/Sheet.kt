@@ -53,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -164,7 +165,8 @@ fun LetterSetSheet(
         val cap = if (topClearance == null) maxH * 0.92f else minOf(maxH * 0.92f, maxOf(maxH * 0.6f, maxH - statusTop - topClearance))
         // The scrim: a tap closes the sheet. Never a keyboard stop (Escape and Back close it, §15); for TalkBack it is the
         // "Close sheet" button read after the sheet's own controls, and it covers the screen behind, so TalkBack stays in
-        // the sheet (a scrim that said nothing was a nameless button over the whole screen).
+        // the sheet (a scrim that said nothing was a nameless button over the whole screen). Fading out with a leaving
+        // sheet it is only a shade: a tap goes through to the screen behind, and TalkBack reads that screen again.
         val closeLabel = stringResource(R.string.a11y_close_sheet)
         val dismiss by rememberUpdatedState(onDismissRequest)
         Box(
@@ -172,15 +174,22 @@ fun LetterSetSheet(
                 .fillMaxSize()
                 .graphicsLayer { alpha = scrim.value }
                 .background(c.scrim)
-                .pointerInput(Unit) { detectTapGestures { dismiss() } }
-                .clearAndSetSemantics {
-                    contentDescription = closeLabel
-                    traversalIndex = 1f
-                    onClick(label = closeLabel) {
-                        dismiss()
-                        true
-                    }
-                },
+                .then(
+                    if (visible) {
+                        Modifier
+                            .pointerInput(Unit) { detectTapGestures { dismiss() } }
+                            .clearAndSetSemantics {
+                                contentDescription = closeLabel
+                                traversalIndex = 1f
+                                onClick(label = closeLabel) {
+                                    dismiss()
+                                    true
+                                }
+                            }
+                    } else {
+                        Modifier.clearAndSetSemantics { }
+                    },
+                ),
         )
         Box(
             Modifier
@@ -361,6 +370,47 @@ private class GlideHeightNode(var below: FooterRoom) : Modifier.Node(), LayoutMo
             drawContent()
         }
     }
+}
+
+/**
+ * What a sheet shows of [value]: the value itself while the sheet is [open], and the last one it showed open while it
+ * slides away (§4.16), so it leaves as she saw it, at its height, never emptied or changed by what its host has
+ * already moved on to (the book closed to null, the confirmed list gone, the item's new sticker).
+ */
+@Composable
+fun <T> keptWhileLeaving(open: Boolean, value: T): T {
+    val kept = remember { Kept(value) }
+    if (open) kept.value = value
+    return if (open) value else kept.value
+}
+
+/** The value a leaving sheet keeps showing ([keptWhileLeaving]). */
+private class Kept<T>(var value: T)
+
+/**
+ * Hosts a letter-set sheet that is up while [value] is not null (§4.16): [sheet] gets what to show and whether it is
+ * open. Closed, the sheet stays for its exit (`sheetOut`, or the reduced-motion fade) still showing the value it had
+ * open, so it slides away as she saw it instead of vanishing in one frame; then it leaves the composition, its own state
+ * with it.
+ */
+@Composable
+fun <T : Any> SheetFor(value: T?, sheet: @Composable (shown: T, open: Boolean) -> Unit) {
+    val reduced = LocalReducedMotion.current
+    val shown = keptWhileLeaving(value != null, value) ?: return
+    // Whether the sheet's exit has played out since it last closed (opened again, it is back at once).
+    var left by remember { mutableStateOf(false) }
+    LaunchedEffect(value == null) {
+        left = false
+        if (value != null) return@LaunchedEffect
+        withContext(FixedMotionScale) {
+            holdOnFrameClock((if (reduced) PicnicMotion.rmFade else PicnicMotion.sheetOut).durationMillis.toLong())
+            // The sheet's own exit ends on this frame: one more, so its last step is drawn.
+            withFrameMillis { }
+        }
+        left = true
+    }
+    if (value == null && left) return
+    sheet(shown, value != null)
 }
 
 /** A sheet sliding away: no touch reaches what it shows, and TalkBack no longer reads it. */
