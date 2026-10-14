@@ -111,8 +111,9 @@ import kotlin.math.min
  *
  * Taps and drags (segment.json "taps", VideoRig's header): every press is on the spot the app answers at (a tick on
  * the row's check spot, where its hanko lands); a drag is logged with the eased path its finger takes. Regions:
- * add_field (write, recipe), the add field's box over the typing with an 8 dp margin; pantry_row_1 and pantry_row_2
- * (recipe), the recipe card's two "in your pantry" rows (White sugar, Salt) once the card has come to rest.
+ * add_field (write, recipe), the add field's box over the typing with an even margin round it; pantry_row_1 and
+ * pantry_row_2 (recipe), the recipe card's two "in your pantry" rows (White sugar, Salt) once the card has come to
+ * rest, inside their tray's border and under the rule above them.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -175,10 +176,10 @@ class FeatureVideoRecorder {
     }
 
     /**
-     * Recipe (§4.17, §4.18): on that list, "pancakes from scratch". The thinking box ticks the answer's real steps (the
-     * web search with its own query, 3 recipes compared, the pantry, the sort); the recipe card keeps what she needs
-     * and says why the rest is off ("already on your list", "in your pantry" twice, "optional · skipped"); "Stick all
-     * 3" lands them in their aisles.
+     * Recipe (§4.17, §4.18): on that list, "pancakes for 12" (her own words, so they never match the field's example
+     * line). The thinking box ticks the answer's real steps (the web search with its own query, 3 recipes compared, the
+     * pantry, the sort); the recipe card keeps what she needs and says why the rest is off ("already on your list", "in
+     * your pantry" twice, "optional · skipped"); "Stick all 3" lands them in their aisles.
      */
     @Test
     fun recipe() = film("recipe", "day") { cam ->
@@ -187,7 +188,7 @@ class FeatureVideoRecorder {
         press(cam, field())
         cam.roll(400)
         followField(cam) {
-            type(cam, "pancakes from scratch")
+            type(cam, "pancakes for 12")
             cam.roll(400)
         }
         val answer = setup.fakes.assistant.answer(pancakes())
@@ -200,17 +201,21 @@ class FeatureVideoRecorder {
         cam.mark("card_shown")
         cam.rollUntil("the recipe card", maxMs = 4_000) { exists(RECIPE_CARD_TAG) }
         cam.mark("recipe_card")
-        // The stickers fan out into the trays, and the steps can be read.
-        cam.roll(2_100)
-        // Up through the card, so its aisle trays and their reasons can be read (the finger lifts by the sheet's top).
+        // The stickers fan out into the trays, and the steps (about 30 words) can be read.
+        cam.roll(3_100)
+        // Up through the card, so its aisle trays and their reasons can be read (the finger lifts on the card, a little
+        // under the sheet's top edge, never over the dimmed app bar).
         cam.mark("card_scroll")
-        drag(cam, from = Offset(540f, 1_880f), distance = 1_700f, ms = 2_000)
+        drag(cam, from = Offset(540f, 1_880f), distance = 1_450f, ms = 2_000)
         cam.roll(300)
-        // The two rows the pantry left out, at rest: White sugar, then Salt.
+        // The two rows the pantry left out, at rest: White sugar, then Salt. Each inside its tray's border (2 dp) and
+        // under the rule above it (1 dp), so a closer look shows the row alone.
+        val dp = compose.activity.resources.displayMetrics.density
         compose.onAllNodes(hasContentDescription("in your pantry", substring = true)).fetchSemanticsNodes()
             .map(::boundsOnScreen).sortedBy { it.top }
-            .forEachIndexed { i, b -> cam.region("pantry_row_${i + 1}", b.left, b.top, b.right, b.bottom) }
-        cam.roll(2_450)
+            .forEachIndexed { i, b -> cam.region("pantry_row_${i + 1}", b.left + 2 * dp, b.top + dp, b.right - 2 * dp, b.bottom) }
+        // Still long enough to read the rows and their reasons up close.
+        cam.roll(3_800)
         stick(cam, sheet, "Stick all 3 on my list", items = 9)
         cam.roll(2_000)
     }
@@ -223,7 +228,7 @@ class FeatureVideoRecorder {
      */
     @Test
     fun shop() = film("shop", "day") { cam ->
-        cam.roll(1_500)
+        cam.roll(2_400)
         tick(cam, "Baking powder")
         cam.mark("first_tick")
         cam.rollUntil("the Next card", maxMs = 4_000) { exists(NEXT_CARD_TAG) }
@@ -263,7 +268,8 @@ class FeatureVideoRecorder {
         // Down the list to the last stop, past the aisles tied with their bows.
         cam.mark("scroll_start")
         drag(cam, from = Offset(540f, 1_700f), distance = 900f, ms = 1_100)
-        cam.roll(1_000)
+        // At rest on Household long enough for the scene's caption to be read before the tick.
+        cam.roll(1_700)
         tick(cam, "Toothpaste")
         cam.mark("last_tick")
         cam.rollUntil("the celebration", maxMs = 6_000) { exists(CELEBRATION_TAG) }
@@ -295,7 +301,8 @@ class FeatureVideoRecorder {
     }) { cam ->
         cam.roll(1_500)
         cam.mark("scroll_start")
-        drag(cam, from = Offset(600f, 1_900f), distance = 1_500f, ms = 2_200)
+        // From low on the grid, so the finger lifts on the stickers, under the pinned tabs.
+        drag(cam, from = Offset(600f, 2_050f), distance = 1_500f, ms = 2_200)
         cam.roll(1_800)
     }
 
@@ -377,7 +384,9 @@ class FeatureVideoRecorder {
     /**
      * Films [script] while following the add field on every frame (it grows to a second line as she types), then names
      * the box it took on the screen, with an 8 dp margin, as the region add_field. The bar's "picnic day" doodle leans
-     * over the field's top, so the box starts between the doodle and the typed text rather than cut either in half.
+     * over the field's top, so the box starts between the doodle and the typed text rather than cut either in half, and
+     * gives up as much of its margin below, so the text sits in the middle of it; never more than leaves the underline
+     * whole (the field's own padding under it is about 5 dp).
      */
     private fun followField(cam: FrameCamera, script: () -> Unit) {
         var box: Rect? = null
@@ -388,10 +397,12 @@ class FeatureVideoRecorder {
         val dp = compose.activity.resources.displayMetrics.density
         val doodle = compose.onAllNodesWithTag(ADD_BAR_DOODLE_TAG, useUnmergedTree = true).fetchSemanticsNodes()
             .firstOrNull()?.let(::boundsOnScreen)
-        // Its box is laid out level; turned 4°, its lowest ink (the heart at its left end) ends about 2 dp under it, and
-        // two-line text starts about 1 dp lower still.
-        val clear = doodle?.let { it.bottom + 3 * dp } ?: Float.NEGATIVE_INFINITY
-        cam.region("add_field", b.left - 8 * dp, max(b.top - 8 * dp, clear), b.right + 8 * dp, b.bottom + 8 * dp)
+        // Its box is laid out level; turned 4°, its lowest ink (the heart at its left end) ends about 1 dp under it, and
+        // two-line text starts about 2 dp lower still.
+        val clear = doodle?.let { it.bottom + 2 * dp } ?: Float.NEGATIVE_INFINITY
+        val top = max(b.top - 8 * dp, clear)
+        val bottom = max(b.bottom + 8 * dp - (top - (b.top - 8 * dp)), b.bottom - 2 * dp)
+        cam.region("add_field", b.left - 8 * dp, top, b.right + 8 * dp, bottom)
     }
 
     /** A finger on [node]: down on its centre, held [holdMs] (the kit's press shows), up. */
@@ -578,8 +589,8 @@ class FeatureVideoRecorder {
     )
 
     /**
-     * "pancakes from scratch" against the written list and her pantry (salt and white sugar are in it): a recipe from
-     * the web, compared across three, with brand-free source names.
+     * "pancakes for 12" against the written list and her pantry (salt and white sugar are in it): a recipe from the web
+     * for 12, compared across three, with brand-free source names.
      */
     private fun pancakes() = IngestResult(
         items = listOf(
@@ -601,8 +612,8 @@ class FeatureVideoRecorder {
             WebSource("https://baking.example/classic-pancakes", "Classic pancakes"),
         ),
         skippedDuplicates = listOf("Milk", "Eggs", "Maple syrup"),
-        meta = meta(webSearches = 1, queries = listOf("fluffy pancakes from scratch recipe")),
-        recipe = RecipeInfo("Pancakes from scratch", recipesCompared = 3, servings = 12),
+        meta = meta(webSearches = 1, queries = listOf("fluffy pancakes recipe for 12")),
+        recipe = RecipeInfo("Fluffy pancakes", recipesCompared = 3, servings = 12),
     )
 
     private companion object {
