@@ -200,24 +200,25 @@ TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the
 #   decor              (drawable or 'sparkle:<family>', size px, side 'L' / 'R', centre y, angle), as in SHOTS
 # Pacing: a caption stays up at least MIN_CAPTION; rests before and after a beat are about 1.25x what reads at a
 # glance, and the recorder films them that long. The app's motion plays at 1x, its ambient decor included: dead air is
-# left out with a skip, and only the wait for an answer (the capsule turning in the send button) goes faster.
-# Celebrate starts after the list's scroll to Household, where the sticker book folds to its strip in 2 frames.
+# left out with a skip, and only the wait for an answer (the capsule turning in the send button) goes faster. A
+# caption pops at least 2.2 s before the tap it is about, and a scene ends on a rest after its last beat, never on a
+# beat in flight.
 # ---------------------------------------------------------------------------------------------------------------------
 SCENES = [
-    # write's two lines fill the field from top to bottom ("picnic day" stands just above it), so its loupe draws out
+    # both add-field loupes stay up until just before the sheet rises, so the finished note reads whole for a while.
+    # Write's two lines fill the field from top to bottom ("picnic day" stands just above it), so its loupe draws out
     # a little of the field's own paper above and below them
     dict(segment='write', cut_in='typing_start-1.8s', cut_out='rows_landed+1.6s',
          speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
-         loupe=[('typing_start', 'sent+0.4s', 'add_field', {'margin': 14})],
+         loupe=[('typing_start', 'card_shown-0.25s', 'add_field', {'margin': 14})],
          captions=[(['Write your list', 'any old way'], 'start'),
                    (['Your list, sorted', 'aisle by aisle'], 'card_shown+0.2s')],
          fam='mint', tape='sakura',
          decor=[('sk_i_strawberry', 176, 'L', 1520, 8), ('sk_d_bee', 132, 'R', 1250, -10),
                 ('sk_d_ladybug', 112, 'R', 1760, 12)]),
-    # the loupe is up until just before the sheet rises, so "pancakes for 12" reads whole for 1.5 s. It sits in the
-    # band between the list and the dock: 20 px under the Dairy & eggs strip (its shadow ends at frame y 1442) and
-    # clear of the dock's washi, perforation and "picnic day" (from y 1654), so a little smaller than write's, and
-    # wide enough to cover the "end of the list" pill (frame x 262 to 823) whole
+    # the loupe sits in the band between the list and the dock: 20 px under the Dairy & eggs strip (its shadow ends
+    # at frame y 1442) and clear of the dock's washi, perforation and "picnic day" (from y 1654), so a little smaller
+    # than write's, and wide enough to cover the "end of the list" pill (frame x 262 to 823) whole
     dict(segment='recipe', enter='wipe', cut_in='typing_start-1.3s', cut_out='rows_landed+1.6s',
          speed=[('sent+0.6s', 'card_shown-0.2s', 1.6)],
          loupe=[('typing_start', 'card_shown-0.25s', 'add_field', {'scale': 1.35, 'y': 1462, 'width': 584})],
@@ -232,12 +233,16 @@ SCENES = [
          fam='ramune', tape='dots',
          decor=[('sk_i_banana', 160, 'L', 1520, 8), ('sk_i_croissant', 140, 'R', 1250, -8),
                 ('sk_d_heart', 104, 'R', 1760, 10)]),
-    dict(segment='glow', enter='wipe', cut_in='start', cut_out='second_tick+1.4s',
+    # Breakfast's aisle-done payoff (the lid's GOT IT and the book's stamp) settles 0.2 s before the tray starts to
+    # curl, so the scene rests on the frame before the curl while the payoff is read and the wipe goes by
+    dict(segment='glow', enter='wipe', cut_in='start', cut_out='tray_curl-0.03s', hold=0.9,
          captions=[(['Glow-in-the-dark', 'night theme'], 'start')],
          fam='periwinkle', dusk=True, tape='dots',
          decor=[('sk_d_kira', 150, 'L', 1520, 8), ('sk_d_glowstar', 120, 'R', 1250, -8),
                 ('sk_d_glowstar', 92, 'R', 1760, 14)]),
-    dict(segment='celebrate', enter='wipe', cut_in='last_tick-1.7s', cut_out='banner+2.8s',
+    # from the rest after the list's scroll to Household (the sticker book folds to its strip during the scroll), to
+    # just before the bonus card bursts out of its capsule
+    dict(segment='celebrate', enter='wipe', cut_in='last_tick-2.7s', cut_out='bonus-0.1s',
          captions=[(['Every finished list', 'gets a celebration'], 'start')],
          fam='sakura', tape='sakura',
          decor=[('sk_i_lemonade', 150, 'L', 1520, 8), ('sparkle:lemon', 112, 'R', 1250, -8),
