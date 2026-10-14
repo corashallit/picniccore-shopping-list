@@ -104,6 +104,12 @@ TAP_STYLE = {                    # by the recording's theme: disc colour and opa
     'day': ('#FFF3A6', 0.45, store.BALLPOINT, 0.7),  # the highlighter (a pressed row's band, §2.1) and the ballpoint
     'glow': (store.WHITE, 0.22, '#C9FFDE', 0.9),     # glowStar: Glow's spots are dashed in inkSoft, so not that
 }
+# While a drag moves, the content it carries (a header, a row) slides along under the finger, so the disc steps back:
+# smaller and fainter, still plainly a finger. It eases to that over DRAG_EASE after the press and back to the full
+# disc over DRAG_EASE before the finger leaves (the recorder's smoothstep is all but still by then), then lifts as a
+# tap does.
+DRAG_LOOK = (0.7, 0.4, 0.6)      # the disc's scale, and its opacity and the ring's, as a share of a press's
+DRAG_EASE = 0.2
 # The loupe: a white die-cut sticker card with the house's hard periwinkle shadow, floating over the phone just above
 # the region it shows (the add field, a row of the recipe card, a tray), with that region live and enlarged in it. It
 # pops in calmly, as the title's book does (a big card of words, so no sticker bounce), and never comes out wider than
@@ -411,24 +417,30 @@ class Segment:
                          f'(it has {", ".join(sorted(self.regions)) or "none"})')
 
     def rings_at(self, idx, head, tail):
-        """[(x, y, scale, opacity)] of the tap rings showing at frame idx of a stretch of the segment played from
-        `head` to `tail` without a jump: a press that would start before `head`, or a finger that comes down after
-        `tail`, never shows (it would pop up mid-press, or press on a screen that does not answer)."""
+        """[(x, y, scale, disc opacity, ring opacity)] of the tap rings showing at frame idx of a stretch of the
+        segment played from `head` to `tail` without a jump: a press that would start before `head`, or a finger that
+        comes down after `tail`, never shows (it would pop up mid-press, or press on a screen that does not answer).
+        The opacities are shares of the theme's (TAP_STYLE)."""
         out = []
-        press, lift = frames(TAP_PRESS), frames(TAP_LIFT)
+        press, lift, settle = frames(TAP_PRESS), frames(TAP_LIFT), frames(DRAG_EASE)
         for t in self.taps:
             if t.frame - press < head or t.frame > tail:
                 continue
             rel = idx - t.frame
             if -press <= rel < 0:
                 p = (rel + press + 1) / (press + 1)
-                out.append((t.x, t.y, 0.6 + 0.4 * ease_out_cubic(p), ease_out_cubic(p)))
+                out.append((t.x, t.y, 0.6 + 0.4 * ease_out_cubic(p), ease_out_cubic(p), ease_out_cubic(p)))
             elif t.kind == 'drag' and 0 <= rel <= t.until - t.frame:
-                s = smoothstep(rel / (t.until - t.frame))
-                out.append((t.x + (t.to_x - t.x) * s, t.y + (t.to_y - t.y) * s, 1.0, 1.0))
+                span = t.until - t.frame
+                s = smoothstep(rel / span)
+                # how far into the drag's lighter look: eased in after the press, out before the lift
+                g = ease_in_out_sine(min(1.0, min(rel, span - rel) / settle))
+                scale, disc, ring = (1 + (v - 1) * g for v in DRAG_LOOK)
+                out.append((t.x + (t.to_x - t.x) * s, t.y + (t.to_y - t.y) * s, scale, disc, ring))
             elif 0 <= idx - t.until - (t.kind == 'drag') < lift:
                 p = (idx - t.until - (t.kind == 'drag') + 1) / (lift + 1)
-                out.append((t.to_x, t.to_y, 1 + 0.35 * ease_out_cubic(p), 1 - ease_in_out_sine(p)))
+                fade = 1 - ease_in_out_sine(p)
+                out.append((t.to_x, t.to_y, 1 + 0.35 * ease_out_cubic(p), fade, fade))
         return out
 
     BEAT = re.compile(r'^([a-z_][a-z0-9_]*)(?:([+-])(\d+(?:\.\d+)?)s)?$')
@@ -1104,7 +1116,7 @@ def draw_rings(scr, rings, k, ox, oy, theme):
     disc_c, disc_a, ring_c, ring_a = TAP_STYLE[theme]
     disc_c = np.array(store.rgb(disc_c), np.float32)
     ring_c = np.array(store.rgb(ring_c), np.float32)
-    for x, y, scale, alpha in rings:
+    for x, y, scale, disc_k, ring_k in rings:
         cx, cy = ox + x * k, oy + y * k
         r, rw = TAP_RADIUS * k * scale, TAP_RING * k * scale
         x0, y0 = max(0, math.floor(cx - r - 2)), max(0, math.floor(cy - r - 2))
@@ -1113,8 +1125,8 @@ def draw_rings(scr, rings, k, ox, oy, theme):
             continue
         yy, xx = np.mgrid[y0:y1, x0:x1].astype(np.float32)
         d = np.sqrt((xx + 0.5 - cx) ** 2 + (yy + 0.5 - cy) ** 2)
-        disc = (np.clip(r - d + 0.5, 0, 1) * (disc_a * alpha))[..., None]
-        edge = (np.clip(rw / 2 - np.abs(d - (r - rw / 2)) + 0.5, 0, 1) * (ring_a * alpha))[..., None]
+        disc = (np.clip(r - d + 0.5, 0, 1) * (disc_a * disc_k))[..., None]
+        edge = (np.clip(rw / 2 - np.abs(d - (r - rw / 2)) + 0.5, 0, 1) * (ring_a * ring_k))[..., None]
         region = scr[y0:y1, x0:x1]
         region += (disc_c - region) * disc
         region += (ring_c - region) * edge

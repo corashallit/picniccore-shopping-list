@@ -135,8 +135,10 @@ the finger: it presses in just before the tap and spreads and fades after it. Th
 list's check spots, so on a tick it shows round the spot instead of lying on its dashes. In Glow the ring is the
 glow-star mint (`#C9FFDE`) over a faint white disc, so it reads on the navy page and stands apart from the spots'
 lavender dashes. A drag presses in the same way, follows the finger along its path with the recorder's easing and
-lifts where the finger left the screen. No ring shows before the phone has landed, a press that would begin before
-its clip does is left out, and while a clip rests on its last frame the ring goes on lifting.
+lifts where the finger left the screen; while it moves, the disc steps back (0.7 of its size, fainter, eased in
+over 0.2 s after the press and out over 0.2 s before the lift), so the words it carries along stay readable under
+it. No ring shows before the phone has landed, a press that would begin before its clip does is left out, and while
+a clip rests on its last frame the ring goes on lifting.
 
 Each frame is drawn from the same pieces as the screenshots (`backdrop`, `washi`, `phone`, `puffy`, the decoration
 stickers), so a frame at rest has a screenshot's layout exactly. Everything but the screen is drawn once per
