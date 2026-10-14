@@ -130,11 +130,6 @@ crisp; the card pops in and out calmly, as the title's book does, and is never w
 made while it is up show in it. A region is a name from `segment.json`'s `regions` or a box of the screen; for a
 recording that names none, the script falls back to its own box for the add field.
 
-**Flash.** The celebration opens with the app's own white flash (§11: 1 → .92 → 0 over 170 ms). Boxed in an unlit
-bezel it would read as a dropped frame, so `flash=['celebration']` lets a white bloom spill past the screen over
-the phone and the backdrop (under the caption and the stickers) on the same frames, strongest at the bezel and
-fading with distance. It is still the one flash.
-
 **Taps.** Each tap shows as a disc of the highlighter (`#FFF3A6`, a pressed row's band) with a ballpoint ring under
 the finger: it presses in just before the tap and spreads and fades after it. The ring is a little wider than the
 list's check spots, so on a tick it shows round the spot instead of lying on its dashes. In Glow the ring is the
@@ -154,6 +149,7 @@ timestamped, so the same frames give the same video (with the same Pillow, cairo
 - every segment matches the recorder's contract: `segment.json` names it, 30 fps, 1080 × 2280, contiguous frames
   `00000.png` to the frame count, every frame that size, every mark inside the segment, every tap a tap or a drag
   on the screen (a drag lifting after it lands, inside the segment), every region a box on the screen;
+- every scene names only keys the script knows;
 - every cut, skip, speed span, caption beat, loupe and the poster's beat names a mark the recording has, in order
   and inside the cut, and every transition is `fade` or `wipe`;
 - no speed span goes above 1.6x or runs over the typing;
@@ -161,7 +157,6 @@ timestamped, so the same frames give the same video (with the same Pillow, cairo
 - every caption has two lines, fits the width at the screenshots' size, and stays up at least 3.1 s;
 - a loupe stays inside its scene with the phone at rest and never shows during a transition; its card is no wider
   than the phone at rest, and at rest and at the top of its pop it stays on the frame and off the region it shows;
-- a flash plays with the phone at rest;
 - no decoration sticker covers the screen or runs off the frame at rest, the title card stays on the frame, and no
   sticker on it comes within 6 px of the wordmark or the tagline;
 - the video runs 30 to 75 s, and the MP4 is under 12 MB (it stops with an error otherwise: raise `--crf`, then check

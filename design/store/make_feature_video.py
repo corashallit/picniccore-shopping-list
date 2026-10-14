@@ -116,12 +116,6 @@ LOUPE_GAP = 70         # px between the card (with its shadow) and the region it
                        # top edge, which stands about 50 px above the add field
 LOUPE_TURN = 3.0       # degrees off at the start of its pop (smaller than a sticker's: it is a big card)
 LOUPE_STYLE = 'book'
-# The celebration's white flash (§11: opacity 1 -> .92 -> 0, 2 steps, 170 ms) is the app's, on its screen. Inside an
-# unlit bezel it reads as a dropped frame, so while it lasts a white bloom spills past the screen over the phone and
-# the backdrop (under the caption and the stickers), fading with distance from the screen, on the same steps.
-FLASH_STEPS = (1.0, 1.0, 0.92, 0.92, 0.92)    # the flash's opacity on its frames, as the app draws it
-FLASH_BLOOM = 0.4      # the bloom's opacity at the screen's edge, at the flash's full
-FLASH_REACH = 220      # px of the frame: the bloom falls to 1/e this far from the screen
 # For recordings that name no regions (the first recorder): the add field, in recorded px
 FALLBACK_REGIONS = {'add_field': (22, 2104, 540, 2252)}
 POSTER_AT = 'celebrate:banner+0.6s'   # the poster: the composed frame at this beat (scene:beat)
@@ -169,7 +163,6 @@ TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the
 #   loupe              optional [(from, to, region)] or [(from, to, region, scale)]: from 'from' to 'to' a loupe
 #                      shows `region` (a name from segment.json's "regions", such as 'add_field', or a rect (x0, y0, x1,
 #                      y1) of the recorded screen) live and enlarged (LOUPE_SCALE unless given), on a card just above it
-#   flash              optional [beat]: the app's white flash starts there, and a bloom spills past the bezel with it
 #   captions           [(two lines, beat)]: the first is up from the scene's start ('start'); each next one takes
 #                      over when its beat plays
 #   fam, dusk, tape    backdrop family (dusk: the deeper night-theme ground), washi pattern, as in SHOTS
@@ -209,7 +202,6 @@ SCENES = [
          decor=[('sk_d_kira', 150, 'L', 1520, 8), ('sk_d_glowstar', 120, 'R', 1250, -8),
                 ('sk_d_glowstar', 92, 'R', 1760, 14)]),
     dict(segment='celebrate', enter='wipe', cut_in='last_tick-1.7s', cut_out='banner+2.8s',
-         flash=['celebration'],
          captions=[(['Every finished list', 'gets a celebration'], 'start')],
          fam='sakura', tape='sakura',
          decor=[('sk_i_lemonade', 150, 'L', 1520, 8), ('sparkle:lemon', 112, 'R', 1250, -8),
@@ -220,6 +212,8 @@ SCENES = [
          decor=[('sk_d_ribbon', 160, 'L', 1520, 8), ('sk_d_flower', 128, 'R', 1250, -8),
                 ('sk_d_heart', 104, 'R', 1760, 10)]),
 ]
+SCENE_KEYS = {'segment', 'cut_in', 'cut_out', 'enter', 'skip', 'speed', 'hold', 'loupe', 'captions', 'fam', 'dusk',
+              'tape', 'decor'}
 
 
 def frames(seconds):
@@ -606,7 +600,7 @@ class Clip(namedtuple('Clip', 'seg a b speed hold start head tail join')):
         return self.start + math.floor((f - self.a) / self.speed + 1e-9)
 
 
-FrameState = namedtuple('FrameState', 'ground under phone bloom over screen loupes')
+FrameState = namedtuple('FrameState', 'ground under phone over screen loupes')
 Layer = namedtuple('Layer', 'seg idx ring head tail')     # ring: the frame the rings follow, or None for none
 Screen = namedtuple('Screen', 'layers blend w')            # blend: None, 'fade' or 'wipe'; w: the second's share
 
@@ -628,6 +622,11 @@ class Plan:
         self.loupes = {}           # loupe sprite id -> Loupe
         self.loupe_since = {}      # loupe sprite id -> the segment frame it comes in at (no older press shows in it)
         self.events = []           # (frame, label) worth a still
+        for sc in SCENES:
+            stray = sorted(set(sc) - SCENE_KEYS)
+            if stray:
+                raise SystemExit(f'scene {sc.get("segment")!r}: {", ".join(map(repr, stray))} is not a scene key '
+                                 f'({", ".join(sorted(SCENE_KEYS))})')
         title_items = TITLE['items']
         check_title()
 
@@ -809,23 +808,6 @@ class Plan:
                 self.events += [(n_in + 4, f'{seg.name}_loupe_pop'), (sh.settled() + frames(1.0), f'{seg.name}_loupe'),
                                 (n_out + 3, f'{seg.name}_loupe_out')]
 
-        # the app's white flash: the bloom's opacity on each output frame that shows one of its frames
-        self.flash = {}
-        for i, sc in enumerate(self.scenes):
-            seg = segs[sc['segment']]
-            for beat in sc.get('flash', []):
-                f0 = seg.beat(beat, 'flash')
-                n0 = self._output_frame(scene_clips[i], f0, seg.name, beat)
-                for n in range(n0, scene_clips[i][-1].end()):
-                    scr = self.screen(n)
-                    k = scr.layers[0].idx - f0 if len(scr.layers) == 1 and scr.layers[0].seg == seg.name else -1
-                    if not 0 <= k < len(FLASH_STEPS):
-                        break
-                    if not self.n_land <= n < self.n_drop:
-                        raise SystemExit(f'scene {seg.name}: flash {beat!r} plays while the phone moves')
-                    self.flash[n] = FLASH_STEPS[k]
-                self.events += [(n0, f'{seg.name}_flash'), (n0 + len(FLASH_STEPS), f'{seg.name}_flash_after')]
-
         # taps worth a still: each press as it lands, and a drag halfway
         for c in self.clips:
             for t in self.segs[c.seg].taps:
@@ -979,8 +961,7 @@ class Plan:
             if s is not None:
                 {'under': under, 'over': over, 'loupe': loupes}[sh.layer].append(
                     (sh.sid,) + tuple(round(v, 5) for v in s))
-        return FrameState(self.ground(n), tuple(under), self.phone(n), self.flash.get(n, 0.0), tuple(over),
-                          self.screen(n), tuple(loupes))
+        return FrameState(self.ground(n), tuple(under), self.phone(n), tuple(over), self.screen(n), tuple(loupes))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -1152,7 +1133,6 @@ class Renderer:
         for sid, (kind, spec) in plan.sprites.items():
             self.sprites[sid] = self._sprite(kind, spec)
         self.cards = {sid: self._card(lp) for sid, lp in plan.loupes.items()}
-        self.bloom = self._bloom() if plan.flash else None
         self._bases = OrderedDict()
         self._screens = OrderedDict()
 
@@ -1176,19 +1156,6 @@ class Renderer:
         img, x, y = title_art(spec)
         return Sprite(img, x, y, self.f)
 
-    def _bloom(self):
-        """The flash's bloom at its full, as opacity on the output frame (the phone at rest): FLASH_BLOOM at the
-        screen's edge, falling off with distance from the screen, and none on the screen itself (the app's own)."""
-        f = self.f
-        ys = (np.arange(self.oh, dtype=np.float32) + 0.5) / f
-        xs = (np.arange(self.ow, dtype=np.float32) + 0.5) / f
-        dx = np.maximum(np.maximum(SCREEN_BOX[0] - xs, xs - SCREEN_BOX[2]), 0)
-        dy = np.maximum(np.maximum(SCREEN_BOX[1] - ys, ys - SCREEN_BOX[3]), 0)
-        bloom = FLASH_BLOOM * np.exp(-np.hypot(dx[None, :], dy[:, None]) / FLASH_REACH)
-        k, kx, ky = self.phone.draw(np.zeros((self.oh, self.ow, 3), np.float32), 0)
-        bloom[ky:ky + k.shape[0], kx:kx + k.shape[1]] *= 1 - k
-        return bloom.astype(np.float32)[..., None]
-
     @staticmethod
     def _card(lp):
         """The loupe's card without its content: (RGBA card, mask of the window the region shows through)."""
@@ -1206,7 +1173,7 @@ class Renderer:
     def base(self, st):
         """Everything but the screen, for a frame state: (frame as uint8 with a black screen, and if the phone shows,
         (box on the frame, that box as float32, screen weights, offset into the screen))."""
-        key = (st.ground, st.under, st.phone, st.bloom, st.over)
+        key = (st.ground, st.under, st.phone, st.over)
         if key in self._bases:
             self._bases.move_to_end(key)
             return self._bases[key]
@@ -1219,8 +1186,6 @@ class Renderer:
         screen = None
         if st.phone is not None:
             kmap = self.phone.draw(canvas, round(st.phone * self.f))
-            if st.bloom:
-                canvas += (1 - canvas) * (self.bloom * np.float32(st.bloom))
             for sid, s, t, o in st.over:
                 self.sprites[sid].draw(canvas, s, t, o, kmap)
             k, kx, ky = kmap
