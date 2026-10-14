@@ -122,13 +122,18 @@ last frame while the next one comes in, so a beat just before the jump plays out
 **Loupe.** While someone types, the add field is small at video size, so `loupe=[('typing_start',
 'sent+0.4s', 'add_field')]` floats a white die-cut sticker card with the house's hard periwinkle shadow just above
 the field (clear of the dock's top edge), showing it live at 1.7x the phone screen's scale; it opens on the first
-letter, so it never shows the field's grey example line enlarged. The recipe scene uses a second one on the card's
-first "in your pantry" row (`('card_scroll+2.1s', 'stuck-0.8s', 'pantry_row_1', 1.3)`, a fourth item being its own
-scale), so the viewer sees what the caption means, and the shop scene one on the Baking tray, so the sticker's hop
-into the bowl is big enough to follow. The region is cut from the full-size recorded frame, so its text stays
-crisp; the card pops in and out calmly, as the title's book does, and is never wider than the phone. Only the taps
-made while it is up show in it. A region is a name from `segment.json`'s `regions` or a box of the screen; for a
-recording that names none, the script falls back to its own box for the add field.
+letter, so it never shows the field's grey example line enlarged. The write and recipe scenes each use one on the add
+field and no others: a card over a dense list slices the lines round it and shows a second copy of what lies under
+it. A fourth item gives options: `{'scale': 1.35, 'y': 1462, 'width': 584}` sets the scale, the card's top (frame
+px, the phone at rest) and the width of its face (more white either side). The recipe's card uses them to sit in the
+band between the list and the dock, 20 px under the last aisle strip, clear of the dock's washi and covering the
+"end of the list" pill whole, and stays up until just before the sheet rises, so "pancakes for 12" reads whole for
+1.5 s. The card pops in and out as a sticker does but opaque on every frame: it grows from 0.3 with a small
+overshoot (1.06) and settles from 3° off, and leaves by shrinking away in 0.22 s, so it never lies part-faded over
+the words under it. The region is cut from the full-size recorded frame, so its text stays crisp, and the card is
+never wider than the phone. Only the taps made while it is up show in it. A region is a name from `segment.json`'s
+`regions` or a box of the screen; for a recording that names none, the script falls back to its own box for the add
+field.
 
 **Taps.** Each tap shows as a disc of the highlighter (`#FFF3A6`, a pressed row's band) with a ballpoint ring under
 the finger: it presses in just before the tap and spreads and fades after it. The ring is a little wider than the
@@ -159,6 +164,7 @@ timestamped, so the same frames give the same video (with the same Pillow, cairo
 - every caption has two lines, fits the width at the screenshots' size, and stays up at least 3.1 s;
 - a loupe stays inside its scene with the phone at rest and never shows during a transition; its card is no wider
   than the phone at rest, and at rest and at the top of its pop it stays on the frame and off the region it shows;
+- a loupe's card stays opaque on every frame of its pop, in and out;
 - no decoration sticker covers the screen or runs off the frame at rest, the title card stays on the frame, and no
   sticker on it comes within 6 px of the wordmark or the tagline;
 - the video runs 30 to 75 s, and the MP4 is under 12 MB (it stops with an error otherwise: raise `--crf`, then check

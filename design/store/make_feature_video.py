@@ -15,10 +15,9 @@ and a few stickers, exactly as make_store_images.py lays out a screenshot; the t
 later edit to the cut, the wording or the timing is an edit to those two tables.
 
 Each output frame is the scene's backdrop, the phone with the screen resampled into it, the decoration stickers and
-the caption, and at a few beats a loupe: a sticker card showing part of the screen enlarged (the field while someone
-types, a row of the recipe card, the tray a sticker hops into). Everything but the screen and the loupe is the same
-from one frame to the next while nothing moves, so it is drawn once and kept; a frame at rest costs one screen
-resample. Frames stream to ffmpeg (libx264) as raw RGB.
+the caption, and while someone types a loupe: a sticker card showing the add field enlarged. Everything but the
+screen and the loupe is the same from one frame to the next while nothing moves, so it is drawn once and kept; a frame
+at rest costs one screen resample. Frames stream to ffmpeg (libx264) as raw RGB.
 
 The output is deterministic: no randomness and no timestamps, so the same frames (and the same Pillow, cairosvg,
 numpy and ffmpeg versions) always give the same video. Requirements: design/store/requirements.txt and ffmpeg.
@@ -111,8 +110,9 @@ TAP_STYLE = {                    # by the recording's theme: disc colour and opa
 DRAG_LOOK = (0.7, 0.4, 0.6)      # the disc's scale, and its opacity and the ring's, as a share of a press's
 DRAG_EASE = 0.2
 # The loupe: a white die-cut sticker card with the house's hard periwinkle shadow, floating over the phone just above
-# the region it shows (the add field, a row of the recipe card, a tray), with that region live and enlarged in it. It
-# pops in calmly, as the title's book does (a big card of words, so no sticker bounce), and never comes out wider than
+# the region it shows (the add field), with that region live and enlarged in it. It pops in and out as a sticker
+# does, but opaque on every frame: it grows from small with a little overshoot and settles from a few degrees off,
+# and leaves by shrinking away, so a part-faded card never lies over the text under it. It never comes out wider than
 # the phone.
 LOUPE_SCALE = 1.7      # x the phone screen's own scale (about 1.1 recorded px a frame px, so the text stays crisp)
 LOUPE_BORDER = 16      # px of white die-cut round the region
@@ -121,7 +121,8 @@ LOUPE_SHADOW = (8, 11)  # the hard shadow's offset
 LOUPE_GAP = 70         # px between the card (with its shadow) and the region it shows, above it: clear of the dock's
                        # top edge, which stands about 50 px above the add field
 LOUPE_TURN = 3.0       # degrees off at the start of its pop (smaller than a sticker's: it is a big card)
-LOUPE_STYLE = 'book'
+LOUPE_POP = (0.3, 1.06)  # its scale on the way in: from, and the overshoot's peak
+LOUPE_STYLE = 'loupe'
 # For recordings that name no regions (the first recorder): the add field, in recorded px
 FALLBACK_REGIONS = {'add_field': (22, 2104, 540, 2252)}
 POSTER_AT = 'celebrate:banner+0.6s'   # the poster: the composed frame at this beat (scene:beat)
@@ -166,9 +167,13 @@ TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the
 #                      or nothing moves, and never above 1.6x; never over the typing (typing_start to typing_end, or
 #                      to sent), so the app's own motion plays at 1x; a factor under 1 stretches a wholly still lead-in
 #   hold               optional seconds to rest on the last frame
-#   loupe              optional [(from, to, region)] or [(from, to, region, scale)]: from 'from' to 'to' a loupe
+#   loupe              optional [(from, to, region)] or [(from, to, region, options)]: from 'from' to 'to' a loupe
 #                      shows `region` (a name from segment.json's "regions", such as 'add_field', or a rect (x0, y0, x1,
-#                      y1) of the recorded screen) live and enlarged (LOUPE_SCALE unless given), on a card just above it
+#                      y1) of the recorded screen) live and enlarged, on a card LOUPE_GAP above it. Options: 'scale'
+#                      (LOUPE_SCALE unless given), 'y' (the card's top, frame px with the phone at rest) and 'width'
+#                      (the card's face, frame px: more white either side, to cover what would peek out round it).
+#                      Only over a small region with room round it: over a dense list a card slices the lines it
+#                      covers
 #   captions           [(two lines, beat)]: the first is up from the scene's start ('start'); each next one takes
 #                      over when its beat plays
 #   fam, dusk, tape    backdrop family (dusk: the deeper night-theme ground), washi pattern, as in SHOTS
@@ -187,17 +192,19 @@ SCENES = [
          fam='mint', tape='sakura',
          decor=[('sk_i_strawberry', 176, 'L', 1520, 8), ('sk_d_bee', 132, 'R', 1250, -10),
                 ('sk_d_ladybug', 112, 'R', 1760, 12)]),
+    # the loupe is up until just before the sheet rises, so "pancakes for 12" reads whole for 1.5 s. It sits in the
+    # band between the list and the dock: 20 px under the Dairy & eggs strip (its shadow ends at frame y 1442) and
+    # clear of the dock's washi, perforation and "picnic day" (from y 1654), so a little smaller than write's, and
+    # wide enough to cover the "end of the list" pill (frame x 262 to 823) whole
     dict(segment='recipe', enter='wipe', cut_in='typing_start-1.3s', cut_out='rows_landed+1.6s',
-         speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
-         loupe=[('typing_start', 'sent+0.4s', 'add_field'),
-                ('card_scroll+2.1s', 'stuck-0.8s', 'pantry_row_1', 1.3)],
+         speed=[('sent+0.6s', 'card_shown-0.2s', 1.6)],
+         loupe=[('typing_start', 'card_shown-0.25s', 'add_field', {'scale': 1.35, 'y': 1462, 'width': 584})],
          captions=[(['Turn a recipe into', 'a shopping list'], 'start'),
                    (['Recipes leave out', 'what’s in your pantry'], 'card_scroll+1.2s')],
          fam='lemon', tape='gingham',
          decor=[('sk_i_eggs', 168, 'L', 1520, 8), ('sk_i_flour', 150, 'R', 1250, -8),
                 ('sk_i_maple_syrup', 124, 'R', 1760, 10)]),
     dict(segment='shop', enter='wipe', cut_in='start', cut_out='next_card+2.1s',
-         loupe=[('first_tick-0.8s', 'first_tick+1.3s', (90, 1110, 870, 1428), 1.3)],
          captions=[(['Check it off and', 'its sticker hops in'], 'start')],
          fam='ramune', tape='dots',
          decor=[('sk_i_banana', 160, 'L', 1520, 8), ('sk_i_croissant', 140, 'R', 1250, -8),
@@ -276,6 +283,11 @@ STYLES = {
     'book': (BOOK_IN, BOOK_OUT,
              lambda p, d: (overshoot(p, 0.9, 1.03), d * (1 - ease_out_back(p)), ease_out_cubic(min(1.0, p / 0.4))),
              lambda p, d: (1 - 0.25 * ease_in_back(p), 0.0, 1 - ease_in_cubic(p)), 1.03),
+    # the sticker's pop with the opacity left at 1: a card over words never shows them through it. It leaves by
+    # shrinking, quicker and quicker, to about a quarter of its size on its last frame
+    'loupe': (STICKER_IN, STICKER_OUT,
+              lambda p, d: (overshoot(p, *LOUPE_POP, 0.5), d * (1 - ease_out_back(p)), 1.0),
+              lambda p, d: (1 - p ** 1.5, 0.0, 1.0), LOUPE_POP[1]),
 }
 
 
@@ -570,19 +582,27 @@ def region_on_frame(rect):
             SCREEN_X + rect[2] * SCREEN_K, SCREEN_Y + rect[3] * SCREEN_K)
 
 
-Loupe = namedtuple('Loupe', 'seg rect scale crop_w crop_h x y w h')
+Loupe = namedtuple('Loupe', 'seg rect scale crop_w crop_h pad x y w h')   # pad: more white at either side
 
 
-def loupe_layout(seg, rect, scale):
-    """Where a loupe sits: its card (with the shadow) is centred on the screen just above the region it shows."""
+def loupe_layout(seg, rect, scale, y=None, width=None):
+    """Where a loupe sits: its card (with the shadow) is centred on the screen, LOUPE_GAP above the region it shows,
+    or with its top at frame px `y`. A `width` (of the card's face, frame px) widens it with white either side."""
     s = scale * SCREEN_K
     cw, ch = round((rect[2] - rect[0]) * s), round((rect[3] - rect[1]) * s)
-    w = cw + 2 * LOUPE_BORDER + LOUPE_SHADOW[0]
+    pad = 0
+    if width is not None:
+        if width < cw + 2 * LOUPE_BORDER:
+            raise SystemExit(f'scene {seg}: a loupe {width} px wide is narrower than its region ({cw} px at that '
+                             'scale) and its border')
+        pad = (width - cw - 2 * LOUPE_BORDER) // 2
+    w = cw + 2 * (LOUPE_BORDER + pad) + LOUPE_SHADOW[0]
     h = ch + 2 * LOUPE_BORDER + LOUPE_SHADOW[1]
     top = region_on_frame(rect)[1]
     x = round((SCREEN_BOX[0] + SCREEN_BOX[2]) / 2 - (w - LOUPE_SHADOW[0]) / 2)
-    y = math.floor(top - LOUPE_GAP - h)
-    return Loupe(seg, rect, s, cw, ch, x, y, w, h)
+    if y is None:
+        y = math.floor(top - LOUPE_GAP - h)
+    return Loupe(seg, rect, s, cw, ch, pad, x, y, w, h)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -796,12 +816,15 @@ class Plan:
         for i, sc in enumerate(self.scenes):
             seg = segs[sc['segment']]
             for j, spec in enumerate(sc.get('loupe', [])):
-                if len(spec) not in (3, 4) or (len(spec) == 4 and not 1 <= spec[3] <= 2.5):
-                    raise SystemExit(f'scene {seg.name}: a loupe is (from, to, region) or (from, to, region, scale) '
-                                     f'with a scale from 1 to 2.5: {spec!r}')
+                opts = spec[3] if len(spec) == 4 else {}
+                if (len(spec) not in (3, 4) or not isinstance(opts, dict) or set(opts) - {'scale', 'y', 'width'}
+                        or not 1 <= opts.get('scale', LOUPE_SCALE) <= 2.5
+                        or not all(isinstance(opts.get(o, 0), int) for o in ('y', 'width'))):
+                    raise SystemExit(f'scene {seg.name}: a loupe is (from, to, region) or (from, to, region, '
+                                     f'{{"scale": 1 to 2.5, "y": frame px, "width": frame px}}): {spec!r}')
                 b0, b1, region = spec[:3]
-                lp = loupe_layout(seg.name, seg.region(region, 'loupe region'),
-                                  spec[3] if len(spec) == 4 else LOUPE_SCALE)
+                lp = loupe_layout(seg.name, seg.region(region, 'loupe region'), opts.get('scale', LOUPE_SCALE),
+                                  opts.get('y'), opts.get('width'))
                 self._check_loupe(lp, seg.name)
                 f_in = seg.beat(b0, 'loupe')
                 n_in = self._output_frame(scene_clips[i], f_in, seg.name, b0)
@@ -901,8 +924,13 @@ class Plan:
         if lp.x < PHONE_BOX[0] or lp.x + lp.w > PHONE_BOX[2]:
             raise SystemExit(f'scene {name}: the loupe is wider than the phone ({lp.w} px): give it a smaller region '
                              'or scale')
+        # opaque on every frame of its pop, in and out: a part-faded card over the screen is a double exposure
+        t_in, t_out, curve_in, curve_out, peak = STYLES[LOUPE_STYLE]
+        if any(curve(k / n, LOUPE_TURN)[2] != 1 for curve, n in ((curve_in, max(1, frames(t_in))),
+                                                                  (curve_out, max(1, frames(t_out))))
+               for k in range(1, n + 1)):
+            raise SystemExit(f'the loupe style {LOUPE_STYLE!r} fades the card: keep its opacity at 1')
         # at rest and at the top of its pop (overshot and still turned a little), with its shadow
-        peak = STYLES[LOUPE_STYLE][4]
         cx, cy = lp.x + lp.w / 2, lp.y + lp.h / 2          # the pop turns and scales the card about its middle
         for scale, turn in ((1.0, 0.0), (peak, LOUPE_TURN)):
             box = turned_box((lp.x, lp.y, lp.x + lp.w, lp.y + lp.h), scale, turn, cx, cy)
@@ -1254,7 +1282,7 @@ class Renderer:
                 crop = Image.fromarray(np.rint(arr).clip(0, 255).astype(np.uint8))
         card, window = self.cards[sid]
         card = card.copy()
-        card.paste(crop, (LOUPE_BORDER, LOUPE_BORDER), window)
+        card.paste(crop, (LOUPE_BORDER + lp.pad, LOUPE_BORDER), window)
         sp = Sprite(card, lp.x, lp.y, self.f)
         arr, x, y = sp.patch(scale, turn)
         if opacity < 1:
