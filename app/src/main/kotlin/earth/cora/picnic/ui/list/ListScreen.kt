@@ -93,6 +93,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInputModeManager
@@ -158,12 +159,12 @@ import earth.cora.picnic.ui.list.motion.MotionOverlay
 import earth.cora.picnic.ui.list.motion.ambientVisible
 import earth.cora.picnic.ui.list.motion.rememberAmbient
 import earth.cora.picnic.ui.list.motion.trayCurl
-import earth.cora.picnic.ui.list.motion.unfoldMotion
 import earth.cora.picnic.ui.list.motion.visibleFraction
 import earth.cora.picnic.ui.nav.LocalAppNav
 import earth.cora.picnic.ui.theme.DecorSticker
 import earth.cora.picnic.ui.theme.EmptyState
 import earth.cora.picnic.ui.theme.FixedMotionScale
+import earth.cora.picnic.ui.theme.LocalPieceProbe
 import earth.cora.picnic.ui.theme.LocalReducedMotion
 import earth.cora.picnic.ui.theme.MenuItem
 import earth.cora.picnic.ui.theme.OverflowMenu
@@ -177,6 +178,7 @@ import earth.cora.picnic.ui.theme.ToastMessage
 import earth.cora.picnic.ui.theme.TrayMetrics
 import earth.cora.picnic.ui.theme.WashiPattern
 import earth.cora.picnic.ui.theme.holdOnFrameClock
+import earth.cora.picnic.ui.theme.probe
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -844,10 +846,18 @@ fun ListScreen(
     val shortWindow = LocalConfiguration.current.screenHeightDp < SHORT_WINDOW_DP
     // The lazy items (one plan for the list and for the eggs' scrolls to a section, §12.2 eggs 3, 5 and 8).
     val openId = p.openSection(state.openSectionId)
-    val entries = remember(state.sections, openId) { planEntries(state.sections, openId) }
+    val planned = remember { arrayOfNulls<Planned>(1) }
+    // The finished tray folds into its strip as one sheet (§8.4 L + 1100): the strip takes its band's place and its rows
+    // and cap roll up under it over the 240 ms `layout`, everything below moving with them in the same frames. Under
+    // reduced motion, or with its band pinned over its own rows (the list then keeps its place on the strip, item 87),
+    // it is the one swap.
+    val reduced = LocalReducedMotion.current
+    val foldId = state.sections.firstOrNull { it.id != openId && p.aisles[it.id]?.foldT0 != null }?.id
+    val foldT0 = foldId?.let { p.aisles[it]?.foldT0 }
+    val folding = remember(foldId, foldT0) { foldId != null && !reduced && foldsInView(planned[0], state.listId, foldId, lazyState) }
+    val entries = remember(state.sections, openId, folding) { planEntries(state.sections, openId, foldId.takeIf { folding }) }
     // A tray folding under its pinned plate keeps the list's place on its strip (§8.4 L + 1100, item 87), in the same
     // frame as the swap: no frame shows an empty viewport or a jump to the list's end.
-    val planned = remember { arrayOfNulls<Planned>(1) }
     val anchorGen = remember { IntArray(1) }
     if (keepPlace(planned[0], state.listId, entries, lazyState)) {
         anchorGen[0]++
@@ -1124,7 +1134,8 @@ private fun ListScreenState.focusTargets(entries: List<Entry>): List<Pair<Int, F
         when (e) {
             is Entry.Strip -> i to focusOf(e.s.id).second
             is Entry.Header -> i to focusOf(e.s.id).first
-            is Entry.RowItem -> i to rowFocus(e.row.id)
+            // A folding tray's rows are going: the keyboard goes on to its strip.
+            is Entry.RowItem -> if (e.folding) null else i to rowFocus(e.row.id)
             else -> null
         }
     }
@@ -1157,12 +1168,13 @@ private sealed interface Entry {
         override val sectionId get() = s.id
     }
 
-    data class RowItem(val s: SectionUi, val row: ItemRowUi, val first: Boolean, val last: Boolean) : Entry {
+    /** [folding]: a row of the finished tray rolling up into its strip (§8.4 L + 1100), no longer a row to visit. */
+    data class RowItem(val s: SectionUi, val row: ItemRowUi, val first: Boolean, val last: Boolean, val folding: Boolean = false) : Entry {
         override val key get() = row.id
         override val sectionId get() = s.id
     }
 
-    data class Cap(val s: SectionUi) : Entry {
+    data class Cap(val s: SectionUi, val folding: Boolean = false) : Entry {
         override val key get() = "cap:${s.id}"
         override val sectionId get() = s.id
     }
@@ -1211,14 +1223,36 @@ private fun keepPlace(before: Planned?, listId: String, entries: List<Entry>, li
     return true
 }
 
-/** The lazy items for [sections] with [openId] open: strips, or the tray's band, rows, cap and end marker; gaps; the end note. */
-private fun planEntries(sections: List<SectionUi>, openId: String?): List<Entry> = buildList {
+/**
+ * Whether the tray [sectionId], open in the last plan [before], can fold as one sheet where it is: it was open, and its
+ * band was not pinned over its own rows (the list's first visible item is not one of its rows, its cap or its end, nor
+ * its band scrolled part way under the top).
+ */
+private fun foldsInView(before: Planned?, listId: String, sectionId: String, list: LazyListState): Boolean {
+    if (before == null || before.listId != listId || before.state !== list) return false
+    if (before.entries.none { it is Entry.Header && it.sectionId == sectionId }) return false
+    val (index, offset) = Snapshot.withoutReadObservation { list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset }
+    val first = before.entries.getOrNull(index) ?: return true
+    if (first.sectionId != sectionId) return true
+    return first is Entry.Header && offset == 0
+}
+
+/**
+ * The lazy items for [sections] with [openId] open: strips, or the tray's band, rows, cap and end marker; gaps; the end
+ * note. [folding]: the finished tray folding into its strip (§8.4 L + 1100) is its strip with its rows and cap still
+ * under it, rolling up (the rows keep their keys, so the list keeps them in place while they go).
+ */
+private fun planEntries(sections: List<SectionUi>, openId: String?, folding: String? = null): List<Entry> = buildList {
     for (s in sections) {
         if (s.id == openId && s.rows.isNotEmpty()) {
             add(Entry.Header(s))
             s.rows.forEachIndexed { i, r -> add(Entry.RowItem(s, r, i == 0, i == s.rows.lastIndex)) }
             add(Entry.Cap(s))
             add(Entry.End(s))
+        } else if (s.id == folding && s.rows.isNotEmpty()) {
+            add(Entry.Strip(s))
+            s.rows.forEachIndexed { i, r -> add(Entry.RowItem(s, r, i == 0, i == s.rows.lastIndex, folding = true)) }
+            add(Entry.Cap(s, folding = true))
         } else {
             add(Entry.Strip(s))
         }
@@ -1226,6 +1260,9 @@ private fun planEntries(sections: List<SectionUi>, openId: String?): List<Entry>
     }
     add(Entry.Note)
 }
+
+/** Whether this is a piece of a tray folding into its strip (see [planEntries]). */
+private val Entry.isFolding: Boolean get() = (this is Entry.RowItem && folding) || (this is Entry.Cap && folding)
 
 /** The list viewport (§6.1 item 2): 11 dp top padding, 8 dp sides, the add bar + 26 dp at the bottom. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -1270,13 +1307,33 @@ private fun AisleList(
     val unfoldT0 = if (reduced || handOff == null) null else openedAt[handOff.sectionId]?.takeIf { it >= handOff.t0 - UNFOLD_SLACK_MS }
     val unfoldId = if (unfoldT0 != null) openId else null
     // Its rows and cap unfold as one sheet (one per unfold), which keeps their whole heights as they are measured.
-    val sheet = remember(unfoldT0, unfoldId) { if (unfoldT0 != null && unfoldId != null) UnfoldSheet(unfoldT0, "cap:$unfoldId") else null }
+    val sheet = remember(unfoldT0, unfoldId) { if (unfoldT0 != null && unfoldId != null) TraySheet(unfoldT0, "cap:$unfoldId", opening = true) else null }
     if (sheet != null) SideEffect { sheet.rows = entries.filter { it is Entry.RowItem && it.sectionId == unfoldId }.map { it.key } }
-    // While it unfolds every item keeps step with the layout, frame by frame: no placement animation at all (even one
-    // that lands at once shows its start for a frame, and the lazy list swaps it for a soft spring when it interrupts a
-    // slide still running, which left the strips below lagging under the growing tray).
-    val unfolding = unfoldT0 != null && Snapshot.withoutReadObservation { clock.now } < unfoldT0 + UNFOLD_MS + UNFOLD_SETTLE_MS
-    val still = reduced || screen.layoutSnaps > 0 || unfolding
+    // The finished tray folding into its strip (§8.4 L + 1100, planEntries): its rows and cap roll up as one sheet on the
+    // engine's clock from the fold's beat, starting from where the band's tray ended (the strip may be taller than the
+    // band it replaces, ListPieces).
+    val bands = remember { HashMap<String, Int>() }
+    val strips = remember { HashMap<String, Int>() }
+    val foldId = entries.firstOrNull { it is Entry.Cap && it.isFolding }?.sectionId
+    val foldT0 = foldId?.let { p.aisles[it]?.foldT0 }
+    val fold = remember(foldT0, foldId) {
+        if (foldT0 == null || foldId == null) null else TraySheet(foldT0, "cap:$foldId", opening = false, band = bands[foldId], strips = strips, sectionId = foldId)
+    }
+    if (fold != null) SideEffect { fold.rows = entries.filter { it is Entry.RowItem && it.sectionId == foldId }.map { it.key } }
+    val lastFold = remember { LongArray(1) { Long.MIN_VALUE / 2 } }
+    if (foldT0 != null) lastFold[0] = foldT0
+    // The curl (L + 800) keeps its last pose on the folding tray: the engine's curl ends where the fold begins.
+    val curls = remember { HashMap<String, Long>() }
+    for ((id, a) in p.aisles) a.curlT0?.let { curls[id] = it }
+    // While it unfolds or folds every item keeps step with the layout, frame by frame: no placement animation at all
+    // (even one that lands at once shows its start for a frame, and the lazy list swaps it for a soft spring when it
+    // interrupts a slide still running, which left the strips below lagging under the growing tray).
+    val now = Snapshot.withoutReadObservation { clock.now }
+    val unfolding = unfoldT0 != null && now < unfoldT0 + UNFOLD_MS + UNFOLD_SETTLE_MS
+    val folding = now < lastFold[0] + UNFOLD_MS + UNFOLD_SETTLE_MS
+    val still = reduced || screen.layoutSnaps > 0 || unfolding || folding
+    // Tests read where each slice of an unfolding or folding tray is laid out ("slice:<key>").
+    val probe = LocalPieceProbe.current
     // WP6's check-off chains have played out (no hop in flight, no burst, no celebration): egg 8's cat may curl up.
     val chainsDone = p.flights.isEmpty() && p.bursts.isEmpty() && p.celebration == null
     val ladybugStrip = LocalListEggs.current.ladybug?.sectionId
@@ -1362,8 +1419,11 @@ private fun AisleList(
     val gapPx = with(density) { REVEAL_MARGIN.roundToPx() }
     val topPadPx = with(density) { LIST_TOP_PAD.roundToPx() }
     // Room added after the list's end so a stop's band can land flush at the top, or a plate be pushed off whole, when
-    // the list ends too soon after it (items 178, 313). It goes when another section opens.
-    var endRoom by remember(openId) { mutableIntStateOf(0) }
+    // the list ends too soon after it (items 178, 313). It goes when another section opens, never as one folds: at the
+    // list's end that would pull everything down at once while the tray rolls up.
+    val roomFor = remember { arrayOfNulls<String>(1) }
+    if (openId != null) roomFor[0] = openId
+    var endRoom by remember(roomFor[0]) { mutableIntStateOf(0) }
     // Her own drag or fling moved the list since it last came to rest (programmatic scrolls never pass the nested
     // scroll connection).
     val userScrolled = remember { BooleanArray(1) }
@@ -1405,7 +1465,8 @@ private fun AisleList(
      * in one move (one jump under reduced motion), and the room is then trimmed to exactly what the landing needs, which
      * moves nothing. So no frame ever shows the strip above sliced. The trim lands inside the programmatic scroll, the
      * rows held still: the remeasure it causes never starts a slide (the open tray's rows would drop to the screen's foot
-     * and slide back up under their band).
+     * and slide back up under their band). A stop already laid out glides there over the Next card's rise ([FLUSH_GLIDE]);
+     * one further off takes the list's own scroll to it.
      */
     suspend fun scrollFlush(index: Int) {
         val base = endRoom
@@ -1426,7 +1487,17 @@ private fun AisleList(
         try {
             withFrameMillis { }
             programmatic {
-                if (snap) listState.scrollToItem(index, topPadPx) else listState.animateScrollToItem(index, topPadPx)
+                val info = listState.layoutInfo
+                val laid = info.visibleItemsInfo.firstOrNull { it.index == index }
+                when {
+                    snap -> listState.scrollToItem(index, topPadPx)
+                    laid != null -> {
+                        listState.animateScrollBy((laid.offset - info.viewportStartOffset).toFloat(), FLUSH_GLIDE)
+                        // Exactly flush, whatever moved meanwhile (a pixel or two at most).
+                        listState.scrollToItem(index, topPadPx)
+                    }
+                    else -> listState.animateScrollToItem(index, topPadPx)
+                }
                 // The landing laid out, then the trim, with the rows held still.
                 withFrameMillis { }
                 trim()
@@ -1442,7 +1513,7 @@ private fun AisleList(
      * is partly on screen, and does nothing when it already shows.
      */
     suspend fun reveal(itemId: String, rowOnly: Boolean) {
-        fun row() = latestEntries.indexOfFirst { it is Entry.RowItem && it.key == itemId }
+        fun row() = latestEntries.indexOfFirst { it is Entry.RowItem && it.key == itemId && !it.folding }
         fun strip(): Int {
             val id = latestSections.firstOrNull { s -> s.rows.any { it.id == itemId } }?.id ?: return -1
             return latestEntries.indexOfFirst { it is Entry.Strip && it.sectionId == id }
@@ -1497,10 +1568,10 @@ private fun AisleList(
             reveal(it, rowOnly = true)
             return@LaunchedEffect
         }
-        // The scroll lands on the layout after the fold: it waits (bounded) until no tray but the stop's is laid out,
-        // then a frame, so the stop's band lands flush at the top (item 178).
+        // The scroll lands on the layout after the fold: it waits (bounded) until no tray but the stop's is laid out (a
+        // folding one rolled up and gone), then a frame, so the stop's band lands flush at the top (item 178).
         var waited = 0
-        while (latestEntries.any { it is Entry.Header && it.sectionId != req.sectionId } && waited++ < OPEN_WAIT_FRAMES) withFrameMillis { }
+        while (latestEntries.any { (it is Entry.Header && it.sectionId != req.sectionId) || it.isFolding } && waited++ < OPEN_WAIT_FRAMES) withFrameMillis { }
         withFrameMillis { }
         val index = latestEntries.indexOfFirst { it.sectionId == req.sectionId && (it is Entry.Header || it is Entry.Strip) }
         if (index < 0) return@LaunchedEffect
@@ -1734,7 +1805,12 @@ private fun AisleList(
                                 // (and over the open tray's band beside it).
                                 .zIndex(if (screen.peek == s.id || ladybugStrip == s.id) Z_LIFTED else 0f)
                                 .onGloballyPositioned { screen.stripBounds[s.id] = it.boundsInWindow() }
-                                .unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
+                                // Its height as laid out, read by a fold in the same pass (TraySheet).
+                                .layout { measurable, constraints ->
+                                    val placeable = measurable.measure(constraints)
+                                    strips[s.id] = placeable.height
+                                    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                                },
                         )
                     }
                     is Entry.Header -> stickyHeader(key = e.key, contentType = "header") {
@@ -1761,11 +1837,15 @@ private fun AisleList(
                             },
                             // The band draws over its tray's rows when it pins (R6), and over the strips that slide
                             // past the tray as it opens or closes (§4.10).
-                            modifier = Modifier.zIndex(Z_PLATE).keyFocusIn(screen, e.key, s.id).unfoldMotion(p.aisles[s.id]?.foldT0, clock, reduced),
+                            modifier = Modifier.zIndex(Z_PLATE).keyFocusIn(screen, e.key, s.id).onSizeChanged { bands[s.id] = it.height },
                         )
                     }
                     is Entry.RowItem -> item(key = e.key, contentType = "row") {
-                        val curl = if (e.last) p.aisles[e.s.id]?.curlT0 else null
+                        val curl = when {
+                            !e.last -> null
+                            e.folding -> p.aisles[e.s.id]?.curlT0 ?: curls[e.s.id]?.takeIf { foldT0 != null && foldT0 - it in 0..CURL_TO_FOLD }
+                            else -> p.aisles[e.s.id]?.curlT0
+                        }
                         TrayRow(
                             row = e.row,
                             section = e.s,
@@ -1779,16 +1859,17 @@ private fun AisleList(
                             onPop = { generation, done -> if (done) screen.popped(e.row.id, generation) else screen.popStarted(e.row.id, generation) },
                             sweepT0 = beat?.sweepT0.takeIf { beat?.sweepItem == e.row.id },
                             ambientClock = ambient.clock,
-                            current = e.s.id == currentId,
+                            // A folding tray keeps its ring to the end of its fold.
+                            current = e.folding || e.s.id == currentId,
                             modifier = Modifier
                                 .itemMotion(this, still, placementMs = SLOT_CLOSE_MS)
-                                .unfoldSlice(sheet.takeIf { unfoldId == e.s.id }, e.key, clock)
+                                .probe(probe, "slice:${e.key}")
+                                .sheetSlice(if (e.folding) fold else sheet.takeIf { unfoldId == e.s.id }, e.key, clock)
                                 .keyFocusIn(screen, e.key, e.s.id)
                                 .focusRequester(screen.rowFocus(e.row.id))
                                 // The open tray draws over the folded strips that slide past it as it opens (the strip
                                 // below never covers its rows or its cap, §4.10).
                                 .zIndex(Z_TRAY)
-                                .unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced)
                                 // The curl starts at the panel's inner corner and stays in the row's check column (§8.4).
                                 .trayCurl(
                                     curl, clock,
@@ -1804,12 +1885,12 @@ private fun AisleList(
                     is Entry.Cap -> item(key = e.key, contentType = "cap") {
                         TrayCap(
                             e.s,
-                            current = e.s.id == currentId,
+                            current = e.folding || e.s.id == currentId,
                             modifier = Modifier
                                 .itemMotion(this, still, placementMs = SLOT_CLOSE_MS)
-                                .unfoldSlice(sheet.takeIf { unfoldId == e.s.id }, e.key, clock)
-                                .zIndex(Z_TRAY)
-                                .unfoldMotion(p.aisles[e.s.id]?.foldT0, clock, reduced),
+                                .probe(probe, "slice:${e.key}")
+                                .sheetSlice(if (e.folding) fold else sheet.takeIf { unfoldId == e.s.id }, e.key, clock)
+                                .zIndex(Z_TRAY),
                         )
                     }
                     // One pixel tall: the list ignores zero-size items when it picks the header to pin; this pushes the
@@ -1884,23 +1965,42 @@ private fun Modifier.itemMotion(scope: LazyItemScope, still: Boolean, placementM
 }
 
 /**
- * The rows and cap of the tray opening behind the Next card, unfolding as one sheet from [t0] (§8.5). [full] keeps each
- * slice's whole height (px) as the list measures it; [rows] are the tray's row keys in list order, [cap] its cap's key.
+ * The rows and cap of a tray moving as one sheet from [t0] (§8.4): unfolding behind the Next card ([opening]), or
+ * rolling up into its strip as the finished tray folds. [full] keeps each slice's whole height (px) as the list measures
+ * it; [rows] are the tray's row keys in list order, [cap] its cap's key. A fold starts where the band's tray ended: from
+ * the rows and cap less what its strip took beyond the band's [band] height ([strips] holds the strips' heights as laid
+ * out, its own by [sectionId]), so the strips below never step down as the strip takes the band's place.
  */
-private class UnfoldSheet(val t0: Long, val cap: String) {
+private class TraySheet(
+    val t0: Long,
+    val cap: String,
+    val opening: Boolean,
+    private val band: Int? = null,
+    private val strips: Map<String, Int>? = null,
+    private val sectionId: String? = null,
+) {
     var rows: List<String> = emptyList()
     val full = HashMap<String, Int>()
+
+    /** How much of [whole] px of rows and cap shows [elapsed] ms in. */
+    fun shown(whole: Int, elapsed: Long): Int {
+        val e = PicnicMotion.layout.easing.transform((elapsed.toFloat() / UNFOLD_MS).coerceIn(0f, 1f))
+        if (opening) return (whole * e).roundToInt().coerceIn(0, whole)
+        val strip = sectionId?.let { strips?.get(it) } ?: band ?: 0
+        val from = (whole + (band ?: strip) - strip).coerceIn(0, whole)
+        return (from * (1f - e)).roundToInt().coerceIn(0, whole)
+    }
 }
 
 /**
- * A slice of the opening tray's [sheet] (§8.5): laid out whole, the sheet's rows and cap together take
- * [PicnicMotion.layout]'s share of their summed height on the engine's [clock]. The cap's bottom edge (the end cap,
- * the ring and the shadow) shows first and closes the sheet from the start; the rows unroll above it from the top down,
- * so only the row at the growing edge is cut, never every row at once. A row not reached yet keeps a pixel (its panel
- * and wall), so the list never drops it. Only the slice's top and bottom are clipped: the current aisle's lemon ring
- * and shadow run on outside its sides, as on a still tray.
+ * A slice of a tray's [sheet] (§8.4): laid out whole, the sheet's rows and cap together take [TraySheet.shown] of their
+ * summed height on the engine's [clock], over [PicnicMotion.layout]. The cap keeps its share and its bottom edge (the end
+ * cap, the ring and the shadow), so the sheet is closed in every frame; the rows unroll from the top down (or roll up
+ * from the bottom), so only the row at the moving edge is cut and the others show whole as the tray opens. A row not
+ * reached yet keeps a pixel (its panel and wall), so the list never drops it. Only the slice's top and bottom are clipped:
+ * the current aisle's lemon ring and shadow run on outside its sides, as on a still tray.
  */
-private fun Modifier.unfoldSlice(sheet: UnfoldSheet?, key: String, clock: earth.cora.picnic.ui.list.motion.MotionClock): Modifier =
+private fun Modifier.sheetSlice(sheet: TraySheet?, key: String, clock: earth.cora.picnic.ui.list.motion.MotionClock): Modifier =
     if (sheet == null) {
         this
     } else {
@@ -1909,9 +2009,11 @@ private fun Modifier.unfoldSlice(sheet: UnfoldSheet?, key: String, clock: earth.
             .layout { measurable, constraints ->
                 val placeable = measurable.measure(constraints)
                 sheet.full[key] = placeable.height
-                val t = ((clock.now - sheet.t0).toFloat() / UNFOLD_MS).coerceIn(0f, 1f)
+                val elapsed = clock.now - sheet.t0
                 val cap = key == sheet.cap
-                if (t >= 1f || (!cap && key !in sheet.rows)) return@layout layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                if ((sheet.opening && elapsed >= UNFOLD_MS) || (!cap && key !in sheet.rows)) {
+                    return@layout layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                }
                 val capH = sheet.full[sheet.cap] ?: 0
                 var rowsH = 0
                 var before = 0
@@ -1919,22 +2021,34 @@ private fun Modifier.unfoldSlice(sheet: UnfoldSheet?, key: String, clock: earth.
                     if (k == key) before = rowsH
                     rowsH += sheet.full[k] ?: 0
                 }
-                val shown = ((capH + rowsH) * PicnicMotion.layout.easing.transform(t)).roundToInt()
-                val capShown = minOf(capH, shown)
+                val whole = capH + rowsH
+                val shown = sheet.shown(whole, elapsed)
+                val capShown = if (whole == 0) 0 else (capH.toLong() * shown / whole).toInt()
+                // A folded slice takes no room at all: it leaves the list as the fold ends, with nothing left to close.
+                val least = if (sheet.opening) 1 else 0
                 if (cap) {
-                    val h = capShown.coerceAtLeast(1)
+                    val h = capShown.coerceAtLeast(least)
                     layout(placeable.width, h) { placeable.place(0, h - placeable.height) }
                 } else {
                     val reach = shown - capShown - before
-                    val h = reach.coerceIn(1, placeable.height)
+                    val h = reach.coerceIn(least, placeable.height)
                     layout(placeable.width, h) { placeable.place(0, if (reach <= 0) h - placeable.height else 0) }
                 }
             }
     }
 
-/** The opening tray's unfold (§8.5: 240 ms `layout`), and the frames the list keeps step after it. */
+/** The tray's unfold and fold (§8.4: 240 ms `layout`), and the frames the list keeps step after them. */
 private val UNFOLD_MS: Int = PicnicMotion.layout.durationMillis
 private const val UNFOLD_SETTLE_MS: Int = 48
+
+/**
+ * The scroll to a stop laid out on screen (the next stop behind the Next card, §10): over the card's 400 ms rise on
+ * the `standard` curve, so the list glides there instead of leaping half the way in one frame.
+ */
+private val FLUSH_GLIDE = tween<Float>(PicnicMotion.cardIn.durationMillis, easing = PicnicMotion.standard.easing)
+
+/** The curl (L + 800) comes this long before the fold (L + 1100), §8.4. */
+private const val CURL_TO_FOLD: Long = earth.cora.picnic.ui.list.motion.Beats.FOLD - earth.cora.picnic.ui.list.motion.Beats.CURL
 
 /** The hand-off's tray opens with its scroll request, within a frame or two of it. */
 private const val UNFOLD_SLACK_MS: Long = 50
