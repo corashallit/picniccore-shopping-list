@@ -2,23 +2,26 @@ package earth.cora.picnic.store
 
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.AppContainer
 import earth.cora.picnic.MainActivity
@@ -29,6 +32,7 @@ import earth.cora.picnic.core.assistant.ProposedItem
 import earth.cora.picnic.core.assistant.RecipeInfo
 import earth.cora.picnic.core.assistant.SkipReason
 import earth.cora.picnic.core.assistant.WebSource
+import earth.cora.picnic.core.assistant.toGroceryItem
 import earth.cora.picnic.core.model.AppState
 import earth.cora.picnic.core.model.GroceryItem
 import earth.cora.picnic.core.model.IconFit
@@ -36,13 +40,16 @@ import earth.cora.picnic.core.model.ItemSource
 import earth.cora.picnic.core.model.PantryEntry
 import earth.cora.picnic.core.model.StoreProfile
 import earth.cora.picnic.core.model.TripStats
+import earth.cora.picnic.core.model.addItems
 import earth.cora.picnic.core.model.currentList
+import earth.cora.picnic.core.model.normalizeName
+import earth.cora.picnic.core.model.setFavourite
 import earth.cora.picnic.core.model.setOpenAisle
 import earth.cora.picnic.core.model.toggleChecked
 import earth.cora.picnic.core.model.updateList
+import earth.cora.picnic.ui.add.ADD_BAR_DOODLE_TAG
 import earth.cora.picnic.ui.add.ADD_BAR_TAG
 import earth.cora.picnic.ui.add.ADD_CAPSULE_TAG
-import earth.cora.picnic.ui.add.ADD_TABS_TAG
 import earth.cora.picnic.ui.add.RECIPE_CARD_TAG
 import earth.cora.picnic.ui.add.THINKING_TAG
 import earth.cora.picnic.ui.album.AlbumSamples
@@ -53,6 +60,7 @@ import earth.cora.picnic.ui.list.motion.BeatName
 import earth.cora.picnic.ui.list.motion.CELEBRATION_TAG
 import earth.cora.picnic.ui.list.motion.CelebrationTimeline
 import earth.cora.picnic.ui.list.motion.NEXT_CARD_TAG
+import earth.cora.picnic.ui.theme.LETTERSET_TAG
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
@@ -60,6 +68,9 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * The store's feature video, filmed in the real app: MainActivity with the real container (the JSON store, the album,
@@ -77,8 +88,31 @@ import org.robolectric.annotation.GraphicsMode
  * The forked test JVM sees the variable as Gradle's own environment has it; design/store/make_feature_video.py then cuts
  * the video from the folder.
  *
- * Segments (docs/DESIGN_STICKER.md section): write (§6.2 Send with a key, the review card, the commit), recipe (§4.17,
- * §4.18), shop (§7.6 check-off, §10 Next stop), celebrate (§11), album (§6.10), glow (§2.5, the phone in dark mode).
+ * The segments tell one Saturday shop, in the video's order (docs/DESIGN_STICKER.md section): write (§6.2 Send with a
+ * key, the review card, the commit), recipe (§4.17, §4.18), shop (§7.6 check-off, §10 Next stop), glow (§2.5, the
+ * phone in dark mode), celebrate (§11) and album (§6.10). The list the trip is shopped from is what write and recipe
+ * put on it plus what she added after (24 items, 8 stops, [trip]), so its count only goes up from one segment to the
+ * next: shop 12 → 13 of 24, glow 13 → 15, celebrate 23 → 24.
+ *
+ * Marks (segment.json "marks": the first frame that shows the beat). Each segment opens on its screen at rest, long
+ * enough for the caption to be read before anything moves.
+ * - typing_start, typing_end (write, recipe): the first character in the add field; the whole note in it.
+ * - sent: the first frame after Send is let go (the capsule takes the Send button's place).
+ * - card_shown: the review's thinking box is there (the sheet starts to rise with it).
+ * - sheet_up: the first frame the sheet rests fully risen (later it only glides to new heights as the card arrives).
+ * - recipe_card (recipe): the recipe card's first frame. card_scroll: the finger comes down to scroll the card.
+ * - stuck: the first frame after "Stick all" is let go (the sheet starts down, still showing the card).
+ * - sheet_gone, rows_landed: the first frame with nothing of the sheet left; the new rows are on the list.
+ * - first_tick, second_tick, last_tick: the first frame after a row's check spot is let go (GOT IT! slams on).
+ * - next_card: the Next stop card's first frame.
+ * - scroll_start (celebrate, album): the finger comes down to scroll.
+ * - celebration (celebrate): the celebration's first frame (its white flash); title, perfect, banner, bonus, summary:
+ *   its beats, from the scene's own storyboard (CelebrationTimeline).
+ *
+ * Taps and drags (segment.json "taps", VideoRig's header): every press is on the spot the app answers at (a tick on
+ * the row's check spot, where its hanko lands); a drag is logged with the eased path its finger takes. Regions:
+ * add_field (write, recipe), the add field's box over the typing with an 8 dp margin; pantry_row_1 and pantry_row_2
+ * (recipe), the recipe card's two "in your pantry" rows (White sugar, Salt) once the card has come to rest.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -97,13 +131,13 @@ class FeatureVideoRecorder {
     private fun scene(segment: String): Scene = when (segment) {
         "write" -> Scene { c -> c.store.update { it.withHillcrest() } }
         "recipe" -> Scene(VIDEO_MORNING + 4 * MIN) { c -> c.store.update { written(it.withHillcrest()) } }
-        "shop" -> Scene { c -> c.store.update { SaturdayShop.state() } }
-        "celebrate" -> Scene(SaturdayShop.TRIP_START + 41 * MIN) { c -> c.store.update { almostDone() } }
+        "shop" -> Scene(TRIP_START + 17 * MIN) { c -> c.store.update { trip(it, gotten = 12) } }
+        "glow" -> Scene(TRIP_START + 20 * MIN) { c -> c.store.update { trip(it, gotten = 13) } }
+        "celebrate" -> Scene(TRIP_START + 41 * MIN) { c -> c.store.update { trip(it, gotten = 23) } }
         "album" -> Scene { c ->
             c.store.update { SaturdayShop.state() }
             c.album.update { AlbumSamples.full }
         }
-        "glow" -> Scene { c -> c.store.update { atProduce() } }
         else -> Scene()
     }
 
@@ -113,16 +147,19 @@ class FeatureVideoRecorder {
      * Write (§6.2): the empty list, "Start my list", her list typed into the add bar, Send. With a key the note goes to
      * the assistant (rule 3; the bar's capsule wobbles meanwhile); six items are more than a quick add, so the sheet
      * opens on the review (rule 5): the thinking box, then the card's aisle trays. "Stick all 6" puts them on the list
-     * in their aisles, the first stop open, with the toast.
+     * in their aisles, the first stop open, with the toast; the sheet slides away still showing the card.
      */
     @Test
     fun write() = film("write", "day") { cam ->
-        cam.roll(1_100)
+        val sheet = SheetWatch(cam)
+        // "A brand-new sticker sheet!" at rest, long enough to be read.
+        cam.roll(2_200)
         press(cam, node(hasText("Start my list")))
         cam.roll(450)
-        cam.mark("typing_start")
-        type(cam, "bananas, avocados, 2 bagels, milk, eggs, maple syrup")
-        cam.roll(400)
+        followField(cam) {
+            type(cam, "bananas, avocados, 2 bagels, milk, eggs, maple syrup")
+            cam.roll(400)
+        }
         val answer = setup.fakes.assistant.answer(writeAnswer())
         press(cam, node(hasContentDescription("Send") and hasAnyAncestor(hasTestTag(ADD_BAR_TAG))))
         cam.mark("sent")
@@ -132,29 +169,27 @@ class FeatureVideoRecorder {
         cam.rollUntil("the review", maxMs = 1_500) { exists(THINKING_TAG) }
         cam.mark("card_shown")
         cam.rollUntil("the card's stickers", maxMs = 6_000) { textShown("Stick all 6 on my list", substring = true) }
-        cam.roll(1_800)
-        press(cam, node(hasText("Stick all 6 on my list", substring = true)))
-        cam.mark("stuck")
-        cam.settle("the six rows saved") { state.currentList().items.size == 6 }
-        cam.rollUntil("the sheet to go", maxMs = 2_000) { !exists(ADD_TABS_TAG) && row("Bananas") != null }
-        cam.mark("rows_landed")
+        cam.roll(2_250)
+        stick(cam, sheet, "Stick all 6 on my list", items = 6)
         cam.roll(2_600)
     }
 
     /**
      * Recipe (§4.17, §4.18): on that list, "pancakes from scratch". The thinking box ticks the answer's real steps (the
      * web search with its own query, 3 recipes compared, the pantry, the sort); the recipe card keeps what she needs
-     * and says why the rest is off ("already on your list", "in your pantry", "optional · skipped"); "Stick all 4"
-     * lands them in their aisles.
+     * and says why the rest is off ("already on your list", "in your pantry" twice, "optional · skipped"); "Stick all
+     * 3" lands them in their aisles.
      */
     @Test
     fun recipe() = film("recipe", "day") { cam ->
-        cam.roll(900)
+        val sheet = SheetWatch(cam)
+        cam.roll(1_500)
         press(cam, field())
-        cam.roll(300)
-        cam.mark("typing_start")
-        type(cam, "pancakes from scratch")
         cam.roll(400)
+        followField(cam) {
+            type(cam, "pancakes from scratch")
+            cam.roll(400)
+        }
         val answer = setup.fakes.assistant.answer(pancakes())
         press(cam, node(hasContentDescription("Send") and hasAnyAncestor(hasTestTag(ADD_BAR_TAG))))
         cam.mark("sent")
@@ -166,52 +201,69 @@ class FeatureVideoRecorder {
         cam.rollUntil("the recipe card", maxMs = 4_000) { exists(RECIPE_CARD_TAG) }
         cam.mark("recipe_card")
         // The stickers fan out into the trays, and the steps can be read.
-        cam.roll(1_700)
-        // Up through the card, so its aisle trays and their reasons can be read.
+        cam.roll(2_100)
+        // Up through the card, so its aisle trays and their reasons can be read (the finger lifts by the sheet's top).
         cam.mark("card_scroll")
-        drag(cam, from = Offset(540f, 1_750f), distance = 1_700f, ms = 2_000)
-        cam.roll(2_200)
-        press(cam, node(hasText("Stick all 4 on my list", substring = true)))
-        cam.mark("stuck")
-        cam.settle("the four rows saved") { state.currentList().items.size == 10 }
-        cam.rollUntil("the sheet to go", maxMs = 2_000) { !exists(ADD_TABS_TAG) }
-        cam.mark("rows_landed")
+        drag(cam, from = Offset(540f, 1_880f), distance = 1_700f, ms = 2_000)
+        cam.roll(300)
+        // The two rows the pantry left out, at rest: White sugar, then Salt.
+        compose.onAllNodes(hasContentDescription("in your pantry", substring = true)).fetchSemanticsNodes()
+            .map(::boundsOnScreen).sortedBy { it.top }
+            .forEachIndexed { i, b -> cam.region("pantry_row_${i + 1}", b.left, b.top, b.right, b.bottom) }
+        cam.roll(2_450)
+        stick(cam, sheet, "Stick all 3 on my list", items = 9)
         cam.roll(2_000)
     }
 
     /**
-     * Shop (§7.6, §10): mid-trip at Hillcrest Market, Baking open. Baking powder: GOT IT!, its sticker hops into the
-     * mixing bowl and its twin lands in the book; Baking is done, so the Next card points to Breakfast, which opens
-     * behind it. Then maple syrup, and the next card.
+     * Shop (§7.6, §10): the same list at Hillcrest Market, 12 of 24 in the basket and Baking open with the baking
+     * powder still to get. Its check spot: GOT IT!, its sticker hops into the mixing bowl and its twin lands in the
+     * book; Baking is done, so the tray folds into its strip and the Next card points to Breakfast, which opens behind
+     * it. Filmed until the card has gone again.
      */
     @Test
     fun shop() = film("shop", "day") { cam ->
-        cam.roll(900)
+        cam.roll(1_500)
         tick(cam, "Baking powder")
         cam.mark("first_tick")
         cam.rollUntil("the Next card", maxMs = 4_000) { exists(NEXT_CARD_TAG) }
         cam.mark("next_card")
         cam.rollUntil("the Next card to go", maxMs = 8_000) { !exists(NEXT_CARD_TAG) }
-        cam.roll(300)
-        tick(cam, "Maple syrup")
-        cam.mark("second_tick")
-        cam.rollUntil("the second Next card", maxMs = 4_000) { exists(NEXT_CARD_TAG) }
-        cam.mark("next_card_2")
-        cam.roll(2_400)
+        cam.roll(500)
     }
 
     /**
-     * Celebrate (§11): everything in the basket but the toothpaste, 41 minutes into the trip. A scroll down past the
+     * Glow (§2.5): the phone is in dark mode, so the list is the Glow variant; the same trip a stop on, Breakfast open.
+     * The maple syrup, then the coffee beans, and Breakfast is done: its tray folds and the Next card rises (the cut can
+     * end before it, the shop segment's beat).
+     */
+    @Test
+    @Config(qualifiers = "+night")
+    fun glow() = film("glow", "glow") { cam ->
+        cam.roll(1_500)
+        tick(cam, "Maple syrup")
+        cam.mark("first_tick")
+        cam.roll(1_300)
+        tick(cam, "Coffee beans")
+        cam.mark("second_tick")
+        cam.rollUntil("the Next card", maxMs = 4_000) { exists(NEXT_CARD_TAG) }
+        cam.mark("next_card")
+        cam.roll(1_000)
+    }
+
+    /**
+     * Celebrate (§11): the trip 41 minutes in, everything in the basket but the toothpaste. A scroll down past the
      * finished aisles to Household, the last tick, the last aisle folds, then the celebration: "List complete!",
      * PER-FECT! for a trip with nothing left behind, the banner, the bonus sticker and the summary with its closing
-     * bar.
+     * bar, filmed until the summary has been still for a good read.
      */
     @Test
     fun celebrate() = film("celebrate", "day") { cam ->
-        cam.roll(700)
+        cam.roll(1_500)
         // Down the list to the last stop, past the aisles tied with their bows.
+        cam.mark("scroll_start")
         drag(cam, from = Offset(540f, 1_700f), distance = 900f, ms = 1_100)
-        cam.roll(500)
+        cam.roll(1_000)
         tick(cam, "Toothpaste")
         cam.mark("last_tick")
         cam.rollUntil("the celebration", maxMs = 6_000) { exists(CELEBRATION_TAG) }
@@ -226,8 +278,8 @@ class FeatureVideoRecorder {
         cam.mark("banner", frameAt(plan.beat(BeatName.Banner).at))
         cam.mark("bonus", frameAt(plan.beat(BeatName.Bonus).at))
         cam.mark("summary", frameAt(plan.summaryAt))
-        // Until the summary has been still for a good read.
-        cam.roll(plan.summaryAt + 2_400)
+        // The summary still for 3.4 s, stopping short of the scene closing by itself.
+        cam.roll(min(plan.summaryAt + 3_400, plan.closeAt - 200))
     }
 
     /**
@@ -241,28 +293,10 @@ class FeatureVideoRecorder {
         node(hasText("Sticker album")).performTouchInput { click(center) }
         settleFrames(1_200) { exists(AlbumTags.LIST) }
     }) { cam ->
-        cam.roll(1_000)
+        cam.roll(1_500)
         cam.mark("scroll_start")
         drag(cam, from = Offset(600f, 1_900f), distance = 1_500f, ms = 2_200)
-        cam.roll(1_400)
-    }
-
-    /**
-     * Glow (§2.5): the phone is in dark mode, so the list is the Glow variant. At the first stop: the strawberries,
-     * then the apples, and Produce is done.
-     */
-    @Test
-    @Config(qualifiers = "+night")
-    fun glow() = film("glow", "glow") { cam ->
-        cam.roll(800)
-        tick(cam, "Strawberries")
-        cam.mark("first_tick")
-        cam.roll(1_300)
-        tick(cam, "McIntosh apples")
-        cam.mark("second_tick")
-        cam.rollUntil("the Next card", maxMs = 4_000) { exists(NEXT_CARD_TAG) }
-        cam.mark("next_card")
-        cam.roll(1_400)
+        cam.roll(1_800)
     }
 
     /* ---------------- the script's verbs ---------------- */
@@ -288,7 +322,11 @@ class FeatureVideoRecorder {
         script(cam)
         val captureMs = cam.finish()
         val totalMs = (System.nanoTime() - began) / 1e6
-        println("video: $segment ${cam.frame} frames, ${"%.0f".format(totalMs / cam.frame)} ms a frame (screen grab ${"%.0f".format(captureMs)} ms)")
+        val list = state.currentList()
+        println(
+            "video: $segment ${cam.frame} frames, ${"%.0f".format(totalMs / cam.frame)} ms a frame (screen grab " +
+                "${"%.0f".format(captureMs)} ms), the list ends at ${list.items.count { it.checked }}/${list.items.size}",
+        )
     }
 
     /**
@@ -316,49 +354,93 @@ class FeatureVideoRecorder {
         compose.waitForIdle()
     }
 
-    /** Types [text] into the add bar's field one character at a time, at about 14 a second, pausing after commas. */
+    /**
+     * Types [text] into the add bar's field one key at a time at about 12 characters a second, as a thumb types: a
+     * beat longer after a space, longer still after a comma. Marks typing_start and typing_end: a key typed before
+     * frame n shows from frame n + 1 (the field recomposes as the clock steps on).
+     */
     private fun type(cam: FrameCamera, text: String) {
+        cam.mark("typing_start", cam.frame + 1)
         var due = cam.elapsed
         for (c in text) {
             while (cam.elapsed < due) cam.shoot()
             field().performTextInput(c.toString())
             due += when (c) {
-                ',' -> 170
-                ' ' -> 50
-                else -> 62
+                ',' -> 180
+                ' ' -> 90
+                else -> 70
             }
         }
+        cam.mark("typing_end", cam.frame + 1)
     }
 
-    /** A finger on [node]: down, held [holdMs] (the kit's press shows), up. */
+    /**
+     * Films [script] while following the add field on every frame (it grows to a second line as she types), then names
+     * the box it took on the screen, with an 8 dp margin, as the region add_field. The bar's "picnic day" doodle leans
+     * over the field's top, so the box starts between the doodle and the typed text rather than cut either in half.
+     */
+    private fun followField(cam: FrameCamera, script: () -> Unit) {
+        var box: Rect? = null
+        val stop = cam.watch { box = union(box, boundsOnScreen(field().fetchSemanticsNode())) }
+        script()
+        stop()
+        val b = checkNotNull(box) { "the add field was never filmed" }
+        val dp = compose.activity.resources.displayMetrics.density
+        val doodle = compose.onAllNodesWithTag(ADD_BAR_DOODLE_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+            .firstOrNull()?.let(::boundsOnScreen)
+        // Its box is laid out level; turned 4°, its lowest ink (the heart at its left end) ends about 2 dp under it, and
+        // two-line text starts about 1 dp lower still.
+        val clear = doodle?.let { it.bottom + 3 * dp } ?: Float.NEGATIVE_INFINITY
+        cam.region("add_field", b.left - 8 * dp, max(b.top - 8 * dp, clear), b.right + 8 * dp, b.bottom + 8 * dp)
+    }
+
+    /** A finger on [node]: down on its centre, held [holdMs] (the kit's press shows), up. */
     private fun press(cam: FrameCamera, node: SemanticsNodeInteraction, holdMs: Long = 100) {
-        val n = node.fetchSemanticsNode()
-        val c = n.positionOnScreen + Offset(n.size.width / 2f, n.size.height / 2f)
+        val c = boundsOnScreen(node.fetchSemanticsNode()).center
         cam.tap(c.x, c.y)
         node.performTouchInput { down(center) }
         cam.roll(holdMs)
         node.performTouchInput { up() }
     }
 
-    /** Ticks the row [name] (a press), then waits with the clock held for the store to have it checked. */
+    /**
+     * Ticks the row [name] with a press on its check spot, where the GOT IT! hanko lands (the whole row is the toggle),
+     * then waits with the clock held for the store to have it checked.
+     */
     private fun tick(cam: FrameCamera, name: String) {
         cam.settle("$name's row on screen") { onScreen(name) }
-        press(cam, row(name)!!, holdMs = 90)
+        val id = state.currentList().items.single { it.name == name }.id
+        press(cam, compose.onNode(hasTestTag(ListTags.check(id)), useUnmergedTree = true), holdMs = 90)
         cam.settle("$name checked") { state.currentList().items.single { it.name == name }.checked }
     }
 
     /**
-     * A finger drags the screen's content up by [distance] px over [ms], starting at [from] (root px): one move a
-     * frame, eased in and out, so the content glides and comes to rest before the finger lifts (no fling).
+     * Presses the review's [button] ("Stick all n on my list"): marks stuck, waits (clock held) for the list to hold
+     * [items], films the sheet sliding away with the card, and marks sheet_up, sheet_gone and rows_landed.
+     */
+    private fun stick(cam: FrameCamera, sheet: SheetWatch, button: String, items: Int) {
+        val resting = cam.frame
+        press(cam, node(hasText(button, substring = true)))
+        cam.mark("stuck")
+        cam.settle("the rows saved") { state.currentList().items.size == items }
+        cam.rollUntil("the sheet to go", maxMs = 2_000) { sheet.gone() }
+        sheet.mark(resting)
+        cam.mark("rows_landed")
+    }
+
+    /**
+     * A finger drags the screen's content up by [distance] px over [ms], starting at [from] (screen px): one move a
+     * frame along a smoothstep, so the content glides and comes to rest before the finger lifts (no fling). Logged as
+     * a drag from where the finger is on its first frame to where it lifts.
      */
     private fun drag(cam: FrameCamera, from: Offset, distance: Float, ms: Long) {
         val root = compose.onRoot()
-        cam.tap(from.x, from.y)
         root.performTouchInput { down(from) }
         // Past the touch slop at once (the finger is already moving as it lands), so the content moves from the first
         // frame on instead of standing still and then jumping.
         val slop = android.view.ViewConfiguration.get(compose.activity).scaledTouchSlop.toFloat()
         root.performTouchInput { moveBy(Offset(0f, -slop)) }
+        val first = cam.frame
         val frames = (ms * VIDEO_FPS / 1000).toInt().coerceAtLeast(2)
         var moved = 0f
         for (i in 1..frames) {
@@ -369,8 +451,44 @@ class FeatureVideoRecorder {
             moved = target
         }
         cam.shoot()
+        // Frame first + k showed the finger smoothstep(k / frames) of the way; it lifts after first + frames.
+        cam.drag(first, from.x, from.y - slop, from.x, from.y - slop - distance, until = cam.frame - 1)
         root.performTouchInput { up() }
     }
+
+    /**
+     * Follows the Add sheet on every frame from the next one on (where it is on the screen, or nothing while it is not
+     * there), for sheet_up, the first frame it rests fully risen (its bottom edge at rest: a later height glide moves
+     * only its top), and sheet_gone, the first frame with nothing of it on the screen.
+     */
+    private inner class SheetWatch(private val cam: FrameCamera) {
+        private val bottoms = HashMap<Int, Float>()
+
+        init {
+            cam.watch { f -> sheetOnScreen()?.let { bottoms[f] = it.bottom } }
+        }
+
+        /** The sheet has been on the screen and nothing of it is left there now. */
+        fun gone(): Boolean = bottoms.isNotEmpty() && sheetOnScreen().let { it == null || it.top >= FrameCamera.HEIGHT }
+
+        /** Marks sheet_up, the sheet having rested up to frame [resting], and sheet_gone, the next frame filmed. */
+        fun mark(resting: Int) {
+            val rest = bottoms.getValue(resting)
+            var up = resting
+            while (bottoms[up - 1]?.let { abs(it - rest) < 0.5f } == true) up--
+            cam.mark("sheet_up", up)
+            cam.mark("sheet_gone")
+        }
+
+        private fun sheetOnScreen(): Rect? =
+            compose.onAllNodesWithTag(LETTERSET_TAG, useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.let(::boundsOnScreen)
+    }
+
+    /** Where [n] is on the screen as drawn (a layer's slide included), not clipped to it. */
+    private fun boundsOnScreen(n: SemanticsNode): Rect = Rect(n.positionOnScreen, n.size.toSize())
+
+    private fun union(a: Rect?, b: Rect): Rect =
+        a?.let { Rect(min(it.left, b.left), min(it.top, b.top), max(it.right, b.right), max(it.bottom, b.bottom)) } ?: b
 
     /** The row [name] is on screen, clear of the add bar. */
     private fun onScreen(name: String): Boolean {
@@ -412,21 +530,27 @@ class FeatureVideoRecorder {
                 addedAt = at + i, source = ItemSource.AI_TEXT,
             )
         }
-        val pantry = listOf("Salt", "Cinnamon", "Olive oil").map { PantryEntry(it, null, at - 30 * DAY) }
+        val pantry = listOf("Salt", "White sugar", "Cinnamon", "Olive oil").map { PantryEntry(it, null, at - 30 * DAY) }
         return s.updateList(s.currentListId) { it.copy(items = items) }.copy(pantry = pantry)
     }
 
-    /** The Saturday shop with everything in the basket but the toothpaste, checked over 40 minutes. */
-    private fun almostDone(): AppState {
-        val base = SaturdayShop.state()
-        val rest = base.currentList().items.filter { !it.checked && it.name != "Toothpaste" }
-        val checked = rest.foldIndexed(base) { i, s, item -> s.toggleChecked(SaturdayShop.LIST_ID, item.id, SaturdayShop.TRIP_START + (26 + i) * MIN) }
-        // The open stop is the automatic one again: Household, where the toothpaste waits.
-        return checked.setOpenAisle(SaturdayShop.LIST_ID, null)
+    /**
+     * The Saturday shop the rest of the video is shopped from: the six she wrote and the recipe's three (as their
+     * commits wrote them), and 15 more of Appendix A's items she added after the recipe, 24 in Hillcrest Market's 8
+     * stops. She set off at [TRIP_START] and gets them in walking order ([WAY_ROUND]); the first [gotten] are in the
+     * basket. The coffee beans are a favourite; the open stop is the automatic one, the first with something left.
+     */
+    private fun trip(s: AppState, gotten: Int): AppState {
+        val base = written(s.withHillcrest())
+        val id = base.currentListId
+        val recipe = pancakes().items.filter { it.skipReason == SkipReason.NONE }
+            .mapIndexed { i, p -> p.toGroceryItem("r-$i", VIDEO_MORNING + 4 * MIN + 10_000 + i, ItemSource.AI_TEXT) }
+        val more = ADDED_AFTER.mapIndexed { i, row -> SaturdayShop.item(row).copy(addedAt = VIDEO_MORNING + 6 * MIN + i * 20_000L) }
+        val listed = (recipe + more).fold(base) { acc, item -> acc.addItems(id, listOf(item), item.addedAt).first }
+        check(listed.currentList().items.size == 24) { "the trip's list holds ${listed.currentList().items.size} items" }
+        val checked = WAY_ROUND.take(gotten).fold(listed) { acc, (item, minute) -> acc.toggleChecked(id, item, TRIP_START + minute * MIN) }
+        return checked.setFavourite(normalizeName("Coffee beans"), true).setOpenAisle(id, null)
     }
-
-    /** The Saturday shop at its first stop: Produce open, the strawberries and the apples still to get. */
-    private fun atProduce(): AppState = SaturdayShop.state().setOpenAisle(SaturdayShop.LIST_ID, "produce")
 
     private fun meta(webSearches: Int = 0, queries: List<String> = emptyList()) =
         CallMeta(model = null, requestId = null, latencyMs = 1_600, webSearches = webSearches, searchQueries = queries)
@@ -454,14 +578,14 @@ class FeatureVideoRecorder {
     )
 
     /**
-     * "pancakes from scratch" against the written list and her pantry: a recipe from the web, compared across three, with
-     * brand-free source names.
+     * "pancakes from scratch" against the written list and her pantry (salt and white sugar are in it): a recipe from
+     * the web, compared across three, with brand-free source names.
      */
     private fun pancakes() = IngestResult(
         items = listOf(
             item("Blueberries", "blueberries", "produce", "170 g clamshell · 1 cup", SkipReason.OPTIONAL),
             item("All-purpose flour", "flour", "aisle-2-baking", "2.5 kg bag · 2 cups"),
-            item("White sugar", "sugar", "aisle-2-baking", "2 kg bag · 2 tbsp"),
+            item("White sugar", "sugar", "aisle-2-baking", "2 kg bag · 2 tbsp", SkipReason.IN_PANTRY, pantry = "White sugar"),
             item("Baking powder", "baking_soda", "aisle-2-baking", "225 g tin · 2 tsp"),
             item("Salt", "salt", "aisle-2-baking", "1 kg box · ½ tsp", SkipReason.IN_PANTRY, pantry = "Salt"),
             item("Pure vanilla extract", "vanilla", "aisle-2-baking", "43 mL bottle · 1 tsp", SkipReason.OPTIONAL),
@@ -484,6 +608,33 @@ class FeatureVideoRecorder {
     private companion object {
         const val MIN = 60_000L
         const val DAY = 86_400_000L
+
+        /** 11:02, half an hour after she wrote the list: the first sticker of the trip. */
+        const val TRIP_START = VIDEO_MORNING + 32 * MIN
+
+        /**
+         * Appendix A's items she added after the recipe: all but the ones already on her list (its bananas, flour,
+         * baking powder, maple syrup, milk, eggs and butter), the sugar in her pantry and the sourdough (her bagels).
+         */
+        val ADDED_AFTER = listOf(
+            "strawberries", "apples", "carrots", "broccoli", "croissants", "baguette", "ham", "peameal", "coffee",
+            "peas", "ice-cream", "toilet-paper", "dish-soap", "cat-food", "toothpaste",
+        )
+
+        /**
+         * Her way round Hillcrest Market: every item in walking order, with the minute after [TRIP_START] it went in the
+         * basket (w- the six she wrote, r- the recipe's flour, baking powder and butter).
+         */
+        val WAY_ROUND: List<Pair<String, Long>> = listOf(
+            "w-0" to 0L, "w-1" to 1L, "strawberries" to 2L, "apples" to 3L, "carrots" to 4L, "broccoli" to 5L, // Produce
+            "w-2" to 7L, "croissants" to 8L, "baguette" to 9L, // Bakery
+            "ham" to 11L, "peameal" to 12L, // Deli & meat
+            "r-0" to 15L, "r-1" to 17L, // Baking
+            "w-5" to 20L, "coffee" to 21L, // Breakfast
+            "w-3" to 24L, "w-4" to 25L, "r-2" to 26L, // Dairy & eggs
+            "peas" to 29L, "ice-cream" to 30L, // Frozen
+            "toilet-paper" to 33L, "dish-soap" to 34L, "cat-food" to 36L, "toothpaste" to 41L, // Household
+        )
     }
 }
 
