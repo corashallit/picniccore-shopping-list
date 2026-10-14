@@ -15,7 +15,10 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.toSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.assistant.IconDecider
@@ -23,6 +26,7 @@ import earth.cora.picnic.core.assistant.IconDecision
 import earth.cora.picnic.core.assistant.NamedItem
 import earth.cora.picnic.core.catalog.IconCatalog
 import earth.cora.picnic.core.model.PantryEntry
+import earth.cora.picnic.core.model.list
 import earth.cora.picnic.core.store.InMemoryStateStore
 import earth.cora.picnic.core.store.TripBook
 import earth.cora.picnic.settings.InMemorySettingsRepository
@@ -170,6 +174,29 @@ class SheetsLeaveTest {
         compose.show(rig)
         compose.runOnIdle { rig.vm.openEdit("flour") }
         leaves(close = { compose.runOnIdle { rig.vm.closeEdit() } })
+    }
+
+    /**
+     * §4.16: sliding away the sheet is only a picture of what it showed: a tap on its Delete as it leaves deletes
+     * nothing, and TalkBack no longer reads it.
+     */
+    @Test
+    fun aLeavingSheetTakesNoTouch() {
+        val rig = ListRig()
+        compose.show(rig)
+        compose.runOnIdle { rig.vm.openEdit("flour") }
+        compose.waitForIdle()
+        val delete = compose.onNode(hasText("Delete") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        compose.mainClock.autoAdvance = false
+        compose.runOnIdle { rig.vm.closeEdit() }
+        compose.frames(2)
+        assertTrue("the sheet is still sliding away", compose.exists(LETTERSET_TAG))
+        assertTrue("TalkBack no longer reads it", compose.onAllNodes(hasText("Delete") and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        compose.onRoot().performTouchInput { click(delete.center) }
+        compose.frames(40)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertTrue("flour is still on the list", rig.app.list(ListFixture.LIST_ID)!!.items.any { it.id == "flour" })
     }
 
     /** §6.13: My pantry's sticker sheet slides away still showing the stickers she was choosing from. */
