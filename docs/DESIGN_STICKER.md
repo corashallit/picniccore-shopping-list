@@ -623,7 +623,8 @@ TalkBack: "Strawberries, 1 litre basket" + state ("not checked" / "got it"); cus
 
 - A pad sheet with rules and a margin line at 22 dp, top corners 20 dp, a perforated top edge, shadow (0, −3) dp; the list, app bar and LCD stay visible behind a 38 % ballpoint scrim.
 - Handle: a pink-gingham washi strip 60 × 16 dp rotated −3° straddling the top edge; it "slaps on" a beat after the sheet arrives (scale 1.6 → 1.2 → 1, 2 poses).
-- Entrance: slides up 280 ms `cubic-bezier(.2, .9, .3, 1.1)` with a small overshoot (−3 %). Exit 260 ms. Sticky footer with a white fade above it.
+- Entrance: slides up 280 ms `cubic-bezier(.2, .9, .3, 1.1)` with a small overshoot (−3 %). Exit 260 ms. The scrim fades evenly with it (in over 280 ms, out over 260 ms; 120 ms under reduced motion). Sticky footer with a white fade above it.
+- Height: when what the sheet holds grows or shrinks (a thinking step, the review card, a footer coming or going), it glides to its new height over the 240 ms `layout`, its top edge never jumping; at once under reduced motion. Sliding away it keeps showing what it showed (after "Stick all", the card it stuck), takes no touch and reads nothing to TalkBack.
 - Add sheet index tabs **Write · Snap · Speak** in lemon, ramune and sakura pastels, 38 dp tall, Zen Maru 700 14 sp with a 20 dp glyph; the selected tab is 6 dp taller (44 dp), mid fill, DynaPuff 16 sp. A tab that cannot be used while the sheet is busy takes `disabledFace` / `onDisabledFace` inside its white frame, with no shadow (Day: the backing and ballpointSoft; Glow: `#3A438A` and `#C9CFF5`). Each face is its label's paper: pressed, the highlighter band lies behind the words on a pastel or mid face. A 2 dp rule under the tabs. Tabs switch modes (`Role.Tab`). A REC dot (8 dp, hanko, white ring) sits on Speak while recording.
 
 ### 4.17 Recipe card and keep switch
@@ -2471,6 +2472,9 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 
 361. **[WP5]** A finished tray folds into its strip as one sheet (§8.4 L + 1100): the strip takes the band's place in the same frame and the rows and cap roll up under it over the 240 ms `layout`, everything below moving in the same frames: no frame leaves a blank band where the tray was or puts a strip over the folded one, and at the list's end the strips above come down to meet it. A band pinned over its own rows keeps item 87's one swap; reduced motion: one swap. — *Test:* `TrayFoldTest.finishedTrayFoldsAsOneSheet`, `.lastTrayFoldsAtTheListEnd`, `.reducedMotionFoldIsOneSwap`, `NextStopTest.foldUnderPinnedPlateKeepsItsPlace` (Robolectric)
 362. **[WP5]** The next stop unfolds behind the Next card with its rows showing as it opens (the first row hangs from the band from the first frame), only ever growing, the strip below keeping its gap; the list then glides to it over the card's 400 ms. — *Test:* `TrayFoldTest.nextStopUnfoldsWithItsRows`, `TrayContainmentTest.openingTrayCapDrawsOverTheStripBelow` (Robolectric)
+363. **[WP4 · WP7]** A letter-set sheet glides to a new height over the 240 ms `layout` (thinking steps, the review card), its top edge never jumping; at once under reduced motion. — *Test:* `AddSheetMotionTest.heightGlidesAsTheReviewArrives`, `.reducedMotionChangesHeightAtOnce` (Robolectric)
+364. **[WP4]** The 38 % scrim fades in evenly over `sheetIn`'s 280 ms and out over `sheetOut`'s 260 ms. — *Test:* `AddSheetMotionTest.scrimFadesWithTheSheet` (Robolectric)
+365. **[WP7]** After "Stick all" the Add sheet slides away still showing the card, at its height, taking no touch and reading nothing to TalkBack; the Write tab is reset behind it. — *Test:* `AddSheetMotionTest.keepsItsCardWhileItLeaves` (Robolectric)
 
 ## 21. Work packages
 

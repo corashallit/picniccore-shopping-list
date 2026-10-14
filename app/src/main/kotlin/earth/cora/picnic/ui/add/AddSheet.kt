@@ -182,19 +182,23 @@ val LocalAppBarHeight = compositionLocalOf<Dp?> { null }
 /**
  * The stateless sheet: [LetterSetSheet] (visible while [AddUiState.sheetOpen]) with the tabs, the content and the footer.
  * A tall sheet stops under the app bar ([LocalAppBarHeight]), so the list's title, LCD and More stay visible behind the
- * scrim (§4.16).
+ * scrim (§4.16). Sliding away it keeps showing what it showed last (the card she just stuck, say), never the empty
+ * Write tab the ViewModel has already gone back to.
  */
 @Composable
 fun AddSheet(state: AddUiState, actions: AddActions, modifier: Modifier = Modifier) {
-    val reveals = rememberReveals(state, actions)
+    val last = remember { arrayOfNulls<AddUiState>(1) }
+    if (state.sheetOpen) last[0] = state
+    val shown = if (state.sheetOpen) state else last[0] ?: state
+    val reveals = rememberReveals(shown, actions)
     LetterSetSheet(
         visible = state.sheetOpen,
         onDismissRequest = actions.onClose,
         modifier = modifier,
-        footer = footerFor(state, reveals)?.let { footer -> { AddFooter(footer, state, actions) } },
+        footer = footerFor(shown, reveals)?.let { footer -> { AddFooter(footer, shown, actions) } },
         topClearance = LocalAppBarHeight.current ?: PicnicTheme.dimens.appBar,
     ) {
-        AddSheetContent(state, actions, reveals)
+        AddSheetContent(shown, actions, reveals)
     }
 }
 

@@ -2,6 +2,24 @@ package earth.cora.picnic.ui.theme
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.IntrinsicMeasurable
+import androidx.compose.ui.layout.IntrinsicMeasureScope
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.constrainHeight
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -96,6 +114,9 @@ fun LetterSetSheet(
 ) {
     val reduced = LocalReducedMotion.current
     val enter = remember { Animatable(0f) }
+    // The scrim fades on its own over the sheet's 280 ms (out over its 260 ms), evenly: the sheet's overshooting curve
+    // would put it nearly half on in the first frame.
+    val scrim = remember { Animatable(0f) }
     var present by remember { mutableStateOf(visible) }
     var handle by remember { mutableStateOf(if (visible) 1f else PicnicMotion.handleSlapScales.first()) }
     // The handle "slaps on" a beat after the sheet arrives: hidden until then.
@@ -125,6 +146,14 @@ fun LetterSetSheet(
             }
         }
     }
+    LaunchedEffect(visible) {
+        val ms = when {
+            reduced -> PicnicMotion.rmFade.durationMillis
+            visible -> PicnicMotion.sheetIn.durationMillis
+            else -> PicnicMotion.sheetOut.durationMillis
+        }
+        withContext(FixedMotionScale) { scrim.animateTo(if (visible) 1f else 0f, tween(ms, easing = LinearEasing)) }
+    }
     if (!present && !visible) return
     BackHandler(enabled = visible, onBack = onDismissRequest)
     val c = PicnicTheme.colors
@@ -141,7 +170,7 @@ fun LetterSetSheet(
         Box(
             Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = enter.value.coerceIn(0f, 1f) }
+                .graphicsLayer { alpha = scrim.value }
                 .background(c.scrim)
                 .pointerInput(Unit) { detectTapGestures { dismiss() } }
                 .clearAndSetSemantics {
@@ -168,9 +197,11 @@ fun LetterSetSheet(
                         translationY = (1f - enter.value) * size.height
                     }
                 }
-                .testTag(LETTERSET_TAG),
+                .testTag(LETTERSET_TAG)
+                // Sliding away it is only a picture of what it showed: nothing in it takes a touch or reads to TalkBack.
+                .then(if (visible) Modifier else Modifier.leaving()),
         ) {
-            LetterSetSurface(Modifier.padding(top = 8.dp), footer = footer, handleScale = if (handleShown) handle else 0f, content = content)
+            LetterSetSurface(Modifier.padding(top = 8.dp), footer = footer, handleScale = if (handleShown) handle else 0f, glide = !reduced, content = content)
         }
     }
 }
@@ -185,10 +216,12 @@ fun LetterSetSurface(
     modifier: Modifier = Modifier,
     footer: (@Composable () -> Unit)? = null,
     handleScale: Float = 1f,
+    /** The sheet glides to a new height (§4.16); off under reduced motion, where it changes at once. */
+    glide: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // A floating layer: it re-roots on the binder's colours, then lays its own paper (§2.4.1).
-    OnPaper(null) { LetterSetPaper(modifier, footer, handleScale, content) }
+    OnPaper(null) { LetterSetPaper(modifier, footer, handleScale, glide, content) }
 }
 
 @Composable
@@ -196,10 +229,14 @@ private fun LetterSetPaper(
     modifier: Modifier,
     footer: (@Composable () -> Unit)?,
     handleScale: Float,
+    glide: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val c = PicnicTheme.colors
     val shadows = PicnicTheme.shadows
+    // The sticky footer's height as last laid out (none: 0), which the glide counts in (glideHeight).
+    val below = remember { FooterRoom() }
+    if (footer == null) below.px = 0
     Box(modifier.fillMaxWidth()) {
         Column(
             Modifier
@@ -220,6 +257,7 @@ private fun LetterSetPaper(
                 Column(
                     Modifier
                         .weight(1f, fill = false)
+                        .then(if (glide) Modifier.glideHeight(below) else Modifier)
                         // The scroll's viewport starts under the perforated rim and the washi handle, so what scrolls up passes
                         // under the paper's edge instead of over its bites and the tape (§4.16). At rest nothing moves.
                         .padding(top = SCROLL_TOP)
@@ -232,6 +270,12 @@ private fun LetterSetPaper(
                     Box(
                         Modifier
                             .fillMaxWidth()
+                            // Measured before the content above it (a column measures its weighted child last).
+                            .layout { measurable, constraints ->
+                                val placeable = measurable.measure(constraints)
+                                below.px = placeable.height
+                                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                            }
                             .drawBehind { drawRect(c.pad) }
                             .padding(start = 22.dp, end = 18.dp, top = 8.dp, bottom = 18.dp),
                         contentAlignment = Alignment.Center,
@@ -251,6 +295,82 @@ private fun LetterSetPaper(
         )
     }
 }
+
+/** The sticky footer's height in px as last laid out (0 without one). */
+private class FooterRoom {
+    var px: Int = 0
+}
+
+/**
+ * The sheet's content glides to a new height (§4.16, §8.1: layout moves smoothly): when what it holds grows or shrinks
+ * (a thinking step, the review card arriving), the sheet's height (this area and the sticky footer [below] it, which
+ * may come or go in the same frame) moves over the 240 ms `layout` on the fixed motion scale, so its top edge never
+ * jumps. The first height is taken as it is (the sheet slides in at it). While it glides, what does not fit yet is cut
+ * at this area's top and bottom edges, never its sides.
+ */
+private fun Modifier.glideHeight(below: FooterRoom): Modifier = this then GlideHeightElement(below)
+
+private class GlideHeightElement(private val below: FooterRoom) : ModifierNodeElement<GlideHeightNode>() {
+    override fun create() = GlideHeightNode(below)
+
+    override fun update(node: GlideHeightNode) {
+        node.below = below
+    }
+
+    override fun hashCode(): Int = below.hashCode()
+
+    override fun equals(other: Any?): Boolean = other is GlideHeightElement && other.below === below
+}
+
+private class GlideHeightNode(var below: FooterRoom) : Modifier.Node(), LayoutModifierNode, DrawModifierNode {
+    /** The sheet's height from here down (this area and the footer), as shown; null until first laid out. */
+    private var shown: Animatable<Float, AnimationVector1D>? = null
+    private var target = 0
+
+    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+        val placeable = measurable.measure(constraints)
+        val footer = below.px
+        val whole = placeable.height + footer
+        val anim = shown ?: Animatable(whole.toFloat()).also {
+            shown = it
+            target = whole
+        }
+        if (whole != target) {
+            target = whole
+            coroutineScope.launch(FixedMotionScale) {
+                anim.animateTo(whole.toFloat(), tween(PicnicMotion.layout.durationMillis, easing = PicnicMotion.layout.easing))
+            }
+        }
+        val h = constraints.constrainHeight((anim.value.roundToInt() - footer).coerceAtLeast(0))
+        return layout(placeable.width, h) { placeable.place(0, 0) }
+    }
+
+    // Asked for its natural size, it answers as its content does (a glide is never started by a question).
+    override fun IntrinsicMeasureScope.minIntrinsicHeight(measurable: IntrinsicMeasurable, width: Int): Int = measurable.minIntrinsicHeight(width)
+
+    override fun IntrinsicMeasureScope.maxIntrinsicHeight(measurable: IntrinsicMeasurable, width: Int): Int = measurable.maxIntrinsicHeight(width)
+
+    override fun IntrinsicMeasureScope.minIntrinsicWidth(measurable: IntrinsicMeasurable, height: Int): Int = measurable.minIntrinsicWidth(height)
+
+    override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurable: IntrinsicMeasurable, height: Int): Int = measurable.maxIntrinsicWidth(height)
+
+    override fun ContentDrawScope.draw() {
+        if (shown?.isRunning == true) {
+            clipRect(-size.width, 0f, size.width * 2f, size.height) { this@draw.drawContent() }
+        } else {
+            drawContent()
+        }
+    }
+}
+
+/** A sheet sliding away: no touch reaches what it shows, and TalkBack no longer reads it. */
+private fun Modifier.leaving(): Modifier =
+    clearAndSetSemantics { }
+        .pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+            }
+        }
 
 /** Where the sheet's scrolling content is cut off at the top: below the 4 dp bites and the handle's tape (to ~10 dp). */
 private val SCROLL_TOP = 16.dp
