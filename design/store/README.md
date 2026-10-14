@@ -104,9 +104,11 @@ book from the feature graphic and a few stickers) and when each piece pops in.
 
 **Pacing.** People read slower than one tends to guess, so the cut leaves room: every caption stays up at least
 3.1 s, and the rests before and after a beat, the title card (3.2 s) and the closing card's hold (1.9 s) are
-generous. The app's own motion always plays at 1x, and so do the typing and the celebration. Dead air is left out
-with a skip; only a wait (the capsule turning while the answer comes back) plays faster, never above 1.6x. A factor
-under 1 stretches a still lead-in, so a caption is read before its beat plays.
+generous. The app's own motion always plays at 1x, and so do the typing and the celebration, its little ambient
+decor included. The recorder films the rests long enough to be read (the empty list, the recipe's steps, the
+recipe card's pantry rows, the list before a tick), so the cut needs no slow motion; dead air is left out with a
+skip, and only a wait (the capsule turning while the answer comes back) plays faster, never above 1.6x. A factor
+under 1 is there to stretch a lead-in that is wholly still.
 
 **Motion.** Captions pop in with a small overshoot and shrink away; stickers pop in one after another and settle
 from a few degrees off; the backdrop crossfades between scenes. The title card is already there on the first frame
@@ -117,17 +119,27 @@ and out), which keeps two busy screens from making a muddy double exposure; a sk
 item, `('card_scroll+2.5s', 'stuck-0.75s', 'wipe')`, and a scene its `enter`. Before a skip, the screen rests on the
 last frame while the next one comes in, so a beat just before the jump plays out whole.
 
-**Loupe.** While someone types, the add field is small at video size, so `loupe=[('typing_start-0.4s',
+**Loupe.** While someone types, the add field is small at video size, so `loupe=[('typing_start',
 'sent+0.4s', 'add_field')]` floats a white die-cut sticker card with the house's hard periwinkle shadow just above
-the field, showing it live at 1.7x the phone screen's scale. The recipe scene uses a second one on the card's
-first "in your pantry" row (`pantry_row_1`), so the viewer sees what the caption means. The region is cut from the
-full-size recorded frame, so its text stays crisp; the card pops in and out like a sticker. A region is a name from
-`segment.json`'s `regions` or a box of the screen; for a recording that names none, the script falls back to its own
-box for the add field.
+the field (clear of the dock's top edge), showing it live at 1.7x the phone screen's scale; it opens on the first
+letter, so it never shows the field's grey example line enlarged. The recipe scene uses a second one on the card's
+first "in your pantry" row (`('card_scroll+2.1s', 'stuck-0.8s', 'pantry_row_1', 1.3)`, a fourth item being its own
+scale), so the viewer sees what the caption means, and the shop scene one on the Baking tray, so the sticker's hop
+into the bowl is big enough to follow. The region is cut from the full-size recorded frame, so its text stays
+crisp; the card pops in and out calmly, as the title's book does, and is never wider than the phone. Only the taps
+made while it is up show in it. A region is a name from `segment.json`'s `regions` or a box of the screen; for a
+recording that names none, the script falls back to its own box for the add field.
 
-**Taps.** Each tap shows as a soft disc with a ring under the finger: it presses in just before the tap and spreads
-and fades after it. In Glow the ring is the night theme's soft lavender (`#C9CFF5`) over a fainter disc, so it reads
-on the navy page. A drag presses in the same way, follows the finger along its path with the recorder's easing and
+**Flash.** The celebration opens with the app's own white flash (§11: 1 → .92 → 0 over 170 ms). Boxed in an unlit
+bezel it would read as a dropped frame, so `flash=['celebration']` lets a white bloom spill past the screen over
+the phone and the backdrop (under the caption and the stickers) on the same frames, strongest at the bezel and
+fading with distance. It is still the one flash.
+
+**Taps.** Each tap shows as a disc of the highlighter (`#FFF3A6`, a pressed row's band) with a ballpoint ring under
+the finger: it presses in just before the tap and spreads and fades after it. The ring is a little wider than the
+list's check spots, so on a tick it shows round the spot instead of lying on its dashes. In Glow the ring is the
+glow-star mint (`#C9FFDE`) over a faint white disc, so it reads on the navy page and stands apart from the spots'
+lavender dashes. A drag presses in the same way, follows the finger along its path with the recorder's easing and
 lifts where the finger left the screen. No ring shows before the phone has landed, a press that would begin before
 its clip does is left out, and while a clip rests on its last frame the ring goes on lifting.
 
@@ -147,8 +159,9 @@ timestamped, so the same frames give the same video (with the same Pillow, cairo
 - no speed span goes above 1.6x or runs over the typing;
 - a dusk backdrop goes with a Glow recording, and only then;
 - every caption has two lines, fits the width at the screenshots' size, and stays up at least 3.1 s;
-- a loupe stays inside its scene with the phone at rest and never shows during a transition; its card, at rest and
-  at the top of its pop, stays on the frame and off the region it shows;
+- a loupe stays inside its scene with the phone at rest and never shows during a transition; its card is no wider
+  than the phone at rest, and at rest and at the top of its pop it stays on the frame and off the region it shows;
+- a flash plays with the phone at rest;
 - no decoration sticker covers the screen or runs off the frame at rest, the title card stays on the frame, and no
   sticker on it comes within 6 px of the wordmark or the tagline;
 - the video runs 30 to 75 s, and the MP4 is under 12 MB (it stops with an error otherwise: raise `--crf`, then check

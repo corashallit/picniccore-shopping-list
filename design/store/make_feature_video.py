@@ -16,9 +16,9 @@ later edit to the cut, the wording or the timing is an edit to those two tables.
 
 Each output frame is the scene's backdrop, the phone with the screen resampled into it, the decoration stickers and
 the caption, and at a few beats a loupe: a sticker card showing part of the screen enlarged (the field while someone
-types, a row of the recipe card). Everything but the screen and the loupe is the same from one frame to the next
-while nothing moves, so it is drawn once and kept; a frame at rest costs one screen resample. Frames stream to
-ffmpeg (libx264) as raw RGB.
+types, a row of the recipe card, the tray a sticker hops into). Everything but the screen and the loupe is the same
+from one frame to the next while nothing moves, so it is drawn once and kept; a frame at rest costs one screen
+resample. Frames stream to ffmpeg (libx264) as raw RGB.
 
 The output is deterministic: no randomness and no timestamps, so the same frames (and the same Pillow, cairosvg,
 numpy and ffmpeg versions) always give the same video. Requirements: design/store/requirements.txt and ffmpeg.
@@ -97,21 +97,31 @@ CAPTION_ON_RISE = 0.25  # the first caption pops this long after the phone start
 # A tap the recorder logged ("taps" in segment.json) shows as a soft disc with a ring under the finger: it presses in
 # for TAP_PRESS before the tap and spreads and fades for TAP_LIFT after it. A drag presses in the same way, follows
 # the finger along its path (the recorder's smoothstep) and lifts where the finger left the screen.
-TAP_RADIUS, TAP_RING = 44, 6     # px of the recorded screen
+TAP_RADIUS, TAP_RING = 62, 7     # px of the recorded screen: wider than a check spot (about 45 px), so the ring shows
+                                 # round the spot instead of lying on its dashes (still inside a row and a pill)
 TAP_PRESS, TAP_LIFT = 0.12, 0.36
 TAP_STYLE = {                    # by the recording's theme: disc colour and opacity, ring colour and opacity
-    'day': (store.WHITE, 0.5, store.BALLPOINT_SOFT, 0.85),
-    'glow': (store.WHITE, 0.22, '#C9CFF5', 0.9),     # Glow's inkSoft: the day ring would vanish on the navy page
+    'day': ('#FFF3A6', 0.45, store.BALLPOINT, 0.7),  # the highlighter (a pressed row's band, §2.1) and the ballpoint
+    'glow': (store.WHITE, 0.22, '#C9FFDE', 0.9),     # glowStar: Glow's spots are dashed in inkSoft, so not that
 }
 # The loupe: a white die-cut sticker card with the house's hard periwinkle shadow, floating over the phone just above
-# the region it shows (the add field, a row of the recipe card), with that region live and enlarged in it. It pops
-# like a sticker.
+# the region it shows (the add field, a row of the recipe card, a tray), with that region live and enlarged in it. It
+# pops in calmly, as the title's book does (a big card of words, so no sticker bounce), and never comes out wider than
+# the phone.
 LOUPE_SCALE = 1.7      # x the phone screen's own scale (about 1.1 recorded px a frame px, so the text stays crisp)
 LOUPE_BORDER = 16      # px of white die-cut round the region
 LOUPE_RADIUS = 30      # the card's corners (the region's are LOUPE_RADIUS - LOUPE_BORDER)
 LOUPE_SHADOW = (8, 11)  # the hard shadow's offset
-LOUPE_GAP = 40         # px between the card (with its shadow) and the region it shows, above it
+LOUPE_GAP = 70         # px between the card (with its shadow) and the region it shows, above it: clear of the dock's
+                       # top edge, which stands about 50 px above the add field
 LOUPE_TURN = 3.0       # degrees off at the start of its pop (smaller than a sticker's: it is a big card)
+LOUPE_STYLE = 'book'
+# The celebration's white flash (§11: opacity 1 -> .92 -> 0, 2 steps, 170 ms) is the app's, on its screen. Inside an
+# unlit bezel it reads as a dropped frame, so while it lasts a white bloom spills past the screen over the phone and
+# the backdrop (under the caption and the stickers), fading with distance from the screen, on the same steps.
+FLASH_STEPS = (1.0, 1.0, 0.92, 0.92, 0.92)    # the flash's opacity on its frames, as the app draws it
+FLASH_BLOOM = 0.4      # the bloom's opacity at the screen's edge, at the flash's full
+FLASH_REACH = 220      # px of the frame: the bloom falls to 1/e this far from the screen
 # For recordings that name no regions (the first recorder): the add field, in recorded px
 FALLBACK_REGIONS = {'add_field': (22, 2104, 540, 2252)}
 POSTER_AT = 'celebrate:banner+0.6s'   # the poster: the composed frame at this beat (scene:beat)
@@ -154,40 +164,41 @@ TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the
 #                      muddy double exposure)
 #   speed              optional spans to play at another speed, [(from, to, factor)]: faster only where the app waits
 #                      or nothing moves, and never above 1.6x; never over the typing (typing_start to typing_end, or
-#                      to sent), so the app's own motion plays at 1x; a factor under 1 stretches a still lead-in
+#                      to sent), so the app's own motion plays at 1x; a factor under 1 stretches a wholly still lead-in
 #   hold               optional seconds to rest on the last frame
-#   loupe              optional [(from, to, region)]: from 'from' to 'to' a loupe shows `region` (a name from
-#                      segment.json's "regions", such as 'add_field', or a rect (x0, y0, x1, y1) of the recorded
-#                      screen) live and enlarged, on a card just above it
+#   loupe              optional [(from, to, region)] or [(from, to, region, scale)]: from 'from' to 'to' a loupe
+#                      shows `region` (a name from segment.json's "regions", such as 'add_field', or a rect (x0, y0, x1,
+#                      y1) of the recorded screen) live and enlarged (LOUPE_SCALE unless given), on a card just above it
+#   flash              optional [beat]: the app's white flash starts there, and a bloom spills past the bezel with it
 #   captions           [(two lines, beat)]: the first is up from the scene's start ('start'); each next one takes
 #                      over when its beat plays
 #   fam, dusk, tape    backdrop family (dusk: the deeper night-theme ground), washi pattern, as in SHOTS
 #   decor              (drawable or 'sparkle:<family>', size px, side 'L' / 'R', centre y, angle), as in SHOTS
 # Pacing: a caption stays up at least MIN_CAPTION; rests before and after a beat are about 1.25x what reads at a
-# glance. The app's motion plays at 1x: dead air is left out with a skip, a still lead-in may be stretched so its
-# caption is read before the beat, and only the wait for an answer (the capsule turning in the send button) goes
-# faster. Celebrate starts after the list's scroll to Household, where the sticker book folds to its strip in 2 frames.
+# glance, and the recorder films them that long. The app's motion plays at 1x, its ambient decor included: dead air is
+# left out with a skip, and only the wait for an answer (the capsule turning in the send button) goes faster.
+# Celebrate starts after the list's scroll to Household, where the sticker book folds to its strip in 2 frames.
 # ---------------------------------------------------------------------------------------------------------------------
 SCENES = [
     dict(segment='write', cut_in='typing_start-1.8s', cut_out='rows_landed+1.6s',
          speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
-         loupe=[('typing_start-0.4s', 'sent+0.4s', 'add_field')],
+         loupe=[('typing_start', 'sent+0.4s', 'add_field')],
          captions=[(['Write your list', 'any old way'], 'start'),
                    (['Your list, sorted', 'aisle by aisle'], 'card_shown+0.2s')],
          fam='mint', tape='sakura',
          decor=[('sk_i_strawberry', 176, 'L', 1520, 8), ('sk_d_bee', 132, 'R', 1250, -10),
                 ('sk_d_ladybug', 112, 'R', 1760, 12)]),
-    dict(segment='recipe', cut_in='typing_start-1.3s', cut_out='rows_landed+1.6s',
+    dict(segment='recipe', enter='wipe', cut_in='typing_start-1.3s', cut_out='rows_landed+1.6s',
          speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
-         loupe=[('typing_start-0.4s', 'sent+0.4s', 'add_field'),
-                ('card_scroll+2.4s', 'stuck-0.35s', 'pantry_row_1')],
+         loupe=[('typing_start', 'sent+0.4s', 'add_field'),
+                ('card_scroll+2.1s', 'stuck-0.8s', 'pantry_row_1', 1.3)],
          captions=[(['Turn a recipe into', 'a shopping list'], 'start'),
                    (['Recipes leave out', 'what’s in your pantry'], 'card_scroll+1.2s')],
          fam='lemon', tape='gingham',
          decor=[('sk_i_eggs', 168, 'L', 1520, 8), ('sk_i_flour', 150, 'R', 1250, -8),
                 ('sk_i_maple_syrup', 124, 'R', 1760, 10)]),
     dict(segment='shop', enter='wipe', cut_in='start', cut_out='next_card+2.1s',
-         speed=[('start', 'first_tick-1.4s', 0.5)],
+         loupe=[('first_tick-0.8s', 'first_tick+1.3s', (90, 1110, 870, 1428), 1.3)],
          captions=[(['Check it off and', 'its sticker hops in'], 'start')],
          fam='ramune', tape='dots',
          decor=[('sk_i_banana', 160, 'L', 1520, 8), ('sk_i_croissant', 140, 'R', 1250, -8),
@@ -197,13 +208,13 @@ SCENES = [
          fam='periwinkle', dusk=True, tape='dots',
          decor=[('sk_d_kira', 150, 'L', 1520, 8), ('sk_d_glowstar', 120, 'R', 1250, -8),
                 ('sk_d_glowstar', 92, 'R', 1760, 14)]),
-    dict(segment='celebrate', enter='wipe', cut_in='last_tick-1.0s', cut_out='banner+2.8s',
-         speed=[('last_tick-1.0s', 'last_tick-0.3s', 0.5)],
+    dict(segment='celebrate', enter='wipe', cut_in='last_tick-1.7s', cut_out='banner+2.8s',
+         flash=['celebration'],
          captions=[(['Every finished list', 'gets a celebration'], 'start')],
          fam='sakura', tape='sakura',
          decor=[('sk_i_lemonade', 150, 'L', 1520, 8), ('sparkle:lemon', 112, 'R', 1250, -8),
                 ('sk_d_star', 104, 'R', 1760, 10)]),
-    dict(segment='album', enter='wipe', cut_in='start', cut_out='end',
+    dict(segment='album', enter='wipe', cut_in='start', cut_out='end-0.4s',
          captions=[(['Collect 200+ stickers', 'in your album'], 'start')],
          fam='grape', tape='gingham',
          decor=[('sk_d_ribbon', 160, 'L', 1520, 8), ('sk_d_flower', 128, 'R', 1250, -8),
@@ -595,7 +606,7 @@ class Clip(namedtuple('Clip', 'seg a b speed hold start head tail join')):
         return self.start + math.floor((f - self.a) / self.speed + 1e-9)
 
 
-FrameState = namedtuple('FrameState', 'ground under phone over screen loupes')
+FrameState = namedtuple('FrameState', 'ground under phone bloom over screen loupes')
 Layer = namedtuple('Layer', 'seg idx ring head tail')     # ring: the frame the rings follow, or None for none
 Screen = namedtuple('Screen', 'layers blend w')            # blend: None, 'fade' or 'wipe'; w: the second's share
 
@@ -615,6 +626,7 @@ class Plan:
         self.sprites = {}          # sprite id -> what to draw (resolved by the renderer)
         self.showings = []
         self.loupes = {}           # loupe sprite id -> Loupe
+        self.loupe_since = {}      # loupe sprite id -> the segment frame it comes in at (no older press shows in it)
         self.events = []           # (frame, label) worth a still
         title_items = TITLE['items']
         check_title()
@@ -773,15 +785,18 @@ class Plan:
         for i, sc in enumerate(self.scenes):
             seg = segs[sc['segment']]
             for j, spec in enumerate(sc.get('loupe', [])):
-                if len(spec) != 3:
-                    raise SystemExit(f'scene {seg.name}: a loupe is (from, to, region): {spec!r}')
-                b0, b1, region = spec
-                lp = loupe_layout(seg.name, seg.region(region, 'loupe region'), LOUPE_SCALE)
+                if len(spec) not in (3, 4) or (len(spec) == 4 and not 1 <= spec[3] <= 2.5):
+                    raise SystemExit(f'scene {seg.name}: a loupe is (from, to, region) or (from, to, region, scale) '
+                                     f'with a scale from 1 to 2.5: {spec!r}')
+                b0, b1, region = spec[:3]
+                lp = loupe_layout(seg.name, seg.region(region, 'loupe region'),
+                                  spec[3] if len(spec) == 4 else LOUPE_SCALE)
                 self._check_loupe(lp, seg.name)
-                n_in = self._output_frame(scene_clips[i], seg.beat(b0, 'loupe'), seg.name, b0)
+                f_in = seg.beat(b0, 'loupe')
+                n_in = self._output_frame(scene_clips[i], f_in, seg.name, b0)
                 n_out = self._output_frame(scene_clips[i], seg.beat(b1, 'loupe'), seg.name, b1)
                 sid = ('loupe', i, j)
-                sh = Showing(sid, 'loupe', 'sticker', n_in, n_out, LOUPE_TURN)
+                sh = Showing(sid, 'loupe', LOUPE_STYLE, n_in, n_out, LOUPE_TURN)
                 if not (max(starts[i], self.n_land) <= n_in < n_out and sh.gone() <= ends[i]):
                     raise SystemExit(f'scene {seg.name}: loupe {b0!r}..{b1!r} is not inside the scene, in order, '
                                      'with the phone at rest')
@@ -789,9 +804,27 @@ class Plan:
                     if self.screen(m).blend:
                         raise SystemExit(f'scene {seg.name}: loupe {b0!r}..{b1!r} is up during a transition')
                 self.loupes[sid] = lp
+                self.loupe_since[sid] = f_in
                 self.showings.append(sh)
                 self.events += [(n_in + 4, f'{seg.name}_loupe_pop'), (sh.settled() + frames(1.0), f'{seg.name}_loupe'),
                                 (n_out + 3, f'{seg.name}_loupe_out')]
+
+        # the app's white flash: the bloom's opacity on each output frame that shows one of its frames
+        self.flash = {}
+        for i, sc in enumerate(self.scenes):
+            seg = segs[sc['segment']]
+            for beat in sc.get('flash', []):
+                f0 = seg.beat(beat, 'flash')
+                n0 = self._output_frame(scene_clips[i], f0, seg.name, beat)
+                for n in range(n0, scene_clips[i][-1].end()):
+                    scr = self.screen(n)
+                    k = scr.layers[0].idx - f0 if len(scr.layers) == 1 and scr.layers[0].seg == seg.name else -1
+                    if not 0 <= k < len(FLASH_STEPS):
+                        break
+                    if not self.n_land <= n < self.n_drop:
+                        raise SystemExit(f'scene {seg.name}: flash {beat!r} plays while the phone moves')
+                    self.flash[n] = FLASH_STEPS[k]
+                self.events += [(n0, f'{seg.name}_flash'), (n0 + len(FLASH_STEPS), f'{seg.name}_flash_after')]
 
         # taps worth a still: each press as it lands, and a drag halfway
         for c in self.clips:
@@ -869,8 +902,13 @@ class Plan:
     @staticmethod
     def _check_loupe(lp, name):
         field = region_on_frame(lp.rect)
+        # at rest, the card (with its shadow) is no wider than the phone's art: a card hanging past the die-cut reads as
+        # a second, bigger screen
+        if lp.x < PHONE_BOX[0] or lp.x + lp.w > PHONE_BOX[2]:
+            raise SystemExit(f'scene {name}: the loupe is wider than the phone ({lp.w} px): give it a smaller region '
+                             'or scale')
         # at rest and at the top of its pop (overshot and still turned a little), with its shadow
-        peak = STYLES['sticker'][4]
+        peak = STYLES[LOUPE_STYLE][4]
         cx, cy = lp.x + lp.w / 2, lp.y + lp.h / 2          # the pop turns and scales the card about its middle
         for scale, turn in ((1.0, 0.0), (peak, LOUPE_TURN)):
             box = turned_box((lp.x, lp.y, lp.x + lp.w, lp.y + lp.h), scale, turn, cx, cy)
@@ -941,7 +979,8 @@ class Plan:
             if s is not None:
                 {'under': under, 'over': over, 'loupe': loupes}[sh.layer].append(
                     (sh.sid,) + tuple(round(v, 5) for v in s))
-        return FrameState(self.ground(n), tuple(under), self.phone(n), tuple(over), self.screen(n), tuple(loupes))
+        return FrameState(self.ground(n), tuple(under), self.phone(n), self.flash.get(n, 0.0), tuple(over),
+                          self.screen(n), tuple(loupes))
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -1113,6 +1152,7 @@ class Renderer:
         for sid, (kind, spec) in plan.sprites.items():
             self.sprites[sid] = self._sprite(kind, spec)
         self.cards = {sid: self._card(lp) for sid, lp in plan.loupes.items()}
+        self.bloom = self._bloom() if plan.flash else None
         self._bases = OrderedDict()
         self._screens = OrderedDict()
 
@@ -1136,6 +1176,19 @@ class Renderer:
         img, x, y = title_art(spec)
         return Sprite(img, x, y, self.f)
 
+    def _bloom(self):
+        """The flash's bloom at its full, as opacity on the output frame (the phone at rest): FLASH_BLOOM at the
+        screen's edge, falling off with distance from the screen, and none on the screen itself (the app's own)."""
+        f = self.f
+        ys = (np.arange(self.oh, dtype=np.float32) + 0.5) / f
+        xs = (np.arange(self.ow, dtype=np.float32) + 0.5) / f
+        dx = np.maximum(np.maximum(SCREEN_BOX[0] - xs, xs - SCREEN_BOX[2]), 0)
+        dy = np.maximum(np.maximum(SCREEN_BOX[1] - ys, ys - SCREEN_BOX[3]), 0)
+        bloom = FLASH_BLOOM * np.exp(-np.hypot(dx[None, :], dy[:, None]) / FLASH_REACH)
+        k, kx, ky = self.phone.draw(np.zeros((self.oh, self.ow, 3), np.float32), 0)
+        bloom[ky:ky + k.shape[0], kx:kx + k.shape[1]] *= 1 - k
+        return bloom.astype(np.float32)[..., None]
+
     @staticmethod
     def _card(lp):
         """The loupe's card without its content: (RGBA card, mask of the window the region shows through)."""
@@ -1153,7 +1206,7 @@ class Renderer:
     def base(self, st):
         """Everything but the screen, for a frame state: (frame as uint8 with a black screen, and if the phone shows,
         (box on the frame, that box as float32, screen weights, offset into the screen))."""
-        key = (st.ground, st.under, st.phone, st.over)
+        key = (st.ground, st.under, st.phone, st.bloom, st.over)
         if key in self._bases:
             self._bases.move_to_end(key)
             return self._bases[key]
@@ -1166,6 +1219,8 @@ class Renderer:
         screen = None
         if st.phone is not None:
             kmap = self.phone.draw(canvas, round(st.phone * self.f))
+            if st.bloom:
+                canvas += (1 - canvas) * (self.bloom * np.float32(st.bloom))
             for sid, s, t, o in st.over:
                 self.sprites[sid].draw(canvas, s, t, o, kmap)
             k, kx, ky = kmap
@@ -1209,13 +1264,13 @@ class Renderer:
 
     def loupe(self, img, sid, scale, turn, opacity, layer):
         """Draw a loupe onto the finished frame `img` (uint8), in place: the region cut from the full-size recorded
-        frame (so its text stays crisp), with the tap rings, in its card."""
+        frame (so its text stays crisp), with the tap rings of the presses made while it is up, in its card."""
         lp = self.plan.loupes[sid]
         seg = self.plan.segs[layer.seg]
         full, _ = self.screen_image(layer.seg, layer.idx)
         crop = full.resize((lp.crop_w, lp.crop_h), Image.LANCZOS, box=lp.rect)
         if layer.ring is not None:
-            rings = seg.rings_at(layer.ring, layer.head, layer.tail)
+            rings = seg.rings_at(layer.ring, max(layer.head, self.plan.loupe_since[sid]), layer.tail)
             if rings:
                 arr = np.asarray(crop, np.float32).copy()
                 draw_rings(arr, rings, lp.scale, -lp.rect[0] * lp.scale, -lp.rect[1] * lp.scale, seg.theme)
