@@ -57,8 +57,8 @@ screenshots, and writes it to `design/store/video/`:
 
 | File | Size | What |
 |---|---|---|
-| `feature.mp4` | 1080 × 1920, 30 fps, H.264 (yuv420p, BT.709), no audio, under 10 MB | the title card, six scenes (write a list, a recipe, shopping, the celebration, the album, the night theme), the title card again |
-| `poster.png` | 1080 × 1920, 24-bit, no alpha | the closing title card, for a thumbnail |
+| `feature.mp4` | 1080 × 1920, 30 fps, H.264 (yuv420p, BT.709), no audio, under 12 MB, 30 to 75 s | the title card, six scenes (write a list, a recipe, shopping, the night theme, the celebration, the album), the title card again |
+| `poster.png` | 1080 × 1920, 24-bit, no alpha | the celebration as the video shows it (phone, caption and backdrop), for a thumbnail |
 
 Google Play takes a promo video only as a YouTube link (fastlane supply reads it from a `video.txt` beside
 `title.txt`), so the MP4 is for sharing and for uploading there.
@@ -71,10 +71,12 @@ PICNIC_VIDEO_FRAMES=/tmp/kk-frames ./gradlew :app:testDebugUnitTest \
 ```
 
 The recorder plays each flow on the app's own screens and writes one folder per segment (`write`, `recipe`,
-`shop`, `celebrate`, `album`, `glow`): `00000.png`, `00001.png`, … (1080 × 2280, the whole screen, 30 frames per
+`shop`, `glow`, `celebrate`, `album`): `00000.png`, `00001.png`, … (1080 × 2280, the whole screen, 30 frames per
 second of app time) and a `segment.json` with the segment's name, fps, size, frame count, theme (`day` or `glow`),
-its marks, the frames where the beats happen (`sent`, `rows_landed`, `first_tick`, …), and optionally its taps
-(frame and screen position), which the video shows as a soft ring under the finger.
+its marks (the frames where the beats happen: `typing_start`, `typing_end`, `sent`, `sheet_up`, `rows_landed`,
+`first_tick`, …), its taps and its regions. A tap is a frame and a screen position, with `"kind": "tap"` or
+`"drag"`; a drag also gives where the finger lifted (`to_x`, `to_y`) and on which frame (`until`). An entry with no
+kind is a tap. `regions` names boxes of the screen worth a closer look, such as `"add_field": [x0, y0, x1, y1]`.
 
 ### Building the video
 
@@ -83,20 +85,49 @@ pip install -r design/store/requirements.txt      # and ffmpeg with libx264 (apt
 python3 design/store/make_feature_video.py --frames /tmp/kk-frames      # writes feature.mp4 and poster.png
 python3 design/store/make_feature_video.py --frames /tmp/kk-frames --preview --out /tmp/kk.mp4 \
     --sheet /tmp/kk_sheet.png --every 15 --stills /tmp/kk_stills         # a quick half-size pass, for review
+python3 design/store/make_feature_video.py --frames /tmp/kk-frames --no-video --stills /tmp/kk_stills \
+    --poster /tmp/kk_poster.png                                          # only the stills, full size, no MP4
 ```
 
-`--sheet` writes a contact sheet of every Nth frame and `--stills` a PNG at every caption change and scene change
-(and mid-pop), which is the quickest way to look the cut over. `--frames` defaults to `$PICNIC_VIDEO_FRAMES`.
+`--sheet` writes a contact sheet of every Nth frame and `--stills` a PNG at every caption, scene change,
+transition, tap, drag and loupe (and mid-pop), which is the quickest way to look the cut over; `--no-video` renders
+just those frames. The poster is the composed frame at `--poster-at` (default `celebrate:banner+0.6s`, any
+`scene:beat`). `--frames` defaults to `$PICNIC_VIDEO_FRAMES`.
 
 Two tables at the top of the script hold every choice, so a recut is an edit there. `SCENES` cuts each segment by
-its marks (`'typing_start-0.6s'`, `'rows_landed+1.8s'`, `'end'`), with optional `skip` spans to leave out, `speed`
-spans to play faster (the typing and the wait for the answer run at 2x) and a `hold` at the end; it times the
-captions to marks and gives each scene a backdrop colour, washi tape and decoration stickers in the screenshots'
-layout. `TITLE` lays out the title card (the wordmark, the tagline on a pad patch, the trip's sticker book from the
-feature graphic and a few stickers) and when each piece pops in. The motion is the same everywhere: captions pop in
-with a small overshoot and shrink away, stickers pop in one after another and settle from a few degrees off, the
-backdrop crossfades between scenes, and the screen crossfades between clips. A scene whose segment was not recorded
-is left out.
+its marks (`'typing_start-1.5s'`, `'rows_landed+1.8s'`, `'end'`). Each scene can leave out `skip` spans, play
+`speed` spans faster or slower, `hold` on its last frame, choose how it comes in (`enter`), and show a `loupe`; it
+times the captions to marks and gives the scene a backdrop colour, washi tape and decoration stickers in the
+screenshots' layout. `TITLE` lays out the title card (the wordmark, the tagline on a pad patch, the trip's sticker
+book from the feature graphic and a few stickers) and when each piece pops in.
+
+**Pacing.** People read slower than one tends to guess, so the cut leaves room: every caption stays up at least
+3.1 s, and the rests before and after a beat, the title card (3.2 s) and the closing card's hold (1.9 s) are
+generous. The app's own motion always plays at 1x, and so does the typing; only a wait (the answer coming back) or a
+stretch where nothing moves (the celebration's turning rays) plays faster, never above 1.6x. A factor under 1
+stretches a still lead-in, so a caption is read before its beat plays.
+
+**Motion.** Captions pop in with a small overshoot and shrink away; stickers pop in one after another and settle
+from a few degrees off; the backdrop crossfades between scenes. The title card is already there on the first frame
+(the wordmark and tagline; the book and stickers pop in), clears from the bottom up, and the phone rises only once
+nothing is left in its way. Between two clips the screen either crossfades (`fade`, 0.3 s, for nearly alike
+screens) or wipes (`wipe`, 0.35 s: the next screen comes in from the top down behind an 80 px soft edge, eased in
+and out), which keeps two busy screens from making a muddy double exposure; a skip names its transition as a third
+item, `('stuck', 'rows_landed', 'wipe')`, and a scene its `enter`. Before a skip, the screen rests on the last frame
+while the next one comes in, so a beat just before the jump plays out whole.
+
+**Loupe.** While someone types, the add field is small at video size, so `loupe=[('typing_start-0.2s',
+'sent+0.4s', 'add_field')]` floats a white die-cut sticker card with the house's hard periwinkle shadow just above
+the field, showing it live at 1.7x the phone screen's scale. The region is cut from the full-size recorded frame,
+so its text stays crisp; the card pops in and out like a sticker. A region is a name from `segment.json`'s
+`regions` or a box of the screen; for a recording that names none, the script falls back to its own box for the add
+field.
+
+**Taps.** Each tap shows as a soft disc with a ring under the finger: it presses in just before the tap and spreads
+and fades after it. In Glow the ring is the night theme's soft lavender (`#C9CFF5`) over a fainter disc, so it reads
+on the navy page. A drag presses in the same way, follows the finger along its path with the recorder's easing and
+lifts where the finger left the screen. No ring shows before the phone has landed, a press that would begin before
+its clip does is left out, and while a clip rests on its last frame the ring goes on lifting.
 
 Each frame is drawn from the same pieces as the screenshots (`backdrop`, `washi`, `phone`, `puffy`, the decoration
 stickers), so a frame at rest has a screenshot's layout exactly. Everything but the screen is drawn once per
@@ -107,10 +138,16 @@ timestamped, so the same frames give the same video (with the same Pillow, cairo
 ### Rules the script checks
 
 - every segment matches the recorder's contract: `segment.json` names it, 30 fps, 1080 × 2280, contiguous frames
-  `00000.png` to the frame count, every frame that size, every mark inside the segment;
-- every cut, skip, speed span and caption beat names a mark the recording has, in order and inside the cut, and
-  every tap is on the screen;
+  `00000.png` to the frame count, every frame that size, every mark inside the segment, every tap a tap or a drag
+  on the screen (a drag lifting after it lands, inside the segment), every region a box on the screen;
+- every cut, skip, speed span, caption beat, loupe and the poster's beat names a mark the recording has, in order
+  and inside the cut, and every transition is `fade` or `wipe`;
+- no speed span goes above 1.6x or runs over the typing;
 - a dusk backdrop goes with a Glow recording, and only then;
-- every caption has two lines, fits the width at the screenshots' size, and stays up at least 2.5 s;
-- no decoration sticker covers the screen or runs off the frame at rest, and the title card stays on the frame;
-- the video runs 30 to 60 s, and the MP4 is under 10 MB (it stops with an error otherwise: raise `--crf`).
+- every caption has two lines, fits the width at the screenshots' size, and stays up at least 3.1 s;
+- a loupe stays inside its scene with the phone at rest and never shows during a transition; its card, at rest and
+  at the top of its pop, stays on the frame and off the region it shows;
+- no decoration sticker covers the screen or runs off the frame at rest, the title card stays on the frame, and no
+  sticker on it comes within 6 px of the wordmark or the tagline;
+- the video runs 30 to 75 s, and the MP4 is under 12 MB (it stops with an error otherwise: raise `--crf`, then check
+  the pastel stripes and the celebration's rays for banding).
