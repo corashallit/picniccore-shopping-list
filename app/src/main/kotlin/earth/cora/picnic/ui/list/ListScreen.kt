@@ -1935,6 +1935,7 @@ private fun AisleList(
                                 .itemMotion(this, still, placementMs = SLOT_CLOSE_MS)
                                 .probe(probe, "slice:${e.key}")
                                 .sheetSlice(if (e.folding) fold else sheet.takeIf { unfoldId == e.s.id }, e.key, slices)
+                                .then(if (e.folding) Modifier.goingAway() else Modifier)
                                 .keyFocusIn(screen, e.key, e.s.id)
                                 .focusRequester(screen.rowFocus(e.row.id))
                                 // The open tray draws over the folded strips that slide past it as it opens (the strip
@@ -1960,6 +1961,7 @@ private fun AisleList(
                                 .itemMotion(this, still, placementMs = SLOT_CLOSE_MS)
                                 .probe(probe, "slice:${e.key}")
                                 .sheetSlice(if (e.folding) fold else sheet.takeIf { unfoldId == e.s.id }, e.key, slices)
+                                .then(if (e.folding) Modifier.goingAway() else Modifier)
                                 .zIndex(Z_TRAY),
                         )
                     }
@@ -2121,6 +2123,17 @@ private fun Modifier.sheetSlice(sheet: TraySheet?, key: String, heights: Mutable
                 }
             }
     }
+
+/**
+ * A slice of a tray rolling up into its strip (§8.4, §8.5): it is going, so a touch on it neither checks nor edits its row
+ * (nor puts the finished tray back open halfway through its fold), and TalkBack no longer reads it, as the keyboard
+ * passes it by (focusTargets).
+ */
+private fun Modifier.goingAway(): Modifier = clearAndSetSemantics { }.pointerInput(Unit) {
+    awaitPointerEventScope {
+        while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+    }
+}
 
 /** The tray's unfold and fold (§8.4: 240 ms `layout`), and the frames the list keeps step after them. */
 private val UNFOLD_MS: Int = PicnicMotion.layout.durationMillis

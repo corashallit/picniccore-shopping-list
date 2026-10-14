@@ -1,12 +1,16 @@
 package earth.cora.picnic.ui.list
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.ui.common.PHONE_360
 import org.junit.Assert.assertEquals
@@ -405,5 +409,55 @@ class TrayFoldTest {
         compose.mainClock.autoAdvance = true
         assertTrue("Breakfast opened", full.isNotEmpty())
         assertTrue("at its whole height from its first frame (${full.map { it.toInt() }})", full.distinct().size == 1 || full.zipWithNext().all { (a, b) -> abs(a - b) < 1f })
+    }
+
+    /** A tap on the screen where [at] is (root px), as a finger lands there. */
+    private fun tapAt(at: Offset) = compose.onRoot().performTouchInput { click(at) }
+
+    /**
+     * §8.5, §15: the rows of a tray rolling up into its strip are going, as the keyboard already treats them (it passes
+     * them by): a touch where one still shows neither checks nor unchecks it, and TalkBack no longer reads them.
+     */
+    @Test
+    fun herFoldingTrayTakesNoTouchAndReadsNothing() {
+        val probe = RecordingProbe()
+        val rig = ListRig(ListFixture.state())
+        compose.show(rig, probe)
+        assertTrue("flour is in the basket", rig.item("flour").checked)
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(ListTags.chevron(baking)).performClick()
+        compose.frames(2)
+        val flour = probe.bounds["slice:flour"]
+        assertTrue("Baking is rolling up with flour still showing ($flour)", compose.exists(ListTags.strip(baking)) && flour != null && flour.height > 24 * compose.density.density)
+        assertFalse("TalkBack no longer reads its rows", compose.exists(ListTags.row("flour")))
+        tapAt(flour!!.center)
+        compose.frames(30)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertTrue("the touch did not take flour out of the basket", rig.item("flour").checked)
+        assertFalse("Baking stays folded", compose.exists(ListTags.header(baking)))
+    }
+
+    /**
+     * §8.4 L + 1100: the finished tray rolling up takes no touch either: a tap on a row still showing does not take it
+     * out of the basket, which would put the tray back open in one frame halfway through its fold.
+     */
+    @Test
+    fun finishedTrayTakesNoTouchAsItFolds() {
+        val probe = RecordingProbe()
+        val rig = ListRig(ListFixture.state())
+        compose.show(rig, probe)
+        val px = compose.density.density
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(ListTags.row("baking-powder")).performClick()
+        val folding = compose.framesUntil(3000) { compose.exists(ListTags.strip(baking)) && (probe.bounds["slice:flour"]?.height ?: 0f) > 24 * px }
+        assertTrue("Baking starts to fold with flour still showing", folding)
+        assertFalse("TalkBack no longer reads its rows", compose.exists(ListTags.row("flour")))
+        tapAt(probe.bounds["slice:flour"]!!.center)
+        compose.frames(40)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertTrue("the touch did not take flour out of the basket", rig.item("flour").checked)
+        assertFalse("Baking stays folded", compose.exists(ListTags.header(baking)))
     }
 }
