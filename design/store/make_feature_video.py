@@ -15,9 +15,10 @@ and a few stickers, exactly as make_store_images.py lays out a screenshot; the t
 later edit to the cut, the wording or the timing is an edit to those two tables.
 
 Each output frame is the scene's backdrop, the phone with the screen resampled into it, the decoration stickers and
-the caption, and while someone types a loupe: a sticker card showing the add field enlarged. Everything but the
-screen and the loupe is the same from one frame to the next while nothing moves, so it is drawn once and kept; a frame
-at rest costs one screen resample. Frames stream to ffmpeg (libx264) as raw RGB.
+the caption, and at a few beats a loupe (a sticker card showing the add field enlarged while someone types) or a
+highlighter mark laid on the screen itself (the recipe card's pantry rows). Everything but the screen and the loupe
+is the same from one frame to the next while nothing moves, so it is drawn once and kept; a frame at rest costs one
+screen resample. Frames stream to ffmpeg (libx264) as raw RGB.
 
 The output is deterministic: no randomness and no timestamps, so the same frames (and the same Pillow, cairosvg,
 numpy and ffmpeg versions) always give the same video. Requirements: design/store/requirements.txt and ffmpeg.
@@ -123,6 +124,20 @@ LOUPE_GAP = 70         # px between the card (with its shadow) and the region it
 LOUPE_TURN = 3.0       # degrees off at the start of its pop (smaller than a sticker's: it is a big card)
 LOUPE_POP = (0.3, 1.06)  # its scale on the way in: from, and the overshoot's peak
 LOUPE_STYLE = 'loupe'
+# The highlighter: a mark of the app's own highlighter (Day's `highlighter`, the band of a pressed row and of the
+# 400 ms flash on a new row's words, §4.11, §6.2) drawn on the screen itself, so it rides with the phone and scales
+# with it. It multiplies, as ink on paper does, so the words under it stay dark and crisp. It swipes in from left to
+# right as a chisel-tipped marker would (one mark after another), and fades away. Its edges are drawn by hand: a
+# slanted start and end, a slight tilt like the app's band (-0.6°), a little wobble along the top and the bottom, and
+# a faint streak in the ink, all from fixed curves (nothing random).
+HIGHLIGHT_INK = {'day': '#FFF3A6'}   # by theme; Glow's band (#3A438A) is a light on navy, not an ink, so it has none
+HIGHLIGHT_IN = 0.3     # each mark's swipe (ease-out)
+HIGHLIGHT_STAGGER = 0.2  # from one mark's swipe to the next's
+HIGHLIGHT_OUT = 0.2    # the fade
+HIGHLIGHT_INSET = 5    # recorded px: the mark keeps this far inside its rect, wobble and tilt aside (they go inward)
+HIGHLIGHT_SLANT = 12   # recorded px: how far the chisel's slanted start and end lean over the mark's height
+HIGHLIGHT_WOBBLE = 3.5  # recorded px: the most the top and the bottom edges waver
+HIGHLIGHT_TILT = -0.6  # degrees, as the app's band
 # For recordings that name no regions (the first recorder): the add field, in recorded px
 FALLBACK_REGIONS = {'add_field': (22, 2104, 540, 2252)}
 POSTER_AT = 'celebrate:banner+0.6s'   # the poster: the composed frame at this beat (scene:beat)
@@ -174,6 +189,9 @@ TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the
 #                      (the card's face, frame px: more white either side, to cover what would peek out round it).
 #                      Only over a small region with room round it: over a dense list a card slices the lines it
 #                      covers
+#   highlight          optional [(from, to, regions)]: from 'from' to 'to' a highlighter mark lies on each rect of
+#                      `regions` (a region name, which may name several rects, a rect, or a list of names and rects).
+#                      Day recordings only, and only while the rects' content stands still
 #   captions           [(two lines, beat)]: the first is up from the scene's start ('start'); each next one takes
 #                      over when its beat plays
 #   fam, dusk, tape    backdrop family (dusk: the deeper night-theme ground), washi pattern, as in SHOTS
@@ -199,6 +217,7 @@ SCENES = [
     dict(segment='recipe', enter='wipe', cut_in='typing_start-1.3s', cut_out='rows_landed+1.6s',
          speed=[('sent+0.6s', 'card_shown-0.2s', 1.6)],
          loupe=[('typing_start', 'card_shown-0.25s', 'add_field', {'scale': 1.35, 'y': 1462, 'width': 584})],
+         highlight=[('card_scroll+2.4s', 'stuck-0.8s', 'pantry_rows')],
          captions=[(['Turn a recipe into', 'a shopping list'], 'start'),
                    (['Recipes leave out', 'what’s in your pantry'], 'card_scroll+1.2s')],
          fam='lemon', tape='gingham',
@@ -225,8 +244,8 @@ SCENES = [
          decor=[('sk_d_ribbon', 160, 'L', 1520, 8), ('sk_d_flower', 128, 'R', 1250, -8),
                 ('sk_d_heart', 104, 'R', 1760, 10)]),
 ]
-SCENE_KEYS = {'segment', 'cut_in', 'cut_out', 'enter', 'skip', 'speed', 'hold', 'loupe', 'captions', 'fam', 'dusk',
-              'tape', 'decor'}
+SCENE_KEYS = {'segment', 'cut_in', 'cut_out', 'enter', 'skip', 'speed', 'hold', 'loupe', 'highlight', 'captions',
+              'fam', 'dusk', 'tape', 'decor'}
 
 
 def frames(seconds):
@@ -400,9 +419,10 @@ class Segment:
                 self.taps.append(Tap(f, x, y, kind, to_x, to_y, until))
             else:
                 raise bad(f'the tap at frame {f} is a {kind!r}, neither a tap nor a drag')
-        self.regions = {}
-        for name, rect in (meta.get('regions') or {}).items():
-            self.regions[name] = self._rect(rect, f'region {name!r}')
+        self.regions = {}          # name -> (rect, ...): a region is a box, or a list of boxes
+        for name, spec in (meta.get('regions') or {}).items():
+            many = isinstance(spec, (list, tuple)) and spec and all(isinstance(r, (list, tuple)) for r in spec)
+            self.regions[name] = tuple(self._rect(r, f'region {name!r}') for r in (spec if many else [spec]))
         self._noted = set()
 
     def _rect(self, rect, what):
@@ -413,20 +433,30 @@ class Segment:
             raise SystemExit(f'segment {self.name}: {what} {tuple(rect)} is not a box on the screen')
         return tuple(rect)
 
+    def rects(self, spec, what):
+        """The rects `spec` names: a name from segment.json's regions (or, for a recording that names none,
+        FALLBACK_REGIONS), a rect, or a list of names and rects."""
+        if isinstance(spec, str):
+            if spec in self.regions:
+                return self.regions[spec]
+            if not self.regions and spec in FALLBACK_REGIONS:
+                if spec not in self._noted:
+                    print(f'note: segment {self.name} names no regions; {spec!r} is the fallback '
+                          f'{FALLBACK_REGIONS[spec]}')
+                    self._noted.add(spec)
+                return (FALLBACK_REGIONS[spec],)
+            raise SystemExit(f'segment {self.name}: {what} {spec!r} is not a region the recording names '
+                             f'(it has {", ".join(sorted(self.regions)) or "none"})')
+        if isinstance(spec, (list, tuple)) and spec and all(isinstance(r, (str, list, tuple)) for r in spec):
+            return tuple(r for part in spec for r in self.rects(part, what))
+        return (self._rect(spec, what),)
+
     def region(self, spec, what):
-        """The rect a loupe's region names: a name from segment.json's regions (or, for a recording that names
-        none, FALLBACK_REGIONS), or a rect."""
-        if not isinstance(spec, str):
-            return self._rect(spec, what)
-        if spec in self.regions:
-            return self.regions[spec]
-        if not self.regions and spec in FALLBACK_REGIONS:
-            if spec not in self._noted:
-                print(f'note: segment {self.name} names no regions; {spec!r} is the fallback {FALLBACK_REGIONS[spec]}')
-                self._noted.add(spec)
-            return FALLBACK_REGIONS[spec]
-        raise SystemExit(f'segment {self.name}: {what} {spec!r} is not a region the recording names '
-                         f'(it has {", ".join(sorted(self.regions)) or "none"})')
+        """The one rect a loupe's region names (see rects)."""
+        rects = self.rects(spec, what)
+        if len(rects) != 1:
+            raise SystemExit(f'segment {self.name}: {what} {spec!r} is {len(rects)} boxes; a loupe shows one')
+        return rects[0]
 
     def rings_at(self, idx, head, tail):
         """[(x, y, scale, disc opacity, ring opacity)] of the tap rings showing at frame idx of a stretch of the
@@ -605,6 +635,31 @@ def loupe_layout(seg, rect, scale, y=None, width=None):
     return Loupe(seg, rect, s, cw, ch, pad, x, y, w, h)
 
 
+class Highlight(namedtuple('Highlight', 'seg rects n_in n_out ink')):
+    """Highlighter marks on `rects` of a segment's screen, swiping in one after another from output frame `n_in` and
+    fading from `n_out`."""
+
+    def swipe(self):
+        return max(1, frames(HIGHLIGHT_IN))
+
+    def fade(self):
+        return max(1, frames(HIGHLIGHT_OUT))
+
+    def starts(self):
+        return [self.n_in + frames(HIGHLIGHT_STAGGER * j) for j in range(len(self.rects))]
+
+    def gone(self):
+        return self.n_out + self.fade()
+
+    def at(self, n):
+        """(each mark's swipe progress 0..1, the marks' opacity) at output frame n, or None while none shows."""
+        if n < self.n_in or n >= self.gone():
+            return None
+        reach = tuple(round(ease_out_cubic(min(1.0, max(0.0, (n - s + 1) / self.swipe()))), 5) for s in self.starts())
+        q = (n - self.n_out + 1) / (self.fade() + 1) if n >= self.n_out else 0.0
+        return reach, round(1 - ease_in_out_sine(q), 5)
+
+
 # ---------------------------------------------------------------------------------------------------------------------
 # The plan: what every output frame shows
 # ---------------------------------------------------------------------------------------------------------------------
@@ -632,7 +687,7 @@ class Clip(namedtuple('Clip', 'seg a b speed hold start head tail join')):
         return self.start + math.floor((f - self.a) / self.speed + 1e-9)
 
 
-FrameState = namedtuple('FrameState', 'ground under phone over screen loupes')
+FrameState = namedtuple('FrameState', 'ground under phone over screen loupes marks')
 Layer = namedtuple('Layer', 'seg idx ring head tail')     # ring: the frame the rings follow, or None for none
 Screen = namedtuple('Screen', 'layers blend w')            # blend: None, 'fade' or 'wipe'; w: the second's share
 
@@ -653,6 +708,7 @@ class Plan:
         self.showings = []
         self.loupes = {}           # loupe sprite id -> Loupe
         self.loupe_since = {}      # loupe sprite id -> the segment frame it comes in at (no older press shows in it)
+        self.highlights = []       # Highlight
         self.events = []           # (frame, label) worth a still
         for sc in SCENES:
             stray = sorted(set(sc) - SCENE_KEYS)
@@ -843,6 +899,29 @@ class Plan:
                 self.events += [(n_in + 4, f'{seg.name}_loupe_pop'), (sh.settled() + frames(1.0), f'{seg.name}_loupe'),
                                 (n_out + 3, f'{seg.name}_loupe_out')]
 
+        # highlighter marks: inside their scene, every mark swiped in before they fade, and gone before the scene ends
+        for i, sc in enumerate(self.scenes):
+            seg = segs[sc['segment']]
+            for spec in sc.get('highlight', []):
+                if len(spec) != 3:
+                    raise SystemExit(f'scene {seg.name}: a highlight is (from, to, regions): {spec!r}')
+                b0, b1, regions = spec
+                if seg.theme not in HIGHLIGHT_INK:
+                    raise SystemExit(f'scene {seg.name}: a highlight needs a recording in a theme with a highlighter '
+                                     f'ink ({", ".join(HIGHLIGHT_INK)}), not {seg.theme}')
+                rects = seg.rects(regions, 'highlight region')
+                n_in = self._output_frame(scene_clips[i], seg.beat(b0, 'highlight'), seg.name, b0)
+                n_out = self._output_frame(scene_clips[i], seg.beat(b1, 'highlight'), seg.name, b1)
+                hl = Highlight(seg.name, rects, n_in, n_out, HIGHLIGHT_INK[seg.theme])
+                if not (max(starts[i], self.n_land) <= n_in and hl.starts()[-1] + hl.swipe() <= n_out
+                        and hl.gone() <= ends[i]):
+                    raise SystemExit(f'scene {seg.name}: highlight {b0!r}..{b1!r} is not inside the scene, in order, '
+                                     f'with time for its {len(rects)} marks to swipe in before they fade')
+                self.highlights.append(hl)
+                self.events += [(n_in + hl.swipe() // 2, f'{seg.name}_highlight_swipe'),
+                                (hl.starts()[-1] + hl.swipe() + frames(1.0), f'{seg.name}_highlight'),
+                                (n_out + hl.fade() // 2, f'{seg.name}_highlight_out')]
+
         # taps worth a still: each press as it lands, and a drag halfway
         for c in self.clips:
             for t in self.segs[c.seg].taps:
@@ -1001,7 +1080,9 @@ class Plan:
             if s is not None:
                 {'under': under, 'over': over, 'loupe': loupes}[sh.layer].append(
                     (sh.sid,) + tuple(round(v, 5) for v in s))
-        return FrameState(self.ground(n), tuple(under), self.phone(n), tuple(over), self.screen(n), tuple(loupes))
+        marks = tuple((j,) + s for j, hl in enumerate(self.highlights) for s in [hl.at(n)] if s is not None)
+        return FrameState(self.ground(n), tuple(under), self.phone(n), tuple(over), self.screen(n), tuple(loupes),
+                          marks)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -1160,6 +1241,53 @@ def draw_rings(scr, rings, k, ox, oy, theme):
         region += (ring_c - region) * edge
 
 
+def highlight_mark(rect, j, k, m, size, ink):
+    """The j-th highlighter mark of a scene, over `rect` (recorded px), for an image of the screen `size` px with k
+    px a recorded px and the screen's corner at (m, m): (take, along, x, y). `take` (float32 h x w x 3) is how much of
+    each channel the mark's ink takes away at full (a multiply: the pixel times 1 - take), `along` (h x w) where each
+    pixel lies along the stroke, in recorded px measured parallel to the chisel's slanted edge, and (x, y) the box's
+    place."""
+    x0, y0, x1, y1 = rect
+    tilt = math.tan(math.radians(HIGHLIGHT_TILT))
+    span = abs((x1 - x0) * tilt)
+
+    def wobble(x, edge):
+        # two slow waves of fixed phases (golden-angle steps, so no two edges of two marks waver alike)
+        a = 2.39996 * (2 * j + edge + 1)
+        w = 0.6 * math.sin(2 * math.pi * x / 263 + a) + 0.4 * math.sin(2 * math.pi * x / 97 + 1.7 * a)
+        return HIGHLIGHT_WOBBLE * (0.5 + 0.5 * w)
+
+    def top(x):
+        return y0 + HIGHLIGHT_INSET + (x - x0) * tilt + (span if tilt < 0 else 0) + wobble(x, 0)
+
+    def bottom(x):
+        return y1 - HIGHLIGHT_INSET + (x - x0) * tilt - (0 if tilt < 0 else span) - wobble(x, 1)
+
+    # the outline: the top edge left to right, the chisel's slanted end, the bottom edge back, the slanted start
+    left, right, s = x0 + HIGHLIGHT_INSET, x1 - HIGHLIGHT_INSET, HIGHLIGHT_SLANT
+    xs = np.linspace(left + s, right, max(2, round((right - left) / 4)))
+    outline = [(x, top(x)) for x in xs] + [(x, bottom(x)) for x in xs[::-1] - s]
+    ss = 4                                                  # supersampled, then boxed down: smooth edges
+    bx0, by0 = max(0, math.floor(m + x0 * k) - 1), max(0, math.floor(m + y0 * k) - 1)
+    bw, bh = min(size[0], math.ceil(m + x1 * k) + 1) - bx0, min(size[1], math.ceil(m + y1 * k) + 1) - by0
+    big = Image.new('L', (bw * ss, bh * ss), 0)
+    ImageDraw.Draw(big).polygon([((m + x * k - bx0) * ss, (m + y * k - by0) * ss) for x, y in outline], fill=255)
+    big = big.filter(ImageFilter.GaussianBlur(0.5 * ss))   # a felt tip's edge is a touch soft
+    cover = np.asarray(big.resize((bw, bh), Image.BOX), np.float32) / 255
+    # each pixel in recorded px
+    u = (np.arange(bw, dtype=np.float32) + bx0 + 0.5 - m)[None, :] / k
+    v = (np.arange(bh, dtype=np.float32) + by0 + 0.5 - m)[:, None] / k
+    mid_top, mid_bottom = top((x0 + x1) / 2), bottom((x0 + x1) / 2)
+    along = u - s * np.clip((mid_bottom - v) / (mid_bottom - mid_top), 0, 1)
+    # the ink: a faint streak along the stroke, and a little more where the tip came down and where it lifted
+    streak = 0.5 + 0.5 * np.sin(2 * np.pi * v / 11 + 2.39996 * j) * np.sin(2 * np.pi * v / 29 + 1.3 * j)
+    pool = 0.3 * np.exp(-np.maximum(along - left, 0) / 9) + 0.2 * np.exp(-np.maximum(right - s - along, 0) / 7)
+    density = (1 - 0.08 * streak + pool)[..., None]
+    c = np.array(store.rgb(ink), np.float32) / 255
+    take = cover[..., None] * (1 - c ** density)
+    return take.astype(np.float32), np.broadcast_to(along, (bh, bw)).astype(np.float32), bx0, by0
+
+
 class Renderer:
     def __init__(self, plan, f):
         self.plan, self.f = plan, f
@@ -1173,6 +1301,10 @@ class Renderer:
         for sid, (kind, spec) in plan.sprites.items():
             self.sprites[sid] = self._sprite(kind, spec)
         self.cards = {sid: self._card(lp) for sid, lp in plan.loupes.items()}
+        k, m = self.phone.sw / SEG_W, self.phone.margin
+        size = (self.phone.sw + 2 * m, self.phone.sh + 2 * m)
+        self.marks = [[highlight_mark(rect, r, k, m, size, hl.ink) for r, rect in enumerate(hl.rects)]
+                      for hl in plan.highlights]
         self._bases = OrderedDict()
         self._screens = OrderedDict()
 
@@ -1195,6 +1327,21 @@ class Renderer:
             return sp
         img, x, y = title_art(spec)
         return Sprite(img, x, y, self.f)
+
+    def draw_marks(self, part, seg, marks):
+        """The highlighter marks of `seg` showing in `marks` (FrameState.marks) onto its screen image `part` (float32),
+        in place: each swiped in as far as its reach, all at the marks' opacity, multiplied in."""
+        k = self.phone.sw / SEG_W
+        for j, reach, opacity in marks:
+            if self.plan.highlights[j].seg != seg:
+                continue
+            for (take, along, x, y), r in zip(self.marks[j], reach):
+                if r <= 0:
+                    continue
+                lo, hi = along.min() - 1 / k, along.max() + 1 / k
+                shown = np.clip((lo + (hi - lo) * r - along) * k + 0.5, 0, 1) * np.float32(opacity)
+                region = part[y:y + take.shape[0], x:x + take.shape[1]]
+                region *= 1 - take * shown[..., None]
 
     @staticmethod
     def _card(lp):
@@ -1305,8 +1452,10 @@ class Renderer:
             _, part = self.screen_image(layer.seg, layer.idx)
             seg = self.plan.segs[layer.seg]
             rings = seg.rings_at(layer.ring, layer.head, layer.tail) if layer.ring is not None else []
-            if rings or len(st.screen.layers) > 1:
+            if rings or st.marks or len(st.screen.layers) > 1:
                 part = part.astype(np.float32)
+            if st.marks:
+                self.draw_marks(part, layer.seg, st.marks)
             if rings:
                 draw_rings(part, rings, self.phone.sw / SEG_W, m, m, seg.theme)
             parts.append(part)

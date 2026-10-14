@@ -77,7 +77,8 @@ its marks (the frames where the beats happen: `typing_start`, `typing_end`, `sen
 `first_tick`, …), its taps and its regions. A tap is a frame and a screen position, with `"kind": "tap"` or
 `"drag"`; a drag also gives where the finger lifted (`to_x`, `to_y`) and on which frame (`until`), and between its
 first frame and `until` the finger moves along a smoothstep, u²(3 − 2u) of the way at u of the time. An entry with no
-kind is a tap. `regions` names boxes of the screen worth a closer look, such as `"add_field": [x0, y0, x1, y1]`.
+kind is a tap. `regions` names boxes of the screen worth a closer look, such as `"add_field": [x0, y0, x1, y1]`; a
+region can also be a list of boxes (`"pantry_rows": [[x0, y0, x1, y1], …]`).
 
 ### Building the video
 
@@ -91,13 +92,14 @@ python3 design/store/make_feature_video.py --frames /tmp/kk-frames --no-video --
 ```
 
 `--sheet` writes a contact sheet of every Nth frame and `--stills` a PNG at every caption, scene change,
-transition, tap, drag and loupe (and mid-pop), which is the quickest way to look the cut over; `--no-video` renders
-just those frames. The poster is the composed frame at `--poster-at` (default `celebrate:banner+0.6s`, any
-`scene:beat`). `--frames` defaults to `$PICNIC_VIDEO_FRAMES`.
+transition, tap, drag, loupe and highlight (and mid-pop), which is the quickest way to look the cut over;
+`--no-video` renders just those frames. The poster is the composed frame at `--poster-at` (default
+`celebrate:banner+0.6s`, any `scene:beat`). `--frames` defaults to `$PICNIC_VIDEO_FRAMES`.
 
 Two tables at the top of the script hold every choice, so a recut is an edit there. `SCENES` cuts each segment by
 its marks (`'typing_start-1.8s'`, `'rows_landed+1.6s'`, `'end'`). Each scene can leave out `skip` spans, play
-`speed` spans faster or slower, `hold` on its last frame, choose how it comes in (`enter`), and show a `loupe`; it
+`speed` spans faster or slower, `hold` on its last frame, choose how it comes in (`enter`), show a `loupe` and lay
+a `highlight` on the screen; it
 times the captions to marks and gives the scene a backdrop colour, washi tape and decoration stickers in the
 screenshots' layout. `TITLE` lays out the title card (the wordmark, the tagline on a pad patch, the trip's sticker
 book from the feature graphic and a few stickers) and when each piece pops in.
@@ -135,6 +137,16 @@ never wider than the phone. Only the taps made while it is up show in it. A regi
 `regions` or a box of the screen; for a recording that names none, the script falls back to its own box for the add
 field.
 
+**Highlight.** To point at something on a busy screen without covering it, `highlight=[('card_scroll+2.4s',
+'stuck-0.8s', 'pantry_rows')]` lays a mark of the app's own highlighter (Day's `#FFF3A6`, the band of a pressed row
+and of a new row's 400 ms flash) on each box the region names: the recipe card's two "in your pantry" rows, while
+the caption says what they are. It is drawn on the screen itself, so it rides and scales with the phone, and it
+multiplies like ink, so the words under it stay dark and crisp. Each mark swipes in from left to right in 0.3 s
+(ease-out), 0.2 s after the one before, and all fade together in 0.2 s; its edges are drawn by hand from fixed curves
+(a chisel's slanted start and end, the app band's −0.6° tilt, a slight wobble along the top and bottom, a faint
+streak and a little more ink where the tip came down). Glow has no highlighter ink (its band is a light on navy), so
+a highlight goes on Day recordings only.
+
 **Taps.** Each tap shows as a disc of the highlighter (`#FFF3A6`, a pressed row's band) with a ballpoint ring under
 the finger: it presses in just before the tap and spreads and fades after it. The ring is a little wider than the
 list's check spots, so on a tick it shows round the spot instead of lying on its dashes. In Glow the ring is the
@@ -155,16 +167,19 @@ timestamped, so the same frames give the same video (with the same Pillow, cairo
 
 - every segment matches the recorder's contract: `segment.json` names it, 30 fps, 1080 × 2280, contiguous frames
   `00000.png` to the frame count, every frame that size, every mark inside the segment, every tap a tap or a drag
-  on the screen (a drag lifting after it lands, inside the segment), every region a box on the screen;
+  on the screen (a drag lifting after it lands, inside the segment), every region a box on the screen or a list of
+  them;
 - every scene names only keys the script knows;
-- every cut, skip, speed span, caption beat, loupe and the poster's beat names a mark the recording has, in order
-  and inside the cut, and every transition is `fade` or `wipe`;
+- every cut, skip, speed span, caption beat, loupe, highlight and the poster's beat names a mark the recording has,
+  in order and inside the cut, and every transition is `fade` or `wipe`;
 - no speed span goes above 1.6x or runs over the typing;
 - a dusk backdrop goes with a Glow recording, and only then;
 - every caption has two lines, fits the width at the screenshots' size, and stays up at least 3.1 s;
 - a loupe stays inside its scene with the phone at rest and never shows during a transition; its card is no wider
   than the phone at rest, and at rest and at the top of its pop it stays on the frame and off the region it shows;
 - a loupe's card stays opaque on every frame of its pop, in and out;
+- a highlight's boxes are on the screen, its marks all swipe in before they fade, it is gone before its scene ends,
+  and its recording is a Day one;
 - no decoration sticker covers the screen or runs off the frame at rest, the title card stays on the frame, and no
   sticker on it comes within 6 px of the wordmark or the tagline;
 - the video runs 30 to 75 s, and the MP4 is under 12 MB (it stops with an error otherwise: raise `--crf`, then check
