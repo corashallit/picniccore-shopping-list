@@ -59,6 +59,9 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.CRC32
 import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlin.random.Random
 
@@ -67,8 +70,12 @@ import kotlin.random.Random
  * held clock at 30 frames a second and writes each frame of the whole screen (every window, a popup over the activity
  * included) as a PNG, and the PNG writer itself. The frame contract with design/store/make_feature_video.py:
  * <root>/<segment>/00000.png … (1080 × 2280 RGB) and segment.json {name, fps, width, height, frames, theme, marks,
- * taps}; frame k is the app at t0 + round(k × 1000 / 30) ms of its clock; marks name the storyboard's beats, taps say
- * where a finger came down (frame, x, y in screen px).
+ * taps, regions}; frame k is the app at t0 + round(k × 1000 / 30) ms of its clock; marks name the storyboard's beats
+ * (FeatureVideoRecorder lists them); taps say where a finger touched the screen, in screen px:
+ * {"frame", "x", "y", "kind": "tap"} for a press, and {"frame", "x", "y", "kind": "drag", "to_x", "to_y", "until"} for
+ * a drag, whose finger is at (x, y) on its first frame and at (to_x, to_y) on frame until, the last before it lifts;
+ * k frames in, it is u²(3 − 2u) of the way there, u = k / (until − frame) (a smoothstep, no fling). regions name boxes
+ * of the screen worth a closer look, as [x0, y0, x1, y1] in screen px ("add_field").
  */
 
 /** The frames' root folder: the PICNIC_VIDEO_FRAMES environment variable, or null (the recorder is skipped). */
@@ -256,7 +263,8 @@ internal class CountingForecast : WeatherSource {
  * at t0 + round(k × 1000 / fps) ms, to [dir]. The test frame clock is set to deliver a frame every millisecond, so each
  * captured frame shows the app exactly at its time (Compose's motion runs on frame time); background work the script
  * waits for is waited for with the clock held ([settle]), never filmed as frozen frames. [marks] name the storyboard's
- * beats for the compositor's captions; [taps] are where a finger came down (screen px).
+ * beats for the compositor's captions; [touches] are where a finger pressed or dragged, [regions] boxes of the screen
+ * (all in screen px); [watch]ers look at the app on every frame, just before it is captured.
  */
 internal class FrameCamera(
     private val compose: ComposeTestRule,
@@ -270,7 +278,9 @@ internal class FrameCamera(
     }
     private val start = compose.mainClock.currentTime
     private val marks = mutableListOf<Pair<String, Int>>()
-    private val taps = mutableListOf<Triple<Int, Int, Int>>()
+    private val touches = mutableListOf<Touch>()
+    private val regions = LinkedHashMap<String, IntArray>()
+    private val watchers = mutableListOf<(Int) -> Unit>()
     private val writes = mutableListOf<Future<*>>()
     private var captureNanos = 0L
 
@@ -286,13 +296,40 @@ internal class FrameCamera(
         marks += beat to at
     }
 
+    /** A finger comes down at (x, y) on the next frame. */
     fun tap(x: Float, y: Float) {
-        taps += Triple(frame, x.toInt(), y.toInt())
+        touches += Touch(frame, x.roundToInt(), y.roundToInt())
+    }
+
+    /**
+     * A finger was at (x, y) on frame [from] and slid along the smoothstep path (VideoRig's header) to (toX, toY) on frame
+     * [until], the last before it lifted.
+     */
+    fun drag(from: Int, x: Float, y: Float, toX: Float, toY: Float, until: Int) {
+        touches += Touch(from, x.roundToInt(), y.roundToInt(), drag = Triple(toX.roundToInt(), toY.roundToInt(), until))
+    }
+
+    /** Names a box of the screen (screen px), clipped to it; the same name again replaces it. */
+    fun region(name: String, x0: Float, y0: Float, x1: Float, y1: Float) {
+        regions[name] = intArrayOf(
+            floor(x0).toInt().coerceIn(0, WIDTH), floor(y0).toInt().coerceIn(0, HEIGHT),
+            ceil(x1).toInt().coerceIn(0, WIDTH), ceil(y1).toInt().coerceIn(0, HEIGHT),
+        )
+    }
+
+    /**
+     * Runs [look] on every frame from the next one on, with the frame's index, once the app has settled for it (it sees
+     * what the frame shows); the function returned stops it.
+     */
+    fun watch(look: (Int) -> Unit): () -> Unit {
+        watchers += look
+        return { watchers.remove(look) }
     }
 
     /** Captures the screen as frame [frame], then runs the clock on to the next frame's time. */
     fun shoot() {
         settle()
+        watchers.forEach { it(frame) }
         val began = System.nanoTime()
         val shot = captureScreen()
         val pixels = IntArray(shot.width * shot.height)
@@ -349,8 +386,16 @@ internal class FrameCamera(
             append(" \"marks\": [")
             append(marks.sortedBy { it.second }.joinToString(", ") { (beat, at) -> "{\"name\": \"$beat\", \"frame\": $at}" })
             append("],\n \"taps\": [")
-            append(taps.joinToString(", ") { (at, x, y) -> "{\"frame\": $at, \"x\": $x, \"y\": $y}" })
-            append("]}\n")
+            append(
+                touches.sortedBy { it.frame }.joinToString(", ") { t ->
+                    val at = "{\"frame\": ${t.frame}, \"x\": ${t.x}, \"y\": ${t.y}"
+                    val drag = t.drag ?: return@joinToString "$at, \"kind\": \"tap\"}"
+                    "$at, \"kind\": \"drag\", \"to_x\": ${drag.first}, \"to_y\": ${drag.second}, \"until\": ${drag.third}}"
+                },
+            )
+            append("],\n \"regions\": {")
+            append(regions.entries.joinToString(", ") { (name, r) -> "\"$name\": [${r.joinToString(", ")}]" })
+            append("}}\n")
         }
         File(dir, "segment.json").writeText(json)
         return if (frame == 0) 0.0 else captureNanos / 1e6 / frame
@@ -405,6 +450,9 @@ internal class FrameCamera(
         if (activity != null && activity.window.decorView === rootView) return activity.window
         return runCatching { rootView.field("mWindow").get(rootView) as? Window }.getOrNull()
     }
+
+    /** A press, or with [drag] (to x, to y, until) a drag that lifts after frame until. */
+    private class Touch(val frame: Int, val x: Int, val y: Int, val drag: Triple<Int, Int, Int>? = null)
 
     companion object {
         const val WIDTH: Int = 1080

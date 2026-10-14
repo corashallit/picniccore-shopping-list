@@ -75,7 +75,8 @@ The recorder plays each flow on the app's own screens and writes one folder per 
 second of app time) and a `segment.json` with the segment's name, fps, size, frame count, theme (`day` or `glow`),
 its marks (the frames where the beats happen: `typing_start`, `typing_end`, `sent`, `sheet_up`, `rows_landed`,
 `first_tick`, …), its taps and its regions. A tap is a frame and a screen position, with `"kind": "tap"` or
-`"drag"`; a drag also gives where the finger lifted (`to_x`, `to_y`) and on which frame (`until`). An entry with no
+`"drag"`; a drag also gives where the finger lifted (`to_x`, `to_y`) and on which frame (`until`), and between its
+first frame and `until` the finger moves along a smoothstep, u²(3 − 2u) of the way at u of the time. An entry with no
 kind is a tap. `regions` names boxes of the screen worth a closer look, such as `"add_field": [x0, y0, x1, y1]`.
 
 ### Building the video
