@@ -185,8 +185,10 @@ TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the
 #   loupe              optional [(from, to, region)] or [(from, to, region, options)]: from 'from' to 'to' a loupe
 #                      shows `region` (a name from segment.json's "regions", such as 'add_field', or a rect (x0, y0, x1,
 #                      y1) of the recorded screen) live and enlarged, on a card LOUPE_GAP above it. Options: 'scale'
-#                      (LOUPE_SCALE unless given), 'y' (the card's top, frame px with the phone at rest) and 'width'
-#                      (the card's face, frame px: more white either side, to cover what would peek out round it).
+#                      (LOUPE_SCALE unless given), 'y' (the card's top, frame px with the phone at rest), 'width'
+#                      (the card's face, frame px: more white either side, to cover what would peek out round it) and
+#                      'margin' (recorded px of the region's own paper above and below it, its first and last rows
+#                      drawn out: room round text that fills its region, where the screen above holds something else).
 #                      Only over a small region with room round it: over a dense list a card slices the lines it
 #                      covers
 #   highlight          optional [(from, to, regions)]: from 'from' to 'to' a highlighter mark lies on each rect of
@@ -202,9 +204,11 @@ TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the
 # Celebrate starts after the list's scroll to Household, where the sticker book folds to its strip in 2 frames.
 # ---------------------------------------------------------------------------------------------------------------------
 SCENES = [
+    # write's two lines fill the field from top to bottom ("picnic day" stands just above it), so its loupe draws out
+    # a little of the field's own paper above and below them
     dict(segment='write', cut_in='typing_start-1.8s', cut_out='rows_landed+1.6s',
          speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
-         loupe=[('typing_start', 'sent+0.4s', 'add_field')],
+         loupe=[('typing_start', 'sent+0.4s', 'add_field', {'margin': 14})],
          captions=[(['Write your list', 'any old way'], 'start'),
                    (['Your list, sorted', 'aisle by aisle'], 'card_shown+0.2s')],
          fam='mint', tape='sakura',
@@ -612,27 +616,29 @@ def region_on_frame(rect):
             SCREEN_X + rect[2] * SCREEN_K, SCREEN_Y + rect[3] * SCREEN_K)
 
 
-Loupe = namedtuple('Loupe', 'seg rect scale crop_w crop_h pad x y w h')   # pad: more white at either side
+# pad: more white at either side; margin: the region's paper drawn out above and below it (both px of the card)
+Loupe = namedtuple('Loupe', 'seg rect scale crop_w crop_h pad margin x y w h')
 
 
-def loupe_layout(seg, rect, scale, y=None, width=None):
+def loupe_layout(seg, rect, scale, y=None, width=None, margin=0):
     """Where a loupe sits: its card (with the shadow) is centred on the screen, LOUPE_GAP above the region it shows,
-    or with its top at frame px `y`. A `width` (of the card's face, frame px) widens it with white either side."""
+    or with its top at frame px `y`. A `width` (of the card's face, frame px) widens it with white either side, and a
+    `margin` (recorded px) gives the region that much of its own paper above and below."""
     s = scale * SCREEN_K
     cw, ch = round((rect[2] - rect[0]) * s), round((rect[3] - rect[1]) * s)
-    pad = 0
+    pad, mh = 0, round(margin * s)
     if width is not None:
         if width < cw + 2 * LOUPE_BORDER:
             raise SystemExit(f'scene {seg}: a loupe {width} px wide is narrower than its region ({cw} px at that '
                              'scale) and its border')
         pad = (width - cw - 2 * LOUPE_BORDER) // 2
     w = cw + 2 * (LOUPE_BORDER + pad) + LOUPE_SHADOW[0]
-    h = ch + 2 * LOUPE_BORDER + LOUPE_SHADOW[1]
+    h = ch + 2 * (LOUPE_BORDER + mh) + LOUPE_SHADOW[1]
     top = region_on_frame(rect)[1]
     x = round((SCREEN_BOX[0] + SCREEN_BOX[2]) / 2 - (w - LOUPE_SHADOW[0]) / 2)
     if y is None:
         y = math.floor(top - LOUPE_GAP - h)
-    return Loupe(seg, rect, s, cw, ch, pad, x, y, w, h)
+    return Loupe(seg, rect, s, cw, ch, pad, mh, x, y, w, h)
 
 
 class Highlight(namedtuple('Highlight', 'seg rects n_in n_out ink')):
@@ -873,14 +879,17 @@ class Plan:
             seg = segs[sc['segment']]
             for j, spec in enumerate(sc.get('loupe', [])):
                 opts = spec[3] if len(spec) == 4 else {}
-                if (len(spec) not in (3, 4) or not isinstance(opts, dict) or set(opts) - {'scale', 'y', 'width'}
+                if (len(spec) not in (3, 4) or not isinstance(opts, dict)
+                        or set(opts) - {'scale', 'y', 'width', 'margin'}
                         or not 1 <= opts.get('scale', LOUPE_SCALE) <= 2.5
-                        or not all(isinstance(opts.get(o, 0), int) for o in ('y', 'width'))):
+                        or not all(isinstance(opts.get(o, 0), int) for o in ('y', 'width', 'margin'))
+                        or not 0 <= opts.get('margin', 0) <= 40):
                     raise SystemExit(f'scene {seg.name}: a loupe is (from, to, region) or (from, to, region, '
-                                     f'{{"scale": 1 to 2.5, "y": frame px, "width": frame px}}): {spec!r}')
+                                     f'{{"scale": 1 to 2.5, "y": frame px, "width": frame px, "margin": 0 to 40 '
+                                     f'recorded px}}): {spec!r}')
                 b0, b1, region = spec[:3]
                 lp = loupe_layout(seg.name, seg.region(region, 'loupe region'), opts.get('scale', LOUPE_SCALE),
-                                  opts.get('y'), opts.get('width'))
+                                  opts.get('y'), opts.get('width'), opts.get('margin', 0))
                 self._check_loupe(lp, seg.name)
                 f_in = seg.beat(b0, 'loupe')
                 n_in = self._output_frame(scene_clips[i], f_in, seg.name, b0)
@@ -1352,8 +1361,8 @@ class Renderer:
         m = store.rr_mask(size, face, LOUPE_RADIUS)
         card.paste(Image.new('RGBA', size, store.rgb(store.STICKER_SHADOW)), (0, 0), store.shift(m, *LOUPE_SHADOW))
         card.paste(Image.new('RGBA', size, store.rgb(store.WHITE)), (0, 0), m)
-        b = LOUPE_BORDER
-        window = store.rr_mask((lp.crop_w, lp.crop_h), (0, 0, lp.crop_w, lp.crop_h), LOUPE_RADIUS - b)
+        b, wh = LOUPE_BORDER, lp.crop_h + 2 * lp.margin
+        window = store.rr_mask((lp.crop_w, wh), (0, 0, lp.crop_w, wh), LOUPE_RADIUS - b)
         return card, window
 
     # one frame -------------------------------------------------------------------------------------------------------
@@ -1420,12 +1429,20 @@ class Renderer:
         lp = self.plan.loupes[sid]
         seg = self.plan.segs[layer.seg]
         full, _ = self.screen_image(layer.seg, layer.idx)
-        crop = full.resize((lp.crop_w, lp.crop_h), Image.LANCZOS, box=lp.rect)
+        if lp.margin:
+            # the region's own paper, its first and last rows drawn out, resampled from the region alone (a resample
+            # of the whole frame would bring in a trace of what lies just outside it, and draw that out too)
+            m = round(lp.margin / lp.scale)
+            src = np.pad(np.asarray(full.crop(lp.rect)), ((m, m), (0, 0), (0, 0)), mode='edge')
+            crop = Image.fromarray(src).resize((lp.crop_w, lp.crop_h + 2 * lp.margin), Image.LANCZOS)
+        else:
+            crop = full.resize((lp.crop_w, lp.crop_h), Image.LANCZOS, box=lp.rect)
         if layer.ring is not None:
             rings = seg.rings_at(layer.ring, max(layer.head, self.plan.loupe_since[sid]), layer.tail)
             if rings:
                 arr = np.asarray(crop, np.float32).copy()
-                draw_rings(arr, rings, lp.scale, -lp.rect[0] * lp.scale, -lp.rect[1] * lp.scale, seg.theme)
+                draw_rings(arr, rings, lp.scale, -lp.rect[0] * lp.scale, lp.margin - lp.rect[1] * lp.scale,
+                           seg.theme)
                 crop = Image.fromarray(np.rint(arr).clip(0, 255).astype(np.uint8))
         card, window = self.cards[sid]
         card = card.copy()

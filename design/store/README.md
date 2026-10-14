@@ -127,10 +127,13 @@ the field (clear of the dock's top edge), showing it live at 1.7x the phone scre
 letter, so it never shows the field's grey example line enlarged. The write and recipe scenes each use one on the add
 field and no others: a card over a dense list slices the lines round it and shows a second copy of what lies under
 it. A fourth item gives options: `{'scale': 1.35, 'y': 1462, 'width': 584}` sets the scale, the card's top (frame
-px, the phone at rest) and the width of its face (more white either side). The recipe's card uses them to sit in the
-band between the list and the dock, 20 px under the last aisle strip, clear of the dock's washi and covering the
-"end of the list" pill whole, and stays up until just before the sheet rises, so "pancakes for 12" reads whole for
-1.5 s. The card pops in and out as a sticker does but opaque on every frame: it grows from 0.3 with a small
+px, the phone at rest) and the width of its face (more white either side), and `{'margin': 14}` draws out 14
+recorded px of the region's own paper above and below it (its first and last rows repeated, never the screen beyond
+them). The recipe's card uses the first three to sit in the band between the list and the dock, 20 px under the last
+aisle strip, clear of the dock's washi and covering the "end of the list" pill whole, and stays up until just before
+the sheet rises, so "pancakes for 12" reads whole for 1.5 s; write's uses the margin, because its two lines fill the
+field from top to bottom with "picnic day" just above it. The card pops in and out as a sticker does but opaque on
+every frame: it grows from 0.3 with a small
 overshoot (1.06) and settles from 3° off, and leaves by shrinking away in 0.22 s, so it never lies part-faded over
 the words under it. The region is cut from the full-size recorded frame, so its text stays crisp, and the card is
 never wider than the phone. Only the taps made while it is up show in it. A region is a name from `segment.json`'s
