@@ -10,6 +10,7 @@ import android.view.View
 import android.view.Window
 import android.view.WindowManager
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.MainTestClock
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.test.core.app.ApplicationProvider
@@ -61,6 +62,7 @@ import java.util.zip.Deflater
 import java.util.zip.DeflaterOutputStream
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import kotlin.random.Random
@@ -75,7 +77,8 @@ import kotlin.random.Random
  * {"frame", "x", "y", "kind": "tap"} for a press, and {"frame", "x", "y", "kind": "drag", "to_x", "to_y", "until"} for
  * a drag, whose finger is at (x, y) on its first frame and at (to_x, to_y) on frame until, the last before it lifts;
  * k frames in, it is u²(3 − 2u) of the way there, u = k / (until − frame) (a smoothstep, no fling). regions name boxes
- * of the screen worth a closer look, as [x0, y0, x1, y1] in screen px ("add_field").
+ * of the screen worth a closer look, as [x0, y0, x1, y1] in screen px ("add_field"), or a list of such boxes
+ * ("pantry_rows": [[x0, y0, x1, y1], …]).
  */
 
 /** The frames' root folder: the PICNIC_VIDEO_FRAMES environment variable, or null (the recorder is skipped). */
@@ -264,7 +267,8 @@ internal class CountingForecast : WeatherSource {
  * captured frame shows the app exactly at its time (Compose's motion runs on frame time); background work the script
  * waits for is waited for with the clock held ([settle]), never filmed as frozen frames. [marks] name the storyboard's
  * beats for the compositor's captions; [touches] are where a finger pressed or dragged, [regions] boxes of the screen
- * (all in screen px); [watch]ers look at the app on every frame, just before it is captured.
+ * (all in screen px); [watch]ers look at the app on every frame, just before it is captured, and [look]ers at the
+ * frame's pixels, just after.
  */
 internal class FrameCamera(
     private val compose: ComposeTestRule,
@@ -279,8 +283,10 @@ internal class FrameCamera(
     private val start = compose.mainClock.currentTime
     private val marks = mutableListOf<Pair<String, Int>>()
     private val touches = mutableListOf<Touch>()
-    private val regions = LinkedHashMap<String, IntArray>()
+    private val regions = LinkedHashMap<String, List<IntArray>>()
+    private val many = HashSet<String>()
     private val watchers = mutableListOf<(Int) -> Unit>()
+    private val lookers = mutableListOf<(Int, IntArray) -> Unit>()
     private val writes = mutableListOf<Future<*>>()
     private var captureNanos = 0L
 
@@ -294,6 +300,13 @@ internal class FrameCamera(
     /** Names a beat at the next frame, or at [at] (a frame the script knows is coming). */
     fun mark(beat: String, at: Int = frame) {
         marks += beat to at
+    }
+
+    /** The first frame that shows the app at [ms] of segment time or later (frame k is the app at round(k × 1000 / fps)). */
+    fun frameAt(ms: Long): Int {
+        var k = max(0, (ms * VIDEO_FPS / 1000).toInt() - 1)
+        while ((k * 1000.0 / VIDEO_FPS).roundToLong() < ms) k++
+        return k
     }
 
     /** A finger comes down at (x, y) on the next frame. */
@@ -311,11 +324,20 @@ internal class FrameCamera(
 
     /** Names a box of the screen (screen px), clipped to it; the same name again replaces it. */
     fun region(name: String, x0: Float, y0: Float, x1: Float, y1: Float) {
-        regions[name] = intArrayOf(
-            floor(x0).toInt().coerceIn(0, WIDTH), floor(y0).toInt().coerceIn(0, HEIGHT),
-            ceil(x1).toInt().coerceIn(0, WIDTH), ceil(y1).toInt().coerceIn(0, HEIGHT),
-        )
+        regions[name] = listOf(box(x0, y0, x1, y1))
+        many -= name
     }
+
+    /** Names a list of boxes of the screen (screen px, each clipped to it), in order; the same name again replaces it. */
+    fun regions(name: String, boxes: List<Rect>) {
+        regions[name] = boxes.map { box(it.left, it.top, it.right, it.bottom) }
+        many += name
+    }
+
+    private fun box(x0: Float, y0: Float, x1: Float, y1: Float) = intArrayOf(
+        floor(x0).toInt().coerceIn(0, WIDTH), floor(y0).toInt().coerceIn(0, HEIGHT),
+        ceil(x1).toInt().coerceIn(0, WIDTH), ceil(y1).toInt().coerceIn(0, HEIGHT),
+    )
 
     /**
      * Runs [look] on every frame from the next one on, with the frame's index, once the app has settled for it (it sees
@@ -324,6 +346,15 @@ internal class FrameCamera(
     fun watch(look: (Int) -> Unit): () -> Unit {
         watchers += look
         return { watchers.remove(look) }
+    }
+
+    /**
+     * Runs [look] on every frame from the next one on, with the frame's index and its pixels as captured (ARGB, [WIDTH]
+     * a row, [HEIGHT] rows; read them, never keep or change them); the function returned stops it.
+     */
+    fun look(look: (Int, IntArray) -> Unit): () -> Unit {
+        lookers += look
+        return { lookers.remove(look) }
     }
 
     /** Captures the screen as frame [frame], then runs the clock on to the next frame's time. */
@@ -338,6 +369,7 @@ internal class FrameCamera(
         val h = shot.height
         shot.recycle()
         captureNanos += System.nanoTime() - began
+        lookers.forEach { it(frame, pixels) }
         val file = File(dir, "%05d.png".format(frame))
         writes += PngWriter.submit(file, w, h, pixels)
         frame++
@@ -394,7 +426,12 @@ internal class FrameCamera(
                 },
             )
             append("],\n \"regions\": {")
-            append(regions.entries.joinToString(", ") { (name, r) -> "\"$name\": [${r.joinToString(", ")}]" })
+            append(
+                regions.entries.joinToString(", ") { (name, boxes) ->
+                    val each = boxes.map { "[${it.joinToString(", ")}]" }
+                    "\"$name\": " + if (name in many) each.joinToString(", ", "[", "]") else each.single()
+                },
+            )
             append("}}\n")
         }
         File(dir, "segment.json").writeText(json)
