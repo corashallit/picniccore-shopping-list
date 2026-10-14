@@ -24,8 +24,10 @@ import org.robolectric.annotation.GraphicsMode
  * spec's own blinks are under it (the REC dot 0.83 Hz, the LCD star 0.25 Hz, the shiny glint, the Glow stars' charge;
  * sparkles are shape changes, but their cycle is under it too), and the strips the app really draws flash at most three
  * times in any second (FlashMeter, WCAG 2.3.1's count): the celebration from the last check-off through its summary
- * (one white flash), the List at rest with its blinks, glints and ambient loops, the Speak tab recording, the album with
- * its holo glints, Day and Glow. The eggs' moments are NoFlashEggsTest's.
+ * (no flash at all since 14 October, §0.4: its heart iris opens straight from the last tick; item 361's
+ * CelebrationTest.entranceHandsStraightOver* reads its entrance frame by frame), the List at rest with its blinks,
+ * glints and ambient loops, the Speak tab recording, the album with its holo glints, Day and Glow. The eggs' moments are
+ * NoFlashEggsTest's.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -55,10 +57,10 @@ class NoFlashTest {
     }
 
     @Test
-    fun theCelebrationFlashesOnceDay() = celebration(ThemeVariant.Day)
+    fun theCelebrationNeverFlashesDay() = celebration(ThemeVariant.Day)
 
     @Test
-    fun theCelebrationFlashesOnceGlow() = celebration(ThemeVariant.Glow)
+    fun theCelebrationNeverFlashesGlow() = celebration(ThemeVariant.Glow)
 
     @Test
     fun theListAtRestDay() = atRest("list_midtrip", Combo(), 9_500)
@@ -72,7 +74,7 @@ class NoFlashTest {
     @Test
     fun theAlbum() = atRest("album", Combo(), 7_000)
 
-    /** The last check-off, the flash, the iris, the confetti and the ride, through the summary. */
+    /** The last check-off, the kira bloom and the heart iris, the ride, the confetti, through the summary. */
     private fun celebration(variant: ThemeVariant) {
         val stage = FixtureStage(compose, Combo(variant = variant))
         try {

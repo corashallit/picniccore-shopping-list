@@ -21,6 +21,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
@@ -37,8 +38,10 @@ import earth.cora.picnic.platform.Cue
 import earth.cora.picnic.ui.theme.CelebrationScene
 import earth.cora.picnic.ui.theme.CelebrationTags
 import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.closingFill
 import kotlinx.coroutines.runBlocking
+import kotlin.math.abs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -237,6 +240,92 @@ class CelebrationTest {
         assertBeat("closes by itself", s + 18450, frames.firstTime { it.celebration?.closingT0 != null })
         assertBeat("gone", s + 18450 + 200, frames.firstTime(from = s + 18450) { it.celebration == null })
     }
+
+    /**
+     * Item 361 (§0.4, 14 October): the celebration opens from the last tick with no white flash. Every frame from the
+     * tap that completes the trip through the scene's first 0.5 s is read off the screen: none is mostly white; the
+     * scene shows from its first frame, in a heart that already reads as its arrival; once it has started, the plain list
+     * never shows again (the share of the screen the scene has taken from the list only grows); and it has the whole
+     * screen by 0.25 s, the end of the iris. Over a Day list (mint, like the scene's own ground) and a Glow one.
+     */
+    @Test
+    fun entranceHandsStraightOverDay() = entrance(ThemeVariant.Day)
+
+    @Test
+    fun entranceHandsStraightOverGlow() = entrance(ThemeVariant.Glow)
+
+    private fun entrance(variant: ThemeVariant) {
+        val rig = HarnessRig(compose, lastOne(), variant = variant).start()
+        // Toothpaste's row on screen, so the iris opens from the checkbox she taps.
+        compose.onNodeWithTag(HarnessTags.LIST).performScrollToIndex(rig.model.grouped().sections.indexOfFirst { it.id == household })
+        rig.advance(300)
+        val t0 = rig.tap("toothpaste")
+        val due = t0 + 620 + Beats.CELEBRATION
+        var list: IntArray? = null
+        var start: Long? = null
+        val white = ArrayList<Pair<Long, Float>>()
+        val taken = ArrayList<Pair<Long, Float>>()
+        rig.sampleTo(due + 500) { now ->
+            val px = screenPixels()
+            white += (now - t0) to share(px.size) { isWhite(px[it]) }
+            val cele = rig.p.celebration
+            if (cele == null) {
+                list = px
+            } else {
+                // Times from the scene's own start (its t0, on the frame clock).
+                val s = start ?: cele.t0.also { start = it }
+                val before = list!!
+                taken += (now - s) to share(px.size) { differs(px[it], before[it]) }
+            }
+        }
+        val fmt = { l: List<Pair<Long, Float>> -> l.joinToString { (t, f) -> "$t: ${"%.3f".format(f)}" } }
+        println("entrance [$variant] white from the tap: ${fmt(white)}")
+        println("entrance [$variant] scene's share from its start: ${fmt(taken)}")
+        val s = start
+        assertNotNull("the scene starts", s)
+        assertBeat("the scene", due, s)
+        val mostlyWhite = white.filter { it.second > MOSTLY_WHITE }
+        assertTrue("[$variant] mostly white frames (ms from the tap: share): ${fmt(mostlyWhite)}", mostlyWhite.isEmpty())
+        // The scene from its first frame: the heart's first pose reads at once.
+        assertTrue("[$variant] the scene's first frame shows it: ${fmt(taken.take(1))}", taken.first().second >= FIRST_POSE)
+        // Never the plain list again: the scene's share only grows (a frame's own small changes aside).
+        var most = 0f
+        for ((t, f) in taken) {
+            assertTrue("[$variant] the list shows again at +$t ms (${"%.3f".format(f)} after ${"%.3f".format(most)}): ${fmt(taken)}", f >= most - SLACK)
+            most = maxOf(most, f)
+        }
+        // And it has the whole screen from the end of the iris.
+        val covered = taken.first { it.first >= CelebrationTimeline.IRIS }.second
+        assertTrue("[$variant] the scene has the screen by 0.25 s: ${fmt(taken)}", covered >= COVERED && covered >= most - SLACK)
+        // Its text shows only from then, never cut by the heart's edge.
+        val open = s!! + CelebrationTimeline.IRIS
+        for (tag in listOf(CelebrationTags.TITLE, CelebrationTags.CHIP, CelebrationTags.LCD, CelebrationTags.SKIP)) {
+            val shown = rig.probe.frames(tag).filter { it.time >= s && it.alpha > 0f }
+            assertTrue("[$variant] $tag shows inside the heart: ${shown.map { it.time - s }}", shown.none { it.time < open })
+            assertTrue("[$variant] $tag shows once the scene has the screen", shown.any { it.time < open + 100 })
+        }
+    }
+
+    /** The screen as drawn now, every 4th pixel each way (ARGB). */
+    private fun screenPixels(): IntArray {
+        compose.waitForIdle()
+        val full = compose.onRoot().captureToImage().asAndroidBitmap()
+        val small = android.graphics.Bitmap.createScaledBitmap(full, full.width / 4, full.height / 4, false)
+        val px = IntArray(small.width * small.height)
+        small.getPixels(px, 0, small.width, 0, 0, small.width, small.height)
+        return px
+    }
+
+    /** The share of [n] pixels for which [pred] holds. */
+    private fun share(n: Int, pred: (Int) -> Boolean): Float = (0 until n).count(pred).toFloat() / n
+
+    /** Paper white or near it: every channel at least 240 (the old flash's 92 % white over any list is). */
+    private fun isWhite(argb: Int): Boolean =
+        (argb shr 16 and 0xFF) >= 240 && (argb shr 8 and 0xFF) >= 240 && (argb and 0xFF) >= 240
+
+    /** A pixel the scene has changed from the list: some channel moved by more than 40. */
+    private fun differs(a: Int, b: Int): Boolean =
+        abs((a shr 16 and 0xFF) - (b shr 16 and 0xFF)) > 40 || abs((a shr 8 and 0xFF) - (b shr 8 and 0xFF)) > 40 || abs((a and 0xFF) - (b and 0xFF)) > 40
 
     /** Item 182: each text beat holds still its rule from its settle (StillnessProbe). */
     @Test
@@ -779,5 +868,25 @@ class CelebrationTest {
         val sa = ca[ca.indexOfFirst { it.id == common.id } - 1]
         val sb = cb[cb.indexOfFirst { it.id == common.id } - 1]
         return sa to sb
+    }
+
+    private companion object {
+        /**
+         * Mostly white: more than this share of the screen (a Day list's paper is about half of it; the old flash frames
+         * were 95 to 100 %).
+         */
+        const val MOSTLY_WHITE = 0.8f
+
+        /** The heart's first pose (180 dp, cut by the screen's edge beside the checkbox) already takes this much (4 %). */
+        const val FIRST_POSE = 0.03f
+
+        /** A frame's own small changes (the scene's motion, anti-aliasing) under the scene's share. */
+        const val SLACK = 0.02f
+
+        /**
+         * The scene has the screen: over a Glow list it changes 94 % of it, over a Day list 65 % (its mint stripes and
+         * white plates fall on the list's own mint and paper).
+         */
+        const val COVERED = 0.5f
     }
 }

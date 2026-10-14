@@ -1,7 +1,10 @@
 package earth.cora.picnic.ui.list.motion
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import earth.cora.picnic.ui.theme.ThemeVariant
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -47,6 +50,28 @@ class HarnessPeekTest {
         for (t in listOf(100L, 700L, 2400L, 3300L, 4600L, 5000L, 6600L, 9500L, 11500L, 12200L, 15000L)) {
             rig.advanceTo(start + t)
             rig.peek(File(dir, "cele_$t.png"))
+        }
+    }
+
+    /** The celebration's entrance, every frame from just before the scene to 0.64 s, over a Day and a Glow list. */
+    @Test
+    fun entranceDay() = entrance(ThemeVariant.Day)
+
+    @Test
+    fun entranceGlow() = entrance(ThemeVariant.Glow)
+
+    private fun entrance(variant: ThemeVariant) {
+        assumeTrue(dir != null)
+        val rig = HarnessRig(compose, MotionFixture.allBut(listOf("toothpaste"), open = "household"), variant = variant).start()
+        // Toothpaste's row on screen, so the iris opens from the checkbox she tapped.
+        compose.onNodeWithTag(HarnessTags.LIST).performScrollToIndex(rig.model.grouped().sections.indexOfFirst { it.id == "household" })
+        rig.advance(300)
+        val t0 = rig.tap("toothpaste")
+        val start = t0 + 620 + Beats.CELEBRATION
+        rig.advanceTo(start - 48)
+        while (rig.now <= start + 640) {
+            rig.peek(File(dir, "entrance_${variant.suffix}_${rig.now - start}.png"))
+            rig.frame()
         }
     }
 }

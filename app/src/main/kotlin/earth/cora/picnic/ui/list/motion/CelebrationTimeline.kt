@@ -17,7 +17,7 @@ import earth.cora.picnic.ui.theme.words
 
 /** The storyboard's moments (§11.2). */
 enum class BeatName {
-    Flash, Iris, BurstStar, Title, SkipChip, Hamper, Kira, RibbonDraw, Ride, Spread, StampCard, Flip, CardGlint,
+    Iris, BurstStar, Title, SkipChip, Hamper, Kira, RibbonDraw, Ride, Spread, StampCard, Flip, CardGlint,
     Perfect, Shake, TitleGlint, Banner, Confetti, PetDance, CapsuleWobble, Bonus, CapsulePop, Curl, SkipChipOut,
     PocketKira, PocketMagic, Summary, Close,
 }
@@ -84,6 +84,12 @@ data class CelebrationPlan(
 }
 
 object CelebrationTimeline {
+    /**
+     * The heart iris (with its kira bloom) opens from 0 in three held 12 fps poses (HeartIris, 83 ms each) and has
+     * uncovered the whole scene from [IRIS] ms (§11.2); the scene's text shows from then, never cut by its edge.
+     */
+    const val IRIS: Long = 249
+
     /** The title drops in 600 ms (cubic-bezier(.3, 1.4, .5, 1)) from 0.10 s: settled S1 = 0.70 s. */
     const val TITLE_AT: Long = 100
     const val TITLE_IN: Long = 600
@@ -143,8 +149,9 @@ object CelebrationTimeline {
         }
 
         val beats = ArrayList<Beat>()
-        beats += Beat(BeatName.Flash, 0, 170)
-        beats += Beat(BeatName.Iris, 40, 460)
+        // No flash (§0.4, 14 October): at 0 a kira bloom marks the last tapped checkbox and the heart iris opens from it
+        // at once, so the finished list hands straight over to the rays.
+        beats += Beat(BeatName.Iris, 0, IRIS)
         beats += Beat(BeatName.BurstStar, 100, 600)
 
         // Text beat 1: the title, the list chip, the LCD and "tap to skip" (all newly on screen with it).
