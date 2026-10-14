@@ -15,9 +15,9 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -57,6 +57,7 @@ import earth.cora.picnic.ui.album.AlbumTags
 import earth.cora.picnic.ui.common.SaturdayShop
 import earth.cora.picnic.ui.list.ListTags
 import earth.cora.picnic.ui.list.motion.BeatName
+import earth.cora.picnic.ui.list.motion.Beats
 import earth.cora.picnic.ui.list.motion.CELEBRATION_TAG
 import earth.cora.picnic.ui.list.motion.CelebrationTimeline
 import earth.cora.picnic.ui.list.motion.NEXT_CARD_TAG
@@ -101,19 +102,24 @@ import kotlin.math.min
  * - card_shown: the review's thinking box is there (the sheet starts to rise with it).
  * - sheet_up: the first frame the sheet rests fully risen (later it only glides to new heights as the card arrives).
  * - recipe_card (recipe): the recipe card's first frame. card_scroll: the finger comes down to scroll the card.
+ * - card_ready: the first frame "Stick all" can be pressed (the reveal is over and its pill turns glossy); the press
+ *   comes at least [REVIEW_REST] later, so the card is read at rest.
  * - stuck: the first frame after "Stick all" is let go (the sheet starts down, still showing the card).
  * - sheet_gone, rows_landed: the first frame with nothing of the sheet left; the new rows are on the list.
  * - first_tick, second_tick, last_tick: the first frame after a row's check spot is let go (GOT IT! slams on).
+ * - aisle_done (glow): the aisle-done payoff has landed (§8.4, from the last landing L: the lid's GOT IT at L + 440,
+ *   the book's aisle stamp at L + 500); tray_curl: the tray's curl, the first motion after it (L + 800).
  * - next_card: the Next stop card's first frame.
  * - scroll_start (celebrate, album): the finger comes down to scroll.
- * - celebration (celebrate): the celebration's first frame (its white flash); title, perfect, banner, bonus, summary:
- *   its beats, from the scene's own storyboard (CelebrationTimeline).
+ * - celebration (celebrate): the celebration's first frame (the kira bloom on the last checkbox and the heart iris
+ *   opening from it; no flash, §0.4); title, perfect, banner, bonus, summary: its beats, from the scene's own
+ *   storyboard (CelebrationTimeline).
  *
  * Taps and drags (segment.json "taps", VideoRig's header): every press is on the spot the app answers at (a tick on
  * the row's check spot, where its hanko lands); a drag is logged with the eased path its finger takes. Regions:
- * add_field (write, recipe), the add field's box over the typing with an even margin round it; pantry_row_1 and
- * pantry_row_2 (recipe), the recipe card's two "in your pantry" rows (White sugar, Salt) once the card has come to
- * rest, inside their tray's border and under the rule above them.
+ * add_field (write, recipe), the add field over the typing, clear of the dock's "picnic day" doodle, with her words
+ * and the underline in its middle (see followField); pantry_rows (recipe), one box per "in your pantry" row of the
+ * recipe card at rest (White sugar, Salt): its name and detail line, with room round them for a highlighter's mark.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -169,9 +175,8 @@ class FeatureVideoRecorder {
         answer.gate.complete(Unit)
         cam.rollUntil("the review", maxMs = 1_500) { exists(THINKING_TAG) }
         cam.mark("card_shown")
-        cam.rollUntil("the card's stickers", maxMs = 6_000) { textShown("Stick all 6 on my list", substring = true) }
-        cam.roll(2_250)
-        stick(cam, sheet, "Stick all 6 on my list", items = 6)
+        val ready = ready(cam, "Stick all 6 on my list")
+        stick(cam, sheet, "Stick all 6 on my list", items = 6, readyAt = ready)
         cam.roll(2_600)
     }
 
@@ -202,21 +207,19 @@ class FeatureVideoRecorder {
         cam.rollUntil("the recipe card", maxMs = 4_000) { exists(RECIPE_CARD_TAG) }
         cam.mark("recipe_card")
         // The stickers fan out into the trays, and the steps (about 30 words) can be read.
-        cam.roll(3_100)
+        val shown = cam.elapsed
+        val ready = ready(cam, "Stick all 3 on my list")
+        cam.roll(shown + 3_100 - cam.elapsed)
         // Up through the card, so its aisle trays and their reasons can be read (the finger lifts on the card, a little
         // under the sheet's top edge, never over the dimmed app bar).
         cam.mark("card_scroll")
         drag(cam, from = Offset(540f, 1_880f), distance = 1_450f, ms = 2_000)
         cam.roll(300)
-        // The two rows the pantry left out, at rest: White sugar, then Salt. Each inside its tray's border (2 dp) and
-        // under the rule above it (1 dp), so a closer look shows the row alone.
-        val dp = compose.activity.resources.displayMetrics.density
-        compose.onAllNodes(hasContentDescription("in your pantry", substring = true)).fetchSemanticsNodes()
-            .map(::boundsOnScreen).sortedBy { it.top }
-            .forEachIndexed { i, b -> cam.region("pantry_row_${i + 1}", b.left + 2 * dp, b.top + dp, b.right - 2 * dp, b.bottom) }
+        // The two rows the pantry left out, at rest: White sugar, then Salt.
+        cam.regions("pantry_rows", pantryRows())
         // Still long enough to read the rows and their reasons up close.
         cam.roll(3_800)
-        stick(cam, sheet, "Stick all 3 on my list", items = 9)
+        stick(cam, sheet, "Stick all 3 on my list", items = 9, readyAt = ready)
         cam.roll(2_000)
     }
 
@@ -239,18 +242,24 @@ class FeatureVideoRecorder {
 
     /**
      * Glow (§2.5): the phone is in dark mode, so the list is the Glow variant; the same trip a stop on, Breakfast open.
-     * The maple syrup, then the coffee beans, and Breakfast is done: its tray folds and the Next card rises (the cut can
-     * end before it, the shop segment's beat).
+     * The maple syrup (its whole chain, the twin settling in the book, then a rest), then the coffee beans, and
+     * Breakfast is done: the lid's GOT IT and the book's stamp land (the cut can end on them, before the tray curls and
+     * folds and the Next card rises, the shop segment's beats).
      */
     @Test
     @Config(qualifiers = "+night")
     fun glow() = film("glow", "glow") { cam ->
         cam.roll(1_500)
-        tick(cam, "Maple syrup")
+        val maple = tick(cam, "Maple syrup")
         cam.mark("first_tick")
-        cam.roll(1_300)
-        tick(cam, "Coffee beans")
+        // Its chain has played out (§8.3: the twin settles in the book 1,260 ms after the tap), then a rest before the next.
+        cam.roll(maple + Beats.settled(personality("Maple syrup")) + 1_000 - cam.elapsed)
+        val coffee = tick(cam, "Coffee beans")
         cam.mark("second_tick")
+        // Breakfast's aisle-done chain (§8.4), from the coffee beans' landing L.
+        val landed = coffee + Beats.land(personality("Coffee beans"))
+        cam.mark("aisle_done", cam.frameAt(landed + Beats.STAMP))
+        cam.mark("tray_curl", cam.frameAt(landed + Beats.CURL))
         cam.rollUntil("the Next card", maxMs = 4_000) { exists(NEXT_CARD_TAG) }
         cam.mark("next_card")
         cam.roll(1_000)
@@ -268,24 +277,25 @@ class FeatureVideoRecorder {
         // Down the list to the last stop, past the aisles tied with their bows.
         cam.mark("scroll_start")
         drag(cam, from = Offset(540f, 1_700f), distance = 900f, ms = 1_100)
-        // At rest on Household long enough for the scene's caption to be read before the tick.
-        cam.roll(1_700)
-        tick(cam, "Toothpaste")
+        // At rest on Household, its tray open, long enough for the scene's caption to be read (slowly) before the tick.
+        cam.roll(2_600)
+        val toothpaste = tick(cam, "Toothpaste")
         cam.mark("last_tick")
         cam.rollUntil("the celebration", maxMs = 6_000) { exists(CELEBRATION_TAG) }
         cam.mark("celebration")
-        // The scene's own storyboard (CelebrationTimeline, the same plan the scene runs) names the beats' frames.
+        // The scene starts at L + 1350 from the last landing (§8.4), between two frames, and its own storyboard
+        // (CelebrationTimeline, the same plan the scene runs) times the beats from there.
+        val start = toothpaste + Beats.land(personality("Toothpaste")) + Beats.CELEBRATION
+        check(cam.frameAt(start) == cam.frame) { "the celebration came at frame ${cam.frame}, not at L + 1350 (${cam.frameAt(start)})" }
         val list = state.currentList()
         val plan = CelebrationTimeline.plan(list.title, TripStats.of(list, stops = 8), petHatched = false)
-        val start = cam.frame
-        fun frameAt(ms: Long) = start + (ms * VIDEO_FPS / 1000).toInt()
-        cam.mark("title", frameAt(plan.beat(BeatName.Title).at))
-        cam.mark("perfect", frameAt(plan.beat(BeatName.Perfect).at))
-        cam.mark("banner", frameAt(plan.beat(BeatName.Banner).at))
-        cam.mark("bonus", frameAt(plan.beat(BeatName.Bonus).at))
-        cam.mark("summary", frameAt(plan.summaryAt))
+        cam.mark("title", cam.frameAt(start + plan.beat(BeatName.Title).at))
+        cam.mark("perfect", cam.frameAt(start + plan.beat(BeatName.Perfect).at))
+        cam.mark("banner", cam.frameAt(start + plan.beat(BeatName.Banner).at))
+        cam.mark("bonus", cam.frameAt(start + plan.beat(BeatName.Bonus).at))
+        cam.mark("summary", cam.frameAt(start + plan.summaryAt))
         // The summary still for 3.4 s, stopping short of the scene closing by itself.
-        cam.roll(min(plan.summaryAt + 3_400, plan.closeAt - 200))
+        cam.roll(start + min(plan.summaryAt + 3_400, plan.closeAt - 200) - cam.elapsed)
     }
 
     /**
@@ -382,27 +392,83 @@ class FeatureVideoRecorder {
     }
 
     /**
-     * Films [script] while following the add field on every frame (it grows to a second line as she types), then names
-     * the box it took on the screen, with an 8 dp margin, as the region add_field. The bar's "picnic day" doodle leans
-     * over the field's top, so the box starts between the doodle and the typed text rather than cut either in half, and
-     * gives up as much of its margin below, so the text sits in the middle of it; never more than leaves the underline
-     * whole (the field's own padding under it is about 5 dp).
+     * Films [script] while following the add field on every frame (it grows to a second line as she types, and the
+     * dock with it), then names the region add_field: the field's box over the typing with an 8 dp margin each side, and
+     * from under the dock's "picnic day" doodle to as far under the field's own ink as that leaves above it, so her
+     * words and the underline sit in its middle. The doodle is turned −4° and leans over the field's top: its 'p' dips
+     * lowest, and lower while the field is one line (the dock is shorter), so its ink and the field's are read off every
+     * frame: in the columns over the field, the doodle's is its rose and gold (red over blue) down to the dip its turn
+     * allows, and the field's every other mark on the paper below the doodle's lowest (her words, the caret, the
+     * underline and its heart), from her first key on (it shows a frame late, so the first frame still has the hint).
      */
     private fun followField(cam: FrameCamera, script: () -> Unit) {
-        var box: Rect? = null
-        val stop = cam.watch { box = union(box, boundsOnScreen(field().fetchSemanticsNode())) }
-        script()
-        stop()
-        val b = checkNotNull(box) { "the add field was never filmed" }
         val dp = compose.activity.resources.displayMetrics.density
-        val doodle = compose.onAllNodesWithTag(ADD_BAR_DOODLE_TAG, useUnmergedTree = true).fetchSemanticsNodes()
-            .firstOrNull()?.let(::boundsOnScreen)
-        // Its box is laid out level; turned 4°, its lowest ink (the heart at its left end) ends about 1 dp under it, and
-        // two-line text starts about 2 dp lower still.
-        val clear = doodle?.let { it.bottom + 2 * dp } ?: Float.NEGATIVE_INFINITY
-        val top = max(b.top - 8 * dp, clear)
-        val bottom = max(b.bottom + 8 * dp - (top - (b.top - 8 * dp)), b.bottom - 2 * dp)
-        cam.region("add_field", b.left - 8 * dp, top, b.right + 8 * dp, bottom)
+        var box: Rect? = null
+        var now: Pair<Rect, Rect>? = null
+        val follow = cam.watch {
+            val at = boundsOnScreen(field().fetchSemanticsNode())
+            box = union(box, at)
+            now = at to boundsOnScreen(compose.onAllNodesWithTag(ADD_BAR_DOODLE_TAG, useUnmergedTree = true).fetchSemanticsNodes().single())
+        }
+        var doodleInk = -1
+        var ink: Rect? = null
+        val typed = cam.frame + 1
+        val look = cam.look { frame, px ->
+            val (at, doodle) = checkNotNull(now)
+            val w = FrameCamera.WIDTH
+            val x0 = max(0, (at.left - 8 * dp).toInt())
+            val x1 = min(w, (at.right + 8 * dp).toInt())
+            // Its box is laid out level; turned 4° about its middle, its ends move up or down by half its width × sin 4°.
+            val dip = min(FrameCamera.HEIGHT, (doodle.bottom + doodle.width * DOODLE_TILT_SIN / 2 + 2 * dp).toInt())
+            var lowest = -1
+            for (y in max(0, doodle.top.toInt()) until dip) {
+                if ((x0 until x1).any { x -> px[y * w + x].let { !paper(it) && red(it) - blue(it) > 4 } }) lowest = y
+            }
+            doodleInk = max(doodleInk, lowest)
+            if (frame >= typed) {
+                for (y in (if (lowest >= 0) lowest + 1 else at.top.toInt()) until min(FrameCamera.HEIGHT, at.bottom.toInt() + 1)) {
+                    val inked = (at.left.toInt() until at.right.toInt()).filter { x -> !paper(px[y * w + x]) }
+                    if (inked.isNotEmpty()) ink = union(ink, Rect(inked.first().toFloat(), y.toFloat(), inked.last() + 1f, y + 1f))
+                }
+            }
+        }
+        script()
+        follow()
+        look()
+        val b = checkNotNull(box) { "the add field was never filmed" }
+        val words = checkNotNull(ink) { "the add field showed no ink" }
+        val top = max(words.top - 8 * dp, doodleInk + 1f)
+        cam.region("add_field", b.left - 8 * dp, top, b.right + 8 * dp, words.bottom + (words.top - top))
+    }
+
+    /** The dock's paper (white) or near it: no ink. */
+    private fun paper(argb: Int): Boolean = red(argb) + green(argb) + blue(argb) >= 735
+
+    private fun red(argb: Int) = argb shr 16 and 0xFF
+
+    private fun green(argb: Int) = argb shr 8 and 0xFF
+
+    private fun blue(argb: Int) = argb and 0xFF
+
+    /**
+     * The recipe card's "in your pantry" rows at rest, top to bottom: each the box of its name and detail line (the
+     * row's words as laid out, under the cleared semantics TalkBack hears as one label) with room round them for a
+     * highlighter's mark: 3 dp over and under, as a pressed row's band (§4.4), and 6 dp either side, so the slanted
+     * ends of a chisel-tipped mark still cover the first and last letters.
+     */
+    private fun pantryRows(): List<Rect> {
+        val dp = compose.activity.resources.displayMetrics.density
+        val words = compose.onAllNodes(
+            SemanticsMatcher.keyIsDefined(SemanticsProperties.Text) and hasAnyAncestor(hasTestTag(RECIPE_CARD_TAG)),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes().map(::boundsOnScreen)
+        val rows = compose.onAllNodes(hasContentDescription("in your pantry", substring = true)).fetchSemanticsNodes()
+            .map(::boundsOnScreen).sortedBy { it.top }
+        check(rows.size == 2) { "the card shows ${rows.size} pantry rows" }
+        return rows.map { row ->
+            val band = words.filter { row.contains(it.center) }.reduceOrNull(::union) ?: error("a pantry row with no words at $row")
+            Rect(band.left - 6 * dp, band.top - 3 * dp, band.right + 6 * dp, band.bottom + 3 * dp)
+        }
     }
 
     /** A finger on [node]: down on its centre, held [holdMs] (the kit's press shows), up. */
@@ -416,20 +482,39 @@ class FeatureVideoRecorder {
 
     /**
      * Ticks the row [name] with a press on its check spot, where the GOT IT! hanko lands (the whole row is the toggle),
-     * then waits with the clock held for the store to have it checked.
+     * then waits with the clock held for the store to have it checked. Returns the segment time its check-off chain
+     * starts from (§8.3: the next frame's, the first after the finger lifts).
      */
-    private fun tick(cam: FrameCamera, name: String) {
+    private fun tick(cam: FrameCamera, name: String): Long {
         cam.settle("$name's row on screen") { onScreen(name) }
         val id = state.currentList().items.single { it.name == name }.id
         press(cam, compose.onNode(hasTestTag(ListTags.check(id)), useUnmergedTree = true), holdMs = 90)
         cam.settle("$name checked") { state.currentList().items.single { it.name == name }.checked }
+        return cam.elapsed
+    }
+
+    /** The personality of the row [name]'s sticker: its hop takes 360 ms instead of 300 (§8.3). */
+    private fun personality(name: String) = container.catalog.personalityOf(state.currentList().items.single { it.name == name }.icon)
+
+    /**
+     * Films until the review's [button] ("Stick all n on my list") can be pressed: the stickers have fanned in and its
+     * pill turned glossy. Marks card_ready; returns its segment time.
+     */
+    private fun ready(cam: FrameCamera, button: String): Long {
+        cam.rollUntil("$button to be ready", maxMs = 8_000) {
+            compose.onAllNodes(hasText(button, substring = true) and isEnabled()).fetchSemanticsNodes().isNotEmpty()
+        }
+        cam.mark("card_ready")
+        return cam.elapsed
     }
 
     /**
-     * Presses the review's [button] ("Stick all n on my list"): marks stuck, waits (clock held) for the list to hold
-     * [items], films the sheet sliding away with the card, and marks sheet_up, sheet_gone and rows_landed.
+     * Presses the review's [button] ("Stick all n on my list"), no sooner than [REVIEW_REST] after it was ready at
+     * [readyAt]: marks stuck, waits (clock held) for the list to hold [items], films the sheet sliding away with the
+     * card, and marks sheet_up, sheet_gone and rows_landed.
      */
-    private fun stick(cam: FrameCamera, sheet: SheetWatch, button: String, items: Int) {
+    private fun stick(cam: FrameCamera, sheet: SheetWatch, button: String, items: Int, readyAt: Long) {
+        cam.roll(readyAt + REVIEW_REST - cam.elapsed)
         val resting = cam.frame
         press(cam, node(hasText(button, substring = true)))
         cam.mark("stuck")
@@ -513,9 +598,6 @@ class FeatureVideoRecorder {
     private fun node(matcher: SemanticsMatcher): SemanticsNodeInteraction = compose.onNode(matcher, useUnmergedTree = false)
 
     private fun exists(tag: String): Boolean = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
-
-    private fun textShown(text: String, substring: Boolean = false): Boolean =
-        compose.onAllNodesWithText(text, substring = substring, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     /** The list row whose spoken label starts with [name], or null while it is not on screen. */
     private fun row(name: String): SemanticsNodeInteraction? {
@@ -619,6 +701,12 @@ class FeatureVideoRecorder {
     private companion object {
         const val MIN = 60_000L
         const val DAY = 86_400_000L
+
+        /** At least this long at rest on a ready review card before "Stick all" is pressed: its words read slowly. */
+        const val REVIEW_REST = 2_500L
+
+        /** sin 4°, the doodle's turn. */
+        const val DOODLE_TILT_SIN = 0.0698f
 
         /** 11:02, half an hour after she wrote the list: the first sticker of the trip. */
         const val TRIP_START = VIDEO_MORNING + 32 * MIN
