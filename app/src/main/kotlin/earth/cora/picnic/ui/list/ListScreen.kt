@@ -867,6 +867,8 @@ fun ListScreen(
     // pinned over its rows: item 87's one swap) and the one she opens unfolds, from the first frame the list shows them.
     val shownOpen = remember { arrayOfNulls<Pair<String, String?>>(1) }
     val wasOpen = shownOpen[0]?.takeIf { it.first == state.listId }
+    // Her last glide: a tap while it still moves its trays carries them on from where they are (TapGlide.carried).
+    val lastGlide = remember { arrayOfNulls<TapGlide>(1) }
     val glide = remember(state.listId, openId) {
         val tap = screen.foldTap
         val hers = tap != null && wasOpen != null && openId != wasOpen.second &&
@@ -875,15 +877,25 @@ fun ListScreen(
         if (!hers || reduced) {
             null
         } else {
+            val before = lastGlide[0]
+            val moving = if (before == null) emptySet() else Snapshot.withoutReadObservation { before.moving }
             val leaving = wasOpen.second?.takeIf { id -> state.sections.any { it.id == id && it.rows.isNotEmpty() } && foldsInView(planned[0], state.listId, id, lazyState) }
             val opening = openId?.takeIf { id -> state.sections.any { it.id == id && it.rows.isNotEmpty() } }
-            if (leaving == null && opening == null) null else TapGlide(folding = leaving, opening = opening)
+            // A tray her last glide is still rolling up goes on rolling up (unless she opens it again).
+            val folding = buildSet {
+                if (leaving != null) add(leaving)
+                before?.folding?.forEach { id -> if (id in moving && id != opening && state.sections.any { it.id == id }) add(id) }
+            }
+            if (folding.isEmpty() && opening == null) null else TapGlide(folding = folding, opening = opening, carried = moving)
         }
     }
+    if (glide != null) lastGlide[0] = glide
     shownOpen[0] = state.listId to openId
     LaunchedEffect(glide) { glide?.play() }
     val tapGlide = glide?.takeIf { !it.done }
-    val folds = foldId.takeIf { folding } ?: tapGlide?.folding?.takeIf { !tapGlide.rolledUp }
+    val autoFold = foldId.takeIf { folding }
+    val tapFolds = tapGlide?.takeIf { !it.rolledUp }?.folding
+    val folds = remember(autoFold, tapFolds) { if (autoFold == null) tapFolds.orEmpty() else tapFolds.orEmpty() + autoFold }
     val entries = remember(state.sections, openId, folds) { planEntries(state.sections, openId, folds) }
     // A tray folding under its pinned plate keeps the list's place on its strip (§8.4 L + 1100, item 87), in the same
     // frame as the swap: no frame shows an empty viewport or a jump to the list's end.
@@ -1274,17 +1286,18 @@ private fun foldsInView(before: Planned?, listId: String, sectionId: String, lis
 
 /**
  * The lazy items for [sections] with [openId] open: strips, or the tray's band, rows, cap and end marker; gaps; the end
- * note. [folding]: the finished tray folding into its strip (§8.4 L + 1100) is its strip with its rows and cap still
- * under it, rolling up (the rows keep their keys, so the list keeps them in place while they go).
+ * note. [folding]: a tray folding into its strip (the finished one, §8.4 L + 1100, or the ones she leaves, §8.5) is its
+ * strip with its rows and cap still under it, rolling up (the rows keep their keys, so the list keeps them in place while
+ * they go).
  */
-private fun planEntries(sections: List<SectionUi>, openId: String?, folding: String? = null): List<Entry> = buildList {
+private fun planEntries(sections: List<SectionUi>, openId: String?, folding: Set<String> = emptySet()): List<Entry> = buildList {
     for (s in sections) {
         if (s.id == openId && s.rows.isNotEmpty()) {
             add(Entry.Header(s))
             s.rows.forEachIndexed { i, r -> add(Entry.RowItem(s, r, i == 0, i == s.rows.lastIndex)) }
             add(Entry.Cap(s))
             add(Entry.End(s))
-        } else if (s.id == folding && s.rows.isNotEmpty()) {
+        } else if (s.id in folding && s.rows.isNotEmpty()) {
             add(Entry.Strip(s))
             s.rows.forEachIndexed { i, r -> add(Entry.RowItem(s, r, i == 0, i == s.rows.lastIndex, folding = true)) }
             add(Entry.Cap(s, folding = true))
@@ -1350,32 +1363,46 @@ private fun AisleList(
     val bands = remember { HashMap<String, Int>() }
     val strips = remember { HashMap<String, Int>() }
     val slices = remember { HashMap<String, Int>() }
+    // Where each tray's sheet last laid it out, and where her glide found the trays her last one was still moving when
+    // she tapped: it carries them on from there (taken once, as its first frame is composed).
+    val moved = remember { HashMap<String, TrayShown>() }
+    val carriedFrom = remember(glide) { glide?.carried?.mapNotNull { id -> moved[id]?.let { id to it.copy() } }?.toMap().orEmpty() }
     // Its rows and cap unfold as one sheet (one per unfold), which keeps their whole heights as they are measured.
     val sheet = remember(unfoldT0, unfoldId, tapOpen) {
         when {
             unfoldId == null -> null
-            unfoldT0 != null -> TraySheet({ clock.now - unfoldT0 }, "cap:$unfoldId", opening = true, full = slices)
-            tapOpen != null -> TraySheet(tapOpen::elapsed, "cap:$unfoldId", opening = true, full = slices, bands = bands, strips = strips, sectionId = unfoldId)
+            unfoldT0 != null -> TraySheet({ clock.now - unfoldT0 }, unfoldId, opening = true, full = slices, moved = moved)
+            tapOpen != null -> TraySheet(
+                tapOpen::elapsed, unfoldId, opening = true, full = slices, bands = bands, strips = strips, moved = moved,
+                carried = carriedFrom[unfoldId],
+            )
             else -> null
         }
     }
     if (sheet != null) SideEffect { sheet.rows = entries.filter { it is Entry.RowItem && it.sectionId == unfoldId }.map { it.key } }
     // The finished tray folding into its strip (§8.4 L + 1100, planEntries): its rows and cap roll up as one sheet on the
     // engine's clock from the fold's beat, starting from where the band's tray ended (the strip may be taller than the
-    // band it replaces, ListPieces). The tray she folds herself rolls up the same way on its glide's clock (§8.5).
-    val foldId = entries.firstOrNull { it is Entry.Cap && it.isFolding }?.sectionId
-    val foldT0 = foldId?.let { p.aisles[it]?.foldT0 }
-    val tapFold = glide?.takeIf { foldId != null && it.folding == foldId }
-    val fold = remember(foldT0, foldId, tapFold) {
-        val elapsed: (() -> Long)? = when {
-            foldId == null -> null
-            foldT0 != null -> { { clock.now - foldT0 } }
-            tapFold != null -> tapFold::elapsed
-            else -> null
-        }
-        if (elapsed == null || foldId == null) null else TraySheet(elapsed, "cap:$foldId", opening = false, full = slices, band = bands[foldId], strips = strips, sectionId = foldId)
+    // band it replaces, ListPieces). The trays she folds herself roll up the same way on their glide's clock (§8.5), each
+    // from where it is when her tap catches it in the middle of a glide.
+    val foldIds = remember(entries) { entries.mapNotNull { e -> e.sectionId.takeIf { e is Entry.Cap && e.isFolding } } }
+    val foldT0 = foldIds.firstNotNullOfOrNull { p.aisles[it]?.foldT0 }
+    val folds = remember(foldIds, foldT0, glide) {
+        foldIds.mapNotNull { id ->
+            val t0 = p.aisles[id]?.foldT0
+            val elapsed: (() -> Long)? = when {
+                t0 != null -> { { clock.now - t0 } }
+                glide != null && id in glide.folding -> glide::elapsed
+                else -> null
+            }
+            elapsed?.let {
+                id to TraySheet(
+                    it, id, opening = false, full = slices, band = bands[id], strips = strips, moved = moved,
+                    carried = carriedFrom[id]?.takeIf { t0 == null },
+                )
+            }
+        }.toMap()
     }
-    if (fold != null) SideEffect { fold.rows = entries.filter { it is Entry.RowItem && it.sectionId == foldId }.map { it.key } }
+    if (folds.isNotEmpty()) SideEffect { for ((id, fold) in folds) fold.rows = entries.filter { it is Entry.RowItem && it.sectionId == id }.map { it.key } }
     val lastFold = remember { LongArray(1) { Long.MIN_VALUE / 2 } }
     if (foldT0 != null) lastFold[0] = foldT0
     // The curl (L + 800) keeps its last pose on the folding tray: the engine's curl ends where the fold begins.
@@ -1913,7 +1940,7 @@ private fun AisleList(
                     is Entry.RowItem -> item(key = e.key, contentType = "row") {
                         val curl = when {
                             !e.last -> null
-                            e.folding -> p.aisles[e.s.id]?.curlT0 ?: curls[e.s.id]?.takeIf { foldT0 != null && foldT0 - it in 0..CURL_TO_FOLD }
+                            e.folding -> p.aisles[e.s.id]?.let { a -> a.curlT0 ?: curls[e.s.id]?.takeIf { a.foldT0 != null && a.foldT0 - it in 0..CURL_TO_FOLD } }
                             else -> p.aisles[e.s.id]?.curlT0
                         }
                         TrayRow(
@@ -1934,7 +1961,7 @@ private fun AisleList(
                             modifier = Modifier
                                 .itemMotion(this, still, placementMs = SLOT_CLOSE_MS)
                                 .probe(probe, "slice:${e.key}")
-                                .sheetSlice(if (e.folding) fold else sheet.takeIf { unfoldId == e.s.id }, e.key, slices)
+                                .sheetSlice(if (e.folding) folds[e.s.id] else sheet.takeIf { unfoldId == e.s.id }, e.key, slices)
                                 .then(if (e.folding) Modifier.goingAway() else Modifier)
                                 .keyFocusIn(screen, e.key, e.s.id)
                                 .focusRequester(screen.rowFocus(e.row.id))
@@ -1960,7 +1987,7 @@ private fun AisleList(
                             modifier = Modifier
                                 .itemMotion(this, still, placementMs = SLOT_CLOSE_MS)
                                 .probe(probe, "slice:${e.key}")
-                                .sheetSlice(if (e.folding) fold else sheet.takeIf { unfoldId == e.s.id }, e.key, slices)
+                                .sheetSlice(if (e.folding) folds[e.s.id] else sheet.takeIf { unfoldId == e.s.id }, e.key, slices)
                                 .then(if (e.folding) Modifier.goingAway() else Modifier)
                                 .zIndex(Z_TRAY),
                         )
@@ -2045,33 +2072,70 @@ private fun Modifier.itemMotion(scope: LazyItemScope, still: Boolean, placementM
  * band's [band] height ([strips] holds the strips' heights as laid out, its own by [sectionId]), so the strips below
  * never step down as the strip takes the band's place. An unfold she starts herself starts where her strip ended (its
  * band, laid out in the same pass, is in [bands]): the rows show the strip's extra height at once, so the strips below
- * never step up either.
+ * never step up either. A tray her tap catches in the middle of a glide starts where that glide had got it to
+ * ([carried], from [moved], where every sheet keeps how it last laid its tray out), never back at its strip or its whole
+ * height.
  */
 private class TraySheet(
     val elapsed: () -> Long,
-    val cap: String,
+    val sectionId: String,
     val opening: Boolean,
     val full: MutableMap<String, Int>,
     private val band: Int? = null,
     private val strips: Map<String, Int>? = null,
-    private val sectionId: String? = null,
     private val bands: Map<String, Int>? = null,
+    private val moved: MutableMap<String, TrayShown>? = null,
+    carried: TrayShown? = null,
 ) {
+    val cap: String = "cap:$sectionId"
     var rows: List<String> = emptyList()
+
+    // Where [carried] had the tray when its glide began.
+    private val carriedPx: Int? = carried?.px
+    private val carriedUnderBand: Boolean = carried?.underBand == true
 
     /** How much of [whole] px of rows and cap shows [elapsed] ms in. */
     fun shown(whole: Int, elapsed: Long): Int {
         val e = PicnicMotion.layout.easing.transform((elapsed.toFloat() / UNFOLD_MS).coerceIn(0f, 1f))
         if (opening) {
-            val strip = sectionId?.let { strips?.get(it) }
-            val band = sectionId?.let { bands?.get(it) }
-            val from = if (strip == null || band == null) 0 else (strip - band).coerceIn(0, whole)
+            val strip = strips?.get(sectionId)
+            val band = bands?.get(sectionId)
+            // What the strip took beyond its band: the rows show it at once, so nothing below steps up.
+            val extra = if (strip == null || band == null) 0 else strip - band
+            val from = when {
+                carriedPx == null -> extra
+                carriedUnderBand -> carriedPx
+                else -> carriedPx + extra
+            }.coerceIn(0, whole)
             return (from + (whole - from) * e).roundToInt().coerceIn(0, whole)
         }
-        val strip = sectionId?.let { strips?.get(it) } ?: band ?: 0
-        val from = (whole + (band ?: strip) - strip).coerceIn(0, whole)
+        val strip = strips?.get(sectionId) ?: band ?: 0
+        // What the strip takes beyond the band it replaces: the rows give it up at once, so nothing below steps down.
+        val extra = strip - (band ?: strip)
+        val from = when {
+            carriedPx == null -> whole - extra
+            carriedUnderBand -> carriedPx - extra
+            else -> carriedPx
+        }.coerceIn(0, whole)
         return (from * (1f - e)).roundToInt().coerceIn(0, whole)
     }
+
+    /** Keeps where this sheet lays its tray out: [px] of its rows and cap shown (under its band while it opens). */
+    fun laidOut(px: Int) {
+        val at = moved?.getOrPut(sectionId) { TrayShown() } ?: return
+        at.px = px
+        at.underBand = opening
+    }
+
+    /** The tray is whole and still: a tap that catches it now starts from its whole height. */
+    fun settled() {
+        moved?.remove(sectionId)
+    }
+}
+
+/** How much of a tray's rows and cap a sheet last showed (px), and whether under its band (else under its strip). */
+private class TrayShown(var px: Int = 0, var underBand: Boolean = false) {
+    fun copy(): TrayShown = TrayShown(px, underBand)
 }
 
 /**
@@ -2098,6 +2162,7 @@ private fun Modifier.sheetSlice(sheet: TraySheet?, key: String, heights: Mutable
                 sheet.full[key] = placeable.height
                 val elapsed = sheet.elapsed()
                 val cap = key == sheet.cap
+                if (cap && sheet.opening && elapsed >= UNFOLD_MS) sheet.settled()
                 if ((sheet.opening && elapsed >= UNFOLD_MS) || (!cap && key !in sheet.rows)) {
                     return@layout layout(placeable.width, placeable.height) { placeable.place(0, 0) }
                 }
@@ -2110,6 +2175,7 @@ private fun Modifier.sheetSlice(sheet: TraySheet?, key: String, heights: Mutable
                 }
                 val whole = capH + rowsH
                 val shown = sheet.shown(whole, elapsed)
+                sheet.laidOut(shown)
                 val capShown = if (whole == 0) 0 else (capH.toLong() * shown / whole).toInt()
                 // A folded slice takes no room at all: it leaves the list as the fold ends, with nothing left to close.
                 val least = if (sheet.opening) 1 else 0
@@ -2140,13 +2206,15 @@ private val UNFOLD_MS: Int = PicnicMotion.layout.durationMillis
 private const val UNFOLD_SETTLE_MS: Int = 48
 
 /**
- * Her own fold or open (§8.5): [folding] (the tray she leaves, null when its band was pinned over its rows) rolls up into
- * its strip and [opening] (the tray she opens) unfolds, over the 240 ms `layout` from the first frame the list shows
- * them, everything below moving in the same frames, as the aisle-done fold and the next stop do (§8.4). Timed on its own
- * frame clock ([play]): the engine's sleeps while no chain plays.
+ * Her own fold or open (§8.5): [folding] (the tray she leaves, none when its band was pinned over its rows, and any her
+ * last glide was still rolling up) roll up into their strips and [opening] (the tray she opens) unfolds, over the 240 ms
+ * `layout` from the first frame the list shows them, everything below moving in the same frames, as the aisle-done fold
+ * and the next stop do (§8.4). [carried]: the trays her last glide was still moving when she tapped, which start from
+ * where it had got them (TraySheet), so a tap in the middle of a glide never snaps a tray whole, shut or gone. Timed on
+ * its own frame clock ([play]): the engine's sleeps while no chain plays.
  */
 @Stable
-internal class TapGlide(val folding: String?, val opening: String?) {
+internal class TapGlide(val folding: Set<String>, val opening: String?, val carried: Set<String> = emptySet()) {
     private val clock = earth.cora.picnic.ui.list.motion.MotionClock()
     private var t0 = Long.MIN_VALUE
 
@@ -2157,13 +2225,21 @@ internal class TapGlide(val folding: String?, val opening: String?) {
             return if (t0 == Long.MIN_VALUE) 0 else now - t0
         }
 
-    /** The folding tray's rows and cap have rolled up: the list drops them. */
+    /** The folding trays' rows and caps have rolled up: the list drops them. */
     var rolledUp by mutableStateOf(false)
         private set
 
     /** Played out, and the list has kept step a frame or two after it. */
     var done by mutableStateOf(false)
         private set
+
+    /** The trays it still moves: the folding ones until they have rolled up, the one it opens until it is open. */
+    val moving: Set<String>
+        get() = when {
+            done || rolledUp -> emptySet()
+            opening == null || elapsed >= UNFOLD_MS -> folding
+            else -> folding + opening
+        }
 
     suspend fun play() {
         withFrameMillis {

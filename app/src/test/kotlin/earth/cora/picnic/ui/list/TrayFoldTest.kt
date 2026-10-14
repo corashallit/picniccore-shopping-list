@@ -460,4 +460,100 @@ class TrayFoldTest {
         assertTrue("the touch did not take flour out of the basket", rig.item("flour").checked)
         assertFalse("Baking stays folded", compose.exists(ListTags.header(baking)))
     }
+
+    /** Where [section]'s band or strip starts (its top) in [s], or null when it is not laid out. */
+    private fun topOf(s: Shot): Float? = (s.header ?: s.strip)?.top
+
+    /**
+     * Follows [trays] (each with its rows) for [frames] held frames after [act], from the frame before it: one shot per
+     * tray per frame, in [trays] order.
+     */
+    private fun follow(probe: RecordingProbe, trays: List<Pair<String, List<String>>>, below: String, frames: Int, act: () -> Unit): List<List<Shot>> {
+        val shots = ArrayList<List<Shot>>()
+        fun one() = trays.map { (id, rows) -> tapShot(probe, id, rows, below) }
+        shots += one()
+        act()
+        repeat(frames) {
+            compose.frames(1)
+            shots += one()
+        }
+        return shots
+    }
+
+    /**
+     * Asserts that [values] (one measure of a tray per frame, the first from the frame before her tap) carry on from where
+     * they were: the glide she interrupted may go on for a frame or two while her tap reaches the list, then they turn
+     * [towards] the new end (+1: down the screen, -1: up it) and only ever move that way after, never covering half of
+     * what is left in one frame; and no frame at all moves them by [snap] px or more (a tray put whole, shut or gone at
+     * once).
+     */
+    private fun assertCarriesOn(what: String, values: List<Float>, towards: Int, snap: Float) {
+        val shown = values.map { it.toInt() }
+        val steps = values.zipWithNext { a, b -> (b - a) * towards }
+        assertTrue("$what never moves $snap px or more in one frame ($shown)", steps.all { kotlin.math.abs(it) < snap })
+        val turn = (0..2).firstOrNull { i -> steps.drop(i).all { it >= -1f } }
+        assertTrue("$what turns to its new end within two frames of her tap and keeps on that way ($shown)", turn != null)
+        val after = steps.drop(turn!!)
+        val way = after.sum()
+        assertTrue("$what glides on from where it was: no frame covers half its way ($shown)", way <= 4f || after.max() < way * 0.5f)
+    }
+
+    /**
+     * §8.5: she taps Breakfast's strip and, while it is still unfolding, its chevron (a double tap). The glide carries on
+     * from where the trays are: Baking keeps rolling up from where it had got to and Breakfast rolls back up from what it
+     * showed, never first jumping to its whole height, and in every frame Breakfast keeps its gap to Baking's foot and the
+     * strip below its gap to Breakfast's.
+     */
+    @Test
+    fun herSecondTapCarriesTheTraysOnFromWhereTheyAre() {
+        val probe = RecordingProbe()
+        val rig = ListRig(ListFixture.state())
+        compose.show(rig, probe)
+        val gap = 7 * compose.density.density
+        val trays = listOf(baking to listOf("flour", "sugar", "baking-powder"), "breakfast" to listOf("coffee", "maple"))
+        val whole = tapShot(probe, baking, trays[0].second, below = "breakfast").let { footOf(it) - it.header!!.bottom }
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(ListTags.strip("breakfast")).performClick()
+        compose.frames(3)
+        val mid = tapShot(probe, "breakfast", trays[1].second, below = "dairy-eggs")
+        assertTrue("Breakfast is part way open", mid.header != null && mid.cap != null)
+        val shots = follow(probe, trays, below = "dairy-eggs", frames = 30) { compose.onNodeWithTag(ListTags.chevron("breakfast")).performClick() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        val snap = whole * 0.4f
+        assertCarriesOn("Baking's foot", shots.map { footOf(it[0]) }, towards = -1, snap = snap)
+        assertCarriesOn("Breakfast's band", shots.map { topOf(it[1])!! }, towards = -1, snap = snap)
+        assertCarriesOn("Breakfast's open tray", shots.map { (_, br) -> footOf(br) - (br.header ?: br.strip)!!.bottom }, towards = -1, snap = snap)
+        for ((i, frame) in shots.withIndex()) {
+            val (bk, br) = frame
+            assertEquals("frame $i: Breakfast keeps its gap to Baking's foot", gap, topOf(br)!! - footOf(bk), 1.5f)
+            br.below?.let { assertEquals("frame $i: the strip below keeps its gap to Breakfast's foot", gap, it.top - footOf(br), 1.5f) }
+        }
+        assertTrue("both folded at the end", shots.last().all { it.strip != null && it.rows.isEmpty() && it.cap == null })
+    }
+
+    /**
+     * §8.5: she folds Baking and, while it is still rolling up, taps its strip again: it unfolds again from what it still
+     * showed, never first dropping to its strip, and the strip below keeps its gap to its foot in every frame.
+     */
+    @Test
+    fun herReopenMidFoldCarriesOnFromWhereItIs() {
+        val probe = RecordingProbe()
+        val rig = ListRig(ListFixture.state())
+        compose.show(rig, probe)
+        val gap = 7 * compose.density.density
+        val rows = listOf("flour", "sugar", "baking-powder")
+        val whole = tapShot(probe, baking, rows, below = "breakfast").let { footOf(it) - it.header!!.bottom }
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(ListTags.chevron(baking)).performClick()
+        compose.frames(3)
+        val mid = tapShot(probe, baking, rows, below = "breakfast")
+        assertTrue("Baking is part way rolled up", mid.strip != null && mid.rows.isNotEmpty())
+        val shots = follow(probe, listOf(baking to rows), below = "breakfast", frames = 30) { compose.onNodeWithTag(ListTags.strip(baking)).performClick() }.map { it.single() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertCarriesOn("Baking's foot", shots.map { footOf(it) }, towards = 1, snap = whole * 0.4f)
+        for ((i, s) in shots.withIndex()) s.below?.let { assertEquals("frame $i: the strip below keeps its gap to Baking's foot", gap, it.top - footOf(s), 1.5f) }
+        assertTrue("Baking is open at the end", shots.last().header != null && shots.last().cap != null)
+    }
 }
