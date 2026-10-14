@@ -80,6 +80,7 @@ import earth.cora.picnic.ui.list.motion.CelebrationCopy
 import earth.cora.picnic.ui.list.motion.CelebrationPlan
 import earth.cora.picnic.ui.list.motion.CelebrationPresentation
 import earth.cora.picnic.ui.list.motion.CelebrationTimeline
+import earth.cora.picnic.ui.list.motion.HeartIris
 import earth.cora.picnic.ui.list.motion.LocalMotionProbe
 import earth.cora.picnic.ui.list.motion.MotionClock
 import earth.cora.picnic.ui.list.motion.MotionProbe
@@ -103,12 +104,12 @@ import kotlin.math.sin
  * CelebrationTimeline computed from the real words: the title with its chip, LCD and "tap to skip" (settled 0.70 s),
  * PER-FECT! on the stamp card (still from 4.73 s), the ribbon banner with the trip's real stats (6.23 s), the bonus card
  * (8.93 s), the page curl into the album (11.23 s), then the still summary with its washi-tape progress bar
- * ("Closing… tap to keep it"). Around them: the white flash, the heart iris from the last tapped checkbox onto pastel
- * rays, the burst star, the kira stars round the title, the ribbon ride of up to 24 riders into the hamper, the picnic
- * spread, the stamp card's rise and flip, the glints (never inside a text's hold), the screen shake, the confetti
- * (behind every text plate), the gold capsule, the pet dance. Reduced motion: the summary frame only, faded in over
- * 120 ms. Nothing in it is a TalkBack node (the host gives the scene its one node). Every pose is a pure function of
- * the scene time on the engine's clock, read in draw and layer lambdas.
+ * ("Closing… tap to keep it"). Around them: the kira bloom on the last tapped checkbox and the heart iris opening from
+ * it onto pastel rays at once (no flash, §0.4), the burst star, the kira stars round the title, the ribbon ride of up
+ * to 24 riders into the hamper, the picnic spread, the stamp card's rise and flip, the glints (never inside a text's
+ * hold), the screen shake, the confetti (behind every text plate), the gold capsule, the pet dance. Reduced motion: the
+ * summary frame only, faded in over 120 ms. Nothing in it is a TalkBack node (the host gives the scene its one node).
+ * Every pose is a pure function of the scene time on the engine's clock, read in draw and layer lambdas.
  */
 
 /** Test tags of the scene's pieces (CelebrationTest, ReadingRuleAuditTest). */
@@ -153,6 +154,9 @@ private class SceneClock(initial: CelebrationPresentation, val plan: Celebration
 
     fun since(name: BeatName): Long = t() - at(name)
 
+    /** The scene's text shows once the heart iris has the whole screen, never cut by its edge: 0 before, 1 from then. */
+    fun textUncovered(): Float = if (reduced || since(BeatName.Iris) >= CelebrationTimeline.IRIS) 1f else 0f
+
     /** The whole scene's alpha: the reduced-motion fade in, the close fade out. */
     fun sceneAlpha(): Float {
         val now = clock.now
@@ -195,7 +199,8 @@ fun CelebrationScene(
     val anchors = remember { SceneAnchors() }
     var origin by remember { mutableStateOf(Offset.Zero) }
     var sceneSize by remember { mutableStateOf(Size.Zero) }
-    // The flash whitens the whole finished list (it is not inside the iris); the scene opens inside the iris.
+    // No flash (§0.4, 14 October): the scene opens inside the heart iris from its first frame, with the kira bloom on
+    // the last tapped checkbox over it, so the finished list hands straight over to the rays.
     Box(modifier.fillMaxSize()) {
         BoxWithConstraints(
             Modifier
@@ -207,7 +212,7 @@ fun CelebrationScene(
                     sceneSize = Size(it.size.width.toFloat(), it.size.height.toFloat())
                 }
                 .graphicsLayer { alpha = sc.sceneAlpha() }
-                .irisClip(sc, cele, { origin }, { sceneSize }),
+                .irisClip(sc, cele) { origin },
         ) {
             val w = maxWidth
             val h = maxHeight
@@ -228,34 +233,89 @@ fun CelebrationScene(
             }
             if (probe != null) ProbeReports(sc, content, probe, anchors, origin, sceneSize)
         }
-        Flash(sc)
+        OriginBloom(sc, cele) { origin }
     }
 }
 
 /* ------------------------------------------------------------------------------------------------
- * Background: the iris, the rays, the burst star, the flash, the shake.
+ * Background: the iris and its kira bloom, the rays, the burst star, the shake.
  * ------------------------------------------------------------------------------------------------ */
 
-/** The heart iris: from 1 dp at [cele].origin to 80 → 260 → 820 → 3000 dp in 4 steps over 420 ms (from 0.04 s). */
-private fun Modifier.irisClip(sc: SceneClock, cele: CelebrationPresentation, origin: () -> Offset, size: () -> Size): Modifier = drawWithContent {
-    val e = sc.since(BeatName.Iris)
-    val d = when {
-        sc.reduced -> -1f
-        e < 0 -> 0f
-        e < 105 -> 80f
-        e < 210 -> 260f
-        e < 315 -> 820f
-        e < 420 -> 3000f
-        else -> -1f
-    }
-    if (d < 0f) {
+/** Where the heart iris opens (scene px): the last tapped checkbox ([cele].origin, window px), else the scene's centre. */
+private fun irisCentre(cele: CelebrationPresentation, sceneOrigin: Offset, sceneSize: Size): Offset =
+    cele.origin?.let { it - sceneOrigin } ?: Offset(sceneSize.width / 2f, sceneSize.height / 2f)
+
+/**
+ * The heart iris (HeartIris): from 0 the scene shows inside a heart at the last tapped checkbox, 180 → 400 → 900 dp
+ * wide, one held pose per 12 fps frame, then the whole scene from 0.25 s. Nothing of the scene shows before 0, and its
+ * text not before 0.25 s (SceneClock.textUncovered).
+ */
+private fun Modifier.irisClip(sc: SceneClock, cele: CelebrationPresentation, origin: () -> Offset): Modifier = drawWithContent {
+    val w = if (sc.reduced) null else HeartIris.width(sc.since(BeatName.Iris))
+    if (w == null) {
         drawContent()
         return@drawWithContent
     }
-    if (d == 0f) return@drawWithContent
-    val o = cele.origin?.let { it - origin() } ?: Offset(size().width / 2f, size().height / 2f)
-    val heart = heartPath(o, d.dp.toPx())
+    if (w == 0f) return@drawWithContent
+    val heart = heartPath(irisCentre(cele, origin(), size), w.dp.toPx())
     clipPath(heart) { this@drawWithContent.drawContent() }
+}
+
+/** The kira bloom's star (the pocket's, §11.2) and the spot its six sparks fly from (the book's are 30 / 26 dp, §7.6). */
+private val BLOOM: Dp = 40.dp
+private val BLOOM_SPOT: Dp = BLOOM * (26f / 30f)
+
+/**
+ * The kira bloom on the last tapped checkbox as the heart iris opens from it: the book's magic-appear bloom (§7.6), a
+ * holo kira star 1.4 → .9 → .5 → .2 turning −30° → +30° (4 steps, 400 ms) with its six sparks flying out, over the
+ * scene. None under reduced motion.
+ */
+@Composable
+private fun OriginBloom(sc: SceneClock, cele: CelebrationPresentation, origin: () -> Offset) {
+    if (sc.reduced) return
+    val k = BLOOM_SPOT / 26.dp
+    androidx.compose.ui.layout.Layout(
+        content = {
+            DecorSticker(
+                "kira",
+                size = BLOOM,
+                shadow = false,
+                modifier = Modifier.graphicsLayer {
+                    val pose = BookMotion.bloom(sc.since(BeatName.Iris))
+                    if (pose == null) alpha = 0f else {
+                        alpha = sc.sceneAlpha()
+                        scaleX = pose.scaleX
+                        scaleY = pose.scaleY
+                        rotationZ = pose.rotation
+                    }
+                },
+            )
+            for (i in BookMotion.sparkKinds.indices) {
+                DecorSticker(
+                    BookMotion.sparkKinds[i],
+                    size = BLOOM_SPOT * (9f / 26f),
+                    shadow = false,
+                    modifier = Modifier.graphicsLayer {
+                        val pose = BookMotion.spark(i, sc.since(BeatName.Iris))
+                        if (pose == null) alpha = 0f else {
+                            alpha = pose.alpha * sc.sceneAlpha()
+                            translationX = pose.dx * k * density
+                            translationY = pose.dy * k * density
+                            scaleX = pose.scaleX
+                            scaleY = pose.scaleY
+                        }
+                    },
+                )
+            }
+        },
+        modifier = Modifier.fillMaxSize(),
+    ) { measurables, c ->
+        val pieces = measurables.map { it.measure(androidx.compose.ui.unit.Constraints()) }
+        layout(c.maxWidth, c.maxHeight) {
+            val o = irisCentre(cele, origin(), Size(c.maxWidth.toFloat(), c.maxHeight.toFloat()))
+            for (p in pieces) p.place((o.x - p.width / 2f).roundToInt(), (o.y - p.height / 2f).roundToInt())
+        }
+    }
 }
 
 private fun shakeDx(sc: SceneClock): Float {
@@ -269,7 +329,10 @@ private fun shakeDx(sc: SceneClock): Float {
     }
 }
 
-/** Pastel rays: 7.5° conic stripes, fading in over 600 ms from 0.04 s, then turning once per 24 s. Behind everything. */
+/**
+ * Pastel rays: 7.5° conic stripes turning once per 24 s, behind everything. At full from the first frame: the heart iris
+ * is their reveal, so its first pose already shows them, never a flat heart of the mint ground on a mint list.
+ */
 @Composable
 private fun Rays(sc: SceneClock) {
     val loop by rememberLoopTime(enabled = !sc.reduced)
@@ -278,14 +341,12 @@ private fun Rays(sc: SceneClock) {
     val rayColors = listOf(Families.sakura.pastel, Families.lemon.pastel, Families.ramune.pastel, ground)
     Canvas(Modifier.fillMaxSize()) {
         drawRect(ground)
-        val e = sc.since(BeatName.Iris)
-        val a = if (sc.reduced) 1f else (e / 600f).coerceIn(0f, 1f)
         val c = Offset(size.width / 2f, size.height * 0.2f)
         val r = max(size.width, size.height) * 1.5f
         rotate((loop % 24_000L) * 360f / 24_000f, c) {
             for (i in 0 until 48) {
                 val start = i * 7.5f
-                drawArc(rayColors[i % 4], start, 7.5f, true, Offset(c.x - r, c.y - r), Size(r * 2, r * 2), alpha = a)
+                drawArc(rayColors[i % 4], start, 7.5f, true, Offset(c.x - r, c.y - r), Size(r * 2, r * 2))
             }
         }
     }
@@ -323,22 +384,6 @@ private fun popScale(e: Long, ms: Long): Float {
 private val PopEasing = CubicBezierEasing(0.3f, 1.5f, 0.5f, 1f)
 private val TitleEasing = CubicBezierEasing(0.3f, 1.4f, 0.5f, 1f)
 private val FlipEasing = CubicBezierEasing(0.4f, 0f, 0.3f, 1f)
-
-/** One white flash over the finished list: 1 → .92 → 0, 2 steps, 170 ms. */
-@Composable
-private fun Flash(sc: SceneClock) {
-    Canvas(Modifier.fillMaxSize()) {
-        if (sc.reduced) return@Canvas
-        val e = sc.since(BeatName.Flash)
-        val a = when {
-            e < 0 -> 0f
-            e < 85 -> 1f
-            e < 170 -> 0.92f
-            else -> 0f
-        }
-        if (a > 0f) drawRect(Color.White, alpha = a)
-    }
-}
 
 /* ------------------------------------------------------------------------------------------------
  * Confetti: 36 die-cut stickers in 3 waves of 12, behind every text plate.
@@ -513,7 +558,7 @@ private fun SceneContent(
                         translationY = pose.dy * density
                         scaleX = pose.scaleX
                         scaleY = pose.scaleY
-                        alpha = pose.alpha
+                        alpha = pose.alpha * sc.textUncovered()
                     }
                     .titleGlint(sc),
             ) {
@@ -561,7 +606,9 @@ private fun SceneContent(
  * card, at least [CURL_FLOOR] deep, without covering text (AlbumCorner measures its leg from the plates). What hangs
  * below the bonus card (the blanket, 42 dp at most) then still ends above "tap to skip" in the bottom band. The
  * fixture is never scaled at 360 × 640 or taller. The bonus card's place is read back from the first layout (it lies
- * inside the picnic spread); the scene opens under its white flash, so that one frame never shows.
+ * inside the picnic spread). The scene shows from its first frame (inside the heart iris, no flash), so when that first
+ * layout cannot know the fit yet (the column, bonus card included, is taller than the room) the column waits that one
+ * frame unseen rather than jump; when the whole column fits, so does the bonus card, and it shows at once.
  */
 @Composable
 private fun FitColumn(anchors: SceneAnchors, modifier: Modifier, content: @Composable () -> Unit) {
@@ -572,12 +619,14 @@ private fun FitColumn(anchors: SceneAnchors, modifier: Modifier, content: @Compo
         val bonus = anchors.bonusBottom
         val curl = (CURL_FLOOR + CURL_GAP).toPx()
         if (bonus > 0f && bonus > h - curl) s = ((h - curl) / bonus).coerceIn(0.5f, 1f)
+        val unknown = bonus == 0f && p.height > h - curl
         anchors.fit = s
         layout(c.maxWidth, c.maxHeight) {
             p.placeWithLayer(0, 0) {
                 scaleX = s
                 scaleY = s
                 transformOrigin = TransformOrigin(0.5f, 0f)
+                alpha = if (unknown) 0f else 1f
             }
         }
     }
@@ -725,7 +774,7 @@ private val DONE_ROOM: Dp = 6.dp
 @Composable
 private fun SceneChip(text: String, style: androidx.compose.ui.text.TextStyle, maxLines: Int, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(16.dp)
-    // One step down to the floor, decided from the first layout (the scene opens under the flash, so it never shows).
+    // One step down to the floor, decided from the first layout (the chip is not shown yet then: it comes with the title).
     var stepped by remember(text, maxLines, style) { mutableStateOf(false) }
     var overflowed by remember(text, maxLines, style) { mutableStateOf(false) }
     val floor = 13.sp
@@ -779,11 +828,14 @@ private fun titlePose(e: Long, reduced: Boolean): earth.cora.picnic.ui.list.moti
     return earth.cora.picnic.ui.list.motion.MotionPose(dy = -80f * (1f - k), scaleX = s, scaleY = s, alpha = (e / 120f).coerceIn(0f, 1f))
 }
 
-/** A plate newly on screen with a text beat fades in with it (by 0.30 s for the title beat's chips). */
+/**
+ * A plate newly on screen with a text beat fades in with it (by 0.30 s for the title beat's chips), once the heart iris
+ * has the whole screen.
+ */
 private fun textBeatAlpha(sc: SceneClock, beat: BeatName): Float {
     if (sc.reduced) return 1f
     val e = sc.since(beat)
-    return (e / 200f).coerceIn(0f, 1f)
+    return (e / 200f).coerceIn(0f, 1f) * sc.textUncovered()
 }
 
 /** The title glint: a holo glint sweeps the title only, after its hold (12 steps, 1.2 s). */
@@ -1607,7 +1659,7 @@ private fun BottomBand(sc: SceneClock, copy: CelebrationCopy, anchors: SceneAnch
                         alpha = when {
                             e < 0 -> 0f
                             out >= 0 -> (1f - out / 120f).coerceIn(0f, 1f)
-                            else -> (e / 200f).coerceIn(0f, 1f)
+                            else -> (e / 200f).coerceIn(0f, 1f) * sc.textUncovered()
                         }
                     },
             ) {
@@ -1701,12 +1753,17 @@ private fun ProbeReports(sc: SceneClock, content: CelebrationContent, probe: Mot
             val b = anchors.plates[tag] ?: return
             probe.text(tag, now, b, dx = dx + pose.dx * density, dy = pose.dy * density, scale = pose.scaleX, rotation = pose.rotation, alpha = alpha * a)
         }
-        report(CelebrationTags.TITLE, titlePose(sc.since(BeatName.Title), sc.reduced))
+        val title = titlePose(sc.since(BeatName.Title), sc.reduced)
+        report(CelebrationTags.TITLE, title, title.alpha * sc.textUncovered())
         report(CelebrationTags.CHIP, MotionPose.Rest, textBeatAlpha(sc, BeatName.Title))
         report(CelebrationTags.LCD, MotionPose.Rest, textBeatAlpha(sc, BeatName.Title))
         if (!sc.reduced) {
             val skipOut = sc.since(BeatName.SkipChipOut)
-            val skipAlpha = if (skipOut >= 0) (1f - skipOut / 120f).coerceIn(0f, 1f) else (sc.since(BeatName.SkipChip) / 200f).coerceIn(0f, 1f)
+            val skipAlpha = if (skipOut >= 0) {
+                (1f - skipOut / 120f).coerceIn(0f, 1f)
+            } else {
+                (sc.since(BeatName.SkipChip) / 200f).coerceIn(0f, 1f) * sc.textUncovered()
+            }
             report(CelebrationTags.SKIP, MotionPose.Rest, skipAlpha)
         }
         val perfect = if (sc.reduced) MotionPose(scale = 1f, rotation = -12f) else BookMotion.perfect(sc.since(BeatName.Perfect))

@@ -634,6 +634,31 @@ object BookMotion {
 }
 
 /* ------------------------------------------------------------------------------------------------
+ * The celebration's entrance (§11.2): the heart iris from the last tapped checkbox, with a kira bloom on it.
+ * ------------------------------------------------------------------------------------------------ */
+
+object HeartIris {
+    /** One held pose per 12 fps frame (§8.1, `pose`). */
+    val POSE: Long = PicnicMotion.pose.toLong()
+
+    /**
+     * The heart's width (dp) in its held poses from the scene's start: the first already reads as the scene arriving,
+     * and none but the whole screen reaches the top bar from a checkbox in the lower part of the screen.
+     */
+    val WIDTHS: List<Float> = listOf(180f, 400f, 900f)
+
+    /**
+     * The heart's width (dp) at [elapsed] ms from the scene's start; 0 before the start; null from
+     * CelebrationTimeline.IRIS (the three poses, 249 ms), when the scene has the whole screen and is no longer clipped.
+     */
+    fun width(elapsed: Long): Float? = when {
+        elapsed < 0 -> 0f
+        elapsed >= CelebrationTimeline.IRIS -> null
+        else -> WIDTHS[heldStep(elapsed, POSE, WIDTHS.size)]
+    }
+}
+
+/* ------------------------------------------------------------------------------------------------
  * The Next card (§10).
  * ------------------------------------------------------------------------------------------------ */
 
