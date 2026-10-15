@@ -140,7 +140,8 @@ HIGHLIGHT_WOBBLE = 3.5  # recorded px: the most the top and the bottom edges wav
 HIGHLIGHT_TILT = -0.6  # degrees, as the app's band
 # For recordings that name no regions (the first recorder): the add field, in recorded px
 FALLBACK_REGIONS = {'add_field': (22, 2104, 540, 2252)}
-POSTER_AT = 'celebrate:banner+0.6s'   # the poster: the composed frame at this beat (scene:beat)
+POSTER_AT = 'celebrate:bonus+1.2s'    # the poster: the composed frame at this beat (scene:beat): the whole scene
+                                      # at rest with its bonus card, as on the Play still
 
 # ---------------------------------------------------------------------------------------------------------------------
 # The title card, at the start and again at the end. The wordmark and tagline, the trip's real sticker book taped
@@ -200,14 +201,16 @@ TITLE_CLEARANCE = 6    # px: no title sticker comes nearer the wordmark's or the
 #   decor              (drawable or 'sparkle:<family>', size px, side 'L' / 'R', centre y, angle), as in SHOTS
 # Pacing: a caption stays up at least MIN_CAPTION; rests before and after a beat are about 1.25x what reads at a
 # glance, and the recorder films them that long. The app's motion plays at 1x, its ambient decor included: dead air is
-# left out with a skip, and only the wait for an answer (the capsule turning in the send button) goes faster. A
-# caption pops at least 2.2 s before the tap it is about, and a scene ends on a rest after its last beat, never on a
-# beat in flight.
+# left out with a skip, and only a wait for an answer where nothing else moves (the capsule turning in the send button
+# over an empty list) goes faster. A caption pops at least 2.2 s before the tap it is about, and a scene ends on a
+# rest after its last beat, never on a beat in flight (a hold stops the ambient decor too, so it is a last resort).
 # ---------------------------------------------------------------------------------------------------------------------
 SCENES = [
-    # both add-field loupes stay up until just before the sheet rises, so the finished note reads whole for a while.
-    # Write's two lines fill the field from top to bottom ("picnic day" stands just above it), so its loupe draws out
-    # a little of the field's own paper above and below them
+    # both add-field loupes stay up until just before the sheet rises, so the end of the note is read at rest. The
+    # field shows two lines: write's note needs a third, so its first line scrolls out of the field as she types
+    # "maple" and the loupe ends on the last two (the review card then shows the whole note); "pancakes for 12" reads
+    # whole. Write's two lines fill the field from top to bottom ("picnic day" stands just above it), so its loupe
+    # draws out a little of the field's own paper above and below them
     dict(segment='write', cut_in='typing_start-1.8s', cut_out='rows_landed+1.6s',
          speed=[('sent+0.4s', 'card_shown-0.2s', 1.6)],
          loupe=[('typing_start', 'card_shown-0.25s', 'add_field', {'margin': 14})],
@@ -218,11 +221,12 @@ SCENES = [
                 ('sk_d_ladybug', 112, 'R', 1760, 12)]),
     # the loupe sits in the band between the list and the dock: 20 px under the Dairy & eggs strip (its shadow ends
     # at frame y 1442) and clear of the dock's washi, perforation and "picnic day" (from y 1654), so a little smaller
-    # than write's, and wide enough to cover the "end of the list" pill (frame x 262 to 823) whole
+    # than write's, and wide enough to cover the "end of the list" pill (frame x 262 to 823) whole. Its wait for the
+    # answer plays at 1x: the list's bee walks along the Produce tray behind the capsule. The highlighter stays up
+    # until just before the "Stick all 3" press (gone as its disc starts to press in), far from the button
     dict(segment='recipe', enter='wipe', cut_in='typing_start-1.3s', cut_out='rows_landed+1.6s',
-         speed=[('sent+0.6s', 'card_shown-0.2s', 1.6)],
          loupe=[('typing_start', 'card_shown-0.25s', 'add_field', {'scale': 1.35, 'y': 1462, 'width': 584})],
-         highlight=[('card_scroll+2.4s', 'stuck-0.8s', 'pantry_rows')],
+         highlight=[('card_scroll+2.4s', 'stuck-0.45s', 'pantry_rows')],
          captions=[(['Turn a recipe into', 'a shopping list'], 'start'),
                    (['Recipes leave out', 'what’s in your pantry'], 'card_scroll+1.2s')],
          fam='lemon', tape='gingham',
@@ -234,15 +238,17 @@ SCENES = [
          decor=[('sk_i_banana', 160, 'L', 1520, 8), ('sk_i_croissant', 140, 'R', 1250, -8),
                 ('sk_d_heart', 104, 'R', 1760, 10)]),
     # Breakfast's aisle-done payoff (the lid's GOT IT and the book's stamp) settles 0.2 s before the tray starts to
-    # curl, so the scene rests on the frame before the curl while the payoff is read and the wipe goes by
-    dict(segment='glow', enter='wipe', cut_in='start', cut_out='tray_curl-0.03s', hold=0.9,
+    # curl, too soon to end on, and a hold there would stop the bee and the twinkles: the scene plays on through the
+    # fold, the Next card and Dairy & eggs opening (the stamps stay on the folded strip and in the book), and rests
+    dict(segment='glow', enter='wipe', cut_in='start', cut_out='next_card+1.6s',
          captions=[(['Glow-in-the-dark', 'night theme'], 'start')],
          fam='periwinkle', dusk=True, tape='dots',
          decor=[('sk_d_kira', 150, 'L', 1520, 8), ('sk_d_glowstar', 120, 'R', 1250, -8),
                 ('sk_d_glowstar', 92, 'R', 1760, 14)]),
-    # from the rest after the list's scroll to Household (the sticker book folds to its strip during the scroll), to
-    # just before the bonus card bursts out of its capsule
-    dict(segment='celebrate', enter='wipe', cut_in='last_tick-2.7s', cut_out='bonus-0.1s',
+    # from the rest after the list's scroll to Household (the sticker book folds to its strip during the scroll),
+    # through the gold capsule popping in and the bonus card rising out of it, which then rests (as on the Play
+    # still), to just before the page curl
+    dict(segment='celebrate', enter='wipe', cut_in='last_tick-2.7s', cut_out='curl-0.1s',
          captions=[(['Every finished list', 'gets a celebration'], 'start')],
          fam='sakura', tape='sakura',
          decor=[('sk_i_lemonade', 150, 'L', 1520, 8), ('sparkle:lemon', 112, 'R', 1250, -8),

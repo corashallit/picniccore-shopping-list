@@ -94,7 +94,8 @@ python3 design/store/make_feature_video.py --frames /tmp/kk-frames --no-video --
 `--sheet` writes a contact sheet of every Nth frame and `--stills` a PNG at every caption, scene change,
 transition, tap, drag, loupe and highlight (and mid-pop), which is the quickest way to look the cut over;
 `--no-video` renders just those frames. The poster is the composed frame at `--poster-at` (default
-`celebrate:banner+0.6s`, any `scene:beat`). `--frames` defaults to `$PICNIC_VIDEO_FRAMES`.
+`celebrate:bonus+1.2s`, the scene at rest with its bonus card, as on the Play still; any `scene:beat`). `--frames`
+defaults to `$PICNIC_VIDEO_FRAMES`.
 
 Two tables at the top of the script hold every choice, so a recut is an edit there. `SCENES` cuts each segment by
 its marks (`'typing_start-1.8s'`, `'rows_landed+1.6s'`, `'end'`). Each scene can leave out `skip` spans, play
@@ -104,16 +105,18 @@ times the captions to marks and gives the scene a backdrop colour, washi tape an
 screenshots' layout. `TITLE` lays out the title card (the wordmark, the tagline on a pad patch, the trip's sticker
 book from the feature graphic and a few stickers) and when each piece pops in.
 
-**Pacing.** People read slower than one tends to guess, so the cut leaves room: every caption stays up at least
-3.1 s, and the rests before and after a beat, the title card (3.2 s) and the closing card's hold (1.9 s) are
-generous. The app's own motion always plays at 1x, and so do the typing and the celebration, its little ambient
-decor included. The recorder films the rests long enough to be read (the empty list, the recipe's steps, the
-recipe card's pantry rows, the list before a tick), so the cut needs no slow motion; dead air is left out with a
-skip, and only a wait (the capsule turning while the answer comes back) plays faster, never above 1.6x. A factor
-under 1 is there to stretch a lead-in that is wholly still. A caption pops at least 2.2 s before the tap it is
-about, and a scene ends on a rest, never on a beat in flight: where the app moves on sooner than a payoff can be
-read (Glow's aisle-done stamps settle 0.2 s before the tray starts to curl), the scene holds on the frame before
-that motion (`hold=0.9`) and the next one wipes in over it.
+**Pacing.** People read slower than one tends to guess, so the cut leaves room: every caption stays up at least 3.1
+s, and the rests before and after a beat, the title card (3.2 s) and the closing card's hold (1.9 s) are generous.
+The app's own motion always plays at 1x, and so do the typing and the celebration, its little ambient decor
+included. The recorder films the rests long enough to be read (the empty list, the recipe's steps, the recipe card's
+pantry rows, the list before a tick), so the cut needs no slow motion; dead air is left out with a skip, and only a
+wait where nothing else moves (the capsule turning while the answer comes back to an empty list) plays faster, never
+above 1.6x; the recipe's wait plays at 1x, since the list's bee walks along a tray behind it. A factor under 1 is
+there to stretch a lead-in that is wholly still. A caption pops at least 2.2 s before the tap it is about, and a
+scene ends on a rest, never on a beat in flight. `hold` rests on a scene's last frame, but that stops the app's
+ambient decor (the bee, the twinkles) too, so where the app moves on sooner than a payoff can be read (Glow's
+aisle-done stamps settle 0.2 s before the tray starts to curl) the cut plays on to the next rest instead (Glow's
+fold and Next card) and the recorder films that rest long enough.
 
 **Motion.** Captions pop in with a small overshoot and shrink away; stickers pop in one after another and settle
 from a few degrees off; the backdrop crossfades between scenes. The title card is already there on the first frame
@@ -128,23 +131,23 @@ last frame while the next one comes in, so a beat just before the jump plays out
 'card_shown-0.25s', 'add_field')]` floats a white die-cut sticker card with the house's hard periwinkle shadow just
 above the field (clear of the dock's top edge), showing it live at 1.7x the phone screen's scale; it opens on the
 first letter, so it never shows the field's grey example line enlarged, and stays up until just before the sheet
-rises, so the finished note reads whole (write's for 1.4 s, "pancakes for 12" for 1.6 s). The write and recipe
-scenes each use one on the add field and no others: a card over a dense list slices the lines round it and shows a
-second copy of what lies under it. A fourth item gives options: `{'scale': 1.35, 'y': 1462, 'width': 584}` sets the
-scale, the card's top (frame px, the phone at rest) and the width of its face (more white either side), and
+rises, so the end of the note is read at rest ("pancakes for 12" whole for 1.9 s; the field shows two lines, so
+write's longer note has scrolled its first line out by then, and the review card shows it whole). The write and
+recipe scenes each use one on the add field and no others: a card over a dense list slices the lines round it and
+shows a second copy of what lies under it. A fourth item gives options: `{'scale': 1.35, 'y': 1462, 'width': 584}`
+sets the scale, the card's top (frame px, the phone at rest) and the width of its face (more white either side), and
 `{'margin': 14}` draws out 14 recorded px of the region's own paper above and below it (its first and last rows
 repeated, never the screen beyond them). The recipe's card uses the first three to sit in the band between the list
 and the dock, 20 px under the last aisle strip, clear of the dock's washi and covering the "end of the list" pill
 whole; write's uses the margin, because its two lines fill the field from top to bottom with "picnic day" just above
-it. The card pops in and out as a sticker does but opaque on every frame: it grows from 0.3 with a small
-overshoot (1.06) and settles from 3° off, and leaves by shrinking away in 0.22 s, so it never lies part-faded over
-the words under it. The region is cut from the full-size recorded frame, so its text stays crisp, and the card is
-never wider than the phone. Only the taps made while it is up show in it. A region is a name from `segment.json`'s
-`regions` or a box of the screen; for a recording that names none, the script falls back to its own box for the add
-field.
+it. The card pops in and out as a sticker does but opaque on every frame: it grows from 0.3 with a small overshoot
+(1.06) and settles from 3° off, and leaves by shrinking away in 0.22 s, so it never lies part-faded over the words
+under it. The region is cut from the full-size recorded frame, so its text stays crisp, and the card is never wider
+than the phone. Only the taps made while it is up show in it. A region is a name from `segment.json`'s `regions` or
+a box of the screen; for a recording that names none, the script falls back to its own box for the add field.
 
 **Highlight.** To point at something on a busy screen without covering it, `highlight=[('card_scroll+2.4s',
-'stuck-0.8s', 'pantry_rows')]` lays a mark of the app's own highlighter (Day's `#FFF3A6`, the band of a pressed row
+'stuck-0.45s', 'pantry_rows')]` lays a mark of the app's own highlighter (Day's `#FFF3A6`, the band of a pressed row
 and of a new row's 400 ms flash) on each box the region names: the recipe card's two "in your pantry" rows, while
 the caption says what they are. It is drawn on the screen itself, so it rides and scales with the phone, and it
 multiplies like ink, so the words under it stay dark and crisp. Each mark swipes in from left to right in 0.3 s
