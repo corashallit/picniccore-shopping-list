@@ -112,8 +112,9 @@ import kotlin.math.min
  * - next_card: the Next stop card's first frame.
  * - scroll_start (celebrate, album): the finger comes down to scroll.
  * - celebration (celebrate): the celebration's first frame (the kira bloom on the last checkbox and the heart iris
- *   opening from it; no flash, §0.4); title, perfect, banner, bonus, summary: its beats, from the scene's own
- *   storyboard (CelebrationTimeline).
+ *   opening from it; no flash, §0.4); title, perfect, banner, capsule (the gold capsule pops in), bonus, curl (the
+ *   page curl, the first motion after the bonus card's hold), summary: its beats, from the scene's own storyboard
+ *   (CelebrationTimeline).
  *
  * Taps and drags (segment.json "taps", VideoRig's header): every press is on the spot the app answers at (a tick on
  * the row's check spot, where its hanko lands); a drag is logged with the eased path its finger takes. Regions:
@@ -227,11 +228,12 @@ class FeatureVideoRecorder {
      * Shop (§7.6, §10): the same list at Hillcrest Market, 12 of 24 in the basket and Baking open with the baking
      * powder still to get. Its check spot: GOT IT!, its sticker hops into the mixing bowl and its twin lands in the
      * book; Baking is done, so the tray folds into its strip and the Next card points to Breakfast, which opens behind
-     * it. Filmed until the card has gone again.
+     * it. Filmed until the card has gone again. The list rests 3 s first, so the scene's caption is read (slowly)
+     * before the tick it is about.
      */
     @Test
     fun shop() = film("shop", "day") { cam ->
-        cam.roll(2_400)
+        cam.roll(3_000)
         tick(cam, "Baking powder")
         cam.mark("first_tick")
         cam.rollUntil("the Next card", maxMs = 4_000) { exists(NEXT_CARD_TAG) }
@@ -243,8 +245,8 @@ class FeatureVideoRecorder {
     /**
      * Glow (§2.5): the phone is in dark mode, so the list is the Glow variant; the same trip a stop on, Breakfast open.
      * The maple syrup (its whole chain, the twin settling in the book, then a rest), then the coffee beans, and
-     * Breakfast is done: the lid's GOT IT and the book's stamp land (the cut can end on them, before the tray curls and
-     * folds and the Next card rises, the shop segment's beats).
+     * Breakfast is done: the lid's GOT IT and the book's stamp land, the tray curls and folds, the Next card rises and
+     * Dairy & eggs opens behind it; filmed on at rest long enough for the cut to rest there too.
      */
     @Test
     @Config(qualifiers = "+night")
@@ -262,7 +264,7 @@ class FeatureVideoRecorder {
         cam.mark("tray_curl", cam.frameAt(landed + Beats.CURL))
         cam.rollUntil("the Next card", maxMs = 4_000) { exists(NEXT_CARD_TAG) }
         cam.mark("next_card")
-        cam.roll(1_000)
+        cam.roll(1_800)
     }
 
     /**
@@ -292,7 +294,9 @@ class FeatureVideoRecorder {
         cam.mark("title", cam.frameAt(start + plan.beat(BeatName.Title).at))
         cam.mark("perfect", cam.frameAt(start + plan.beat(BeatName.Perfect).at))
         cam.mark("banner", cam.frameAt(start + plan.beat(BeatName.Banner).at))
+        cam.mark("capsule", cam.frameAt(start + plan.beat(BeatName.CapsuleIn).at))
         cam.mark("bonus", cam.frameAt(start + plan.beat(BeatName.Bonus).at))
+        cam.mark("curl", cam.frameAt(start + plan.beat(BeatName.Curl).at))
         cam.mark("summary", cam.frameAt(start + plan.summaryAt))
         // The summary still for 3.4 s, stopping short of the scene closing by itself.
         cam.roll(start + min(plan.summaryAt + 3_400, plan.closeAt - 200) - cam.elapsed)
