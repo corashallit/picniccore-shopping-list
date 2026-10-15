@@ -1,3 +1,4 @@
-# design/store/make_store_images.py. Python 3.11+.
+# design/store/make_store_images.py and make_feature_video.py. Python 3.11+.
 Pillow==12.3.0      # with libraqm for DynaPuff's kerning (the PyPI wheels have it)
 cairosvg==2.9.1     # rasterises the sticker drawables; needs the Cairo library (apt: libcairo2, brew: cairo)
+numpy==2.4.6        # make_feature_video.py composites its layers with it; it also needs ffmpeg with libx264

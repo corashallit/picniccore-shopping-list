@@ -152,6 +152,8 @@ fun EditItemSheet(
     modifier: Modifier = Modifier,
     vm: EditExtrasViewModel = viewModel(factory = EditExtrasViewModel.Factory),
     toasts: ToastHostState = remember { ToastHostState() },
+    /** False while the sheet slides away (the host keeps it for its exit, §4.16): its notes go with it at once. */
+    visible: Boolean = true,
 ) {
     val bars = WindowInsets.navigationBars.union(WindowInsets.ime).asPaddingValues().calculateBottomPadding()
     Box(modifier.fillMaxSize()) {
@@ -165,8 +167,9 @@ fun EditItemSheet(
             onDelete = onDelete,
             onToast = toasts::show,
             vm = vm,
+            visible = visible,
         )
-        ToastHost(toasts, bottomInset = bars + SHEET_FOOTER, bottomGap = 8.dp)
+        if (visible) ToastHost(toasts, bottomInset = bars + SHEET_FOOTER, bottomGap = 8.dp)
     }
 }
 
@@ -190,6 +193,7 @@ fun EditItemRoute(
     onToast: (ToastMessage) -> Unit,
     modifier: Modifier = Modifier,
     vm: EditExtrasViewModel = viewModel(factory = EditExtrasViewModel.Factory),
+    visible: Boolean = true,
 ) {
     val extras by vm.extras.collectAsStateWithLifecycle()
     val resources = LocalResources.current
@@ -212,6 +216,7 @@ fun EditItemRoute(
         onPantryChange = { vm.setInPantry(name, it, onText, offText) },
         aisleStyles = extras.aisleStyles,
         togglesReady = extras.loaded,
+        visible = visible,
         modifier = modifier,
     )
 }

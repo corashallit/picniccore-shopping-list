@@ -62,6 +62,7 @@ import earth.cora.picnic.ui.theme.PicnicIconButton
 import earth.cora.picnic.ui.theme.PicnicTextField
 import earth.cora.picnic.ui.theme.PicnicTheme
 import earth.cora.picnic.ui.theme.hardShadow
+import earth.cora.picnic.ui.theme.keptWhileLeaving
 
 /*
  * The list switcher (docs/DESIGN_STICKER.md §6.4, checklist 144, 219). Owner: WP8 (ListSwitcherTest). The List screen
@@ -150,6 +151,8 @@ fun ListSwitcherSheet(
         }
 
         val confirming = lists.firstOrNull { it.id == confirmDeleteId }
+        // Answered, it slides away still asking about that list (§4.16), which may already be gone.
+        val asked = keptWhileLeaving(confirming != null, confirming)
         LetterSetSheet(
             visible = confirming != null,
             onDismissRequest = { confirmDeleteId = null },
@@ -171,17 +174,17 @@ fun ListSwitcherSheet(
                 }
             },
         ) {
-            if (confirming != null) {
+            if (asked != null) {
                 Text(
-                    stringResource(R.string.lists_delete_title, confirming.title),
+                    stringResource(R.string.lists_delete_title, asked.title),
                     style = PicnicTheme.type.cardTitle.copy(color = PicnicTheme.colors.ink),
                     modifier = Modifier.semantics { heading() },
                 )
                 Spacer(Modifier.height(10.dp))
                 // What goes with it, so a delete is never silent about the list's items (§6.4).
                 val body = listOfNotNull(
-                    if (confirming.items > 0) pluralStringResource(R.plurals.list_delete_items, confirming.items, confirming.items) else null,
-                    if (confirming.bookStickers > 0) stringResource(R.string.lists_delete_book) else null,
+                    if (asked.items > 0) pluralStringResource(R.plurals.list_delete_items, asked.items, asked.items) else null,
+                    if (asked.bookStickers > 0) stringResource(R.string.lists_delete_book) else null,
                 )
                 if (body.isNotEmpty()) {
                     Text(body.joinToString(" "), style = PicnicTheme.type.body.copy(color = PicnicTheme.colors.ink))

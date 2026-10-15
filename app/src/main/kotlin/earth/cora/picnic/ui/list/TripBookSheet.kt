@@ -93,6 +93,7 @@ import earth.cora.picnic.ui.theme.drawDashedCircle
 import earth.cora.picnic.ui.theme.hardShadow
 import earth.cora.picnic.ui.theme.probe
 import earth.cora.picnic.ui.theme.holoBrush
+import earth.cora.picnic.ui.theme.keptWhileLeaving
 import java.time.LocalDate
 
 /*
@@ -163,7 +164,8 @@ internal fun factLines(facts: List<String>, width: Int, measure: (String) -> Int
 /**
  * The read-only sheet of [book] (null = closed). [dateLabel] is the trip's date ("Sat 3 Oct"); [date] prints on the
  * receipt. Same call shape as the album's former FiledBookSheet, so the album swaps one for the other. The sticker pages
- * open on the page holding [initialSlot] (from the list, the spot its book shows; from the album, the first page).
+ * open on the page holding [initialSlot] (from the list, the spot its book shows; from the album, the first page). Closing,
+ * it slides away still showing the book (§4.16), though its host has already let go of it.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -179,33 +181,38 @@ fun TripBookSheet(
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
     val resources = LocalResources.current
+    val open = book != null
+    // The book, its date and its day as last shown open: the sheet leaves with them.
+    val trip = keptWhileLeaving(open, book)
+    val tripDate = keptWhileLeaving(open, dateLabel)
+    val tripDay = keptWhileLeaving(open, date)
     var fullReceipt by rememberSaveable(book?.id) { mutableStateOf(initialFullReceipt) }
     val appName = stringResource(R.string.app_name)
-    val slip = remember(book, date, appName) { book?.let { b -> b.receipt?.let { receiptOf(b, it, date, appName) } } }
+    val slip = remember(trip, tripDay, appName) { trip?.let { b -> b.receipt?.let { receiptOf(b, it, tripDay, appName) } } }
     val spoken = slip?.let { spokenReceipt(resources, it) }
     Box(modifier.fillMaxSize()) {
-        LetterSetSheet(visible = book != null, onDismissRequest = onClose, modifier = Modifier.testTag(TripBookTags.SHEET)) {
-            if (book == null) return@LetterSetSheet
-            val stamped = book.stamps.count { it.done }
+        LetterSetSheet(visible = open, onDismissRequest = onClose, modifier = Modifier.testTag(TripBookTags.SHEET)) {
+            if (trip == null) return@LetterSetSheet
+            val stamped = trip.stamps.count { it.done }
             val stats = buildList {
-                add(pluralStringResource(R.plurals.book_sheet_stickers_of, book.total, book.stickers.size, book.total))
-                add(pluralStringResource(R.plurals.book_sheet_aisles_of, book.stamps.size, stamped, book.stamps.size))
-                if (book.completedAt != null && book.minutes != null) add(TripStats.formatMinutes(book.minutes))
+                add(pluralStringResource(R.plurals.book_sheet_stickers_of, trip.total, trip.stickers.size, trip.total))
+                add(pluralStringResource(R.plurals.book_sheet_aisles_of, trip.stamps.size, stamped, trip.stamps.size))
+                if (trip.completedAt != null && trip.minutes != null) add(TripStats.formatMinutes(trip.minutes))
             }
             Box(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(end = if (book.perfect) 52.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(dateLabel, style = t.cardTitle.copy(color = c.ink), modifier = Modifier.semantics { heading() })
+                Column(Modifier.fillMaxWidth().padding(end = if (trip.perfect) 52.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(tripDate, style = t.cardTitle.copy(color = c.ink), modifier = Modifier.semantics { heading() })
                     // Lines break between facts, never inside one that fits a line ("8 of 8 aisles stamped").
-                    val where = listOf(book.listTitle, book.storeName).filter { it.isNotBlank() }
+                    val where = listOf(trip.listTitle, trip.storeName).filter { it.isNotBlank() }
                     if (where.isNotEmpty()) Facts(where, t.caption.copy(color = c.inkSoft))
                     Facts(stats, t.body.copy(color = c.ink))
                 }
-                if (book.perfect) {
+                if (trip.perfect) {
                     HankoStamp(HankoText.PerFect, Modifier.align(Alignment.TopEnd).rotate(-12f).clearAndSetSemantics { }, size = 44.dp)
                 }
             }
             // The stamp page at 2×: 32 dp stamps in 48 dp targets, names under them (§6.6).
-            if (book.stamps.isNotEmpty()) {
+            if (trip.stamps.isNotEmpty()) {
                 val clock = remember { MotionClock() }
                 Box(
                     Modifier
@@ -216,14 +223,14 @@ fun TripBookSheet(
                         .background(c.stickerWhite)
                         .padding(3.dp)
                         .clip(RoundedCornerShape(9.dp))
-                        .background(if (book.perfect) Color.Transparent else c.book.page)
-                        .then(if (book.perfect) Modifier.background(holoBrush(Offset(400f, 200f))) else Modifier)
+                        .background(if (trip.perfect) Color.Transparent else c.book.page)
+                        .then(if (trip.perfect) Modifier.background(holoBrush(Offset(400f, 200f))) else Modifier)
                         .padding(8.dp),
                 ) {
                     // A PERFECT page is holo foil: its stamps keep their Day inks in every variant (§7.3, §5.3).
-                    earth.cora.picnic.ui.theme.HoloInks(book.perfect) {
+                    earth.cora.picnic.ui.theme.HoloInks(trip.perfect) {
                     // Egg 8 on a filed book: the nap cat curls up by the stamp of the aisle whose basket stayed empty (§12.2).
-                    val nap = remember(book) { book.napStampIndex() }
+                    val nap = remember(trip) { trip.napStampIndex() }
                     val probe = LocalPieceProbe.current
                     val nameStyle = t.caption.copy(color = PicnicTheme.colors.ink, lineBreak = LineBreak.Heading, hyphens = Hyphens.None, textAlign = TextAlign.Center)
                     val measurer = rememberTextMeasurer()
@@ -233,7 +240,7 @@ fun TripBookSheet(
                         // takes fewer stamps a row instead of breaking; the row's cells then share the page's width.
                         val gap = 4.dp
                         val cell = with(LocalDensity.current) {
-                            val widest = book.stamps.maxOf { s -> widestWordPx(stampName(s.aisleName), nameStyle, measurer) }
+                            val widest = trip.stamps.maxOf { s -> widestWordPx(stampName(s.aisleName), nameStyle, measurer) }
                             val least = maxOf(64.dp.roundToPx(), widest + 2.dp.roundToPx())
                             val room = constraints.maxWidth
                             val gapPx = gap.roundToPx()
@@ -241,7 +248,7 @@ fun TripBookSheet(
                             ((room - gapPx * (cols - 1)) / cols).coerceAtLeast(minOf(least, room)).toDp()
                         }
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(gap), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            book.stamps.forEachIndexed { index, s ->
+                            trip.stamps.forEachIndexed { index, s ->
                                 val name = s.aisleName
                                 val desc = if (s.done) stringResource(R.string.book_sheet_stamped, name) else stringResource(R.string.book_sheet_not_yet, name)
                                 Column(
@@ -272,16 +279,16 @@ fun TripBookSheet(
                     }
                 }
             }
-            val stickers = book.stickers.sortedBy { it.slot }
-            if (book.total > 0) {
+            val stickers = trip.stickers.sortedBy { it.slot }
+            if (trip.total > 0) {
                 Text(
                     stringResource(R.string.book_sheet_stickers),
                     style = t.label.copy(color = c.ink),
                     modifier = Modifier.padding(top = 16.dp, bottom = 6.dp).semantics { heading() },
                 )
-                StickerPages(book.total, stickers.associateBy { it.slot }, full = stickers.size >= book.total || book.perfect, initialSlot = initialSlot)
+                StickerPages(trip.total, stickers.associateBy { it.slot }, full = stickers.size >= trip.total || trip.perfect, initialSlot = initialSlot)
             }
-            book.bonus?.let { bonus ->
+            trip.bonus?.let { bonus ->
                 Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ItemIcon(bonus.icon, contentDescription = bonus.name, size = 40.dp, holo = true)
                     Text(stringResource(R.string.list_trip_book_bonus), style = t.label.copy(color = c.ink))
@@ -306,7 +313,7 @@ fun TripBookSheet(
             }
             Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)).height(12.dp).testTag(FiledBookTags.END))
         }
-        if (fullReceipt && book != null && slip != null && spoken != null) {
+        if (fullReceipt && open && slip != null && spoken != null) {
             FullReceipt(slip.lines, spoken, onClose = { fullReceipt = false })
         }
     }

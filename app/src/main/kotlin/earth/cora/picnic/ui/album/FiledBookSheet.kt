@@ -63,6 +63,7 @@ import earth.cora.picnic.ui.theme.HankoText
 import earth.cora.picnic.ui.theme.ItemIcon
 import earth.cora.picnic.ui.theme.LetterSetSheet
 import earth.cora.picnic.ui.theme.PicnicTheme
+import earth.cora.picnic.ui.theme.keptWhileLeaving
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -80,7 +81,8 @@ import kotlin.math.min
 
 /**
  * The read-only sheet of the filed [book] (null = closed). [date] is the trip's date (the first check-off of its last
- * session, §7.1; the row's date), printed on the receipt. Tapping the receipt slip shows it full size (§13.2).
+ * session, §7.1; the row's date), printed on the receipt. Tapping the receipt slip shows it full size (§13.2). Closing,
+ * it slides away still showing the book (§4.16).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -96,36 +98,41 @@ fun FiledBookSheet(
     val t = PicnicTheme.type
     val resources = LocalResources.current
     var fullReceipt by rememberSaveable(book?.id) { mutableStateOf(initialFullReceipt) }
+    val open = book != null
+    // The book, its date and its day as last shown open: the sheet leaves with them.
+    val filed = keptWhileLeaving(open, book)
+    val filedDate = keptWhileLeaving(open, dateLabel)
+    val filedDay = keptWhileLeaving(open, date)
     val appName = stringResource(R.string.app_name)
-    val slip = remember(book, date, appName) { book?.let { b -> b.receipt?.let { receiptOf(b, it, date, appName) } } }
+    val slip = remember(filed, filedDay, appName) { filed?.let { b -> b.receipt?.let { receiptOf(b, it, filedDay, appName) } } }
     val spoken = slip?.let { spokenReceipt(resources, it) }
     Box(modifier.fillMaxSize()) {
-        LetterSetSheet(visible = book != null, onDismissRequest = onClose) {
-            if (book == null) return@LetterSetSheet
-            val stamped = book.stamps.count { it.done }
+        LetterSetSheet(visible = open, onDismissRequest = onClose) {
+            if (filed == null) return@LetterSetSheet
+            val stamped = filed.stamps.count { it.done }
             val stats = buildList {
-                add(pluralStringResource(R.plurals.book_sheet_stickers_of, book.total, book.stickers.size, book.total))
-                add(pluralStringResource(R.plurals.book_sheet_aisles_of, book.stamps.size, stamped, book.stamps.size))
-                if (book.completedAt != null && book.minutes != null) add(TripStats.formatMinutes(book.minutes))
+                add(pluralStringResource(R.plurals.book_sheet_stickers_of, filed.total, filed.stickers.size, filed.total))
+                add(pluralStringResource(R.plurals.book_sheet_aisles_of, filed.stamps.size, stamped, filed.stamps.size))
+                if (filed.completedAt != null && filed.minutes != null) add(TripStats.formatMinutes(filed.minutes))
             }.joinToString(" · ")
             Box(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth().padding(end = if (book.perfect) 52.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(dateLabel, style = t.cardTitle.copy(color = c.ink), modifier = Modifier.semantics { heading() })
-                    val where = listOf(book.listTitle, book.storeName).filter { it.isNotBlank() }.joinToString(" · ")
+                Column(Modifier.fillMaxWidth().padding(end = if (filed.perfect) 52.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(filedDate, style = t.cardTitle.copy(color = c.ink), modifier = Modifier.semantics { heading() })
+                    val where = listOf(filed.listTitle, filed.storeName).filter { it.isNotBlank() }.joinToString(" · ")
                     if (where.isNotEmpty()) Text(where, style = t.caption.copy(color = c.inkSoft))
                     Text(stats, style = t.body.copy(color = c.ink))
                 }
-                if (book.perfect) {
+                if (filed.perfect) {
                     HankoStamp(HankoText.PerFect, Modifier.align(Alignment.TopEnd).rotate(-10f).clearAndSetSemantics { }, size = 44.dp)
                 }
             }
-            if (book.stamps.isNotEmpty()) {
+            if (filed.stamps.isNotEmpty()) {
                 FlowRow(
                     Modifier.fillMaxWidth().padding(top = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    book.stamps.forEach { s ->
+                    filed.stamps.forEach { s ->
                         val family = Families.byName(s.family) ?: Families.periwinkle
                         val desc = if (s.done) stringResource(R.string.book_sheet_stamped, s.aisleName) else stringResource(R.string.book_sheet_not_yet, s.aisleName)
                         Column(
@@ -148,7 +155,7 @@ fun FiledBookSheet(
                     }
                 }
             }
-            val stickers = book.stickers.sortedBy { it.slot } + listOfNotNull(book.bonus)
+            val stickers = filed.stickers.sortedBy { it.slot } + listOfNotNull(filed.bonus)
             if (stickers.isNotEmpty()) {
                 Text(
                     stringResource(R.string.book_sheet_stickers),
@@ -182,7 +189,7 @@ fun FiledBookSheet(
             // Room for the last card or the receipt's torn foot to scroll clear of the navigation bar.
             Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)).height(12.dp).testTag(FiledBookTags.END))
         }
-        if (fullReceipt && book != null && slip != null && spoken != null) {
+        if (fullReceipt && open && slip != null && spoken != null) {
             ReceiptViewer(slip.lines, spoken, onClose = { fullReceipt = false })
         }
     }

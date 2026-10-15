@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import earth.cora.picnic.core.model.list
 import earth.cora.picnic.ui.common.PHONE_360
+import earth.cora.picnic.ui.theme.LETTERSET_TAG
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -59,6 +60,9 @@ class MoveNotesTest {
 
         compose.runOnIdle { rig.vm.closeEdit() }
         compose.frames(3)
+        assertTrue("it carries on over the list as the sheet closes", shows(moved))
+        // The sheet slides away over it (§4.16, item 367); then its Undo is there to tap.
+        assertTrue("the sheet slides away", compose.framesUntil(600) { !compose.exists(LETTERSET_TAG) })
         assertTrue("it carries on over the list once the sheet has closed", shows(moved))
         compose.onNodeWithText("Undo", useUnmergedTree = true).performClick()
         assertTrue(compose.framesUntil(1000) { rig.item("toothpaste").aisleId == "household" })

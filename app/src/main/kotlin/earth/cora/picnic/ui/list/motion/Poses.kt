@@ -634,6 +634,49 @@ object BookMotion {
 }
 
 /* ------------------------------------------------------------------------------------------------
+ * The celebration's entrance (§11.2): the heart iris from the last tapped checkbox, with a kira bloom on it.
+ * ------------------------------------------------------------------------------------------------ */
+
+object HeartIris {
+    /** One held pose per 12 fps frame (§8.1, `pose`). */
+    val POSE: Long = PicnicMotion.pose.toLong()
+
+    /**
+     * The heart's width (dp) in its held poses from the scene's start: the first already reads as the scene arriving,
+     * and none but the whole screen reaches the top bar from a checkbox in the lower part of the screen.
+     */
+    val WIDTHS: List<Float> = listOf(180f, 400f, 900f)
+
+    /**
+     * The heart's width (dp) at [elapsed] ms from the scene's start; 0 before the start; null from
+     * CelebrationTimeline.IRIS (the three poses, 249 ms), when the scene has the whole screen and is no longer clipped.
+     */
+    fun width(elapsed: Long): Float? = when {
+        elapsed < 0 -> 0f
+        elapsed >= CelebrationTimeline.IRIS -> null
+        else -> WIDTHS[heldStep(elapsed, POSE, WIDTHS.size)]
+    }
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * The bonus card's gold capsule (§11.2).
+ * ------------------------------------------------------------------------------------------------ */
+
+object GoldCapsule {
+    /** One held pose per 12 fps frame (§8.1, `pose`). */
+    val POSE: Long = PicnicMotion.pose.toLong()
+
+    /** It pops in as the stickers do (0 → 1.15 → 1), never appearing whole in one frame. */
+    val SCALES: List<Float> = listOf(0.5f, 1.15f, 1f)
+
+    /** The pop's length: three held poses (249 ms). */
+    val IN: Long = SCALES.size * POSE
+
+    /** Its scale [elapsed] ms after it starts popping in: 0 before, then each held pose, 1 from the third on. */
+    fun scale(elapsed: Long): Float = if (elapsed < 0) 0f else SCALES[heldStep(elapsed, POSE, SCALES.size)]
+}
+
+/* ------------------------------------------------------------------------------------------------
  * The Next card (§10).
  * ------------------------------------------------------------------------------------------------ */
 

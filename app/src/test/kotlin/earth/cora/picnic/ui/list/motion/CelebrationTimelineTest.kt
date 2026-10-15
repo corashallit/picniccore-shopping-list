@@ -5,6 +5,7 @@ import earth.cora.picnic.ui.theme.readHold
 import earth.cora.picnic.ui.theme.words
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,6 +37,7 @@ class CelebrationTimelineTest {
         assertEquals(8930L, p.at(BeatName.Bonus))
         assertEquals(9430L, p.beat(BeatName.Bonus).settle)
         assertEquals(1800L, p.beat(BeatName.Bonus).hold)
+        assertEquals(7930L, p.at(BeatName.CapsuleIn))
         assertEquals(8330L, p.at(BeatName.CapsuleWobble))
         assertEquals(9030L, p.at(BeatName.CapsulePop))
         assertEquals(11230L, p.at(BeatName.Curl))
@@ -56,6 +58,52 @@ class CelebrationTimelineTest {
         // The §19.2 contract returns the same beats.
         assertEquals(p.beats, CelebrationTimeline.of("Saturday shop", fixture, petHatched = false))
         assertNoMotionInsideHolds(p)
+    }
+
+    /**
+     * Item 366 (§0.4, 14 October): no white flash. The scene opens with the heart iris (and the kira bloom on the last
+     * tapped checkbox) at 0, its first pose already 160 dp or more, each held 12 fps pose wider, the whole scene from
+     * 0.25 s; the jingle's 0.00 and every later beat keep their times. Reduced motion has neither.
+     */
+    @Test
+    fun irisOpensAtTheStart() {
+        val p = CelebrationTimeline.plan("Saturday shop", fixture, petHatched = false)
+        assertTrue("no Flash beat", BeatName.entries.none { it.name == "Flash" })
+        assertEquals(BeatName.Iris, p.beats.first().name)
+        assertEquals(0L, p.at(BeatName.Iris))
+        assertEquals(CelebrationTimeline.IRIS, p.beat(BeatName.Iris).endsAt)
+        assertEquals("three held 12 fps poses", HeartIris.WIDTHS.size * HeartIris.POSE, CelebrationTimeline.IRIS)
+        assertTrue("the whole screen within about 420 ms", CelebrationTimeline.IRIS <= 420)
+        assertEquals(0f, HeartIris.width(-1))
+        val poses = (0L until CelebrationTimeline.IRIS step 8).map { requireNotNull(HeartIris.width(it)) }
+        assertTrue("the first pose reads as the scene arriving: ${poses.first()} dp", poses.first() >= 160f)
+        assertTrue("each pose is wider: $poses", poses.zipWithNext().all { (a, b) -> b >= a })
+        assertEquals(HeartIris.WIDTHS, poses.distinct())
+        assertNull("the whole scene from 0.25 s", HeartIris.width(CelebrationTimeline.IRIS))
+        assertEquals(100L, p.at(BeatName.BurstStar))
+        assertEquals(100L, p.at(BeatName.Title))
+        assertEquals(700L, p.beat(BeatName.Title).settle)
+        assertNull(CelebrationTimeline.plan("Saturday shop", fixture, petHatched = false, reduced = true).beatOrNull(BeatName.Iris))
+    }
+
+    /**
+     * The gold capsule pops in a second before the bonus (§11.2) as the stickers do, in three held 12 fps poses
+     * (0 → 1.15 → 1), so it never appears whole in a single frame; it has settled before it wobbles. Read every 8 ms.
+     */
+    @Test
+    fun capsulePopsIn() {
+        val p = CelebrationTimeline.plan("Saturday shop", fixture, petHatched = false)
+        val capsule = p.beat(BeatName.CapsuleIn)
+        assertEquals(p.at(BeatName.Bonus) - CelebrationTimeline.CAPSULE_LEAD, capsule.at)
+        assertEquals(capsule.at + GoldCapsule.IN, capsule.endsAt)
+        assertTrue("settled before it wobbles", capsule.endsAt <= p.at(BeatName.CapsuleWobble))
+        assertEquals(0f, GoldCapsule.scale(-1))
+        val poses = (0L until GoldCapsule.IN step 8).map { GoldCapsule.scale(it) }
+        assertTrue("its first frame is not the whole capsule: ${poses.first()}", poses.first() <= 0.5f)
+        assertEquals("three held poses", GoldCapsule.SCALES, poses.distinct())
+        assertTrue("it overshoots: $poses", poses.max() > 1f)
+        assertEquals(1f, GoldCapsule.scale(GoldCapsule.IN))
+        assertEquals(1f, GoldCapsule.scale(GoldCapsule.IN + 5_000))
     }
 
     @Test

@@ -1,6 +1,7 @@
 package earth.cora.picnic.ui.list
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.layout.boundsInWindow
@@ -33,10 +36,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import earth.cora.picnic.R
@@ -75,6 +82,7 @@ import earth.cora.picnic.ui.theme.SunSticker
 import earth.cora.picnic.ui.theme.ThemeVariant
 import earth.cora.picnic.ui.theme.nameTagStyle
 import kotlin.math.ceil
+import kotlin.math.roundToInt
 import kotlinx.coroutines.withContext
 
 /*
@@ -117,15 +125,17 @@ internal fun TopStack(
     val captionRow = fontScale >= LARGE_TEXT && !dateOnPage && book != null && !state.loading
     val lcdBelow = captionRow && spot.inCaption
     val petPose = rememberPetPose(LocalListEggs.current)
+    val reduced = LocalReducedMotion.current
+    val arrival = rememberArrival(state, reduced)
     val lcd: @Composable () -> Unit = {
-        Box(Modifier.testTag(ListTags.LCD_SLOT).onSizeChanged { spot.size = it }) {
+        Box(Modifier.testTag(ListTags.LCD_SLOT).onSizeChanged { spot.size = it }.fadingIn(arrival)) {
             TopLcd(state, presentation, engine.anchors, ui, actions, petPose)
         }
     }
     Column(modifier.fillMaxWidth().statusBarsPadding().testTag(ListTags.TOP_STACK)) {
-        AppBar(state, presentation, engine.anchors, ui, actions, onMore, onMoreBounds, lcd = if (lcdBelow) null else lcd, spot = if (captionRow) spot else null)
+        AppBar(state, presentation, engine.anchors, ui, actions, onMore, onMoreBounds, lcd = if (lcdBelow) null else lcd, spot = if (captionRow) spot else null, arrival = arrival)
         if (book != null && !state.loading) {
-            BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp), contentAlignment = Alignment.TopCenter) {
+            BoxWithConstraints(Modifier.arriving(arrival, reduced).fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp), contentAlignment = Alignment.TopCenter) {
                 val width = BookLayout.widthFor(maxWidth.value + 24f).dp
                 val layout = remember(width, book.stamps.size, book.total) { BookLayout.of(width.value, book.stamps.size, book.total) }
                 val shown = layout.shownPage(book.takenSlots, finished = book.perfect)
@@ -238,6 +248,56 @@ private class LcdSpot {
 }
 
 /**
+ * The list's first items arriving on an empty list (§4.21 → §6.1, item 369; her first note sorted into aisles): 0 → 1
+ * over the 240 ms `layout` from the frame they show, as the top stack grows into the book; under reduced motion a
+ * 120 ms fade in place. 1 at rest, and at once when the list opens with items already (a cold start, another list).
+ */
+@Composable
+private fun rememberArrival(state: ListUiState, reduced: Boolean): Float {
+    val empty = !state.loading && state.total == 0
+    // The list as last shown (its id, and whether it was empty), and how many times items arrived on it.
+    val last = remember { arrayOfNulls<Pair<String, Boolean>>(1) }
+    val arrivals = remember { IntArray(1) }
+    val before = last[0]
+    if (before != null && before.first == state.listId && before.second && !empty && !state.loading) arrivals[0]++
+    if (!state.loading) last[0] = state.listId to empty
+    val grow = remember(arrivals[0]) { Animatable(if (arrivals[0] == 0) 1f else 0f) }
+    LaunchedEffect(grow) {
+        if (grow.value >= 1f) return@LaunchedEffect
+        val spec = if (reduced) {
+            tween<Float>(PicnicMotion.rmFade.durationMillis, easing = LinearEasing)
+        } else {
+            tween(PicnicMotion.layout.durationMillis, easing = PicnicMotion.layout.easing)
+        }
+        withContext(FixedMotionScale) { grow.animateTo(1f, spec) }
+    }
+    return grow.value
+}
+
+/** Fades in with the list's first items ([rememberArrival]); as it is at rest. */
+private fun Modifier.fadingIn(arrival: Float): Modifier =
+    if (arrival >= 1f) this else graphicsLayer { alpha = arrival.coerceIn(0f, 1f) }
+
+/**
+ * The book's slot as the list's first items arrive (item 369): it grows from nothing to its height on [arrival] (the
+ * `layout` curve, never past its height), the card sliding down whole from under the bar (only the slot's top edge
+ * cuts it; its sides and shadow run on) and fading in, so the list below moves with it in the same frames. Under
+ * [reduced] motion it takes its height at once and only fades in place.
+ */
+private fun Modifier.arriving(arrival: Float, reduced: Boolean): Modifier = when {
+    arrival >= 1f -> this
+    reduced -> fadingIn(arrival)
+    else -> this
+        .drawWithContent { clipRect(-size.width, 0f, size.width * 2f, size.height * 2f) { this@drawWithContent.drawContent() } }
+        .layout { measurable, constraints ->
+            val p = measurable.measure(constraints)
+            val h = constraints.constrainHeight((p.height * arrival.coerceIn(0f, 1f)).roundToInt())
+            layout(p.width, h) { p.place(0, h - p.height) }
+        }
+        .fadingIn(arrival)
+}
+
+/**
  * The binder top (§4.2): no bar shape. The puffy title (24 sp, shrinking to 20 sp to stay on one line, then an
  * ellipsis; 20 sp collapsed), the sun sticker (the moon in Dusk and Glow), the subtitle "★ Hillcrest Market · 8 stops"
  * on a pad patch (hidden collapsed); on the right the LCD and the 40 dp More round button. 72 dp, 56 dp collapsed; it
@@ -256,6 +316,8 @@ private fun AppBar(
     lcd: (@Composable () -> Unit)?,
     /** Under large text with the book's date caption showing: where the LCD sits, which this bar decides. */
     spot: LcdSpot?,
+    /** The list's first items arriving (item 369): the stop count fades in after the store's name. 1 at rest. */
+    arrival: Float = 1f,
 ) {
     val c = PicnicTheme.colors
     val t = PicnicTheme.type
@@ -332,9 +394,16 @@ private fun AppBar(
             }
         }
     }
+    // The list's first items (item 369): after the store's name the stop count fades in, its patch widening with it; a
+    // subtitle that is new (no store name) unrolls with the bar and fades in. Under reduced motion only the fades play.
+    val shown = arrival.coerceIn(0f, 1f)
+    val kept = state.storeName.takeIf { arrival < 1f && it.isNotBlank() && subtitle?.startsWith(it) == true }?.length
+    val fresh = arrival < 1f && kept == null
+    val reveal = if (fresh && !reduced) e * shown else e
+    val subtitleAlpha = if (fresh) e * shown else e
     val subtitleRow: @Composable (Modifier) -> Unit = { m ->
-        if (subtitle != null && e > 0f) {
-            PadPatch(m.revealHeight(e).graphicsLayer { alpha = e }.padding(start = 2.dp, bottom = 4.dp).then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "subtitle") })) {
+        if (subtitle != null && reveal > 0f) {
+            PadPatch(m.revealHeight(reveal).graphicsLayer { alpha = subtitleAlpha }.padding(start = 2.dp, bottom = 4.dp).then(with(anchors) { Modifier.anchor(EggAnchors.TEXT_PREFIX + "subtitle") })) {
                 // Large text may wrap the line: the star stays on the first line and the patch hugs the widest one.
                 val style = t.appBarSubtitle.copy(color = c.onPadSoft)
                 val firstLine = with(LocalDensity.current) { style.lineHeight.toDp() }
@@ -342,7 +411,15 @@ private fun AppBar(
                     Box(Modifier.heightIn(min = firstLine), contentAlignment = Alignment.Center) {
                         FlatStar(Modifier.size(13.dp), fill = Families.lemon.mid)
                     }
-                    SnugText(subtitle, style)
+                    if (kept != null) {
+                        val words = buildAnnotatedString {
+                            append(subtitle)
+                            addStyle(SpanStyle(color = style.color.copy(alpha = style.color.alpha * shown)), kept, subtitle.length)
+                        }
+                        SnugText(words, style, kept = kept, grown = if (reduced) 1f else shown)
+                    } else {
+                        SnugText(AnnotatedString(subtitle), style)
+                    }
                 }
             }
         }
@@ -506,17 +583,25 @@ private fun Modifier.overhang(w: androidx.compose.ui.unit.Dp, h: androidx.compos
 
 /**
  * Text that, when it wraps, is only as wide as its widest line (plain Text takes the whole width it was offered), so
- * the pad patch around a wrapped subtitle has no empty tail.
+ * the pad patch around a wrapped subtitle has no empty tail. On one line, [grown] < 1 widens it from its first [kept]
+ * characters to the whole text (item 369: the stop count joining the store's name), cutting what does not fit yet.
  */
 @Composable
-private fun SnugText(text: String, style: TextStyle) {
+private fun SnugText(text: AnnotatedString, style: TextStyle, kept: Int = text.length, grown: Float = 1f) {
     val measurer = rememberTextMeasurer()
-    Layout(content = { Text(text, style = style) }) { measurables, constraints ->
+    val growing = grown < 1f && kept < text.length
+    Layout(content = { Text(text, style = style) }, modifier = if (growing) Modifier.clipToBounds() else Modifier) { measurables, constraints ->
         val probe = measurer.measure(text, style, constraints = Constraints(maxWidth = constraints.maxWidth))
         val widest = (0 until probe.lineCount).maxOf { probe.getLineRight(it) - probe.getLineLeft(it) }
         val w = if (probe.lineCount > 1) ceil(widest).toInt().coerceIn(constraints.minWidth, constraints.maxWidth) else constraints.maxWidth
         val p = measurables.single().measure(constraints.copy(minWidth = 0, maxWidth = w))
-        layout(p.width, p.height) { p.place(0, 0) }
+        val width = if (growing && probe.lineCount == 1) {
+            val from = ceil(measurer.measure(text.subSequence(0, kept), style, maxLines = 1, softWrap = false).size.width.toFloat())
+            (from + (p.width - from) * grown).roundToInt().coerceIn(0, p.width)
+        } else {
+            p.width
+        }
+        layout(width, p.height) { p.place(0, 0) }
     }
 }
 
