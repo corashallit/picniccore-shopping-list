@@ -37,6 +37,7 @@ class CelebrationTimelineTest {
         assertEquals(8930L, p.at(BeatName.Bonus))
         assertEquals(9430L, p.beat(BeatName.Bonus).settle)
         assertEquals(1800L, p.beat(BeatName.Bonus).hold)
+        assertEquals(7930L, p.at(BeatName.CapsuleIn))
         assertEquals(8330L, p.at(BeatName.CapsuleWobble))
         assertEquals(9030L, p.at(BeatName.CapsulePop))
         assertEquals(11230L, p.at(BeatName.Curl))
@@ -83,6 +84,26 @@ class CelebrationTimelineTest {
         assertEquals(100L, p.at(BeatName.Title))
         assertEquals(700L, p.beat(BeatName.Title).settle)
         assertNull(CelebrationTimeline.plan("Saturday shop", fixture, petHatched = false, reduced = true).beatOrNull(BeatName.Iris))
+    }
+
+    /**
+     * The gold capsule pops in a second before the bonus (§11.2) as the stickers do, in three held 12 fps poses
+     * (0 → 1.15 → 1), so it never appears whole in a single frame; it has settled before it wobbles. Read every 8 ms.
+     */
+    @Test
+    fun capsulePopsIn() {
+        val p = CelebrationTimeline.plan("Saturday shop", fixture, petHatched = false)
+        val capsule = p.beat(BeatName.CapsuleIn)
+        assertEquals(p.at(BeatName.Bonus) - CelebrationTimeline.CAPSULE_LEAD, capsule.at)
+        assertEquals(capsule.at + GoldCapsule.IN, capsule.endsAt)
+        assertTrue("settled before it wobbles", capsule.endsAt <= p.at(BeatName.CapsuleWobble))
+        assertEquals(0f, GoldCapsule.scale(-1))
+        val poses = (0L until GoldCapsule.IN step 8).map { GoldCapsule.scale(it) }
+        assertTrue("its first frame is not the whole capsule: ${poses.first()}", poses.first() <= 0.5f)
+        assertEquals("three held poses", GoldCapsule.SCALES, poses.distinct())
+        assertTrue("it overshoots: $poses", poses.max() > 1f)
+        assertEquals(1f, GoldCapsule.scale(GoldCapsule.IN))
+        assertEquals(1f, GoldCapsule.scale(GoldCapsule.IN + 5_000))
     }
 
     @Test

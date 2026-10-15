@@ -1284,6 +1284,7 @@ Text beat times are **computed at run time** by `CelebrationTimeline.of(listName
 | **6.23** → **6.53** | S2 + readHold(1) | **Ribbon banner** | a sakura banner (324 × 46 dp, swallow-tail ends, white stitching) unfurls (scaleX .1 → 1.08 → 1, 3 steps, 300 ms): "24 stickers · 41 min" (DynaPuff 16 sp white, 4 dp `#B02E6B` stroke); real values from the trip; still from 6.53 = S3 | — |
 | 6.23 / 6.53 / 6.83 | with the banner | Confetti | 36 die-cut confetti stickers (hearts, 4-point stars, petals, stars, mini groceries; 18–26 dp) fall in 3 waves of 12, 35 ms apart, across the full width, turning ±140–320°, 1.3–1.8 s each, 10 steps; **behind** all text plates | — |
 | 6.23 | with the banner | Pet dance | the pixel bee dances 4 × 500 ms (only if egg 15 hatched) | — |
+| 7.93 | bonus − 1.00 | Gold capsule | pops in where the bonus card will rise, from its base (0 → 1.15 → 1, 3 steps, 250 ms), never whole in one frame | — |
 | 8.33 | bonus − 0.60 | Gold capsule | wobbles twice (300 ms each, 3 steps) | — |
 | **8.93** → **9.43** | S3 + readHold(banner) | **Bonus sticker** | a holo card rises out of the capsule (500 ms `cubic-bezier(.3, 1.5, .5, 1)`): the bonus sticker + "bonus sticker!" (DynaPuff 15 sp); still from 9.43 = S4. No glint on the bonus card | — |
 | 9.03 | | Pop | the capsule pops behind the card (1.2 / .85, 300 ms) | "pon!" + CONFIRM |
@@ -2482,6 +2483,7 @@ Tags: the package that owns the item (WP1–WP10) and, where it applies, Cora's 
 370. **[WP5]** The rows of a tray rolling up into its strip (the aisle-done fold, her own fold) are going: a touch on one neither checks nor unchecks it, so the finished tray is never put back open half folded, and TalkBack no longer reads them (the keyboard already passes them by). — *Test:* `TrayFoldTest.herFoldingTrayTakesNoTouchAndReadsNothing`, `.finishedTrayTakesNoTouchAsItFolds` (Robolectric)
 371. **[WP5]** Her tap in the middle of a glide carries every tray on from where it is (§8.5): a double tap on the chevron rolls the half-open tray back up from what it shows while the tray she left goes on rolling up, and her strip tapped again as its tray rolls up unfolds it again from there; within two frames of her tap each turns to its new end, no frame moves a tray by 40 % of its height, and the gaps between trays hold in every frame. — *Test:* `TrayFoldTest.herSecondTapCarriesTheTraysOnFromWhereTheyAre`, `.herReopenMidFoldCarriesOnFromWhereItIs` (Robolectric)
 372. **[WP7]** Closed in the middle of the answer's reveal, the Add sheet slides away and is then gone with its reveal: it never finishes the reveal unseen for a review the ViewModel has cleared. — *Test:* `AddSheetMotionTest.aClosedSheetLeavesWithItsReveal` (Robolectric)
+373. **[WP6 · POLISH]** The bonus sticker's gold capsule pops in a second before the bonus (§11.2: 0 → 1.15 → 1 from its base, one 12 fps pose each), so it never appears whole in a single frame, and it has settled before it wobbles; under reduced motion it never shows. — *Test:* `CelebrationTimelineTest.capsulePopsIn` (unit)
 
 ## 21. Work packages
 

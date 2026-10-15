@@ -80,6 +80,7 @@ import earth.cora.picnic.ui.list.motion.CelebrationCopy
 import earth.cora.picnic.ui.list.motion.CelebrationPlan
 import earth.cora.picnic.ui.list.motion.CelebrationPresentation
 import earth.cora.picnic.ui.list.motion.CelebrationTimeline
+import earth.cora.picnic.ui.list.motion.GoldCapsule
 import earth.cora.picnic.ui.list.motion.HeartIris
 import earth.cora.picnic.ui.list.motion.LocalMotionProbe
 import earth.cora.picnic.ui.list.motion.MotionClock
@@ -1233,7 +1234,8 @@ private fun BonusCard(sc: SceneClock, bonus: BonusSticker?, copy: CelebrationCop
     val c = PicnicTheme.colors
     // 132 × 150 dp, taller when the font scale needs it (the card's text never clips).
     Box(modifier.width(132.dp).heightIn(min = 150.dp)) {
-        // The gold capsule wobbles twice, then pops behind the card.
+        // The gold capsule pops in a second before the bonus (3 held poses, from its base), wobbles twice, then pops
+        // behind the card.
         ItemIcon(
             IconRef("_capsule"), null, size = 52.dp, jackpot = true,
             modifier = Modifier
@@ -1244,9 +1246,13 @@ private fun BonusCard(sc: SceneClock, bonus: BonusSticker?, copy: CelebrationCop
                         alpha = 0f
                         return@graphicsLayer
                     }
+                    val arrive = GoldCapsule.scale(sc.since(BeatName.CapsuleIn))
                     val wob = sc.since(BeatName.CapsuleWobble)
                     val pop = sc.since(BeatName.CapsulePop)
-                    alpha = if (wob < -400) 0f else 1f
+                    alpha = if (arrive == 0f) 0f else 1f
+                    scaleX = arrive
+                    scaleY = arrive
+                    transformOrigin = if (arrive < 1f) TransformOrigin(0.5f, 1f) else TransformOrigin.Center
                     rotationZ = when {
                         wob < 0 -> 0f
                         wob < 600 -> listOf(-8f, 0f, 8f)[((wob % 300) / 100).toInt().coerceIn(0, 2)]

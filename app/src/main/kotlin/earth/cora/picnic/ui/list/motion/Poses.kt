@@ -659,6 +659,24 @@ object HeartIris {
 }
 
 /* ------------------------------------------------------------------------------------------------
+ * The bonus card's gold capsule (§11.2).
+ * ------------------------------------------------------------------------------------------------ */
+
+object GoldCapsule {
+    /** One held pose per 12 fps frame (§8.1, `pose`). */
+    val POSE: Long = PicnicMotion.pose.toLong()
+
+    /** It pops in as the stickers do (0 → 1.15 → 1), never appearing whole in one frame. */
+    val SCALES: List<Float> = listOf(0.5f, 1.15f, 1f)
+
+    /** The pop's length: three held poses (249 ms). */
+    val IN: Long = SCALES.size * POSE
+
+    /** Its scale [elapsed] ms after it starts popping in: 0 before, then each held pose, 1 from the third on. */
+    fun scale(elapsed: Long): Float = if (elapsed < 0) 0f else SCALES[heldStep(elapsed, POSE, SCALES.size)]
+}
+
+/* ------------------------------------------------------------------------------------------------
  * The Next card (§10).
  * ------------------------------------------------------------------------------------------------ */
 

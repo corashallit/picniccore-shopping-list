@@ -18,7 +18,7 @@ import earth.cora.picnic.ui.theme.words
 /** The storyboard's moments (§11.2). */
 enum class BeatName {
     Iris, BurstStar, Title, SkipChip, Hamper, Kira, RibbonDraw, Ride, Spread, StampCard, Flip, CardGlint,
-    Perfect, Shake, TitleGlint, Banner, Confetti, PetDance, CapsuleWobble, Bonus, CapsulePop, Curl, SkipChipOut,
+    Perfect, Shake, TitleGlint, Banner, Confetti, PetDance, CapsuleIn, CapsuleWobble, Bonus, CapsulePop, Curl, SkipChipOut,
     PocketKira, PocketMagic, Summary, Close,
 }
 
@@ -97,6 +97,9 @@ object CelebrationTimeline {
     const val SHAKE: Long = 170
     const val BANNER_IN: Long = 300
     const val BONUS_IN: Long = 500
+
+    /** The gold capsule pops in this long before the bonus card rises out of it (GoldCapsule's three poses). */
+    const val CAPSULE_LEAD: Long = 1000
     const val CURL: Long = 400
     const val POCKET_KIRA_AFTER_CURL: Long = 120
     const val POCKET_MAGIC_AFTER_CURL: Long = 200
@@ -196,6 +199,7 @@ object CelebrationTimeline {
         val bonusWords = words(copy.bonus)
         val s4 = bonusAt + BONUS_IN
         val bonusHold = readHold(bonusWords, PicnicMotion.floorBeat)
+        beats += Beat(BeatName.CapsuleIn, bonusAt - CAPSULE_LEAD, bonusAt - CAPSULE_LEAD + GoldCapsule.IN)
         beats += Beat(BeatName.CapsuleWobble, bonusAt - 600, bonusAt)
         beats += Beat(BeatName.Bonus, bonusAt, s4, settle = s4, hold = bonusHold, words = bonusWords, text = copy.bonus)
         beats += Beat(BeatName.CapsulePop, bonusAt + 100, bonusAt + 400)
