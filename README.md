@@ -47,3 +47,7 @@ Making a key for a friend? Use a project of its own with a hard monthly budget, 
 - **Testers:** every push builds an installable APK signed with the app's private key; tags `v*` attach it to a GitHub Release. See [docs/BUILDING.md](docs/BUILDING.md).
 - **Android developer verification:** `earth.cora.picnic` is registered to that key through a free limited distribution account in Android Developer Console (up to 20 authorized phones, not on Google Play). The key, its GitHub secrets and the console are in [docs/RELEASING.md](docs/RELEASING.md).
 - **Privacy:** [docs/PRIVACY.md](docs/PRIVACY.md) is the privacy policy draft, written to match what the app actually stores and sends.
+
+## Licence
+
+[0BSD](LICENSE): use, copy, change and share it for any purpose, no attribution needed. Two parts keep their own licences: the bundled fonts in `app/src/main/res/font/`, and DotGothic16, which the LCD digits are drawn from, are under the SIL Open Font License 1.1 (texts in [`app/src/main/assets/licenses/`](app/src/main/assets/licenses/)), and the Gradle wrapper (`gradlew`, `gradlew.bat`, `gradle/wrapper/`) is under the Apache License 2.0.
