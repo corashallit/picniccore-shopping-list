@@ -1,6 +1,8 @@
 # Kirakira Basket
 
-A picniccore grocery list for Android, styled after early-90s magical-girl anime and sticker books. 
+A picniccore grocery list for Android, styled after early-90s magical-girl anime and sticker books.
+
+Check out the video demo on my blog: https://cora.earth/ultra-cute-grocery-apps/
 
 ## Screenshots
 
