@@ -2,6 +2,10 @@
 
 A picniccore grocery list for Android, styled after early-90s magical-girl anime and sticker books. 
 
+## Demo
+
+https://github.com/user-attachments/assets/1f8e808f-5c2a-4718-967d-2ac845151eb9
+
 ## Screenshots
 
 <p align="center">
